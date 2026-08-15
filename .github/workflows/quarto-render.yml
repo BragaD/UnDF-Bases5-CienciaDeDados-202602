@@ -62,9 +62,47 @@ jobs:
       - name: pytest
         run: pytest tests/ -v
 
+  offline:
+    name: Render offline (sem rede)
+    needs: build-image
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: read
+    # Roda num runner comum (não em `container:`), porque precisa passar
+    # --network none para o `docker run` que executa a imagem — dentro de um
+    # `container:` do próprio job não há como isolar a rede da imagem
+    # interna dessa forma. Um checkout novo não tem `_freeze/` (gitignorado),
+    # então já começa frio por construção: sem cache para reaproveitar, o
+    # quarto render é obrigado a executar os chunks de verdade, e qualquer
+    # chamada de rede estoura em vez de passar em silêncio. Isto é o guard
+    # automático que faltava para a invariante "nenhum byte vem da rede em
+    # tempo de render" — sem ele, um capítulo futuro que buscasse algo da
+    # rede no render passaria verde no CI para sempre.
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Login no GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Pull da imagem
+        run: docker pull ghcr.io/bragad/undf-bases5-ciencia-de-dados-202602:latest
+
+      - name: Render sem rede
+        run: |
+          docker run --rm --network none -e HOME=/tmp \
+            -v "$PWD":/livro -w /livro \
+            ghcr.io/bragad/undf-bases5-ciencia-de-dados-202602:latest \
+            quarto render
+
   render:
     name: Renderizar o livro
-    needs: testes
+    needs: [testes, offline]
     runs-on: ubuntu-latest
     permissions:
       contents: read
