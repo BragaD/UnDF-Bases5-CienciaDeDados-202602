@@ -19,7 +19,7 @@ docker compose run --rm --no-deps livro python scripts/baixar-dados.py
 | `iris.data` | 9 | [UCI Machine Learning Repository](https://archive.ics.uci.edu/ml/datasets/iris) |
 | `spam-assuntos.csv` | 10 | [SpamAssassin public corpus](https://spamassassin.apache.org/old/publiccorpus/) — **só os assuntos**, ver abaixo |
 | `mnist/` | 16 | [MNIST](https://ossci-datasets.s3.amazonaws.com/mnist/) |
-| `imagem-cores.jpg` | 17 | [Wikimedia Commons](https://commons.wikimedia.org/wiki/File:Piet_Mondriaan,_1930_-_Mondrian_Composition_II_in_Red,_Blue,_and_Yellow.jpg) — Piet Mondriaan, *Composition II in Red, Blue, and Yellow* (1930); domínio público (autor falecido em 1944 — PD-old, PD-Art, PD-1923); redimensionada para no máximo 600 px no lado maior |
+| `imagem-cores.jpg` | 17 | [Wikimedia Commons](https://commons.wikimedia.org/wiki/File:Piet_Mondriaan,_1930_-_Mondrian_Composition_II_in_Red,_Blue,_and_Yellow.jpg) — Piet Mondriaan, *Composition II in Red, Blue, and Yellow* (1930); domínio público (autor falecido em 1944 — PD-old, PD-Art, PD-US por publicação pré-1931); redimensionada para no máximo 600 px no lado maior |
 
 ## `spam-assuntos.csv` — por que só os assuntos
 
