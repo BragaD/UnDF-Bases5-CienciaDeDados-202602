@@ -4,11 +4,21 @@ Estes testes travam duas coisas que já quebraram na análise do código:
 importar working_with_data grava um PNG em im/, e importar getting_data
 dispara uma requisição HTTP.
 """
+import hashlib
 import subprocess
 import sys
 from pathlib import Path
 
 RAIZ = Path(__file__).resolve().parent.parent
+
+# SHA-256 sobre a concatenação dos *.py de scratch/, em ordem alfabética de
+# nome de arquivo, gerado no momento em que o pacote foi vendorizado
+# (commits 997435d..c1a1141) e conferido byte a byte contra o upstream
+# nessa ocasião (ver .superpowers/sdd/2026-08-15-andaime-livro-bases5/progress.md,
+# Task 3).
+HASH_SCRATCH_VENDORIZADO = (
+    "d91be62c54d84e8b9cac44c4b278f5cfeb4c191939f3d830eafa82da80aaca6c"
+)
 
 MODULOS_EM_ESCOPO = [
     "linear_algebra",
@@ -77,6 +87,38 @@ def test_vector_e_lista_de_float_nao_numpy():
 def test_scratch_nao_importa_numpy_em_lugar_nenhum():
     for py in (RAIZ / "scratch").glob("*.py"):
         assert "import numpy" not in py.read_text(), f"{py.name} importa numpy"
+
+
+def test_scratch_e_verbatim_upstream():
+    """scratch/ é vendorizado literalmente do repositório do Grus (MIT) e
+    NUNCA deve ser editado — toda adaptação vive no `.qmd`, para que um
+    `diff` contra o upstream continue limpo (CLAUDE.md, seção "O pacote
+    scratch/"). Nenhum outro teste deste projeto verifica isso; é o
+    princípio mais fácil de violar por acidente (um "conserto" de passagem
+    num módulo, por exemplo) e o que não tinha nenhuma guarda.
+
+    Este teste não busca o upstream pela rede a cada rodada — o render deste
+    livro é offline por invariante, e um teste que baixasse algo da internet
+    contradiria a própria coisa que o projeto garante. Em vez disso, trava
+    um hash calculado e verificado uma única vez, no momento da
+    vendorização.
+
+    Se este teste falhar, o motivo quase certo é que scratch/ foi editado.
+    A resposta correta é REVERTER a edição, não atualizar
+    `HASH_SCRATCH_VENDORIZADO` acima — trocar a constante para acomodar uma
+    mudança é remover a própria garantia que este teste existe para dar. Uma
+    atualização legítima do pacote (ex.: um upgrade deliberado do upstream)
+    é uma decisão grande o bastante para merecer revisão explícita, não uma
+    troca silenciosa de constante.
+    """
+    arquivos = sorted((RAIZ / "scratch").glob("*.py"))
+    h = hashlib.sha256()
+    for p in arquivos:
+        h.update(p.read_bytes())
+    assert h.hexdigest() == HASH_SCRATCH_VENDORIZADO, (
+        "scratch/ não bate mais com o hash vendorizado — foi editado? "
+        "Se sim, reverta a edição; não atualize a constante do teste."
+    )
 
 
 def test_modulos_importaveis_sem_rede():
