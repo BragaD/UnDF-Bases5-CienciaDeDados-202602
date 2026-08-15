@@ -16,9 +16,20 @@ preview: ## Preview com hot-reload em http://localhost:4201
 render: ## Renderiza o livro para _book/
 	$(RUN) quarto render
 
-offline: ## Renderiza SEM REDE — prova que nenhum chunk depende da internet
+offline: ## Renderiza SEM REDE (limpa _freeze antes — veja o motivo abaixo)
 # `docker compose run` não tem flag --network (Compose v2), então esta é a
 # única forma de provar o isolamento. Exige `make build` antes.
+#
+# Apaga _freeze/ primeiro DE PROPÓSITO. Com freeze: auto, o Quarto reaproveita
+# a saída congelada e não executa o chunk de novo se o .qmd não mudou — então
+# um `make offline` de cache quente pode reportar sucesso sem rodar um único
+# chunk, e não prova nada sobre depender ou não de rede. Isto não é um `rm -rf`
+# por zelo: é o que torna este alvo honesto por construção, em vez de depender
+# de quem roda lembrar de limpar o cache manualmente antes. O custo é que o
+# próximo render fica mais lento (sem cache) — aceitável, porque este é um
+# alvo rodado deliberadamente antes de publicar, não a cada save. O CI não é
+# afetado: _freeze/ está no .gitignore, então um checkout limpo já começa frio.
+	rm -rf _freeze
 	docker run --rm --network none -u "$(UID):$(GID)" -e HOME=/tmp \
 	  -v "$(PWD)":/livro -w /livro bases5-ciencia-de-dados:local quarto render
 

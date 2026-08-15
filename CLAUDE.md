@@ -182,6 +182,8 @@ Dois detalhes herdados, já pagos no Bases 3:
 
 2. **Render com a rede desligada** — `docker run --network none`, no CI. Específico deste livro: o risco de rede em tempo de render aparece em três lugares e nenhum falha de modo visível — com rede, tudo passa; o que se degrada é a reprodutibilidade, silenciosamente, até a página raspada mudar. Renderizar offline converte essa classe de fragilidade num teste booleano.
 
+   **`make offline` apaga `_freeze/` antes de renderizar, de propósito.** Com `freeze: auto`, um `.qmd` que não mudou não reexecuta — o Quarto devolve a saída congelada sem rodar um chunk sequer. Rodado de cache quente, `make offline` renderizaria "com sucesso" tendo executado zero código Python, o que não prova nada sobre depender ou não de rede: é exatamente o tipo de verificação que passa sem testar o que diz testar. Por isso o alvo começa com `rm -rf _freeze` — o teste é honesto por construção, não por quem lembra de limpar o cache à mão antes de rodar. Se um dia esse `rm -rf` parecer zelo exagerado e alguém cogitar tirá-lo para acelerar o alvo: não tire — é o que garante que "offline passou" significa "o código rodou sem rede", não "o cache existia". O custo é um render mais lento (sem `_freeze/`); aceitável, porque é um alvo rodado deliberadamente antes de publicar, não a cada save. O CI não é afetado — `_freeze/` é gitignorado, então um checkout limpo já começa frio.
+
 3. **`quarto check`**, diagnóstico do ambiente.
 
 Não há equivalente ao teste de Playwright do Bases 3 — aquilo existe para células `{ojs}`, que este livro não tem.
