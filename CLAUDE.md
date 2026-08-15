@@ -53,7 +53,7 @@ A numeração é **sequencial de 1 a 17**. Os capítulos 1–4 batem com os do G
 | 16 | 19 | Deep Learning | 8 (agrupados de 12) |
 | 17 | 20 | Clustering | 6 |
 
-**Regra de citação: o número num callout `de @grus2019` é sempre do Grus, nunca o nosso.** No nosso Capítulo 9, "seção 12.2 de @grus2019" está certo; "seção 9.2" está errado. No sistema de arquivos vale o **nosso** número: `content/cap09/` é k-Vizinhos.
+**Regra de citação: o Grus não numera as seções — o sumário dele traz só títulos —, então nenhum callout pode inventar um número de seção do Grus.** O callout cita o **capítulo** do Grus e o **título** (em itálico) da seção, exatamente como o Capítulo 9 faz: `Esta seção corresponde a *The Model*, do capítulo 12 de @grus2019.` Nunca "seção 12.2 de @grus2019" — essa seção não existe no livro-texto, e `test_nenhuma_secao_inventa_numero_de_secao_do_grus` falha se um padrão desses aparecer perto de `@grus2019`. No sistema de arquivos vale o **nosso** número: `content/cap09/` é k-Vizinhos, e referências como "seção 9.2" são legítimas quando apontam para este livro, não para o Grus.
 
 **Total: 88 arquivos de seção + 17 `index.qmd` = 105 `.qmd`.**
 
