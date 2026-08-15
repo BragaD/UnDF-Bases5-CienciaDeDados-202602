@@ -119,6 +119,8 @@ Cada módulo tem um `if __name__ == "__main__":` com a demonstração do capítu
 
 A correção **não** é editar o pacote: é criar `im/` vazio, como o Grus tem no dele. Chunks que importam desses módulos vão com `include: false` e `plt.close('all')` na sequência, senão a figura do import vaza para a saída da célula.
 
+**`visualization.py` é o caso mais sério: nove `plt.savefig('im/viz_*.png')` no corpo do módulo**, um para cada figura do capítulo (`viz_gdp`, `viz_movies`, `viz_grades`, `viz_misleading_y_axis`, `viz_non_misleading_y_axis`, `viz_line_chart`, `viz_scatterplot`, `viz_scatterplot_axes_not_comparable`, `viz_scatterplot_axes_comparable`). Nenhum `.qmd` ainda importa esse módulo — ele é do capítulo 3, hoje stub —, então isso ainda não aconteceu. Mas assim que o capítulo 3 for escrito, todo `import scratch.visualization` vai gravar esses nove arquivos em `im/` a cada render, inclusive local. O `.gitignore` já tem a regra (`im/*` ignorado, exceto `.gitkeep`) para que isso não seja varrido para um commit por um `git add` amplo — mas quem escrever o capítulo 3 deve saber que os PNGs vão aparecer no disco de qualquer forma.
+
 **2. O capítulo 6 nunca importa o próprio módulo.** `getting_data.py:90` tem um `requests.get` no corpo do módulo — importar dispara rede. Nenhum outro módulo o importa, então basta não importá-lo: o capítulo 6 escreve os chunks direto, lendo o HTML vendorizado. O código do Grus continua visível e citável, sem ser executado por acidente.
 
 ### Dependência dos capítulos fora da ementa
