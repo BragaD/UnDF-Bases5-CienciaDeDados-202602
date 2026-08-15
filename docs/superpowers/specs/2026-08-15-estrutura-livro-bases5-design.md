@@ -53,6 +53,8 @@ A numeração é **sequencial de 1 a 17**. Os capítulos 1–4 batem com os do G
 
 **Regra de citação:** o número dentro de um callout `de @grus2019` é sempre **do Grus**, nunca o nosso. No nosso Capítulo 9, "corresponde à seção 12.2 de @grus2019" está certo; "seção 9.2" está errado. Do lado do sistema de arquivos vale o **nosso** número: `content/cap09/` é k-Vizinhos.
 
+> **Nota de correção (2026-08-15, Task 7 da execução):** a regra acima está errada e não foi seguida na implementação — foi corrigida durante a escrita do capítulo 9, quando ficou confirmado, contra o sumário do PDF, que **o Grus não numera as seções**: o sumário dele traz só títulos, sem "12.1", "12.2" etc. Não existe "seção 12.2 de @grus2019" para citar — inventar esse número é precisamente o que `test_nenhuma_secao_inventa_numero_de_secao_do_grus` (`tests/test_estrutura.py`) existe para proibir. A regra correta, em vigor: o callout cita o **capítulo** do Grus e o **título** (em itálico) da seção — `Esta seção corresponde a *The Model*, do capítulo 12 de @grus2019.` — nunca um número de seção do Grus. Ver `CLAUDE.md`, seção "Escopo e numeração", para o texto definitivo.
+
 ## Pedagogia
 
 Cada seção implementa o algoritmo em Python puro, como o Grus faz, e **fecha com um callout mostrando o equivalente em `scikit-learn`** — o fecho do arco "abrir a caixa-preta". O `scikit-learn` nunca aparece na implementação de uma seção, só no callout de fechamento.
@@ -78,6 +80,8 @@ Fidelidade ao dado, **não** à forma de obtê-lo: nenhum byte vem da rede em te
 
 **Imagem do capítulo 17:** o Grus usa `girl_with_book.jpg` e não a distribui — o texto manda o leitor apontar para uma imagem qualquer. O exemplo precisa de uma foto com poucas regiões de cor bem definidas, para o k-means produzir um resultado legível com k pequeno. Como o livro não fixa qual, a escolha é nossa; a exigência é ter licença que permita redistribuição (CC0 ou equivalente) e caber em ~200 KB depois de redimensionada. **O arquivo específico fica a definir na implementação** — é a única peça de dado ainda não escolhida, e é a de menor risco: qualquer imagem que atenda aos dois critérios serve.
 
+> **Nota de correção (2026-08-15, Task 4 da execução): resolvido.** A imagem escolhida é *Composition II in Red, Blue, and Yellow* (1930), de Piet Mondriaan — poucos blocos de cor sólida (vermelho, azul, amarelo, branco, preto), domínio público (autor falecido em 1944; publicação pré-1931 nos EUA), redimensionada para no máximo 600 px no lado maior. Commitada em `dados/imagem-cores.jpg`; licença e conteúdo verificados na página real do Wikimedia Commons (ver `dados/README.md`).
+
 Repositório final: ~13 MB de dados.
 
 ## O pacote `scratch/`
@@ -95,6 +99,10 @@ Cada módulo tem um `if __name__ == "__main__":` com a demonstração do capítu
 Correção: criar `im/` vazio no repositório, como o Grus tem no dele. **Não** editar o pacote. Chunks que importam desses módulos vão com `include: false` e `plt.close('all')` na sequência, senão a figura do import vaza para a saída da célula.
 
 **2. O capítulo 6 nunca importa o próprio módulo.** `getting_data.py:90` tem um `requests.get` no corpo do módulo — importar dispara rede. Nenhum outro módulo o importa (verificado), então basta não importá-lo: o capítulo 6 escreve os chunks direto, lendo o HTML vendorizado. O código do Grus continua visível e citável no repositório, sem ser executado por acidente.
+
+> **Nota de correção (2026-08-15, Ruling E, Task 3 da execução):** o texto acima, escrito nesta spec original, ficou incompleto na implementação. `working_with_data.py` tem um SEGUNDO defeito, mais grave que o `FileNotFoundError` descrito no item 1: as linhas 44–49 calculam `xs`, `ys1`, `ys2` com `random.random()` **sem semente** e o módulo afirma `0.89 < correlation(xs, ys1) < 0.91` no nível do módulo — o valor real (~0,894) encosta na borda dessa janela, e o `assert` falhou cerca de 1 vez em 3 rodadas medidas. Vendorizar `stocks.csv` na raiz (a correção que o item 1 sugere) não resolve isso: a asserção sem semente continua sendo cara ou coroa a cada import, com ou sem o arquivo no lugar certo.
+>
+> Decisão tomada: `working_with_data` entra, ao lado de `getting_data`, na lista de módulos **nunca importados** (`tests/test_scratch.py`, dicionário `NAO_IMPORTAVEIS`, com o motivo de cada um escrito por extenso). Os capítulos **7** (que *é* esse módulo) e **13** (que importaria `rescale`/`scale` dele) escrevem essas funções **inline no `.qmd`**, em vez de importar — a mesma solução que o item 2 já usa para `getting_data`. Ver `CLAUDE.md`, seção "O pacote `scratch/`", para o texto corrigido e definitivo.
 
 ### Dependência dos capítulos pulados
 
@@ -147,6 +155,8 @@ Três camadas, em ordem de custo:
 1. **O `quarto render` é o teste.** Os módulos do `scratch/` executam `assert` no nível do módulo (`assert add([1, 2, 3], [4, 5, 6]) == [5, 7, 9]`, `linear_algebra.py:21`). Importar o pacote roda a suíte do próprio livro: um upgrade que quebre `add`, `dot` ou `mean` derruba o render no import, em vez de publicar um número errado em silêncio — que foi exatamente a falha que o Bases 3 sofreu com o pandas 3.
 
 2. **Render com a rede desligada** (`docker run --network none`), no CI. Específico deste livro: o risco de rede em tempo de render aparece em três lugares (o `requests.get` no import do cap. 6, o MNIST no cap. 16, as raspagens vivas do cap. 6) e nenhum falha de modo visível — com rede, tudo passa; o que se degrada é a reprodutibilidade, silenciosamente, até a página raspada mudar. Renderizar offline converte essa classe inteira de fragilidade num teste booleano.
+
+   > **Nota de correção (2026-08-15, revisão final do branch):** "no CI" acima descrevia uma intenção que a implementação da Task 8 não executou — o `.github/workflows/quarto-render.yml` ganhou os jobs `build-image`, `testes`, `render` e `publish`, mas nenhum rodava o render offline; a invariante "nenhum byte vem da rede" só era verificada localmente, por disciplina de quem lembrasse de rodar `make offline` antes de publicar. Corrigido na revisão final: o workflow ganhou um job `offline`, que roda em paralelo a `testes` (após `build-image`) num runner comum, faz `docker pull` da imagem publicada e `docker run --network none` contra ela; `render` só roda se `testes` **e** `offline` passarem. Um checkout de CI nunca tem `_freeze/` (gitignorado), então o job já começa frio por construção — sem precisar do `rm -rf _freeze` que `make offline` faz localmente.
 
 3. **`quarto check`**, diagnóstico do ambiente.
 
