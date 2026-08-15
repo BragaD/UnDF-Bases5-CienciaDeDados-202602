@@ -4,7 +4,114 @@
 Esta seção corresponde a *The Model*, do capítulo 12 de @grus2019.
 :::
 
-::: {.callout-warning}
-## Em construção
-O conteúdo desta seção ainda será escrito.
+Imagine que você quer prever em quem uma pessoa vai votar. Sem saber mais nada sobre ela, uma aposta razoável é olhar como os vizinhos dela votam. Se você souber mais — idade, renda, quantos filhos tem —, dá para olhar os vizinhos *naquelas dimensões* também, e não só na geográfica.
+
+Essa é a ideia inteira.
+
+::: {.conceito}
+O k-vizinhos mais próximos precisa de apenas duas coisas:
+
+1. Uma noção de **distância**
+2. A hipótese de que pontos **próximos são parecidos**
+
+Ele não faz nenhuma suposição matemática sobre a forma dos dados e não tem etapa de treino. Em compensação, **ignora quase toda a informação disponível**: a previsão para um ponto novo depende só do punhado de pontos mais próximos dele.
+:::
+
+Essa é uma troca real, não um detalhe. O k-vizinhos raramente ajuda a *entender* o fenômeno. Prever o voto de alguém a partir do voto dos vizinhos não diz nada sobre a causa daquele voto — enquanto um modelo baseado em renda e estado civil poderia dizer.
+
+## Contando votos
+
+Escolhido um *k* — 3 ou 5, digamos —, classificar um ponto novo é achar os *k* pontos rotulados mais próximos e deixá-los votar. Precisamos, então, de uma função que conte votos.
+
+A primeira tentativa é direta:
+
+```{python}
+from typing import List
+from collections import Counter
+
+def raw_majority_vote(labels: List[str]) -> str:
+    votes = Counter(labels)
+    winner, _ = votes.most_common(1)[0]
+    return winner
+
+assert raw_majority_vote(['a', 'b', 'c', 'b']) == 'b'
+```
+
+Só que ela não faz nada de inteligente com empates. Se estivéssemos classificando filmes e os cinco mais próximos fossem G, G, PG, PG e R, teríamos dois votos para G e dois para PG. Há três saídas possíveis:
+
+- Escolher um dos vencedores ao acaso
+- Ponderar os votos pela distância e pegar o vencedor ponderado
+- Reduzir *k* até haver um vencedor único
+
+Vamos implementar a terceira:
+
+```{python}
+def majority_vote(labels: List[str]) -> str:
+    """Assume que os rótulos estão ordenados do mais próximo ao mais distante."""
+    vote_counts = Counter(labels)
+    winner, winner_count = vote_counts.most_common(1)[0]
+    num_winners = len([count
+                       for count in vote_counts.values()
+                       if count == winner_count])
+
+    if num_winners == 1:
+        return winner                     # vencedor único
+    else:
+        return majority_vote(labels[:-1])  # tenta de novo sem o mais distante
+
+# Empate: olha os 4 primeiros, então 'b'
+assert majority_vote(['a', 'b', 'c', 'b', 'a']) == 'b'
+```
+
+::: {.exemplo}
+A recursão sempre termina. No pior caso, descartamos um rótulo por vez até sobrar um só — e aí ele vence sozinho.
+
+Repare que o argumento precisa estar **ordenado do mais próximo ao mais distante**. Descartar "o último" só faz sentido se o último for o vizinho menos relevante. Uma lista fora de ordem produz uma resposta errada sem erro nenhum.
+:::
+
+## O classificador
+
+Com a votação pronta, o classificador cabe em poucas linhas. A função `distance` vem do capítulo 4:
+
+```{python}
+from typing import NamedTuple
+from scratch.linear_algebra import Vector, distance
+
+class LabeledPoint(NamedTuple):
+    point: Vector
+    label: str
+
+def knn_classify(k: int,
+                 labeled_points: List[LabeledPoint],
+                 new_point: Vector) -> str:
+
+    # Ordena os pontos rotulados do mais próximo ao mais distante.
+    by_distance = sorted(labeled_points,
+                         key=lambda lp: distance(lp.point, new_point))
+
+    # Pega os rótulos dos k mais próximos...
+    k_nearest_labels = [lp.label for lp in by_distance[:k]]
+
+    # ...e deixa que votem.
+    return majority_vote(k_nearest_labels)
+```
+
+É isso: ordenar por distância, cortar em *k*, contar. Não há treino, não há parâmetros ajustados, não há otimização. O modelo *é* o conjunto de dados.
+
+::: {.callout-tip collapse="true"}
+## Na prática: `scikit-learn`
+
+Você acabou de escrever o algoritmo. Na vida real usaria isto:
+
+```python
+from sklearn.neighbors import KNeighborsClassifier
+
+modelo = KNeighborsClassifier(n_neighbors=5)
+modelo.fit(X_treino, y_treino)
+modelo.predict(X_novo)
+```
+
+As diferenças que importam: o `scikit-learn` resolve empates escolhendo o rótulo de menor índice (não reduzindo *k*), aceita pesos por distância (`weights='distance'`), e usa estruturas de indexação como `KDTree` para não comparar o ponto novo com todos os outros — o que muda o custo de $O(n)$ por consulta para algo bem menor em dimensões baixas.
+
+Nada disso muda o que o modelo *é*. É a mesma ordenação por distância seguida de votação que você implementou acima.
 :::
