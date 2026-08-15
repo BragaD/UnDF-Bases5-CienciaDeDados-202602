@@ -41,7 +41,7 @@ Alternativa sem instalar nada: abra o repositório no **GitHub Codespaces** ou n
 ├── index.qmd             # Página inicial
 ├── content/capNN/        # Um diretório por capítulo, um .qmd por seção
 ├── scratch/              # Código do livro-texto, vendorizado (MIT) — NÃO EDITAR
-├── im/                   # Vazio de propósito; working_with_data.py grava aqui no import
+├── im/                   # Vazio de propósito; visualization.py grava 9 PNGs aqui no import
 ├── dados/                # Conjuntos de dados, todos commitados
 ├── scripts/              # Coleta única de dados; gerador de stubs
 ├── tests/                # Invariantes estruturais (pytest)
@@ -53,11 +53,13 @@ Alternativa sem instalar nada: abra o repositório no **GitHub Codespaces** ou n
 
 Todo arquivo novo em `content/` precisa ser registrado em `_quarto.yml` — e `make teste` falha se você esquecer.
 
+**Antes de escrever um capítulo novo, leia `content/cap09/` inteiro.** É o único capítulo escrito até agora e serve como modelo de estilo: abertura de seção, posição dos callouts, formato de citação do Grus, justificativa de semente em código estocástico, e o callout de fechamento em `scikit-learn`. Copiar essa forma é mais barato do que reinventá-la.
+
 ## O pacote `scratch/`
 
 É a cópia literal do [repositório do Joel Grus](https://github.com/joelgrus/data-science-from-scratch), sob licença MIT (veja `LICENSE-scratch`). **Nunca é editado**: toda adaptação vive no `.qmd`, para que um `diff` contra o upstream continue limpo.
 
-Um detalhe que surpreende: `im/` precisa existir, mesmo vazio, porque `scratch/working_with_data.py` grava um PNG ali no momento do import.
+Um detalhe que surpreende: `im/` precisa existir, mesmo vazio, porque `scratch/visualization.py` (capítulo 3) tem nove `plt.savefig('im/viz_*.png')` no corpo do módulo — importá-lo grava os nove PNGs ali, a cada render. `working_with_data.py` também escreveria em `im/` no import, mas esse módulo nunca é importado (ver `CLAUDE.md`) — a razão viva para `im/` existir é `visualization.py`.
 
 ## Dados
 
@@ -65,7 +67,7 @@ Todos os conjuntos em `dados/` são commitados; nada é baixado durante a render
 
 ## Publicação
 
-O CI constrói a imagem, roda os testes, renderiza e publica em `gh-pages` a cada push na `main`. Há passos manuais, feitos **uma única vez** no GitHub:
+O CI constrói a imagem, roda os testes, renderiza offline (prova que nada depende da rede) e com rede, e publica em `gh-pages` a cada push na `main`. Há passos manuais, feitos **uma única vez** no GitHub:
 
 1. Criar o repositório e dar push na `main`.
 2. Em **Settings → Actions → General → Workflow permissions**, selecionar "Read and write permissions".

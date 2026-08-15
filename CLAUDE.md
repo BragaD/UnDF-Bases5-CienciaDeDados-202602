@@ -4,18 +4,24 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Estado atual
 
-O design está aprovado e escrito em `docs/superpowers/specs/2026-08-15-estrutura-livro-bases5-design.md` — **leia essa spec antes de mexer na estrutura.** Este arquivo é o resumo operacional; a spec é a fonte das decisões e das razões.
+O design está aprovado e escrito em `docs/superpowers/specs/2026-08-15-estrutura-livro-bases5-design.md` — **leia essa spec antes de mexer na estrutura.** Este arquivo é o resumo operacional; a spec é a fonte das decisões e das razões. A spec carrega algumas notas de correção pós-implementação — leia-as também; elas registram onde a decisão original mudou depois de escrita.
 
-Nada de conteúdo foi construído ainda. Os irmãos já prontos definem o padrão da casa:
+**O andaime está construído.** 17 capítulos, 88 seções + 17 `index.qmd` = 105 `.qmd`, todos registrados em `_quarto.yml`. Container Docker (Quarto + `uv`), CI publicando em `gh-pages`, 20 testes (`make teste`) guardando os invariantes estruturais. O **capítulo 9 (k-Vizinhos Mais Próximos) está escrito por inteiro** — é o único capítulo de conteúdo pronto e é o **modelo de estilo** para os outros 16: leia `content/cap09/` antes de escrever qualquer outro capítulo, para o formato pegar (ver "Antes de escrever um capítulo", abaixo). **Os outros 16 capítulos são stubs** — callout `de @grus2019` citando capítulo e título da seção reais, mais um callout "Em construção" — aguardando conteúdo.
 
-- `../bases_3_estatistica/` — **o modelo a copiar**. Quarto + Docker + `uv`, CI de três jobs, um `.qmd` por seção. Ao criar `Dockerfile`, `Makefile`, `compose.yaml`, `.github/workflows/`, `.devcontainer/`, `.gitignore` ou `styles.css`, **copie de lá e adapte os nomes** — as armadilhas já foram pagas uma vez.
-- `../../202601/BasesIV_EngSoft_BD/` — livro de Banco de Dados, geração anterior (R + `renv`, sem container). Vale pelo `atividades/`: provas e trabalhos em `.qmd` que renderizam para PDF **fora** do projeto-livro, com gabarito via metadado + filtro Lua. **Cuidado:** lá os caminhos de dados são relativos ao arquivo (`../../dados/`); aqui são relativos à raiz. Não copie esse padrão.
+Os irmãos já prontos definiram o padrão da casa **na hora de montar o andaime**; agora servem como referência de convenção, não como fonte para copiar arquivo — a infra já existe aqui e já está adaptada:
+
+- `../bases_3_estatistica/` — Quarto + Docker + `uv`, um `.qmd` por seção. Se uma dúvida de convenção não estiver resolvida aqui (formato de `Makefile`, padrão de `.devcontainer/`, uso de `styles.css`), é lá que a resposta provavelmente já foi pensada uma vez — mas adapte, não copie por cima do que já funciona.
+- `../../202601/BasesIV_EngSoft_BD/` — livro de Banco de Dados, geração anterior (R + `renv`, sem container). Vale pelo `atividades/`: provas e trabalhos em `.qmd` que renderizam para PDF **fora** do projeto-livro, com gabarito via metadado + filtro Lua — ainda fora de escopo aqui. **Cuidado:** lá os caminhos de dados são relativos ao arquivo (`../../dados/`); aqui são relativos à raiz. Não copie esse padrão.
+
+### Antes de escrever um capítulo
+
+**Leia `content/cap09/` inteiro primeiro.** É o único capítulo escrito e foi revisado por rodadas sucessivas até fixar a forma: abertura de seção, posição dos callouts, formato de citação (capítulo + título em itálico, nunca um número de seção do Grus), justificativa de semente em chunk estocástico, e o callout de fechamento em `scikit-learn`. Um capítulo novo que copiar essa forma economiza rodadas de revisão; um que reinventar a forma provavelmente repete um erro que o cap. 9 já pagou.
 
 ## Visão geral
 
 **Quarto book** da disciplina *Bases 5 — Ciência de Dados*, do curso de **Ciência da Computação** da UnDF. Português brasileiro, exemplos em Python, publicado no GitHub Pages a cada push na `main`.
 
-Livro-texto: Joel Grus — *Data Science from Scratch: First Principles with Python*, 2ª ed. (O'Reilly, 2019). Código original: <https://github.com/joelgrus/data-science-from-scratch> (MIT). O PDF do livro está na raiz do projeto — é dele que saem os títulos reais das seções.
+Livro-texto: Joel Grus — *Data Science from Scratch: First Principles with Python*, 2ª ed. (O'Reilly, 2019). Código original: <https://github.com/joelgrus/data-science-from-scratch> (MIT). O PDF do livro **não faz parte do repositório** — `*.pdf` está no `.gitignore`, então um clone novo não o tem. Quem trabalha aqui mantém uma cópia local na raiz do projeto; é dela que saem os títulos reais das seções e o texto que os capítulos citam.
 
 **Identidade: Bases 5 abre as caixas-pretas que o aluno usou antes.** Ele já ajustou uma reta chamando uma função pronta; aqui descobre o que aquele `.fit()` fazia.
 
@@ -72,12 +78,16 @@ Tudo roda dentro do container — não há Python instalado no host.
 ```bash
 make preview   # hot-reload em http://localhost:4201
 make render    # renderiza para _book/
+make teste     # roda a suíte de invariantes estruturais (pytest, tests/)
+make offline   # renderiza SEM REDE, com _freeze/ limpo antes — prova o isolamento
 make shell     # shell dentro do container
 make check     # quarto check
 make build     # reconstrói a imagem (após mudar Dockerfile ou uv.lock)
 make lock      # regenera uv.lock após editar pyproject.toml
 make clean     # remove _book/, _freeze/, .quarto/ e o lixo de render abortado
 ```
+
+**`make teste` roda `pytest tests/`** — 20 testes em três arquivos: `test_estrutura.py` (registro no `_quarto.yml`, caminhos de dados, citações, e os totais de 17 capítulos / 88 seções / 105 arquivos contra o `LIVRO` de `scripts/gerar-stubs.py`), `test_scratch.py` (o pacote vendorizado — inclusive um hash SHA-256 travando que `scratch/` continua verbatim upstream) e `test_dados.py` (os seis conjuntos commitados). É o que garante a regra "todo `.qmd` novo precisa ser registrado em `_quarto.yml`", abaixo — sem essa suíte, um arquivo esquecido no YAML só aparece quando alguém percebe a seção faltando no site publicado.
 
 **Porta 4201, não 4200.** O `bases_3_estatistica` ocupa a 4200, e os dois livros são editados na mesma tarde.
 
@@ -95,13 +105,13 @@ Um diretório por capítulo, um `.qmd` por seção:
 
 ```
 content/cap09/
-├── index.qmd                 # Visão geral + objetivos + tabela de seções + Leituras adicionais
+├── index.qmd                          # Visão geral + objetivos + tabela de seções + Leituras adicionais
 ├── 01-o-modelo.qmd
-├── 02-exemplo-iris.qmd
-└── 03-maldicao-dimensionalidade.qmd
+├── 02-exemplo-o-dataset-iris.qmd
+└── 03-a-maldicao-da-dimensionalidade.qmd
 ```
 
-**Todo `.qmd` novo precisa ser registrado em `_quarto.yml`** sob `book.chapters` — arquivo não listado não aparece no livro. A ordem vem do YAML, não do nome do arquivo; para reordenar, `git mv` e atualize o YAML na mesma operação.
+**Todo `.qmd` novo precisa ser registrado em `_quarto.yml`** sob `book.chapters` — arquivo não listado não aparece no livro. A ordem vem do YAML, não do nome do arquivo; para reordenar, `git mv` e atualize o YAML na mesma operação. `make teste` verifica isso: `test_todo_qmd_esta_registrado_no_quarto_yml` (e o teste que confere os totais contra o `LIVRO`) falham se um `.qmd` existir sem entrada no YAML.
 
 "For Further Exploration" fecha todo capítulo do Grus. Não vira arquivo: vira uma seção *Leituras adicionais* no fim do `index.qmd` do capítulo.
 
@@ -113,15 +123,20 @@ Com `execute-dir: project`, o cwd de todo chunk é a raiz e `from scratch.linear
 
 Cada módulo tem um `if __name__ == "__main__":` com a demonstração do capítulo; ele não roda no import. Se o texto precisa daquele exemplo, chame as funções explicitamente no chunk.
 
-**Dois efeitos colaterais verificados no código:**
+**Dois efeitos colaterais verificados no código, e dois módulos que nunca são importados.**
 
-**1. Importar alguns módulos desenha gráficos, e um escreve arquivo.** Chamadas `plt.*` no nível do módulo: `statistics.py` (5), `probability.py` (18), `working_with_data.py` (8), `visualization.py` (63). E `working_with_data.py:41` faz `plt.savefig('im/working_scatter.png')` **no import** — um `from scratch.working_with_data import rescale` estoura com `FileNotFoundError` se `im/` não existir. Atinge o capítulo 7 (que *é* esse módulo) e o 13, que importa `rescale` e `scale` dele.
+**1. Importar alguns módulos desenha gráficos, e um escreve arquivo.** Chamadas `plt.*` no nível do módulo: `statistics.py` (5), `probability.py` (18), `working_with_data.py` (8), `visualization.py` (63).
 
 A correção **não** é editar o pacote: é criar `im/` vazio, como o Grus tem no dele. Chunks que importam desses módulos vão com `include: false` e `plt.close('all')` na sequência, senão a figura do import vaza para a saída da célula.
 
 **`visualization.py` é o caso mais sério: nove `plt.savefig('im/viz_*.png')` no corpo do módulo**, um para cada figura do capítulo (`viz_gdp`, `viz_movies`, `viz_grades`, `viz_misleading_y_axis`, `viz_non_misleading_y_axis`, `viz_line_chart`, `viz_scatterplot`, `viz_scatterplot_axes_not_comparable`, `viz_scatterplot_axes_comparable`). Nenhum `.qmd` ainda importa esse módulo — ele é do capítulo 3, hoje stub —, então isso ainda não aconteceu. Mas assim que o capítulo 3 for escrito, todo `import scratch.visualization` vai gravar esses nove arquivos em `im/` a cada render, inclusive local. O `.gitignore` já tem a regra (`im/*` ignorado, exceto `.gitkeep`) para que isso não seja varrido para um commit por um `git add` amplo — mas quem escrever o capítulo 3 deve saber que os PNGs vão aparecer no disco de qualquer forma.
 
-**2. O capítulo 6 nunca importa o próprio módulo.** `getting_data.py:90` tem um `requests.get` no corpo do módulo — importar dispara rede. Nenhum outro módulo o importa, então basta não importá-lo: o capítulo 6 escreve os chunks direto, lendo o HTML vendorizado. O código do Grus continua visível e citável, sem ser executado por acidente.
+**2. `getting_data` e `working_with_data` nunca são importados — cada um por um motivo diferente, e nenhum se corrige editando o pacote:**
+
+- **`getting_data.py:90`** faz `requests.get` no corpo do módulo — importar dispara rede. Nenhum outro módulo o importa, então basta não importá-lo: o capítulo 6 (que *é* esse módulo) escreve os chunks direto, lendo o HTML vendorizado. O código do Grus continua visível e citável, sem ser executado por acidente.
+- **`working_with_data.py:148`** abre `stocks.csv` com um caminho relativo ao **cwd** no corpo do módulo — o upstream do Grus mantém esse arquivo na raiz do repositório dele; na nossa convenção, dado vive em `dados/`, então o `open()` estoura com `FileNotFoundError`. E as linhas 44–49 calculam `xs`, `ys1`, `ys2` com `random.random()` **sem semente** e afirmam `0.89 < correlation(xs, ys1) < 0.91` — o valor real (~0,894) encosta na borda dessa janela, e o `assert` falha cerca de 1 vez em 3 (medido em 5 rodadas). Vendorizar `stocks.csv` na raiz não resolve nada disso: a asserção sem semente continua sendo cara ou coroa a cada import.
+
+`tests/test_scratch.py`'s `NAO_IMPORTAVEIS` documenta os dois motivos e trava com um teste que a exclusão precisa vir com motivo escrito. Consequência de conteúdo: os capítulos **7** (que *é* o módulo `working_with_data`) e **13** (que precisaria de `rescale`/`scale` de lá) não importam `working_with_data` — escrevem essas funções **inline no `.qmd`**, exatamente como o capítulo 6 já faz com o código de `getting_data`.
 
 ### Dependência dos capítulos fora da ementa
 
@@ -180,7 +195,7 @@ Dois detalhes herdados, já pagos no Bases 3:
 
 1. **O `quarto render` é o teste.** Os módulos do `scratch/` executam `assert` no nível do módulo (`assert add([1, 2, 3], [4, 5, 6]) == [5, 7, 9]`, `linear_algebra.py:21`). Importar o pacote roda a suíte do próprio livro: um upgrade que quebre `add`, `dot` ou `mean` derruba o render no import, em vez de publicar um número errado em silêncio.
 
-2. **Render com a rede desligada** — `docker run --network none`, no CI. Específico deste livro: o risco de rede em tempo de render aparece em três lugares e nenhum falha de modo visível — com rede, tudo passa; o que se degrada é a reprodutibilidade, silenciosamente, até a página raspada mudar. Renderizar offline converte essa classe de fragilidade num teste booleano.
+2. **Render com a rede desligada** — `docker run --network none`, tanto local (`make offline`) quanto no CI (job `offline` do workflow, ver "CI/CD"). Específico deste livro: o risco de rede em tempo de render aparece em três lugares e nenhum falha de modo visível — com rede, tudo passa; o que se degrada é a reprodutibilidade, silenciosamente, até a página raspada mudar. Renderizar offline converte essa classe de fragilidade num teste booleano.
 
    **`make offline` apaga `_freeze/` antes de renderizar, de propósito.** Com `freeze: auto`, um `.qmd` que não mudou não reexecuta — o Quarto devolve a saída congelada sem rodar um chunk sequer. Rodado de cache quente, `make offline` renderizaria "com sucesso" tendo executado zero código Python, o que não prova nada sobre depender ou não de rede: é exatamente o tipo de verificação que passa sem testar o que diz testar. Por isso o alvo começa com `rm -rf _freeze` — o teste é honesto por construção, não por quem lembra de limpar o cache à mão antes de rodar. Se um dia esse `rm -rf` parecer zelo exagerado e alguém cogitar tirá-lo para acelerar o alvo: não tire — é o que garante que "offline passou" significa "o código rodou sem rede", não "o cache existia". O custo é um render mais lento (sem `_freeze/`); aceitável, porque é um alvo rodado deliberadamente antes de publicar, não a cada save. O CI não é afetado — `_freeze/` é gitignorado, então um checkout limpo já começa frio.
 
@@ -190,7 +205,7 @@ Não há equivalente ao teste de Playwright do Bases 3 — aquilo existe para c�
 
 ### CI/CD
 
-`.github/workflows/quarto-render.yml`, copiado do Bases 3: três jobs em cadeia a cada push na `main` — `build-image` (constrói e envia ao GHCR), `render` (roda **dentro** dessa imagem, `quarto render` → `_book/`, sobe como artefato), `publish` (runner limpo, publica `_book/` em `gh-pages`).
+`.github/workflows/quarto-render.yml`, adaptado do Bases 3: cinco jobs a cada push na `main` — `build-image` (constrói e envia ao GHCR); em seguida, em paralelo, `testes` (`pytest tests/` **dentro** da imagem) e `offline` (`docker pull` + `docker run --network none` num runner comum, contra um checkout novo que já não tem `_freeze/` — o guard automático da invariante "nenhum byte vem da rede em tempo de render"); depois dos dois, `render` (roda **dentro** da imagem, `quarto render` → `_book/`, sobe como artefato); por fim `publish` (runner limpo, publica `_book/` em `gh-pages`). A cadeia de `needs` é sequencial o bastante para que uma falha em `testes` **ou** em `offline` bloqueie `render` e, por consequência, `publish` — nada quebrado chega a `gh-pages`.
 
 **O nome da imagem precisa ser minúsculo e literal**: `ghcr.io/bragad/undf-bases5-ciencia-de-dados-202602:latest`. O GHCR rejeita maiúsculas, então não dá para usar `${{ github.repository_owner }}`, que resolveria para `BragaD`.
 
