@@ -4,7 +4,284 @@
 Esta seção corresponde a *Backpropagation*, do capítulo 18 de @grus2019.
 :::
 
+A rede XOR da [seção 15.2](02-redes-feed-forward.qmd) foi construída à mão: olhamos para o problema, percebemos que "ou, mas não e" resolve, e escrevemos os pesos que produzem isso. Esse método não escala por dois motivos independentes. O primeiro é tamanho — um problema de reconhecimento de imagens envolve centenas ou milhares de neurônios, e ninguém escreve mil vetores de peso à mão. O segundo é pior: na maioria dos problemas **não há como raciocinar** o que cada neurônio deveria calcular. "E" e "ou" eram atributos óbvios do XOR; não existe o equivalente óbvio para a maior parte das tarefas.
+
+Então, como sempre neste livro, usamos dados. O algoritmo se chama **retropropagação**, e ele é gradiente descendente — o do [Capítulo 5](../cap05/index.qmd), sem substituições — aplicado a uma função cujos parâmetros estão distribuídos em camadas.
+
+O ciclo tem cinco passos. Dado um conjunto de treino com vetores de entrada e os vetores de saída desejados:
+
+1. Rodar `feed_forward` sobre um vetor de entrada, produzindo as saídas de **todos** os neurônios da rede.
+2. Como conhecemos a saída desejada, calcular uma perda: a soma dos erros ao quadrado.
+3. Calcular o gradiente dessa perda em relação aos pesos dos neurônios de **saída**.
+4. "Propagar" os gradientes e os erros **para trás**, obtendo os gradientes em relação aos pesos dos neurônios **escondidos**.
+5. Dar um passo de gradiente descendente.
+
+Repetido sobre o conjunto inteiro, muitas vezes, até a rede convergir.
+
+O passo 4 é o coração da coisa, e é onde vale gastar o tempo.
+
+## O que significa propagar o erro para trás
+
+O problema é este: o neurônio de saída **tem** um alvo, então dá para dizer o quanto ele errou. Um neurônio escondido não tem alvo nenhum. Ninguém nunca disse a ele qual deveria ser a sua saída. Como atribuir culpa a quem não tem gabarito?
+
+A resposta é a regra da cadeia, e ela tem uma leitura direta. Chame de **culpa** de um neurônio a quantidade
+
+$$
+\delta \;=\; \frac{\partial \text{perda}}{\partial z}
+$$
+
+onde $z$ é a soma ponderada que entra na sigmoide daquele neurônio — o quanto a perda mudaria se empurrássemos $z$ um tiquinho para cima. Três observações, em ordem:
+
+**Para um neurônio de saída, a culpa é direta.** A perda depende da saída $o$ por $(o - t)^2$, e a saída depende de $z$ pela sigmoide. Pela regra da cadeia, a culpa é o produto de dois fatores com significados distintos: $(o - t)$, o quanto o neurônio errou e para que lado; e $o(1-o)$, a derivada da sigmoide, que mede o quanto aquele neurônio **consegue reagir** a um empurrão. Um neurônio saturado — saída perto de 0 ou perto de 1 — tem $o(1-o)$ perto de zero e recebe pouca culpa mesmo estando muito errado, porque mexer nele quase não muda a saída.
+
+**A culpa de um peso é a culpa do neurônio vezes a entrada que aquele peso multiplica.** Faz sentido: se a entrada que chega por um peso valia 0 naquele exemplo, aquele peso não teve influência nenhuma no resultado, e o gradiente dele é zero. Um peso só é responsável na medida em que a entrada dele estava ligada.
+
+**A culpa de um neurônio escondido é emprestada dos que vêm depois dele.** Ele não tem alvo, mas a saída dele foi enviada a cada neurônio da camada seguinte, cada um por uma conexão de peso conhecido. Então cada neurônio de saída devolve para trás a sua própria culpa, multiplicada pelo peso da conexão por onde o sinal passou. Somando essas parcelas e multiplicando pela derivada da sigmoide do próprio neurônio escondido, temos a culpa dele.
+
+::: {.conceito}
+É daí que vem o nome. **O mesmo peso que levou o sinal para a frente traz a culpa de volta.** Uma conexão forte transporta muita responsabilidade; uma conexão fraca, pouca. O erro medido na saída é redistribuído para trás, camada a camada, na proporção exata em que cada peso contribuiu para produzi-lo.
+:::
+
+## O código
+
+Traduzido, isso é uma função só. O `feed_forward` vem importado de `scratch.neural_networks` — é o mesmo código da [seção 15.2](02-redes-feed-forward.qmd), não uma segunda versão dele. Cada página deste livro roda num kernel próprio, então nomes definidos numa página não existem em outra; o pacote `scratch`, copiado literalmente do repositório do livro-texto, existe em todas.
+
+```{python}
+#| label: sqerror-gradients
+from typing import List
+from scratch.linear_algebra import Vector, dot
+from scratch.neural_networks import feed_forward
+
+def sqerror_gradients(network: List[List[Vector]],
+                      input_vector: Vector,
+                      target_vector: Vector) -> List[List[Vector]]:
+    """
+    Dada uma rede, um vetor de entrada e um vetor-alvo, faz uma previsão
+    e calcula o gradiente da perda quadrática em relação aos pesos.
+    """
+    # passada para a frente
+    hidden_outputs, outputs = feed_forward(network, input_vector)
+
+    # gradientes em relação às pré-ativações dos neurônios de saída
+    output_deltas = [output * (1 - output) * (output - target)
+                     for output, target in zip(outputs, target_vector)]
+
+    # gradientes em relação aos pesos dos neurônios de saída
+    output_grads = [[output_deltas[i] * hidden_output
+                     for hidden_output in hidden_outputs + [1]]
+                    for i, output_neuron in enumerate(network[-1])]
+
+    # gradientes em relação às pré-ativações dos neurônios escondidos
+    hidden_deltas = [hidden_output * (1 - hidden_output) *
+                         dot(output_deltas, [n[i] for n in network[-1]])
+                     for i, hidden_output in enumerate(hidden_outputs)]
+
+    # gradientes em relação aos pesos dos neurônios escondidos
+    hidden_grads = [[hidden_deltas[i] * input for input in input_vector + [1]]
+                    for i, hidden_neuron in enumerate(network[0])]
+
+    return [hidden_grads, output_grads]
+```
+
+As quatro seções da função são, na ordem, os três parágrafos acima mais a passada para a frente. `output_deltas` é a culpa dos neurônios de saída; `output_grads` distribui essa culpa pelos pesos, multiplicando pela entrada de cada um (`hidden_outputs + [1]`, com o 1 do viés); `hidden_deltas` é o empréstimo — `[n[i] for n in network[-1]]` colhe, de todos os neurônios de saída, o peso da conexão que vinha do $i$-ésimo escondido; e `hidden_grads` distribui essa culpa pelos pesos da primeira camada.
+
+::: {.exemplo}
+## A conta, para quem quiser vê-la
+
+O livro-texto deixa a derivação como exercício. Ela cabe aqui, e não é difícil — só exige cuidado com os índices.
+
+Escreva $z_h$ e $o_h = \sigma(z_h)$ para a pré-ativação e a saída do $h$-ésimo neurônio escondido, e $z_i$, $o_i$ para os do $i$-ésimo neurônio de saída, com alvo $t_i$. A perda de um exemplo é
+
+$$
+L = \sum_i (o_i - t_i)^2
+$$
+
+Para o neurônio de saída $i$, a regra da cadeia dá
+
+$$
+\frac{\partial L}{\partial z_i}
+= \underbrace{\frac{\partial L}{\partial o_i}}_{2(o_i - t_i)} \cdot
+  \underbrace{\frac{\partial o_i}{\partial z_i}}_{o_i(1 - o_i)}
+$$
+
+usando que $\sigma' = \sigma(1-\sigma)$ — a propriedade conveniente da logística que o [Capítulo 13](../cap13/02-a-funcao-logistica.qmd) já tinha registrado. Como $z_i = \sum_h v_{ih}\,o_h + v_{i,\text{viés}}$, a derivada em relação a um peso é
+
+$$
+\frac{\partial L}{\partial v_{ih}} = \frac{\partial L}{\partial z_i} \cdot o_h
+$$
+
+que é a culpa do neurônio vezes a entrada que aquele peso multiplica.
+
+Para o neurônio escondido $h$, a diferença é que $o_h$ afeta a perda por **vários** caminhos — um por neurônio de saída — e as contribuições se somam:
+
+$$
+\frac{\partial L}{\partial o_h} = \sum_i \frac{\partial L}{\partial z_i} \cdot v_{ih}
+\qquad\Longrightarrow\qquad
+\frac{\partial L}{\partial z_h} = o_h(1 - o_h) \sum_i \frac{\partial L}{\partial z_i} \cdot v_{ih}
+$$
+
+que é exatamente a linha `hidden_deltas` do código, com $v_{ih}$ escrito como `n[i]`. E, de novo, a derivada em relação a um peso da primeira camada é essa culpa vezes a entrada correspondente, $x_j$.
+:::
+
 ::: {.callout-warning}
-## Em construção
-O conteúdo desta seção ainda será escrito.
+## O fator 2 que sumiu
+
+Compare a derivação com o código e falta um 2. A conta dá $\partial L / \partial o_i = 2(o_i - t_i)$; `output_deltas` calcula `output * (1 - output) * (output - target)`, sem o 2.
+
+Não é um erro, mas o comentário do código também não é preciso ao dizer "o gradiente da perda quadrática": o que está sendo calculado é o gradiente exato da **metade** da soma dos quadrados. Como os dois diferem por um fator constante, eles apontam exatamente na mesma direção, e o efeito prático é só o de dobrar ou não a taxa de aprendizado — que é um número escolhido à mão de qualquer forma, como o [Capítulo 5](../cap05/04-escolhendo-o-tamanho-do-passo.qmd) mostrou.
+
+Vale saber disso por um motivo concreto: a [seção 15.4](04-exemplo-fizz-buzz.qmd) vai **imprimir** a perda a cada época, usando `squared_distance`, que é a soma dos quadrados inteira. O número acompanhado na tela é, portanto, o dobro daquele cujo gradiente está sendo descido. Para ver a perda cair, dá no mesmo; para conferir uma conta contra a outra, não.
+:::
+
+::: {.callout-important}
+## Esta implementação só funciona para duas camadas
+
+Olhe a primeira linha do corpo da função: `hidden_outputs, outputs = feed_forward(...)`. Ela desempacota a lista de saídas em exatamente **dois** nomes.
+
+Uma rede com três camadas faria essa linha estourar com `ValueError`, e uma com uma camada só também. `network[0]` e `network[-1]` aparecem no resto do código pelo mesmo motivo: são "a primeira" e "a última", e a função supõe que não há nada entre elas.
+
+Isso não é descuido; é o custo de escrever a retropropagação à mão para uma arquitetura específica. Cada nova topologia exigiria uma nova função. O [Capítulo 16](../cap16/index.qmd) existe em grande parte para resolver isso: lá, cada camada saberá propagar o gradiente através de si mesma, e redes de qualquer profundidade se montam encaixando camadas.
+:::
+
+## Treinando o XOR
+
+Vamos aprender a rede XOR que a seção anterior escreveu à mão. Começamos com os dados de treino — quatro exemplos, o problema inteiro — e uma rede de pesos aleatórios:
+
+```{python}
+#| label: rede-inicial
+import random
+
+random.seed(0)
+
+# dados de treino
+xs = [[0., 0], [0., 1], [1., 0], [1., 1]]
+ys = [[0.], [1.], [1.], [0.]]
+
+# começamos com pesos aleatórios
+network = [ # camada escondida: 2 entradas -> 2 saídas
+            [[random.random() for _ in range(2 + 1)],   # 1º neurônio escondido
+             [random.random() for _ in range(2 + 1)]],  # 2º neurônio escondido
+            # camada de saída: 2 entradas -> 1 saída
+            [[random.random() for _ in range(2 + 1)]]   # 1º neurônio de saída
+          ]
+
+[[round(w, 4) for w in neuron] for layer in network for neuron in layer]
+```
+
+::: {.callout-warning}
+## A semente não é opcional
+
+`random.seed(0)` fixa a inicialização dos pesos. Sem ela, cada renderização deste livro partiria de uma rede diferente, chegaria a pesos diferentes e imprimiria números diferentes dos que o texto abaixo comenta.
+
+Aqui a semente pesa mais do que em outros capítulos: o treino de uma rede neural depende do ponto de partida de um jeito que uma regressão não depende. Duas inicializações diferentes podem levar a **soluções diferentes**, não só a arredondamentos diferentes — e a próxima seção mostra um caso em que a rede fica presa por dezenas de épocas antes de escapar.
+
+Como sempre neste livro, é o `random` da biblioteca padrão, não o `numpy.random`.
+:::
+
+O treino é gradiente descendente comum. A única diferença em relação aos capítulos anteriores é que agora há **vários** vetores de parâmetros, cada um com o seu gradiente, então `gradient_step` é chamado uma vez por neurônio:
+
+```{python}
+#| label: treino-xor
+#| warning: false
+from scratch.gradient_descent import gradient_step
+import tqdm
+
+learning_rate = 1.0
+
+for epoch in tqdm.trange(20000, desc="rede neural para o xor"):
+    for x, y in zip(xs, ys):
+        gradients = sqerror_gradients(network, x, y)
+
+        # um passo de gradiente para cada neurônio de cada camada
+        network = [[gradient_step(neuron, grad, -learning_rate)
+                    for neuron, grad in zip(layer, layer_grad)]
+                   for layer, layer_grad in zip(network, gradients)]
+
+# conferimos que ela aprendeu o XOR
+assert feed_forward(network, [0, 0])[-1][0] < 0.01
+assert feed_forward(network, [0, 1])[-1][0] > 0.99
+assert feed_forward(network, [1, 0])[-1][0] > 0.99
+assert feed_forward(network, [1, 1])[-1][0] < 0.01
+```
+
+Vinte mil épocas sobre quatro exemplos custam menos de um segundo. O `tqdm.trange` desenha a barra de progresso do [Capítulo 7](../cap07/07-um-parenteses-tqdm.qmd), e o chunk leva `#| warning: false` para que a barra não vaze para a página — ela é útil no terminal, ilegível num livro.
+
+Os `assert` passaram, então a rede aprendeu. Vale ver com quanta folga:
+
+```{python}
+#| label: saidas-xor
+for x in xs:
+    print(f"{x} -> {feed_forward(network, x)[-1][0]:.6f}")
+```
+
+::: {.exemplo}
+## A simetria não é acidente
+
+Olhe os dois valores do meio: **0,992329** e **0,992328**. Eles concordam até a quinta casa decimal, e isso não é coincidência numérica.
+
+O XOR é **simétrico** nos seus dois argumentos: trocar a primeira entrada pela segunda não muda a resposta. Os dados de treino não distinguem $[0,1]$ de $[1,0]$ de forma nenhuma, e o gradiente que chega ao peso da primeira entrada é, exemplo a exemplo, o espelho do que chega ao peso da segunda. Como a inicialização foi aleatória, os dois pesos não começaram iguais — mas foram empurrados quase igualmente durante 20.000 épocas, e a diferença inicial praticamente se dissolveu.
+
+Cuidado com o que a simetria **não** diz. Ela relaciona $[0,1]$ com $[1,0]$, porque um é a troca do outro. Já $[0,0]$ e $[1,1]$ são cada um a troca de si mesmo, e nada obriga que tenham a mesma saída: de fato, 0,009034 e 0,007856 diferem na terceira casa. Os dois estão perto de zero porque o alvo dos dois é zero, o que é uma razão diferente.
+:::
+
+## O que a rede aprendeu
+
+A parte mais interessante é abrir os pesos:
+
+```{python}
+#| label: pesos-xor
+nomes = ["escondido 1", "escondido 2", "saída     "]
+neuronios = [n for layer in network for n in layer]
+
+for nome, neuron in zip(nomes, neuronios):
+    exatos = ", ".join(f"{w:8.4f}" for w in neuron)
+    arredondados = ", ".join(f"{round(w):3d}" for w in neuron)
+    print(f"{nome}  [{exatos}]   ->  [{arredondados}]")
+```
+
+Arredondados, os pesos aprendidos são $[7, 7, -3]$, $[5, 5, -8]$ e $[11, -12, -5]$ — os mesmos três vetores que o livro-texto imprime para este experimento. Nada nos garantia isso: bastaria uma semente diferente para os números mudarem. O que faz eles baterem é que o `random.seed(0)` do livro-texto é o mesmo daqui, e o código também.
+
+Repare também na simetria dentro de cada neurônio escondido: 6,9535 e 6,9528 no primeiro, 5,1159 e 5,1154 no segundo. É a mesma simetria da caixa acima, agora visível nos parâmetros em vez das saídas.
+
+E o que esses neurônios calculam?
+
+```{python}
+#| label: escondida-xor
+for x in xs:
+    escondida, saida = feed_forward(network, x)
+    print(f"{x} -> escondida [{escondida[0]:.4f}, {escondida[1]:.4f}]"
+          f"   saída {saida[0]:.4f}")
+```
+
+O primeiro neurônio escondido está perto de 1 nas três últimas linhas: ele calcula o **OU**. O segundo só chega perto de 1 na última: ele calcula o **E**. E o neurônio de saída, com pesos $[11, -12, -5]$, dispara quando o primeiro está ligado e o segundo não — "o primeiro mas não o segundo", ou seja, "ou, mas não e".
+
+::: {.conceito}
+A rede treinada encontrou **os mesmos dois atributos** que escolhemos à mão na seção anterior — o "e" e o "ou" — mas na **ordem trocada**: lá o primeiro neurônio escondido era o "e", aqui é o "ou".
+
+Isso é a primeira aparição de algo que a próxima seção leva ao extremo. Nada no algoritmo pediu "e" e "ou"; nada fixou qual neurônio ficaria com qual. **A rede tem várias soluções equivalentes, e a que ela encontra depende de onde a inicialização aleatória a colocou.** Trocar os dois neurônios escondidos de lugar (e trocar junto os dois pesos correspondentes na saída) produz uma rede que calcula exatamente a mesma função.
+
+Neste exemplo minúsculo os pesos ainda contam uma história legível, porque o problema tinha dois atributos óbvios e a rede tinha exatamente dois neurônios para descobri-los. É a última vez neste livro que isso acontece.
+:::
+
+::: {.callout-tip collapse="true"}
+## Na prática: derivar gradientes à mão acabou
+
+Duas coisas ficam por conta da biblioteca aqui, e elas são de naturezas diferentes.
+
+A primeira é o modelo. Este mesmo experimento, com o `scikit-learn`:
+
+```python
+from sklearn.neural_network import MLPClassifier
+
+rede = MLPClassifier(hidden_layer_sizes=(2,), activation='logistic',
+                     solver='lbfgs', random_state=0, max_iter=5000)
+rede.fit([[0, 0], [0, 1], [1, 0], [1, 1]], [0, 1, 1, 0])
+rede.predict([[0, 0], [0, 1], [1, 0], [1, 1]])
+```
+
+Rodando isso (`scikit-learn` 1.9), a rede acerta os quatro pontos. Repare no `solver='lbfgs'`: não é gradiente descendente simples, é um método quase-Newton que usa informação de curvatura — uma das muitas variantes que existem porque descer o gradiente puro, como fazemos aqui, costuma ser lento demais em problemas grandes.
+
+A segunda é mais profunda, e é a que mudou a área. **Ninguém deriva `sqerror_gradients` à mão hoje.** As bibliotecas de rede neural — `PyTorch`, `TensorFlow`, `JAX` — implementam **diferenciação automática em modo reverso**, que faz exatamente a contabilidade desta seção, só que genérica: cada operação elementar sabe propagar a derivada através de si mesma, e o gradiente de qualquer composição delas sai por aplicação repetida da regra da cadeia, na ordem inversa da execução. Você escreve a passada para a frente; a passada para trás é derivada do grafo de operações.
+
+É por isso que a retropropagação vale como conceito e quase nunca como código escrito à mão. E é exatamente a abstração que o [Capítulo 16](../cap16/index.qmd) constrói, em pequeno: uma `Layer` que sabe fazer `forward` e `backward`, e uma rede que é só uma sequência delas.
 :::

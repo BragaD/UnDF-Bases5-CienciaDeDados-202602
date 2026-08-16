@@ -4,7 +4,183 @@
 Esta seção corresponde a *Perceptrons*, do capítulo 18 de @grus2019.
 :::
 
-::: {.callout-warning}
-## Em construção
-O conteúdo desta seção ainda será escrito.
+A rede neural mais simples possível tem um neurônio só, e esse neurônio se chama **perceptron**. Ele recebe *n* entradas, calcula uma soma ponderada delas e "dispara" — devolve 1 — se essa soma for maior ou igual a zero. Caso contrário, devolve 0.
+
+São duas funções:
+
+```{python}
+#| label: perceptron
+from scratch.linear_algebra import Vector, dot
+
+def step_function(x: float) -> float:
+    return 1.0 if x >= 0 else 0.0
+
+def perceptron_output(weights: Vector, bias: float, x: Vector) -> float:
+    """Devolve 1 se o perceptron 'dispara', 0 se não"""
+    calculation = dot(weights, x) + bias
+    return step_function(calculation)
+```
+
+O `bias` é um deslocamento: ele decide *quão grande* a soma ponderada precisa ser para o neurônio disparar. O `dot` é o produto escalar do [Capítulo 4](../cap04/index.qmd), e é ele que faz todo o trabalho.
+
+## O perceptron é uma reta
+
+Vale parar num detalhe que parece formalidade e não é. O perceptron devolve 1 exatamente quando
+
+```python
+dot(weights, x) + bias >= 0
+```
+
+O conjunto de pontos em que essa expressão vale **zero** é um **hiperplano** — em duas dimensões, uma reta; em três, um plano. Ele corta o espaço em duas metades, e o perceptron devolve 1 numa delas e 0 na outra.
+
+::: {.conceito}
+Um perceptron não é um classificador qualquer: ele é **uma reta** (ou um hiperplano, em dimensão maior). Tudo o que ele consegue fazer é dizer de que lado dessa reta um ponto está.
+
+Escolher os pesos e o viés é escolher a reta. Não há escolha de pesos que produza duas retas, nem uma curva, nem uma região no meio.
+:::
+
+Isso já é suficiente para resolver alguns problemas. Um deles é a porta lógica **E**, que devolve 1 quando as duas entradas valem 1 e 0 em qualquer outro caso:
+
+```{python}
+#| label: porta-e
+and_weights = [2., 2]
+and_bias = -3.
+
+assert perceptron_output(and_weights, and_bias, [1, 1]) == 1
+assert perceptron_output(and_weights, and_bias, [0, 1]) == 0
+assert perceptron_output(and_weights, and_bias, [1, 0]) == 0
+assert perceptron_output(and_weights, and_bias, [0, 0]) == 0
+```
+
+A aritmética é simples de conferir na mão. Se as duas entradas valem 1, a conta dá $2 + 2 - 3 = 1$, e a saída é 1. Se só uma delas vale 1, dá $2 + 0 - 3 = -1$, e a saída é 0. Se as duas valem 0, dá $-3$, e a saída é 0.
+
+Pelo mesmo raciocínio, a porta **OU** sai movendo o viés:
+
+```{python}
+#| label: porta-ou
+or_weights = [2., 2]
+or_bias = -1.
+
+assert perceptron_output(or_weights, or_bias, [1, 1]) == 1
+assert perceptron_output(or_weights, or_bias, [0, 1]) == 1
+assert perceptron_output(or_weights, or_bias, [1, 0]) == 1
+assert perceptron_output(or_weights, or_bias, [0, 0]) == 0
+```
+
+Repare que os pesos são os mesmos do E; o que mudou foi só o viés, de $-3$ para $-1$. Geometricamente, isso é a mesma reta deslocada: com $-3$ ela passa entre $[1,1]$ e os outros três pontos, com $-1$ ela passa entre $[0,0]$ e os outros três.
+
+E a porta **NÃO**, que tem uma entrada só e inverte:
+
+```{python}
+#| label: porta-nao
+not_weights = [-2.]
+not_bias = 1.
+
+assert perceptron_output(not_weights, not_bias, [0]) == 1
+assert perceptron_output(not_weights, not_bias, [1]) == 0
+```
+
+## O que um perceptron não consegue fazer
+
+Existe uma porta lógica que nenhum perceptron calcula, por mais que você tente: o **XOR**, o "ou exclusivo", que devolve 1 quando exatamente uma das entradas vale 1, e 0 nos outros dois casos.
+
+Desenhar os três problemas lado a lado torna a razão visível:
+
+```{python}
+#| label: fig-portas
+#| fig-cap: "Os quatro pontos de entrada, para as portas E, OU e XOR. Preenchido = a porta devolve 1."
+#| echo: false
+from matplotlib import pyplot as plt
+
+pontos = [(0, 0), (0, 1), (1, 0), (1, 1)]
+portas = [
+    ("E",   lambda a, b: a and b,          lambda x: 1.5 - x),
+    ("OU",  lambda a, b: a or b,           lambda x: 0.5 - x),
+    ("XOR", lambda a, b: int(a != b),      None),
+]
+
+fig, axes = plt.subplots(1, 3, figsize=(10.5, 3.6))
+grade = [-0.5 + i / 50 for i in range(101)]
+
+for ax, (nome, f, reta) in zip(axes, portas):
+    if reta is not None:
+        ys = [reta(x) for x in grade]
+        ax.plot(grade, ys, color='0.35')
+        ax.fill_between(grade, ys, 1.6, color='0.85')
+
+    for (a, b) in pontos:
+        dispara = f(a, b)
+        ax.scatter([a], [b], s=130, zorder=3,
+                   facecolors='black' if dispara else 'white',
+                   edgecolors='black', linewidths=1.6)
+
+    ax.set_title(nome)
+    ax.set_xlim(-0.5, 1.5)
+    ax.set_ylim(-0.5, 1.6)
+    ax.set_xticks([0, 1])
+    ax.set_yticks([0, 1])
+    ax.set_aspect('equal')
+
+plt.tight_layout()
+plt.show()
+```
+
+Nos dois primeiros painéis, a região cinza é o lado da reta em que o perceptron dispara, e os pontos preenchidos caem todos dentro dela. No terceiro não há região cinza porque não há reta: os dois pontos que devem devolver 1 estão em cantos **opostos** do quadrado, e os dois que devem devolver 0 estão nos outros dois cantos opostos. Qualquer reta que você desenhe deixa um ponto preenchido junto de um vazio.
+
+O XOR não é **linearmente separável**, e essa é uma propriedade dos dados, não do algoritmo.
+
+::: {.exemplo}
+## A impossibilidade em quatro desigualdades
+
+O argumento geométrico convence, mas o algébrico fecha a questão em quatro linhas. Suponha que existam pesos $w_1$, $w_2$ e um viés $b$ que resolvam o XOR. Então:
+
+| entrada | saída pedida | desigualdade |
+|---|---|---|
+| $[0,0]$ | 0 | $b < 0$ |
+| $[0,1]$ | 1 | $w_2 + b \geq 0$ |
+| $[1,0]$ | 1 | $w_1 + b \geq 0$ |
+| $[1,1]$ | 0 | $w_1 + w_2 + b < 0$ |
+
+Some as duas do meio: $w_1 + w_2 + 2b \geq 0$, ou seja, $w_1 + w_2 \geq -2b$. A última linha diz que $w_1 + w_2 < -b$.
+
+Juntando as duas: precisaríamos de $-2b \leq w_1 + w_2 < -b$. Mas a primeira linha diz que $b < 0$, o que faz $-2b$ ser **maior** que $-b$. Não existe número que seja ao mesmo tempo maior ou igual a $-2b$ e menor que $-b$ quando $-2b > -b$.
+
+Não há pesos. Não é questão de procurar melhor.
+:::
+
+Vale registrar a piada que o livro-texto faz aqui, porque ela tem conteúdo. Você não precisa aproximar um neurônio para construir uma porta lógica:
+
+```{python}
+#| label: portas-triviais
+and_gate = min
+or_gate = max
+xor_gate = lambda x, y: 0 if x == y else 1
+
+assert and_gate(1, 1) == 1 and and_gate(0, 1) == 0
+assert or_gate(0, 1) == 1 and or_gate(0, 0) == 0
+assert xor_gate(1, 0) == 1 and xor_gate(1, 1) == 0
+```
+
+Nenhum destes três precisa de peso, viés ou treino. As portas lógicas não são o objetivo — são o menor problema em que dá para enxergar exatamente onde um neurônio sozinho para de servir. E, como os neurônios de verdade, os artificiais só ficam interessantes quando se conectam uns aos outros. É o que a [seção 15.2](02-redes-feed-forward.qmd) faz.
+
+::: {.callout-tip collapse="true"}
+## Na prática: `scikit-learn`
+
+O perceptron não é só um exercício histórico: ele existe como modelo na biblioteca, com regra de treino própria.
+
+```python
+from sklearn.linear_model import Perceptron
+
+X = [[0, 0], [0, 1], [1, 0], [1, 1]]
+y = [0, 0, 0, 1]                      # a porta E
+
+p = Perceptron(max_iter=10000, tol=None, random_state=0).fit(X, y)
+p.coef_, p.intercept_
+```
+
+Rodando isso (`scikit-learn` 1.9), o modelo aprende a porta E com `coef_ = [[3., 2.]]` e `intercept_ = [-4.]` — pesos diferentes dos que escolhemos à mão, e igualmente corretos: são duas retas diferentes que separam os mesmos quatro pontos. Para a porta OU, o resultado é mais divertido: ele chega a `coef_ = [[2., 2.]]` e `intercept_ = [-1.]`, **exatamente** os números que o livro-texto escolheu de cabeça.
+
+E o XOR? A biblioteca não avisa nada. Ela ajusta, devolve um modelo, e o modelo tem `coef_ = [[0., 0.]]` e `intercept_ = [0.]` — o vetor de pesos zerado. As correções que a regra de treino aplica a cada passagem se cancelam exatamente sobre os quatro pontos, e o que sobra é um classificador degenerado, que responde 0 para tudo e acerta 2 dos 4 pontos: acurácia de 0,5.
+
+Repare no que aconteceu: `fit` retornou sem erro, `predict` devolveu previsões, e nada na interface indica que o problema era impossível para esta família de modelos. Nenhuma mensagem, nenhum aviso. Saber que um perceptron é uma reta — e olhar os quatro pontos antes de ajustar — é o que teria evitado a hora perdida.
 :::

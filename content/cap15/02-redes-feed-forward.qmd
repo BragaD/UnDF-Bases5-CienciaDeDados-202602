@@ -4,7 +4,200 @@
 Esta seção corresponde a *Feed-Forward Neural Networks*, do capítulo 18 de @grus2019.
 :::
 
-::: {.callout-warning}
-## Em construção
-O conteúdo desta seção ainda será escrito.
+A topologia do cérebro é complicadíssima, então costuma-se aproximá-la por uma idealização: a **rede feed-forward**, feita de camadas discretas de neurônios, cada uma ligada à seguinte. Há uma **camada de entrada**, que só repassa as entradas adiante sem alterá-las; uma ou mais **camadas escondidas**, cujos neurônios pegam as saídas da camada anterior, fazem uma conta e passam o resultado adiante; e uma **camada de saída**, que produz o resultado final.
+
+Como no perceptron, cada neurônio que não é de entrada tem um peso para cada uma das suas entradas, mais um viés. Para simplificar a representação, vamos usar um truque de contabilidade: **o viés entra no fim do vetor de pesos, e o neurônio ganha uma entrada extra que vale sempre 1**. Assim o viés vira só mais um peso, e a conta do neurônio vira um produto escalar puro, sem termo solto.
+
+## O degrau precisa sair
+
+Aqui está a decisão mais importante do capítulo, e ela é fácil de ler como detalhe técnico quando é o contrário.
+
+No perceptron, o neurônio somava os produtos das entradas pelos pesos e aplicava a `step_function` ao resultado. Numa rede, vamos aplicar em vez dela uma **aproximação suave** do degrau. O motivo não é estético.
+
+::: {.conceito}
+Treinar uma rede significa ajustar os pesos por gradiente descendente — a máquina do [Capítulo 5](../cap05/index.qmd). E gradiente descendente precisa de uma derivada que diga alguma coisa.
+
+A derivada da função degrau é **zero em toda parte onde ela existe**, e é indefinida no salto. Um gradiente identicamente nulo não aponta direção nenhuma: "andar na direção oposta ao gradiente" vira "não andar". Um gradiente indefinido não é sequer um número.
+
+Ou seja: **sobre a função degrau, nada do Capítulo 5 se aplica.** Não é que o treino fique difícil; é que o algoritmo não tem entrada válida. Trocar o degrau pela sigmoide não é um refinamento — é o que torna todo o resto deste capítulo possível.
+:::
+
+A substituta é a **sigmoide**:
+
+```{python}
+#| label: sigmoid
+import math
+
+def sigmoid(t: float) -> float:
+    return 1 / (1 + math.exp(-t))
+```
+
+::: {.callout-note}
+## Você já escreveu esta função
+
+Essa é, letra por letra, a função logística do [Capítulo 13](../cap13/index.qmd) — a mesma `1 / (1 + math.exp(-x))`, construída lá por um motivo completamente diferente: espremer uma combinação linear dentro de $[0, 1]$ para que ela pudesse ser lida como probabilidade.
+
+A diferença é só de nome, e ela tem uma lógica. "Sigmoide" se refere à **forma** da curva — um S —, e há muitas funções sigmoides; "logística" se refere a **esta** função em particular. Na prática as duas palavras são usadas como sinônimos o tempo todo, inclusive por quem sabe a diferença.
+
+Vale reter que a mesma função apareceu duas vezes, por caminhos independentes: uma vez porque precisávamos de uma probabilidade, outra porque precisávamos de um degrau derivável. Ela também herda para cá o problema de saturação que o [Capítulo 13](../cap13/02-a-funcao-logistica.qmd) documentou — para entradas muito negativas, `math.exp(-t)` estoura o alcance do `float64`.
+:::
+
+O que a sigmoide tem que o degrau não tem fica claro olhando as duas curvas e as duas derivadas:
+
+```{python}
+#| label: fig-degrau-sigmoide
+#| fig-cap: "À esquerda, o degrau e a sua aproximação suave. À direita, as derivadas das duas."
+#| echo: false
+from matplotlib import pyplot as plt
+
+def step_function(x: float) -> float:
+    return 1.0 if x >= 0 else 0.0
+
+grade = [-6 + i / 50 for i in range(601)]
+
+fig, (esq, dir) = plt.subplots(1, 2, figsize=(10.5, 3.8))
+
+esq.plot([x for x in grade if x < 0], [0.0 for x in grade if x < 0],
+         color='0.35', label='degrau')
+esq.plot([x for x in grade if x >= 0], [1.0 for x in grade if x >= 0],
+         color='0.35')
+esq.plot(grade, [sigmoid(x) for x in grade], color='C0', label='sigmoide')
+esq.set_title("as funções")
+esq.set_ylim(-0.15, 1.15)
+esq.legend(loc='lower right')
+
+dir.plot([x for x in grade if x < 0], [0.0 for x in grade if x < 0],
+         color='0.35', label='derivada do degrau')
+dir.plot([x for x in grade if x > 0], [0.0 for x in grade if x > 0],
+         color='0.35')
+dir.plot(grade, [sigmoid(x) * (1 - sigmoid(x)) for x in grade],
+         color='C0', label='derivada da sigmoide')
+dir.scatter([0], [0], s=60, facecolors='white', edgecolors='0.35',
+            zorder=3, linewidths=1.6)
+dir.annotate("indefinida", xy=(0, 0), xytext=(1.1, 0.09),
+             fontsize=9, color='0.35',
+             arrowprops=dict(arrowstyle='->', color='0.35'))
+dir.set_title("as derivadas")
+dir.set_ylim(-0.05, 0.3)
+dir.legend(loc='upper right', prop={'size': 8})
+
+plt.tight_layout()
+plt.show()
+```
+
+À esquerda, a sigmoide faz o mesmo trabalho do degrau — perto de 0 para entradas bem negativas, perto de 1 para entradas bem positivas — só que atravessando o meio do caminho em vez de saltar. À direita está a razão de tudo: a derivada do degrau é a reta zerada, com um buraco na origem, enquanto a da sigmoide é um sino que chega a 0,25 em $t = 0$ e nunca é exatamente zero. É essa curva azul da direita que o gradiente descendente vai usar para saber para onde andar. A cinza não serve para nada.
+
+Com a sigmoide no lugar, a saída de um neurônio fica assim:
+
+```{python}
+#| label: neuron-output
+from scratch.linear_algebra import Vector, dot
+
+def neuron_output(weights: Vector, inputs: Vector) -> float:
+    # weights inclui o termo de viés, inputs inclui um 1
+    return sigmoid(dot(weights, inputs))
+```
+
+## Como representar uma rede
+
+Com essa função, um neurônio é simplesmente um **vetor de pesos**, de comprimento igual ao número de entradas mais um (por causa do viés). Uma camada é uma **lista de neurônios**. E uma rede é uma **lista de camadas** — as que não são de entrada, já que a camada de entrada não faz conta nenhuma.
+
+Ou seja: uma rede neural é uma lista (camadas) de listas (neurônios) de vetores (pesos). Nenhuma classe, nenhum objeto; três níveis de lista.
+
+Usar a rede, dada essa representação, é curto:
+
+```{python}
+#| label: feed-forward
+from typing import List
+
+def feed_forward(neural_network: List[List[Vector]],
+                 input_vector: Vector) -> List[Vector]:
+    """
+    Passa o vetor de entrada pela rede.
+    Devolve as saídas de todas as camadas (não só a última).
+    """
+    outputs: List[Vector] = []
+
+    for layer in neural_network:
+        input_with_bias = input_vector + [1]               # acrescenta a constante
+        output = [neuron_output(neuron, input_with_bias)   # calcula a saída
+                  for neuron in layer]                     # de cada neurônio
+        outputs.append(output)                             # guarda o resultado
+
+        # a entrada da próxima camada é a saída desta
+        input_vector = output
+
+    return outputs
+```
+
+Repare em duas decisões dentro do laço. A primeira é o `input_vector + [1]`, que materializa o truque do viés a cada camada. A segunda é que a função devolve as saídas de **todas** as camadas, e não só a última. Isso parece desperdício agora — quem usa a rede quer só a resposta final. Não é: a [seção 15.3](03-retropropagacao.qmd) depende de ter as saídas intermediárias guardadas, e é por isso que elas são devolvidas.
+
+## O XOR, agora sim
+
+Com duas camadas, dá para construir à mão a porta que um perceptron sozinho não calcula. O único cuidado é usar pesos grandes, para que as saídas da sigmoide fiquem bem perto de 0 ou bem perto de 1:
+
+```{python}
+#| label: rede-xor
+xor_network = [# camada escondida
+               [[20., 20, -30],      # neurônio 'e'
+                [20., 20, -10]],     # neurônio 'ou'
+               # camada de saída
+               [[-60., 60, -30]]]    # neurônio '2ª entrada mas não a 1ª'
+
+# feed_forward devolve as saídas de todas as camadas, então [-1] pega a
+# saída final, e [0] pega o valor de dentro do vetor resultante
+assert 0.000 < feed_forward(xor_network, [0, 0])[-1][0] < 0.001
+assert 0.999 < feed_forward(xor_network, [1, 0])[-1][0] < 1.000
+assert 0.999 < feed_forward(xor_network, [0, 1])[-1][0] < 1.000
+assert 0.000 < feed_forward(xor_network, [1, 1])[-1][0] < 0.001
+```
+
+Os `assert` passam, mas eles só dizem que a rede acerta. O interessante é *como*. Como `feed_forward` devolve todas as camadas, dá para abrir a rede no meio e ver o que a camada escondida está calculando:
+
+```{python}
+#| label: rede-xor-interna
+for entrada in [[0, 0], [0, 1], [1, 0], [1, 1]]:
+    escondida, saida = feed_forward(xor_network, entrada)
+    print(f"{entrada} -> escondida "
+          f"[{escondida[0]:.4f}, {escondida[1]:.4f}]"
+          f"   saída {saida[0]:.4f}")
+```
+
+Olhe a coluna do meio, arredondando na cabeça. O **primeiro** neurônio escondido só se aproxima de 1 na última linha: ele calcula o **E** das duas entradas. O **segundo** se aproxima de 1 nas três últimas: ele calcula o **OU**. A camada escondida transformou o par de entradas num par `(e, ou)`.
+
+E o neurônio de saída, com pesos $[-60, 60, -30]$, aplica $-60 \cdot e + 60 \cdot ou - 30$: ele dispara quando o *ou* vale 1 e o *e* vale 0. Isto é, "ou, mas não e" — que é exatamente o XOR.
+
+::: {.conceito}
+Uma forma sugestiva de ler isso: **a camada escondida calcula atributos dos dados de entrada** — aqui, o "e" e o "ou" —, e a camada de saída combina esses atributos para gerar a resposta desejada.
+
+É a mesma ideia da extração de atributos do [Capítulo 8](../cap08/index.qmd), com uma diferença que muda tudo: lá quem inventava os atributos era você. Aqui a rede vai inventá-los sozinha, assim que aprendermos a treiná-la.
+:::
+
+Só que nós escolhemos esses pesos à mão, olhando para o problema e raciocinando sobre ele. Isso funciona para um XOR com dois neurônios escondidos, e não funciona para mais nada. A [seção 15.3](03-retropropagacao.qmd) tira essa tarefa das nossas mãos.
+
+::: {.callout-tip collapse="true"}
+## Na prática: `scikit-learn`
+
+A rede acima é uma lista de listas de listas de `float`. Vale ver o que uma biblioteca guarda no lugar disso, porque as diferenças são justamente as decisões que tomamos sem discutir.
+
+```python
+from sklearn.neural_network import MLPClassifier
+
+rede = MLPClassifier(hidden_layer_sizes=(2,), activation='logistic',
+                     solver='lbfgs', random_state=0, max_iter=5000)
+rede.fit([[0, 0], [0, 1], [1, 0], [1, 1]], [0, 1, 1, 0])
+
+rede.coefs_        # pesos, uma matriz por camada
+rede.intercepts_   # vieses, um vetor por camada
+```
+
+Rodando isso (`scikit-learn` 1.9), `coefs_` tem duas matrizes, de formatos $(2, 2)$ e $(2, 1)$, e `intercepts_` tem dois vetores, de formatos $(2,)$ e $(1,)$. Três diferenças em relação ao nosso código, todas informativas:
+
+**O viés é guardado à parte.** A biblioteca não anexa o viés ao vetor de pesos nem acrescenta uma entrada constante 1. Aquilo era contabilidade nossa, para transformar a conta do neurônio num produto escalar limpo — não uma verdade sobre redes neurais. As duas representações descrevem a mesma rede.
+
+**A camada é uma matriz, não uma lista de neurônios.** Onde temos uma lista de vetores, a biblioteca tem uma matriz $(\text{entradas} \times \text{neurônios})$, porque a passagem por uma camada é uma multiplicação de matriz — e é assim que ela roda rápido. O nosso `for neuron in layer` faz a mesma conta, um neurônio por vez.
+
+**A ativação é um parâmetro.** Escrevemos `activation='logistic'` para pedir a nossa sigmoide; o padrão do `MLPClassifier` é `'relu'`, outra função inteiramente. Na nossa rede, a sigmoide está soldada dentro de `neuron_output` e não há como trocá-la sem editar a função. É uma das rigidezes que o [Capítulo 16](../cap16/index.qmd) desfaz, transformando a ativação numa camada como qualquer outra.
+
+O que a biblioteca **não** faz diferente é a conta. `dot(weights, inputs)` seguido de sigmoide é literalmente o que acontece lá dentro.
 :::

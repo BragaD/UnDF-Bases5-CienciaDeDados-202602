@@ -123,6 +123,9 @@ Detalhes que importam se você for mexer nisso:
 - Um `trap ... EXIT INT TERM` devolve o lock mesmo se o render abortar ou levar Ctrl-C.
 - Depois de 30 minutos esperando, o lock é considerado preso (agente morto) e removido com aviso. Um agente que morreu não pode bloquear o livro para sempre.
 - `make offline` **não** pega o lock: ele apaga o `_freeze/` de propósito e é rodado deliberadamente antes de publicar, não em paralelo com escrita.
+- **A espera é limitada a ~7 minutos, e o motivo não é o render.** A ferramenta de shell dos agentes aborta em 10 minutos; uma espera ilimitada estouraria esse teto e devolveria um timeout opaco, sem dizer se o livro quebrou, se o lock travou ou se era só a vez de outro. **Isso já custou um capítulo entregue sem verificação.** Passado o limite, o alvo imprime `NÃO RENDERIZOU — a vez ainda é de outro agente` e sai com **75** (`EX_TEMPFAIL`): a instrução é rodar `make render` de novo, não investigar. Um lock parado há mais de 30 minutos é considerado órfão e removido.
+
+**Consequência prática de coordenação: não deixe mais de dois ou três agentes que precisem renderizar trabalhando ao mesmo tempo.** Cada render leva alguns minutos, e a fila cresce mais rápido que a paciência da ferramenta.
 
 ### O `_freeze` envenenado — a falha mais silenciosa deste projeto
 

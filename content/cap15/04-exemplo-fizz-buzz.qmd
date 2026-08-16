@@ -4,7 +4,316 @@
 Esta seção corresponde a *Example: Fizz Buzz*, do capítulo 18 de @grus2019.
 :::
 
+O vice-presidente de Engenharia da DataSciencester quer entrevistar candidatos técnicos pedindo que resolvam o "Fizz Buzz", o exercício de programação mais surrado que existe:
+
+> Imprima os números de 1 a 100, com estas exceções: se o número for divisível por 3, imprima `"fizz"`; se for divisível por 5, imprima `"buzz"`; e se for divisível por 15, imprima `"fizzbuzz"`.
+
+Ele acha que resolver isso demonstra habilidade extrema em programação. Você acha que o problema é tão simples que uma rede neural daria conta.
+
+O exercício, como está enunciado, transforma um inteiro numa string. Redes neurais recebem vetores e devolvem vetores. Então o primeiro trabalho — e o mais interessante desta seção — é **reformular o problema como um problema de vetores**.
+
+## Codificando a saída
+
+Essa parte é fácil. Há quatro respostas possíveis, então a saída vira um vetor de quatro posições, com um 1 na posição da resposta certa:
+
+```{python}
+#| label: fizz-buzz-encode
+from scratch.linear_algebra import Vector
+
+def fizz_buzz_encode(x: int) -> Vector:
+    if x % 15 == 0:
+        return [0, 0, 0, 1]
+    elif x % 5 == 0:
+        return [0, 0, 1, 0]
+    elif x % 3 == 0:
+        return [0, 1, 0, 0]
+    else:
+        return [1, 0, 0, 0]
+
+assert fizz_buzz_encode(2)  == [1, 0, 0, 0]
+assert fizz_buzz_encode(6)  == [0, 1, 0, 0]
+assert fizz_buzz_encode(10) == [0, 0, 1, 0]
+assert fizz_buzz_encode(30) == [0, 0, 0, 1]
+```
+
+A ordem dos testes importa: 15 é divisível por 3 e por 5, então o caso do 15 precisa vir antes dos outros dois. É a mesma armadilha do exercício original, e ela sobreviveu à mudança de representação.
+
+## Codificando a entrada
+
+Essa parte é menos óbvia, e é onde está a lição.
+
+A tentação é usar um vetor de uma posição só, contendo o próprio número. Não faça isso, por duas razões. A primeira é que uma entrada única codifica uma **intensidade**: ela diz que 2 é o dobro de 1, e que 4 é o dobro de 2 — informação verdadeira e completamente irrelevante para este problema. A segunda é que, com uma entrada só, a camada escondida não teria matéria-prima para calcular atributo interessante nenhum.
+
+O que funciona razoavelmente bem — e o livro-texto é honesto ao dizer que isso não era óbvio nem para ele — é converter cada número para a sua **representação binária**:
+
+```{python}
+#| label: binary-encode
+from typing import List
+
+def binary_encode(x: int) -> Vector:
+    binary: List[float] = []
+
+    for i in range(10):
+        binary.append(x % 2)
+        x = x // 2
+
+    return binary
+
+#                             1  2  4  8 16 32 64 128 256 512
+assert binary_encode(0)   == [0, 0, 0, 0, 0, 0, 0, 0,  0,  0]
+assert binary_encode(1)   == [1, 0, 0, 0, 0, 0, 0, 0,  0,  0]
+assert binary_encode(10)  == [0, 1, 0, 1, 0, 0, 0, 0,  0,  0]
+assert binary_encode(101) == [1, 0, 1, 0, 0, 1, 1, 0,  0,  0]
+assert binary_encode(999) == [1, 1, 1, 0, 0, 1, 1, 1,  1,  1]
+```
+
+Dez bits, do menos significativo para o mais significativo, o que dá conta dos números de 0 a 1023.
+
+::: {.callout-important}
+## Ninguém vai contar à rede o que é divisibilidade
+
+Vale registrar o que **não** está sendo dado a ela, porque é isso que torna o resultado desta seção interessante em vez de trivial.
+
+A rede recebe dez zeros e uns. Ela não recebe o número, não recebe o resto da divisão por 3, não recebe nenhuma dica de que existe algo chamado divisibilidade. E a divisibilidade por 3 não é um bit: enquanto "par" é simplesmente o primeiro bit, "múltiplo de 3" depende de todos eles de um jeito torto — como $2^k \bmod 3$ alterna entre 1 e 2, a divisibilidade por 3 sai da soma **alternada** dos bits. A de 5 é pior: $2^k \bmod 5$ percorre o ciclo $1, 2, 4, 3$ e volta, então ela depende da posição de cada bit módulo 4.
+
+Existe regra, e ela é composta. Se a rede acertar, terá sido por ter construído sozinha alguma coisa que faz esse papel.
+:::
+
+## Treino e teste
+
+O objetivo é produzir as respostas para os números de **1 a 100**. Treinar nesses números seria trapaça — o [Capítulo 8](../cap08/index.qmd) chamaria isso de avaliar o modelo no próprio conjunto de treino, que é a forma mais rápida de se enganar sobre a qualidade dele. Então treinamos nos números de **101 a 1023**, o maior que cabe em dez bits:
+
+```{python}
+#| label: dados-fizz-buzz
+xs = [binary_encode(n) for n in range(101, 1024)]
+ys = [fizz_buzz_encode(n) for n in range(101, 1024)]
+
+len(xs)
+```
+
+São 923 exemplos de treino e 100 de teste, sem nenhuma sobreposição. É a separação mais limpa que este livro faz: não há embaralhamento, não há semente, não há como um número vazar de um lado para o outro.
+
+A rede tem 10 neurônios de entrada (a dimensão dos vetores de entrada), 4 de saída (a dimensão dos alvos) e 25 escondidos — número escolhido por tentativa, guardado numa variável para ser fácil de mexer:
+
+```{python}
+#| label: rede-fizz-buzz
+import random
+
+random.seed(0)
+
+NUM_HIDDEN = 25
+
+network = [
+    # camada escondida: 10 entradas -> NUM_HIDDEN saídas
+    [[random.random() for _ in range(10 + 1)] for _ in range(NUM_HIDDEN)],
+
+    # camada de saída: NUM_HIDDEN entradas -> 4 saídas
+    [[random.random() for _ in range(NUM_HIDDEN + 1)] for _ in range(4)]
+]
+
+sum(len(neuron) for layer in network for neuron in layer)
+```
+
+São 379 pesos ao todo — $25 \times 11$ na camada escondida mais $4 \times 26$ na de saída. Compare com os 4 coeficientes da regressão múltipla do [Capítulo 12](../cap12/index.qmd), que se liam um a um em português.
+
+## Treinando
+
+Este problema é bem maior que o XOR, e há muito mais coisa que pode dar errado, então vamos acompanhar a perda a cada época e guardá-la para desenhar depois. Também vamos parar em algumas épocas escolhidas para ver **o que** a rede está respondendo, e não só o quanto ela está errando:
+
+```{python}
+#| label: treino-fizz-buzz
+#| warning: false
+from collections import Counter
+from scratch.neural_networks import feed_forward, sqerror_gradients, argmax
+from scratch.gradient_descent import gradient_step
+from scratch.linear_algebra import squared_distance
+import tqdm
+
+learning_rate = 1.0
+
+perdas = []
+marcos = [5, 20, 50, 100, 150, 500]
+diagnostico = {}
+
+with tqdm.trange(500) as t:
+    for epoch in t:
+        epoch_loss = 0.0
+
+        for x, y in zip(xs, ys):
+            predicted = feed_forward(network, x)[-1]
+            epoch_loss += squared_distance(predicted, y)
+            gradients = sqerror_gradients(network, x, y)
+
+            # um passo de gradiente para cada neurônio de cada camada
+            network = [[gradient_step(neuron, grad, -learning_rate)
+                        for neuron, grad in zip(layer, layer_grad)]
+                       for layer, layer_grad in zip(network, gradients)]
+
+        perdas.append(epoch_loss)
+        t.set_description(f"fizz buzz (perda: {epoch_loss:.2f})")
+
+        if epoch + 1 in marcos:
+            previstos = [argmax(feed_forward(network, x)[-1]) for x in xs]
+            acertos = sum(1 for p, y in zip(previstos, ys) if p == argmax(y))
+            diagnostico[epoch + 1] = (Counter(previstos), acertos)
+```
+
+Isso leva cerca de um minuto — 500 épocas sobre 923 exemplos, com uma passada para a frente e uma para trás em cada um, tudo em Python puro sobre listas. É de longe o chunk mais caro deste livro, e o preço é o mesmo de sempre: transparência.
+
+A perda caiu?
+
+```{python}
+#| label: fig-perda-fizz-buzz
+#| fig-cap: "Soma dos erros ao quadrado sobre os 923 exemplos de treino, época a época"
+#| echo: false
+from matplotlib import pyplot as plt
+
+plt.figure(figsize=(9, 4))
+plt.plot(range(1, len(perdas) + 1), perdas)
+plt.xlabel("época")
+plt.ylabel("soma dos erros ao quadrado")
+plt.title("Treino do Fizz Buzz")
+plt.show()
+```
+
+Caiu — mas não do jeito liso que a palavra "convergir" sugere. Há uma queda rápida nas primeiras épocas, depois um trecho **plano e longo**, e só bem mais tarde a descida de verdade. Esse platô não é um detalhe cosmético do gráfico; ele é a parte mais instrutiva do treino, e dá para ver exatamente o que a rede está fazendo enquanto está parada nele:
+
+```{python}
+#| label: diagnostico-fizz-buzz
+rotulos = ["o próprio número", "fizz", "buzz", "fizzbuzz"]
+
+for epoca in marcos:
+    contagem, acertos = diagnostico[epoca]
+    dist = "  ".join(f"{rotulos[i]}: {contagem.get(i, 0)}" for i in range(4))
+    print(f"época {epoca:3d}  acertos no treino: {acertos:3d}/923   {dist}")
+```
+
+Nas épocas 20 e 50, a rede responde **"o próprio número" para os 923 exemplos**, sem exceção. Ela não aprendeu nada sobre divisibilidade: descobriu apenas que essa é a resposta mais comum, e passou a dá-la sempre.
+
 ::: {.callout-warning}
-## Em construção
-O conteúdo desta seção ainda será escrito.
+## O platô é o palpite preguiçoso
+
+Responder sempre a classe mais frequente é o classificador-base do [Capítulo 8](../cap08/index.qmd): aquele contra o qual todo modelo deve ser comparado antes de se comemorar qualquer coisa. Nos dados de treino ele acerta 493 dos 923 números, ou 53,4%. E esse é exatamente o patamar em que a rede fica estacionada por dezenas de épocas.
+
+Faz sentido que ela caia ali. Sair desse ponto exige alterar muitos pesos ao mesmo tempo, e cada alteração isolada **piora** a perda antes de melhorá-la; o gradiente, que só enxerga a vizinhança imediata, não vê nenhuma direção boa. A rede só escapa porque continuamos empurrando por muitas épocas numa região quase plana.
+
+Isso tem uma consequência prática que a caixa "Na prática" no fim desta seção mostra medida: **um critério de parada razoável interrompe o treino exatamente aqui**, e devolve o palpite preguiçoso como se fosse o resultado. Quem só chama `.fit()` recebe 53% e um modelo que parece treinado.
+:::
+
+## Resolvendo o problema
+
+A rede devolve um vetor de quatro números, e queremos uma resposta só. A ponte é o `argmax`, o índice do maior valor:
+
+```{python}
+#| label: argmax
+assert argmax([0, -1]) == 0               # o item 0 é o maior
+assert argmax([-1, 0]) == 1               # o item 1 é o maior
+assert argmax([-1, 10, 5, 20, -3]) == 3   # o item 3 é o maior
+```
+
+Com ele, finalmente:
+
+```{python}
+#| label: resultado-fizz-buzz
+num_correct = 0
+erros = []
+
+for n in range(1, 101):
+    x = binary_encode(n)
+    predicted = argmax(feed_forward(network, x)[-1])
+    actual = argmax(fizz_buzz_encode(n))
+    labels = [str(n), "fizz", "buzz", "fizzbuzz"]
+
+    if predicted == actual:
+        num_correct += 1
+    else:
+        erros.append((n, labels[predicted], labels[actual]))
+
+print(num_correct, "/", 100)
+print("erros:", erros)
+```
+
+96 acertos em 100, em números que a rede **nunca viu**. O classificador-base do platô teria feito 53 — há 53 números entre 1 e 100 que não são múltiplos de 3 nem de 5 —, então os 96 são ganho real sobre o palpite preguiçoso, não sobre o vazio.
+
+E não há sinal de sobreajuste: no conjunto de treino a rede terminou com 903 acertos em 923, isto é, 97,8%, contra 96% no teste. Os dois números são próximos, que é o retrato que o [Capítulo 8](../cap08/index.qmd) chama de modelo com viés e variância equilibrados — em contraste direto com a árvore de decisão do [Capítulo 14](../cap14/index.qmd), que acertava 100% do treino e por isso mesmo não dizia nada.
+
+## Os quatro erros
+
+Vale olhar os erros de perto, porque eles não são todos do mesmo tipo:
+
+```{python}
+#| label: erros-fizz-buzz
+for n in [4, 70, 15]:
+    saida = feed_forward(network, binary_encode(n))[-1]
+    valores = ", ".join(f"{v:.4f}" for v in saida)
+    print(f"n = {n:3d}  saída bruta [{valores}]   soma = {sum(saida):.4f}")
+```
+
+Para $n = 4$, a rede está genuinamente indecisa: as três primeiras saídas são 0,3389, 0,4649 e 0,2731, e "fizz" vence por pouco. É um erro de quem não sabe. Para $n = 70$, o quadro é outro: a saída "o próprio número" vale 0,9539 contra 0,0315 de "buzz". Aqui a rede está **confiantemente errada**, que é sempre o pior tipo de erro. O terceiro caso, $n = 15$, é o contraste que fecha o argumento: 0,9056 na posição de "fizzbuzz" e praticamente zero nas outras três — confiante e certa. Coloque os vetores de $n = 70$ e $n = 15$ lado a lado e nada na forma deles distingue um do outro. Só sabemos qual é qual porque temos o gabarito.
+
+::: {.callout-warning}
+## Estes quatro números não são uma distribuição de probabilidade
+
+Olhe a coluna da soma. Para $n = 4$ ela dá 1,0769; para $n = 15$, 0,9062. Não é arredondamento: **nada** na rede força as quatro saídas a somarem 1.
+
+Cada neurônio de saída tem a sua própria sigmoide e produz um número em $[0, 1]$ independentemente dos outros. Quatro números em $[0, 1]$ não formam uma distribuição só porque estão lado a lado. Ler o 0,9539 do $n = 70$ como "95% de confiança" seria inventar uma garantia que o modelo não dá.
+
+A correção existe e tem nome — a função **softmax**, que normaliza as quatro saídas para que somem 1, acompanhada da perda de entropia cruzada em vez do erro quadrático. É o que o [Capítulo 16](../cap16/index.qmd) constrói, e é também o que a biblioteca faz por padrão num problema de classificação com mais de duas classes.
+:::
+
+## O que a rede aprendeu, e por que não dá para saber
+
+O vice-presidente de Engenharia, diante da evidência, cede e troca o desafio da entrevista por "inverta uma árvore binária". A piada é do livro-texto e é boa, mas ela não é a lição.
+
+A lição é que **a rede aprendeu divisibilidade por 3 e por 5 a partir de dez bits, sem que ninguém lhe dissesse que divisibilidade existe.** Ela viu 923 pares (padrão de bits, resposta) e construiu, na camada escondida, alguma combinação desses bits que faz o trabalho da soma alternada e do ciclo módulo 4 mencionados no início da seção.
+
+E aqui o capítulo cobra o preço que o índice anunciou:
+
+::: {.conceito}
+Pergunte quais atributos a camada escondida inventou, e não há resposta.
+
+São 25 vetores de 11 números cada. Nenhum deles corresponde a "é múltiplo de 3", ou a "o terceiro bit está ligado", ou a coisa alguma que se diga em português. O que a rede calcula está espalhado entre os 25, e a informação sobre divisibilidade por 3 não mora em nenhum neurônio específico — mora na combinação.
+
+Esse é o fim do arco que atravessa o livro. O [Capítulo 12](../cap12/index.qmd) deu coeficientes que se leem um a um. O [Capítulo 14](../cap14/index.qmd) deu uma árvore que se percorre com o dedo, e cuja leitura **é** a justificativa da previsão. Aqui os parâmetros não significam nada sozinhos — e o modelo resolve um problema que nenhum dos dois resolveria.
+
+**Poder de representação e interpretabilidade andam em direções opostas.** Não é um defeito a ser consertado numa versão futura; é a troca que se faz ao escolher esta família de modelos. O que esta disciplina acrescenta é que você saiba que está fazendo a troca, e o que está entregando em cada direção.
+:::
+
+::: {.callout-tip collapse="true"}
+## Na prática: `scikit-learn`
+
+O mesmo experimento, com a biblioteca:
+
+```python
+from sklearn.neural_network import MLPClassifier
+
+X_treino = [binary_encode(n) for n in range(101, 1024)]
+y_treino = [argmax(fizz_buzz_encode(n)) for n in range(101, 1024)]
+X_teste  = [binary_encode(n) for n in range(1, 101)]
+y_teste  = [argmax(fizz_buzz_encode(n)) for n in range(1, 101)]
+
+rede = MLPClassifier(hidden_layer_sizes=(25,), activation='logistic',
+                     max_iter=2000, random_state=0)
+rede.fit(X_treino, y_treino)
+rede.score(X_teste, y_teste)
+```
+
+Essa configuração é a mais próxima da nossa: 25 neurônios escondidos, ativação logística. Rodando no container deste livro (`scikit-learn` 1.9), ela devolve **0,53** — e `rede.n_iter_` mostra por quê: o treino parou na **iteração 51**.
+
+Parou no platô. O `MLPClassifier` encerra quando a perda deixa de melhorar por `n_iter_no_change=10` iterações seguidas, com tolerância `tol=1e-4`, e o trecho quase plano do gráfico acima satisfaz esse critério com folga. O modelo devolvido é o palpite preguiçoso: acerta 53 dos 100, exatamente o classificador-base. Nenhum aviso, nenhum erro — `fit` retorna, `score` devolve um número.
+
+O nosso laço passou pelo platô porque **não tinha critério de parada nenhum**: ele roda 500 épocas e pronto. Uma decisão ingênua que, neste problema, acaba sendo a certa.
+
+Trocando as escolhas, a biblioteca aprende. Duas configurações medidas:
+
+| configuração | acerto no treino | acerto no teste | tempo |
+|---|---|---|---|
+| `(25,)`, `logistic`, `adam` (acima) | 0,534 | 0,530 | instantâneo |
+| `(100,)`, `relu`, `adam`, `max_iter=2000` | 1,000 | 0,860 | ~2 s |
+| `(25,)`, `logistic`, `solver='lbfgs'` | 1,000 | 0,850 | ~0,4 s |
+| **a nossa rede** | **0,978** | **0,960** | **~1 min** |
+
+Duas leituras honestas dessa tabela. A primeira: a biblioteca é uma a duas ordens de grandeza mais rápida, e isso é decisivo em qualquer problema real. A segunda: os 96% da nossa rede contra os 86% da melhor configuração testada **não** significam que o nosso código é melhor. São 100 números de teste, e a diferença de dez acertos cabe folgadamente dentro do ruído de escolher outra semente, outra ativação ou outro otimizador. O que a tabela mostra de fato é que a configuração muda o resultado de 53% para 86%, e que nada na interface avisa qual delas você escolheu.
+
+Um último detalhe que fecha a caixa anterior: para um problema com mais de duas classes, o `MLPClassifier` usa `softmax` na saída e entropia cruzada como perda — verificável em `rede.out_activation_` e `rede.loss`. Ele **não** faz o que fizemos aqui. Quatro sigmoides independentes treinadas com erro quadrático é a escolha do livro-texto, e é uma escolha datada; o [Capítulo 16](../cap16/index.qmd) constrói a alternativa moderna do zero.
 :::

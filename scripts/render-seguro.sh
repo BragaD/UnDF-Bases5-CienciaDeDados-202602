@@ -42,15 +42,48 @@ MAX_TENTATIVAS=6   # contra a corrida do bind mount do Docker no macOS
 MAX_RODADAS=3      # contra o freeze envenenado por edição concorrente
 
 # --- lock -------------------------------------------------------------------
+#
+# A espera é LIMITADA a ~7 min, e o motivo não é o render: é a ferramenta de
+# shell dos agentes, que aborta em 10 min. Com vários agentes na fila, um
+# `make render` que esperasse indefinidamente estouraria esse teto e o agente
+# receberia um timeout opaco — sem saber se o livro quebrou, se o lock travou,
+# ou se era só a vez de outro. Um deles já terminou o trabalho sem verificar por
+# causa disso.
+#
+# Então desistimos antes, com uma mensagem que diz exatamente o que fazer, e
+# saímos com 75 (EX_TEMPFAIL): "tente de novo, não há nada errado".
+ESPERA_MAX=42   # 42 × 10 s ≈ 7 min
 espera=0
 while ! mkdir "$LOCK" 2>/dev/null; do
   if [ "$espera" -eq 0 ]; then
     echo "outro render em andamento neste repositório; aguardando a vez..."
   fi
   espera=$((espera + 1))
-  if [ "$espera" -gt 180 ]; then
-    echo "lock preso há mais de 30 min (agente morto?); removendo e seguindo."
+
+  # Lock órfão: um agente que morreu não pode bloquear o livro para sempre.
+  if [ -d "$LOCK" ] && [ -z "$(find "$LOCK" -maxdepth 0 -mmin -30 2>/dev/null)" ]; then
+    echo "lock parado há mais de 30 min (agente morto?); removendo e seguindo."
     rm -rf "$LOCK"
+    continue
+  fi
+
+  if [ "$espera" -ge "$ESPERA_MAX" ]; then
+    cat <<'FILA'
+
+╔══════════════════════════════════════════════════════════════════════════╗
+║  NÃO RENDERIZOU — a vez ainda é de outro agente. Nada está errado.       ║
+╚══════════════════════════════════════════════════════════════════════════╝
+
+Outro agente está renderizando há vários minutos e o lock não chegou até você.
+Isto NÃO é falha do seu conteúdo, NÃO é a corrida do bind mount, e NÃO se
+resolve com `make clean`.
+
+O que fazer: rode `make render` de novo. Com o `_freeze` quente, a sua vez
+costuma chegar rápido. Se voltar esta mesma mensagem três vezes seguidas, aí
+sim avise quem coordena — pode haver um lock órfão.
+
+FILA
+    exit 75   # EX_TEMPFAIL — "tente de novo", não "quebrou"
   fi
   sleep 10
 done

@@ -88,6 +88,10 @@ O alvo é **serializado**: vários agentes escrevem este livro ao mesmo tempo, e
 
 Ele também avisa, em caixa alta, se alguém editou algum `.qmd` **durante** o seu render. Esse aviso não é falha: o livro renderizou. Ele só diz quais páginas podem ter ficado com saída velha, e o remédio é `make refresh CAP=NN` quando ninguém mais estiver editando.
 
+**Se a mensagem for `NÃO RENDERIZOU — a vez ainda é de outro agente`**, o alvo desistiu de esperar depois de ~7 minutos e saiu com código 75. Isso é deliberado: a sua ferramenta de shell aborta em 10 minutos, e um timeout opaco é pior que uma instrução. **Simplesmente rode `make render` de novo** — com o `_freeze` quente, a sua vez costuma chegar rápido. Não é falha do seu conteúdo, não é a corrida do bind mount, e **não** se resolve com `make clean`.
+
+**Nunca termine o seu trabalho sem ter renderizado.** Um agente já entregou um capítulo inteiro sem verificação por ter encerrado o turno enquanto esperava o lock. Se você não conseguir a vez em três tentativas, diga isso no relatório, em letras claras — entregar sem verificar e não avisar é o pior dos dois mundos.
+
 **Se a página publicada não bater com o seu fonte** mesmo depois de um `render OK`, é o `_freeze` envenenado, não o seu texto: rode `make refresh CAP=NN`. Nunca `make clean`.
 
 Três coisas que você **não** deve fazer, e que já custaram caro:
