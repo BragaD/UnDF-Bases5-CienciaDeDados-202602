@@ -261,3 +261,77 @@ Registrado no contrato de correção para que a próxima revisão não o reverta
   fora da faixa dela: (C1) o argumento de *por que* os dois métodos concordam está partido
   entre duas seções e nunca é dito inteiro; (C2) o clímax do livro não tem figura, entrega
   dois `tuple` sem rótulo. **Lição: as duas faixas de revisão não são redundantes.**
+
+---
+
+## Rodada — capítulos 7 e 10 FECHADOS; 11 e 12 em portão/revisão
+
+**Estado:** FECHADOS 5, 6, 7, 9, 10. Em portão: 11. Em revisão: 12. Em escrita: 13.
+Na fila: 14–17. Depois: as revisões gerais do livro (tarefa #28).
+
+### O achado da rodada — o `_freeze` envenenado
+
+Os dois portões (7 e 10) travaram no MESMO defeito, e ele não era de texto: o
+`freeze: auto` guarda o par *(hash MD5 do fonte, markdown executado)*. Quando um
+agente **edita um `.qmd` enquanto outro renderiza**, o Quarto executa a versão velha
+e grava esse resultado com o hash da versão **nova**. Dali em diante o hash bate, o
+cache é considerado válido, e o arquivo **nunca mais reexecuta**. O livro publica
+texto antigo indefinidamente, sem erro na tela.
+
+Já tinha publicado 3 seções do cap. 10 e 2 do cap. 7. Só apareceu porque um portão
+comparou fonte e HTML linha a linha.
+
+**Três camadas de defesa, todas provadas:**
+
+1. `scripts/render-seguro.sh` — lock (mkdir, atômico; `flock` não existe no macOS) +
+   fotografia de mtimes antes/depois do render. Quem foi editado no meio tem o
+   `_freeze` apagado e o render repete, até 3 rodadas. Se persistir, **avisa e sai
+   com SUCESSO** — o render funcionou, e um agente que vê "falha" tende a rodar
+   `make clean`, que é o remédio errado.
+2. `make refresh CAP=NN` — conserta o que já estava envenenado, sem esfriar o livro.
+3. `tests/test_freeze.py` — invariante exato: **se o hash guardado bate com o fonte,
+   o markdown guardado precisa conter a prosa do fonte.** Hash diferente é ignorado
+   de propósito (ali o Quarto reexecuta sozinho — é o cache funcionando). Validado
+   contra o envenenamento real: achou os 4 arquivos, **incluindo a seção 7.2, que o
+   portão do capítulo 7 não tinha visto**. Suíte foi de 21 para 22 testes.
+
+**Ruling O — comparar hashes não detecta nada.** O hash bate; esse é o problema. O
+que se detecta é a causa (mtime mudou durante o render) ou o efeito (prosa ausente
+do cache). As duas foram implementadas, porque a primeira previne e a segunda pega o
+que já passou — inclusive o envenenado antes de o script existir.
+
+**Ruling P — o lixo de render na raiz.** Um render abortado deixava `index.html` na
+raiz (a capa vem de `index.qmd`), e nem `make clean` nem o alvo `render` o removiam:
+a raiz era poupada de propósito para proteger o `spoiler.html`, que é versionado. A
+regra agora distingue os dois: apaga o `.html` que tem um `.qmd` de mesmo nome.
+
+### Erro meu, pego pelo portão do cap. 10
+
+Escrevi no contrato de correção que o classificador que nunca aponta spam é "o par
+98,1%/1,4% do teste do Luke". **Errado.** O teste do Luke *aponta* alguém: precisão
+1,4%, revocação 0,5%, ambas definidas. Quem tem precisão indefinida e revocação zero
+é o outro classificador do cap. 8, o que responde "não tem leucemia" para todo mundo
+e acerta 98,6%. O corretor aplicou fielmente o que eu escrevi, e o portão pegou.
+**Lição: o contrato de correção precisa da mesma verificação que o texto.**
+
+E um segundo: o texto dizia que subir o limiar acima de 0,5 trocaria falsos negativos
+por menos falsos positivos — direção invertida. Subir o limiar derruba FP e paga com
+mais FN.
+
+### Perda de dois agentes por limite de API
+
+Os agentes do cap. 11 (correção) e do cap. 12 (escrita) morreram por limite de sessão
+**já na fase de verificação** — tinham terminado de escrever. O trabalho foi
+recuperado e verificado por mim e pelos portões. **Consequência prática: o brief
+sempre manda escrever o relatório em arquivo antes de verificar**, e isso salvou as
+duas entregas.
+
+### Cap. 12 antecipou uma deriva sozinho
+
+O capítulo obtém 0,84 para o coeficiente de `amigos` no modelo de uma variável, por
+gradiente descendente, enquanto o cap. 11 obteve 0,9039 pela fórmula fechada. Em vez
+de esconder, ele tem um `callout-warning` explicando que a diferença é do otimizador
+(5.000 passos, lotes de 25, taxa fixa — orbita o mínimo sem pousar) e que o padrão
+que importa (0,904 → 0,972 quando as outras variáveis entram) é robusto na solução
+exata. Também corrige a leitura frouxa que o cap. 11 deixava: **a regressão múltipla
+TEM fórmula fechada** (equação normal); os modelos sem nenhuma começam no cap. 13.
