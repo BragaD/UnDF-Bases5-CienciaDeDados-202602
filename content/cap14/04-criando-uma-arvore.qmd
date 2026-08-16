@@ -4,7 +4,184 @@
 Esta seção corresponde a *Creating a Decision Tree*, do capítulo 17 de @grus2019.
 :::
 
-::: {.callout-warning}
-## Em construção
-O conteúdo desta seção ainda será escrito.
+Temos os dados e temos um critério para julgar uma pergunta. Falta o algoritmo que junta os dois e produz uma árvore.
+
+Nossa árvore vai consistir de **nós de decisão** (que fazem uma pergunta e nos mandam por caminhos diferentes conforme a resposta) e **folhas** (que devolvem uma previsão). Vamos construí-la com o algoritmo **ID3**, que é relativamente simples e opera assim. Dados alguns exemplos rotulados e uma lista de atributos sobre os quais ramificar:
+
+::: {.conceito}
+1. Se todos os dados têm o **mesmo rótulo**, crie uma folha que prevê aquele rótulo e pare.
+2. Se a lista de atributos está **vazia** (não há mais perguntas a fazer), crie uma folha que prevê o rótulo mais comum e pare.
+3. Caso contrário, particione os dados por **cada um** dos atributos.
+4. Escolha a partição de **menor entropia**.
+5. Adicione um nó de decisão baseado no atributo escolhido.
+6. **Repita** dentro de cada subconjunto da partição, usando os atributos restantes.
+:::
+
+Note o passo 6: cada ramo continua com **um atributo a menos**. Um atributo já usado não é reperguntado dentro do próprio ramo — dentro dele, todo mundo tem o mesmo valor daquele atributo, então perguntar de novo não separaria nada.
+
+## Guloso quer dizer o quê
+
+Esse é o que se chama de algoritmo **guloso**, porque a cada passo ele escolhe a opção imediatamente melhor.
+
+::: {.callout-important}
+Dado um conjunto de dados, pode existir uma árvore melhor cujo **primeiro movimento pareça pior**. O ID3 não vai encontrá-la: ele escolhe pelo ganho imediato e nunca revê a escolha. Não há retrocesso, não há busca, não há "e se eu tivesse perguntado outra coisa primeiro".
+
+Isso não é um defeito da nossa implementação — é a definição do algoritmo, e é o preço de não resolver um problema computacionalmente muito difícil. A [seção 14.5](05-juntando-tudo.qmd) mostra um conjunto de dados de oito linhas em que essa escolha gulosa produz, comprovadamente, uma árvore maior do que a necessária.
+
+Em compensação, o ID3 é fácil de entender e de implementar, o que faz dele um bom ponto de partida para explorar árvores de decisão. E vale registrar que o `scikit-learn`, o `XGBoost` e todas as implementações sérias de árvore em uso hoje também são gulosas, pelo mesmo motivo.
+:::
+
+## Percorrendo o algoritmo à mão
+
+Vamos executar esses passos manualmente sobre os dados dos candidatos. As funções e os dados são exatamente os da [seção anterior](03-a-entropia-de-uma-particao.qmd), então em vez de reescrevê-los importamos do pacote:
+
+```{python}
+#| label: criando-import
+#| output: false
+from collections import Counter
+from scratch.decision_trees import (data_entropy, partition_by,
+                                    partition_entropy_by, inputs, senior_inputs)
+```
+
+::: {.callout-note}
+Por que `output: false` nesse chunk? Porque `scratch/decision_trees.py` — copiado literalmente do repositório do livro-texto — tem, no **nível do módulo**, o mesmo laço de `print` que o @grus2019 mostra no texto:
+
+```python
+for key in ['level','lang','tweets','phd']:
+    print(key, partition_entropy_by(inputs, key, 'did_well'))
+```
+
+Isso significa que **importar o módulo já imprime** as quatro entropias, com dezesseis casas decimais, antes de qualquer código nosso rodar. É um efeito colateral clássico de código escrito para ser lido de cima a baixo, e é a razão pela qual o pacote `scratch/` nunca é editado neste livro: a adaptação vive no `.qmd`, para que um `diff` contra o repositório original continue limpo.
+:::
+
+O conjunto tem rótulos `True` e `False` misturados, e quatro atributos disponíveis. O passo 1 e o passo 2 não se aplicam, então vamos ao passo 4: qual partição tem a menor entropia?
+
+```{python}
+#| label: criando-melhor-atributo
+atributos = ['level', 'lang', 'tweets', 'phd']
+
+for key in atributos:
+    print(f"{key:8s} {partition_entropy_by(inputs, key, 'did_well'):.6f}")
+
+melhor = min(atributos, key=lambda a: partition_entropy_by(inputs, a, 'did_well'))
+print(f"\nvencedor: {melhor}")
+```
+
+A menor entropia vem de dividir por `level`, então precisamos de uma subárvore para cada valor possível de `level`.
+
+```{python}
+#| label: criando-ramos-level
+for valor, grupo in partition_by(inputs, 'level').items():
+    rotulos = [c.did_well for c in grupo]
+    print(f"{valor:7s} n={len(grupo)}  {dict(Counter(rotulos))}  "
+          f"H={data_entropy(rotulos):.4f}")
+```
+
+**Todo candidato `Mid` está rotulado `True`.** Pelo passo 1, a subárvore de `Mid` é simplesmente uma folha que prevê `True`. Acabou aquele ramo.
+
+Para os `Senior` temos uma mistura de `True` e `False`, então é preciso dividir de novo. Restam três atributos — `level` já foi usado:
+
+```{python}
+#| label: criando-ramo-senior
+for key in ['lang', 'tweets', 'phd']:
+    print(f"{key:8s} {partition_entropy_by(senior_inputs, key, 'did_well'):.6f}")
+```
+
+A próxima divisão é por `tweets`, que resulta numa partição de entropia zero: para os candidatos de nível `Senior`, tuitar sempre resultou em `True` e não tuitar sempre resultou em `False`. Os dois ramos abaixo de `tweets` são folhas, pelo passo 1.
+
+Falta o ramo dos `Junior`:
+
+```{python}
+#| label: criando-ramo-junior
+junior_inputs = [entrada for entrada in inputs if entrada.level == 'Junior']
+
+for key in ['lang', 'tweets', 'phd']:
+    print(f"{key:8s} {partition_entropy_by(junior_inputs, key, 'did_well'):.6f}")
+```
+
+Mesma coisa, por outro atributo: dividir os juniores por `phd` dá **0,000000**. Conferindo diretamente:
+
+```{python}
+#| label: criando-junior-phd
+for valor, grupo in partition_by(junior_inputs, 'phd').items():
+    print(f"phd={str(valor):5s} n={len(grupo)}  "
+          f"{dict(Counter(c.did_well for c in grupo))}")
+```
+
+Nenhum doutorado sempre resultou em `True`, e doutorado sempre resultou em `False`. Os três ramos terminaram, e a árvore está completa:
+
+```{python}
+#| label: fig-arvore-contratacao-manual
+#| fig-cap: "A árvore de decisão para contratação, deduzida à mão. Caixas claras são perguntas; verdes e vermelhas, previsões."
+#| echo: false
+from matplotlib import pyplot as plt
+
+# (pergunta, {valor: subárvore}); uma folha é a string da previsão.
+arvore = ("level?", {
+    "Senior": ("tweets?", {"False": "NÃO CONTRATAR", "True": "CONTRATAR!"}),
+    "Mid": "CONTRATAR!",
+    "Junior": ("phd?", {"False": "CONTRATAR!", "True": "NÃO CONTRATAR"}),
+})
+
+def folhas(t):
+    return 1 if isinstance(t, str) else sum(folhas(s) for s in t[1].values())
+
+def altura(t):
+    return 0 if isinstance(t, str) else 1 + max(altura(s) for s in t[1].values())
+
+def desenha(ax, t, x0, x1, prof, h):
+    y, x = h - prof, (x0 + x1) / 2
+    if isinstance(t, str):
+        cor, ec = ('#d7ecd9', '#4a8f55') if t == "CONTRATAR!" else ('#f6d9d9', '#b55a5a')
+        ax.text(x, y, t, ha='center', va='center', fontsize=9,
+                bbox=dict(boxstyle='round,pad=0.4', fc=cor, ec=ec))
+        return x, y
+    ax.text(x, y, t[0], ha='center', va='center', fontsize=9,
+            bbox=dict(boxstyle='round,pad=0.4', fc='#f6ead0', ec='#b58a4a'))
+    total, ini = folhas(t), x0
+    for valor, sub in t[1].items():
+        larg = (x1 - x0) * folhas(sub) / total
+        xs, ys = desenha(ax, sub, ini, ini + larg, prof + 1, h)
+        ax.annotate("", xy=(xs, ys + 0.18), xytext=(x, y - 0.18),
+                    arrowprops=dict(arrowstyle='->', color='#888', lw=1))
+        ax.text((x + xs) / 2, (y + ys) / 2, valor, fontsize=8, color='#444',
+                ha='center', va='center',
+                bbox=dict(boxstyle='round,pad=0.15', fc='white', ec='none', alpha=0.9))
+        ini += larg
+    return x, y
+
+h = altura(arvore)
+fig, ax = plt.subplots(figsize=(9, 1.3 * h + 0.8))
+desenha(ax, arvore, 0, 1, 0, h)
+ax.set_xlim(-0.08, 1.08)
+ax.set_ylim(-0.35, h + 0.35)
+ax.axis('off')
+plt.tight_layout()
+plt.show()
+```
+
+Duas perguntas bastam para classificar qualquer candidato, e frequentemente uma só. Repare no que essa figura permite: você pode discordar dela. Pode dizer ao vice-presidente que a regra dos sêniores está apoiada em cinco pessoas, ou que `phd` prever fracasso entre juniores é provavelmente ruído. Não dá para fazer isso com um vetor de coeficientes ou com uma lista de vizinhos — é essa a moeda que a árvore paga a mais.
+
+::: {.callout-tip collapse="true"}
+## Na prática: o que a biblioteca faz com a mesma gulodice
+
+O `DecisionTreeClassifier` do `scikit-learn` é guloso pelo mesmo motivo que o nosso: encontrar a árvore ótima é intratável. O que a biblioteca acrescenta não é busca, é **controle de crescimento** — porque a árvore que este capítulo constrói cresce até a pureza total, e isso é sobreajuste garantido:
+
+```python
+from sklearn.tree import DecisionTreeClassifier
+
+DecisionTreeClassifier(
+    criterion='entropy',
+    max_depth=3,          # não pergunte mais que 3 vezes
+    min_samples_split=10, # não divida um nó com menos de 10 exemplos
+    min_samples_leaf=5,   # não crie folha com menos de 5 exemplos
+    ccp_alpha=0.01,       # poda: remova ramos que não pagam sua complexidade
+)
+```
+
+Os três primeiros são **pré-poda**: interrompem o crescimento antes que ele aconteça. São baratos e é o que se usa na prática, mas são gulosos também — podem cortar um ramo que só se revelaria útil um nível abaixo.
+
+O `ccp_alpha` é **pós-poda** (*minimal cost-complexity pruning*): cresce a árvore inteira e depois remove os ramos cujo ganho não compensa o tamanho, controlado por um parâmetro $\alpha$ que penaliza o número de folhas. É a mesma forma de regularização que a [seção 12.8](../cap12/08-regularizacao.qmd) aplicou aos coeficientes de uma regressão — penalizar a complexidade do modelo dentro do próprio critério de ajuste —, só que aqui a complexidade se conta em folhas em vez de em magnitude de parâmetros.
+
+O algoritmo deste capítulo não tem nenhum dos dois. Ele para apenas quando os rótulos ficam puros ou quando os atributos acabam, que são os passos 1 e 2 do ID3. A [seção 14.6](06-florestas-aleatorias.qmd) ataca o mesmo problema por um caminho completamente diferente: em vez de encolher a árvore, construir muitas árvores grandes e fazê-las votar.
 :::

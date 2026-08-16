@@ -4,7 +4,283 @@
 Esta seção corresponde a *Putting It All Together*, do capítulo 17 de @grus2019.
 :::
 
+Agora que vimos como o algoritmo funciona, queremos implementá-lo de forma mais geral — não só para os candidatos a emprego. Para isso é preciso decidir como **representar** uma árvore.
+
+Vamos usar a representação mais leve possível. Uma árvore é uma de duas coisas:
+
+- uma **`Leaf`** (que prevê um único valor), ou
+- um **`Split`** (que contém um atributo sobre o qual dividir, as subárvores para valores específicos daquele atributo e, possivelmente, um valor padrão para usar quando aparecer um valor desconhecido).
+
+```{python}
+#| label: juntando-representacao
+from typing import NamedTuple, Union, Any
+
+class Leaf(NamedTuple):
+    value: Any
+
+class Split(NamedTuple):
+    attribute: str
+    subtrees: dict
+    default_value: Any = None
+
+DecisionTree = Union[Leaf, Split]
+```
+
+São doze linhas, e nelas cabe o modelo inteiro. Compare com o que os capítulos anteriores precisavam guardar: um vetor `beta` de coeficientes que só significa alguma coisa junto com a documentação de qual coluna é qual, ou — no caso do k-vizinhos — o conjunto de dados inteiro.
+
+Com essa representação, a árvore de contratação da [seção anterior](04-criando-uma-arvore.qmd) fica assim:
+
+```{python}
+#| label: juntando-arvore-manual
+hiring_tree = Split('level', {                # primeiro, considere "level"
+    'Junior': Split('phd', {                  # se level é "Junior", olhe "phd"
+        False: Leaf(True),                    #   se "phd" é False, preveja True
+        True: Leaf(False)                     #   se "phd" é True, preveja False
+    }),
+    'Mid': Leaf(True),                        # se level é "Mid", preveja True
+    'Senior': Split('tweets', {               # se level é "Senior", olhe "tweets"
+        False: Leaf(False),                   #   se "tweets" é False, preveja False
+        True: Leaf(True)                      #   se "tweets" é True, preveja True
+    })
+})
+```
+
+Isso é a figura da seção anterior, escrita em Python. Ela cabe na tela, e um leitor que nunca ouviu falar de entropia consegue conferir se concorda com ela.
+
+## O valor que ninguém previu
+
+Resta a pergunta do que fazer diante de um valor de atributo **inesperado** (ou faltante). O que a nossa árvore deveria fazer se encontrasse um candidato cujo `level` fosse `Intern`? Esse caso é tratado preenchendo o atributo `default_value` com o rótulo mais comum daquele nó.
+
+Dada essa representação, dá para classificar uma entrada:
+
+```{python}
+#| label: juntando-classify
+def classify(tree: DecisionTree, input: Any) -> Any:
+    """classifica a entrada usando a árvore de decisão dada"""
+
+    # Se este é um nó folha, devolve o seu valor
+    if isinstance(tree, Leaf):
+        return tree.value
+
+    # Caso contrário, esta árvore consiste de um atributo sobre o qual dividir
+    # e de um dicionário cujas chaves são valores daquele atributo
+    # e cujos valores são subárvores a considerar em seguida
+    subtree_key = getattr(input, tree.attribute)
+
+    if subtree_key not in tree.subtrees:   # Se não há subárvore para a chave,
+        return tree.default_value          # devolve o valor padrão.
+
+    subtree = tree.subtrees[subtree_key]   # Escolhe a subárvore apropriada
+    return classify(subtree, input)        # e a usa para classificar a entrada.
+```
+
+## Construindo a árvore a partir dos dados
+
+Falta só montar a representação a partir dos dados de treino — ou seja, escrever em código os seis passos do ID3:
+
+```{python}
+#| label: juntando-import
+#| output: false
+from typing import List
+from collections import Counter
+from scratch.decision_trees import (partition_by, partition_entropy_by,
+                                    Candidate, inputs)
+```
+
+::: {.callout-note}
+De novo `output: false`: importar `scratch/decision_trees.py` dispara os quatro `print` que o módulo executa no nível do módulo, como explicado na [seção 14.4](04-criando-uma-arvore.qmd).
+
+`Candidate`, `inputs`, `partition_by` e `partition_entropy_by` são exatamente os da [seção 14.3](03-a-entropia-de-uma-particao.qmd). As funções que **são** a lição desta seção — `classify` e `build_tree_id3` — estão escritas aqui, à vista.
+:::
+
+```{python}
+#| label: juntando-build
+def build_tree_id3(inputs: List[Any],
+                   split_attributes: List[str],
+                   target_attribute: str) -> DecisionTree:
+    # Conta os rótulos do alvo
+    label_counts = Counter(getattr(input, target_attribute)
+                           for input in inputs)
+    most_common_label = label_counts.most_common(1)[0][0]
+
+    # Se há um único rótulo, preveja-o
+    if len(label_counts) == 1:
+        return Leaf(most_common_label)
+
+    # Se não sobraram atributos para dividir, devolva o rótulo majoritário
+    if not split_attributes:
+        return Leaf(most_common_label)
+
+    # Caso contrário, divida pelo melhor atributo
+
+    def split_entropy(attribute: str) -> float:
+        """Função auxiliar para encontrar o melhor atributo"""
+        return partition_entropy_by(inputs, attribute, target_attribute)
+
+    best_attribute = min(split_attributes, key=split_entropy)
+
+    partitions = partition_by(inputs, best_attribute)
+    new_attributes = [a for a in split_attributes if a != best_attribute]
+
+    # Constrói as subárvores recursivamente
+    subtrees = {attribute_value: build_tree_id3(subset,
+                                                new_attributes,
+                                                target_attribute)
+                for attribute_value, subset in partitions.items()}
+
+    return Split(best_attribute, subtrees, default_value=most_common_label)
+```
+
+Cada uma das seis regras do ID3 aparece aí, na ordem: os dois `if` que devolvem `Leaf` são os passos 1 e 2, o `min(split_attributes, key=split_entropy)` é o passo 4, e a compreensão de dicionário no fim é o passo 6. O passo 3 — particionar por cada atributo — está escondido dentro do `key=`, que chama `split_entropy` uma vez para cada candidato a atributo.
+
+Vamos construir a árvore com os quatro atributos e olhar o que saiu:
+
+```{python}
+#| label: juntando-constroi
+tree = build_tree_id3(inputs,
+                      ['level', 'lang', 'tweets', 'phd'],
+                      'did_well')
+
+def imprime(arvore: DecisionTree, nivel: int = 0, prefixo: str = "") -> None:
+    espaco = "    " * nivel
+    if isinstance(arvore, Leaf):
+        print(f"{espaco}{prefixo}=> {arvore.value}")
+    else:
+        print(f"{espaco}{prefixo}{arvore.attribute}?")
+        for valor, sub in arvore.subtrees.items():
+            imprime(sub, nivel + 1, f"{valor}: ")
+
+imprime(tree)
+```
+
+É a mesma árvore da figura da [seção 14.4](04-criando-uma-arvore.qmd), agora deduzida pelo código em vez de por nós. As sete linhas acima são o modelo inteiro — não uma visualização aproximada dele.
+
+## Prevendo
+
+Na árvore que construímos, cada folha consiste inteiramente de entradas `True` ou inteiramente de entradas `False`. Isso significa que ela prevê **perfeitamente** o conjunto de treino:
+
+```{python}
+#| label: juntando-acuracia-treino
+acertos = sum(1 for c in inputs if classify(tree, c) == c.did_well)
+print(f"acertos no conjunto de treino: {acertos}/{len(inputs)}")
+```
+
+Mas também dá para aplicá-la a dados novos, que não estavam no treino:
+
+```{python}
+#| label: juntando-previsoes
+# Deve prever True
+assert classify(tree, Candidate("Junior", "Java", True, False))
+
+# Deve prever False
+assert not classify(tree, Candidate("Junior", "Java", True, True))
+
+for candidato in [Candidate("Junior", "Java", True, False),
+                  Candidate("Junior", "Java", True, True)]:
+    print(f"{candidato} -> {classify(tree, candidato)}")
+```
+
+Os dois casos fazem sentido: os dois são juniores, e a árvore pergunta `phd` para juniores. Sem doutorado, `True`; com doutorado, `False`.
+
+E também dá para aplicá-la a dados com valores inesperados:
+
+```{python}
+#| label: juntando-intern
+# Deve prever True
+assert classify(tree, Candidate("Intern", "Java", True, True))
+
+estagiario = Candidate("Intern", "Java", True, True)
+print(f"{estagiario} -> {classify(tree, estagiario)}")
+```
+
 ::: {.callout-warning}
-## Em construção
-O conteúdo desta seção ainda será escrito.
+## O modelo respondeu com confiança sobre algo que nunca viu
+
+`Intern` **não aparece em nenhuma das 14 linhas de treino**. Nenhum estagiário foi entrevistado, nenhum estagiário foi rotulado, e o algoritmo não tem a menor informação sobre como estagiários se saem em entrevistas.
+
+Ainda assim, `classify` devolveu `True`, sem hesitar e sem sinalizar nada. O mecanismo está à vista no código: `subtree_key not in tree.subtrees` é verdadeiro, e a função devolve `tree.default_value`, que `build_tree_id3` preencheu com `most_common_label` — o rótulo mais comum naquele nó, que na raiz é `True`, porque 9 dos 14 candidatos se saíram bem.
+
+Ou seja: a resposta para "como se sai um estagiário?" é "como se sai a maioria das pessoas que **não** são estagiárias". É um padrão razoável de implementação e uma resposta péssima de modelo, e a diferença entre as duas coisas some completamente na saída, que é um `True` idêntico ao dos outros dois casos.
+
+Este é um defeito da **interface**, não do algoritmo. Um `classify` que devolvesse `(previsão, viu_esse_valor)` — ou que levantasse uma exceção diante de um valor não visto — daria ao chamador a chance de tratar o caso. Vale a pena guardar a lição de forma geral: **a maioria dos modelos, na maioria das bibliotecas, não distingue "eu sei" de "eu chutei o mais comum"**, e a previsão sai com a mesma cara nos dois casos. Se essa distinção importa para o seu problema, ela precisa ser construída por fora.
+:::
+
+::: {.callout-warning}
+## O guloso não encontra a menor árvore
+
+A [seção 14.4](04-criando-uma-arvore.qmd) afirmou que o ID3 pode produzir uma árvore maior do que a necessária. Agora que `build_tree_id3` existe, dá para mostrar.
+
+Considere oito exemplos com três atributos, em que o alvo é exatamente `a != b` — o atributo `c` está lá só para atrapalhar:
+
+```{python}
+#| label: juntando-guloso
+from typing import Optional
+
+class Exemplo(NamedTuple):
+    a: int
+    b: int
+    c: int
+    alvo: Optional[bool] = None
+
+dados = [Exemplo(0, 0, 1, False), Exemplo(0, 1, 1, True),
+         Exemplo(1, 0, 1, True),  Exemplo(1, 1, 0, False),
+         Exemplo(0, 0, 0, False), Exemplo(0, 1, 1, True),
+         Exemplo(1, 0, 0, True),  Exemplo(1, 1, 0, False)]
+
+for key in ['a', 'b', 'c']:
+    print(f"{key} {partition_entropy_by(dados, key, 'alvo'):.6f}")
+```
+
+Sozinhos, nem `a` nem `b` reduzem a incerteza em nada — cada um deles deixa os dois lados meio a meio, entropia 1,000000. Só o par `(a, b)` decide o alvo, e o critério guloso, que olha um atributo de cada vez, é **cego para isso**. Já `c` oferece uma redução pequena mas real, então é ele que vence o primeiro passo:
+
+```{python}
+#| label: juntando-guloso-arvores
+def folhas(t: DecisionTree) -> int:
+    return 1 if isinstance(t, Leaf) else sum(folhas(s) for s in t.subtrees.values())
+
+guloso = build_tree_id3(dados, ['a', 'b', 'c'], 'alvo')
+enxuta = build_tree_id3(dados, ['a', 'b'], 'alvo')
+
+for nome, t in [("com a, b, c", guloso), ("só com a, b", enxuta)]:
+    certos = sum(1 for d in dados if classify(t, d) == d.alvo)
+    print(f"{nome:12s} raiz={t.attribute:2s} folhas={folhas(t)}  "
+          f"acertos={certos}/{len(dados)}")
+```
+
+As duas árvores acertam os oito exemplos. A gulosa gasta **seis folhas** para isso; escondendo `c` do algoritmo, quatro bastam. E note que "esconder `c`" não é uma opção disponível na vida real — se soubéssemos de antemão quais atributos atrapalham, não precisaríamos do algoritmo.
+
+Uma árvore com mais folhas para o mesmo desempenho no treino é uma árvore que particionou os dados mais finamente sem necessidade, e essa é precisamente a receita para generalizar pior.
+:::
+
+::: {.callout-important}
+Como o objetivo aqui era demonstrar **como** construir uma árvore, nós a construímos sobre o conjunto de dados inteiro. Como sempre, se estivéssemos realmente tentando criar um bom modelo para alguma coisa, teríamos coletado mais dados e os dividido em subconjuntos de treino, validação e teste — como a [seção 8.4](../cap08/04-correcao.qmd) insistiu.
+
+Sem essa divisão, os `14/14` acima não medem absolutamente nada sobre a qualidade do modelo. Eles medem apenas que o algoritmo fez o que promete fazer: dividir até a pureza.
+:::
+
+::: {.callout-tip collapse="true"}
+## Na prática: `DecisionTreeClassifier`
+
+O equivalente de tudo isso na biblioteca:
+
+```python
+from sklearn.tree import DecisionTreeClassifier, export_text
+from sklearn.preprocessing import OrdinalEncoder
+
+X = OrdinalEncoder().fit_transform([[c.level, c.lang, c.tweets, c.phd]
+                                    for c in inputs])
+y = [c.did_well for c in inputs]
+
+modelo = DecisionTreeClassifier(criterion='entropy', random_state=0).fit(X, y)
+
+print(export_text(modelo, feature_names=['level', 'lang', 'tweets', 'phd']))
+```
+
+O `export_text` imprime a árvore treinada em texto indentado, e `sklearn.tree.plot_tree` a desenha — as duas coisas que o nosso `imprime` e a figura da [seção 14.4](04-criando-uma-arvore.qmd) fazem. É raro uma biblioteca de aprendizado de máquina oferecer isso, e não é generosidade: é que, para uma árvore, imprimir o modelo é possível.
+
+Três diferenças que importam ao comparar as saídas:
+
+- **A árvore é binária.** O `scikit-learn` implementa CART, que divide sempre em dois ramos por um limiar numérico (`level <= 1.5`), enquanto o nosso ID3 abre um ramo por valor (`Senior`, `Mid`, `Junior` de uma vez). A árvore da biblioteca sobre estes dados terá mais níveis para expressar a mesma regra.
+- **Os atributos precisam ser números.** Daí o `OrdinalEncoder` acima. E ele introduz uma ordem que não existe nos dados: codificar `Junior=0, Mid=1, Senior=2` faz o corte `<= 1.5` significar "Junior ou Mid", um agrupamento que ninguém pediu. Para atributos categóricos sem ordem natural, o usual é `OneHotEncoder`, ao custo de uma coluna por valor.
+- **Não há `default_value`.** O caso `Intern` sequer chega ao modelo: o `OrdinalEncoder` levanta um erro diante de uma categoria não vista, a menos que você configure `handle_unknown='use_encoded_value'`. É uma falha mais barulhenta que a nossa — e, dado o callout acima, provavelmente melhor.
 :::

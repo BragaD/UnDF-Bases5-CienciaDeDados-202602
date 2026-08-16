@@ -4,7 +4,293 @@
 Esta seção corresponde a *Random Forests*, do capítulo 17 de @grus2019.
 :::
 
+A [seção anterior](05-juntando-tudo.qmd) terminou com a árvore acertando 14 dos 14 candidatos que usou para se construir. Dado o quanto uma árvore de decisão consegue se ajustar aos próprios dados de treino, não surpreende que ela tenha **tendência ao sobreajuste**.
+
+Vale enxergar por que a tendência é estrutural, e não azar. A regra de parada do ID3 é "pare quando os rótulos ficarem puros ou quando os atributos acabarem". Com atributos suficientes, a primeira condição sempre chega antes da segunda — a árvore simplesmente continua perguntando até cada folha conter uma única classe, ainda que para isso precise isolar exemplos um a um. O [Capítulo 8](../cap08/index.qmd) chamou isso de sobreajuste; a árvore é o modelo deste livro que chega lá mais rápido, porque nada no algoritmo a impede.
+
+Uma forma de evitá-lo é a **floresta aleatória**: construir várias árvores de decisão e combinar as saídas. Se forem árvores de classificação, deixamos que votem; se forem de regressão, tiramos a média das previsões.
+
+Mas o nosso processo de construção é **determinístico** — os mesmos dados produzem sempre a mesma árvore. De onde viriam árvores diferentes?
+
+## Fonte de aleatoriedade 1: reamostrar os dados
+
+A primeira peça é reamostrar os dados. Em vez de treinar cada árvore com todas as `inputs` do conjunto de treino, treinamos cada árvore com o resultado de `bootstrap_sample(inputs)`.
+
+::: {.callout-note}
+Esse é o mesmo `bootstrap_sample` do [Capítulo 12](../cap12/06-digressao-o-bootstrap.qmd) — sortear, com reposição, tantos elementos quanto a amostra original tem. Lá o objetivo era **medir incerteza**: reamostrava-se para ver o quanto uma estatística balançava. Aqui o objetivo é outro: reamostrar para obter conjuntos de treino diferentes, cada um produzindo uma árvore diferente.
+
+A mecânica é idêntica; o uso, não. É o tipo de reaproveitamento que compensa reconhecer, porque a mesma linha de código serve para duas coisas que não têm nada a ver uma com a outra.
+:::
+
+```{python}
+#| label: floresta-bootstrap
+import random
+from typing import List, TypeVar
+
+X = TypeVar('X')
+
+def bootstrap_sample(data: List[X]) -> List[X]:
+    """sorteia len(data) elementos com reposição"""
+    return [random.choice(data) for _ in data]
+```
+
+Como cada árvore é construída com dados diferentes, cada árvore sai diferente das outras.
+
+::: {.exemplo}
+Há um benefício de brinde nisso. Uma amostra bootstrap de tamanho $n$ deixa de fora, em média, cerca de 37% dos exemplos originais — a chance de um exemplo específico nunca ser sorteado em $n$ tentativas é $(1 - 1/n)^n$, que converge para $1/e \approx 0{,}368$.
+
+Esses exemplos não sorteados são chamados **out-of-bag**, e são um conjunto de teste honesto para aquela árvore em particular: ela nunca os viu. Isso permite estimar o desempenho da floresta **usando todos os dados como treino**, sem separar um conjunto de teste — o que, em conjuntos pequenos, é uma vantagem real. É o `oob_score` do `scikit-learn`.
+:::
+
+A técnica de treinar vários modelos em reamostras bootstrap e combinar as saídas chama-se **bootstrap aggregating**, ou **bagging**.
+
+## Fonte de aleatoriedade 2: sortear os atributos
+
+A segunda peça muda a forma de escolher o `best_attribute` sobre o qual dividir. Em vez de olhar **todos** os atributos restantes, sorteamos primeiro um subconjunto deles e dividimos pelo melhor desse subconjunto:
+
+```{python}
+#| label: floresta-import
+#| output: false
+from typing import Any
+from collections import Counter
+from scratch.decision_trees import (partition_by, partition_entropy_by,
+                                    build_tree_id3, classify,
+                                    Leaf, Split, DecisionTree, Candidate, inputs)
+```
+
+```{python}
+#| label: floresta-build
+def build_tree_forest(inputs: List[Any],
+                      split_attributes: List[str],
+                      target_attribute: str,
+                      num_split_candidates: int = 2) -> DecisionTree:
+    """Igual ao build_tree_id3, exceto por sortear os atributos candidatos."""
+    label_counts = Counter(getattr(input, target_attribute) for input in inputs)
+    most_common_label = label_counts.most_common(1)[0][0]
+
+    if len(label_counts) == 1:
+        return Leaf(most_common_label)
+    if not split_attributes:
+        return Leaf(most_common_label)
+
+    def split_entropy(attribute: str) -> float:
+        return partition_entropy_by(inputs, attribute, target_attribute)
+
+    # se já há poucos candidatos a divisão, olhe todos eles
+    if len(split_attributes) <= num_split_candidates:
+        sampled_split_candidates = split_attributes
+    # caso contrário, sorteie uma amostra
+    else:
+        sampled_split_candidates = random.sample(split_attributes,
+                                                 num_split_candidates)
+
+    # agora escolha o melhor atributo apenas entre esses candidatos
+    best_attribute = min(sampled_split_candidates, key=split_entropy)
+
+    partitions = partition_by(inputs, best_attribute)
+    new_attributes = [a for a in split_attributes if a != best_attribute]
+
+    subtrees = {attribute_value: build_tree_forest(subset, new_attributes,
+                                                  target_attribute,
+                                                  num_split_candidates)
+                for attribute_value, subset in partitions.items()}
+
+    return Split(best_attribute, subtrees, default_value=most_common_label)
+```
+
+A diferença em relação ao `build_tree_id3` da [seção 14.5](05-juntando-tudo.qmd) cabe em cinco linhas — o `if`/`else` que reduz `split_attributes` a `sampled_split_candidates` antes do `min`. Todo o resto é idêntico.
+
+E a combinação das saídas é uma votação simples:
+
+```{python}
+#| label: floresta-voto
+def forest_classify(trees: List[DecisionTree], input: Any) -> Any:
+    votes = [classify(tree, input) for tree in trees]
+    return Counter(votes).most_common(1)[0][0]
+```
+
+## Uma floresta sobre os candidatos
+
+Com as duas peças, cem árvores:
+
+```{python}
+#| label: floresta-candidatos
+atributos = ['level', 'lang', 'tweets', 'phd']
+
+random.seed(12)
+floresta = [build_tree_forest(bootstrap_sample(inputs), atributos, 'did_well')
+            for _ in range(100)]
+
+raizes = Counter(t.attribute if isinstance(t, Split) else '(folha só)'
+                 for t in floresta)
+for atributo, n in raizes.most_common():
+    print(f"{atributo:12s} {n:3d} árvores")
+```
+
 ::: {.callout-warning}
-## Em construção
-O conteúdo desta seção ainda será escrito.
+## A semente não é opcional
+
+`random.seed(12)` está ali porque tudo nesta seção é aleatório: as reamostras, os subconjuntos de atributos e, por consequência, as contagens acima. Sem ela, cada renderização do livro produziria uma floresta diferente, e os números do texto deixariam de bater com os da sua tela. É o `random` da biblioteca padrão, como no livro inteiro — nunca o `numpy.random`.
+:::
+
+Lembre-se de que a árvore determinística da seção anterior dividia por `level` na raiz, sempre. Na floresta, `level` só é a raiz de uma fração das árvores; nas outras, a raiz é o atributo que por acaso caiu no sorteio e venceu localmente. Uma das cem nem chegou a ser uma árvore: a reamostra que ela recebeu, por sorte do bootstrap, continha candidatos de um único rótulo, e o passo 1 do ID3 devolveu uma folha na hora.
+
+Como fica a votação nos três candidatos da seção anterior?
+
+```{python}
+#| label: floresta-votos
+testes = [Candidate("Junior", "Java", True, False),
+          Candidate("Junior", "Java", True, True),
+          Candidate("Intern", "Java", True, True)]
+
+for candidato in testes:
+    votos = Counter(classify(t, candidato) for t in floresta)
+    print(f"{candidato.level:7s} phd={str(candidato.phd):5s} -> "
+          f"{forest_classify(floresta, candidato)}   "
+          f"(True: {votos[True]}, False: {votos[False]})")
+```
+
+As três previsões coincidem com as da árvore única, mas agora vêm com algo que a árvore única não dava: uma **contagem de votos**. Uma decisão de 78 a 22 e uma de 51 a 49 saem com a mesma cara num classificador comum; aqui a diferença fica visível. Repare, contudo, que a maioria confortável no caso `Intern` não significa que a floresta saiba alguma coisa sobre estagiários — significa apenas que a maioria das árvores respondeu com o seu próprio `default_value`, pelo mecanismo que o callout da [seção 14.5](05-juntando-tudo.qmd) descreveu.
+
+::: {.callout-important}
+Catorze exemplos não permitem **medir** se a floresta é melhor que a árvore. Com esse tamanho, qualquer comparação de acurácia oscila mais em função de qual exemplo caiu em qual lado do que em função do método, e uma medição dessas diria mais sobre o sorteio do que sobre o algoritmo.
+
+Esse é exatamente o erro que a [seção 8.3](../cap08/03-overfitting-e-underfitting.qmd) descreve, e que este projeto já cometeu na prática: uma medição feita sobre poucas repetições é um chute com aparência de número. Então vamos medir direito, num conjunto grande o bastante para a resposta significar alguma coisa.
+:::
+
+## Medindo o que a floresta compra
+
+Vamos fabricar um problema com estrutura conhecida. Oito atributos categóricos, cada um com três valores possíveis; o rótulo depende **apenas** dos dois primeiros, e 15% dos rótulos de treino são invertidos, para simular ruído de medição. Os outros seis atributos são puro ruído.
+
+```{python}
+#| label: floresta-sintetico-dados
+from typing import NamedTuple, Optional
+
+class Linha(NamedTuple):
+    a0: str
+    a1: str
+    a2: str
+    a3: str
+    a4: str
+    a5: str
+    a6: str
+    a7: str
+    alvo: Optional[bool] = None
+
+ATRIBUTOS = [f"a{i}" for i in range(8)]
+VALORES = ['x', 'y', 'z']
+
+def gera(n: int, ruido: float = 0.15) -> List[Linha]:
+    linhas = []
+    for _ in range(n):
+        valores = [random.choice(VALORES) for _ in range(8)]
+        alvo = (valores[0] == 'x') or (valores[1] == 'y')   # a regra verdadeira
+        if random.random() < ruido:
+            alvo = not alvo                                  # rótulo corrompido
+        linhas.append(Linha(*valores, alvo))
+    return linhas
+```
+
+O conjunto de treino tem 200 linhas com 15% de ruído; o de teste tem 1.000 linhas **sem** ruído, para medir o quanto cada modelo recuperou a regra verdadeira em vez de decorar as corrupções. Repetimos o experimento inteiro 20 vezes, com dados novos a cada vez, e comparamos quatro estratégias:
+
+```{python}
+#| label: floresta-sintetico-experimento
+def acuracia(prever, dados) -> float:
+    return sum(1 for linha in dados if prever(linha) == linha.alvo) / len(dados)
+
+random.seed(0)
+
+resultados = {'árvore única': [], 'só bagging': [],
+              'floresta (2 de 8)': [], 'floresta (3 de 8)': []}
+no_proprio_treino = []
+
+for _ in range(20):
+    treino = gera(200)
+    teste = gera(1000, ruido=0.0)
+
+    arvore = build_tree_id3(treino, ATRIBUTOS, 'alvo')
+    no_proprio_treino.append(
+        acuracia(lambda linha: classify(arvore, linha), treino))
+    resultados['árvore única'].append(
+        acuracia(lambda linha: classify(arvore, linha), teste))
+
+    bagging = [build_tree_id3(bootstrap_sample(treino), ATRIBUTOS, 'alvo')
+               for _ in range(50)]
+    resultados['só bagging'].append(
+        acuracia(lambda linha: forest_classify(bagging, linha), teste))
+
+    for k in (2, 3):
+        mata = [build_tree_forest(bootstrap_sample(treino), ATRIBUTOS, 'alvo', k)
+                for _ in range(50)]
+        resultados[f'floresta ({k} de 8)'].append(
+            acuracia(lambda linha: forest_classify(mata, linha), teste))
+
+print(f"{'árvore única, no treino':20s} "
+      f"média={sum(no_proprio_treino) / len(no_proprio_treino):.4f}\n")
+
+for nome, valores in resultados.items():
+    media = sum(valores) / len(valores)
+    print(f"{nome:20s} média={media:.4f}  pior={min(valores):.3f}  "
+          f"melhor={max(valores):.3f}")
+```
+
+Leia a primeira linha ao lado da segunda. A árvore única acerta **99,7%** dos exemplos que usou para se construir — inclusive os 15% cujo rótulo foi invertido de propósito, que ela só consegue acertar decorando-os um a um, com perguntas sobre os seis atributos de puro ruído. Sobre dados novos, ela cai para 82%. A distância entre esses dois números é o sobreajuste, medido.
+
+(Por que 99,7% e não 100%? Porque com 200 sorteios sobre $3^8 = 6.561$ combinações possíveis de atributos, de vez em quando duas linhas idênticas recebem rótulos diferentes — e aí nem uma árvore infinitamente profunda consegue separá-las. O passo 2 do ID3 devolve o rótulo majoritário e erra o outro.)
+
+::: {.conceito}
+As duas fontes de aleatoriedade contribuem, e contribuem por motivos diferentes.
+
+O **bagging** sozinho já resolve boa parte do problema: cada árvore decora um conjunto diferente de ruídos, e o ruído decorado por uma é contradito pelas outras 49 na votação. O que sobrevive à média é o que estava presente na maioria das reamostras — ou seja, o sinal.
+
+O **sorteio de atributos** acrescenta um ganho a mais, e o mecanismo é sutil: sem ele, as 50 árvores tendem a escolher os mesmos primeiros atributos, porque a reamostra muda pouco o ranking dos melhores. Árvores parecidas erram parecido, e votar entre modelos que erram juntos não corrige nada. Forçar cada divisão a escolher entre poucos atributos sorteados **descorrelaciona** as árvores, e é a correlação entre elas, não a qualidade individual de cada uma, que limita o ganho de um comitê.
+
+É por isso que uma floresta aleatória usa árvores propositalmente piores que a melhor árvore possível. Cada uma sozinha é um **aprendiz fraco**; o comitê é forte porque os erros não se somam.
+:::
+
+Isso é um exemplo de uma técnica mais ampla chamada **aprendizado de comitê** (*ensemble learning*), em que combinamos vários aprendizes fracos — tipicamente modelos de viés alto e variância baixa — para produzir um modelo forte no conjunto.
+
+## O que a floresta cobra
+
+Vale terminar o capítulo onde ele começou.
+
+A [seção 14.1](01-o-que-e-uma-arvore-de-decisao.qmd) abriu dizendo que a árvore é o primeiro modelo deste livro que um humano lê — que a figura **é** o modelo, e que dá para discordar dela. As cem árvores acima, tomadas em conjunto, não são legíveis por ninguém. Não existe figura. A resposta para "por que este candidato foi classificado assim?" passou de um caminho de duas perguntas para "porque 78 de 100 árvores, cada uma treinada num subconjunto sorteado dos dados usando um subconjunto sorteado dos atributos, votaram assim".
+
+::: {.callout-important}
+Esse é o compromisso, e ele é honesto: a floresta aleatória compra generalização com a única moeda que tornava a árvore especial.
+
+Não há resposta universal sobre qual lado escolher. Se o modelo precisa ser auditado por um humano — decisões de crédito, triagem médica, admissão —, uma árvore rasa que se lê numa página pode valer mais do que alguns pontos de acurácia. Se ele só precisa acertar, a floresta ganha quase sempre.
+
+O que **não** vale é fingir que não houve troca. Existe uma indústria inteira de ferramentas de "explicabilidade" para modelos de comitê, e todas elas produzem explicações **aproximadas**, reconstruídas por fora do modelo. A explicação da árvore da [seção 14.4](04-criando-uma-arvore.qmd) não era uma aproximação: era o modelo.
+:::
+
+::: {.callout-tip collapse="true"}
+## Na prática: `RandomForestClassifier`
+
+Tudo desta seção, em quatro linhas:
+
+```python
+from sklearn.ensemble import RandomForestClassifier
+
+modelo = RandomForestClassifier(
+    n_estimators=100,     # quantas árvores
+    criterion='entropy',  # o critério de divisão deste capítulo
+    max_features='sqrt',  # atributos sorteados por divisão (o padrão)
+    bootstrap=True,       # reamostrar os dados (o padrão)
+    oob_score=True,       # estimar o desempenho com os exemplos não sorteados
+    random_state=0,
+).fit(X, y)
+
+modelo.oob_score_          # acurácia estimada sem separar conjunto de teste
+modelo.feature_importances_
+```
+
+Os dois parâmetros do meio são exatamente as duas fontes de aleatoriedade desta seção, e vale reparar no padrão de `max_features`: `'sqrt'` significa $\sqrt{p}$ atributos sorteados por divisão, ou seja, 3 de 8 no experimento acima — a mesma proporção que saiu melhor na nossa medição. Não é coincidência; é a recomendação clássica para classificação.
+
+Duas coisas que a biblioteca dá e que não construímos:
+
+- **`predict_proba`** devolve a fração de árvores que votaram em cada classe, que é a contagem de votos da nossa tabela normalizada. É uma medida de concordância do comitê, não uma probabilidade calibrada — 78 de 100 árvores não quer dizer 78% de chance.
+- **`feature_importances_`** soma, para cada atributo, a redução de impureza que ele produziu em todas as divisões de todas as árvores. É útil, e tem um viés conhecido e importante: **favorece atributos com muitos valores distintos**, pelo mesmo motivo que a [seção 14.3](03-a-entropia-de-uma-particao.qmd) mostrou com a coluna de matrícula. A alternativa recomendada é a *permutation importance*, que mede a queda de desempenho ao embaralhar a coluna.
+
+Se você for além disto, o próximo passo natural não é uma floresta maior: é o **gradient boosting** (`HistGradientBoostingClassifier`, `XGBoost`, `LightGBM`), que constrói árvores em **sequência**, cada uma treinada para corrigir os erros das anteriores. A floresta reduz variância combinando modelos independentes; o boosting reduz viés encadeando modelos dependentes. É outra ideia, e hoje é ela que costuma ganhar em dados tabulares.
 :::

@@ -4,7 +4,128 @@
 Esta seção corresponde a *What Is a Decision Tree?*, do capítulo 17 de @grus2019.
 :::
 
-::: {.callout-warning}
-## Em construção
-O conteúdo desta seção ainda será escrito.
+Uma árvore de decisão usa uma estrutura de árvore para representar vários **caminhos de decisão** possíveis, e um resultado para cada caminho.
+
+Se você já jogou vinte perguntas, já usou uma. O diálogo é mais ou menos assim:
+
+- "Estou pensando num animal."
+- "Tem mais de cinco patas?"
+- "Não."
+- "É gostoso?"
+- "Não."
+- "Sai na moeda australiana de cinco centavos?"
+- "Sim."
+- "É um equidna?"
+- "Sim, é!"
+
+O caminho percorrido foi:
+
+> "Não mais que 5 patas" → "Não é gostoso" → "Sai na moeda de 5 centavos" → "Equidna!"
+
+Esse caminho existe dentro de uma árvore de "adivinhe o animal" idiossincrática e nada abrangente:
+
+```{python}
+#| label: fig-arvore-bicho
+#| fig-cap: "Uma árvore de decisão para adivinhar o animal. Cada caixa clara é uma pergunta; cada caixa azul, uma resposta final."
+#| echo: false
+from matplotlib import pyplot as plt
+
+# Uma árvore aqui é (pergunta, {resposta: subárvore}); uma folha é uma string.
+bicho = ("Mais de 5 patas?", {
+    "não": ("É gostoso?", {
+        "não": ("Sai na moeda australiana de 5 centavos?",
+                {"não": "Gatinho!", "sim": "Equidna!"}),
+        "sim": ('Estrela de "A Teia de Charlotte"?',
+                {"não": "Bisão!", "sim": "Porco!"}),
+    }),
+    "sim": ("Vive embaixo da sua cama?", {
+        "não": ("Faz mel?", {"não": "Mosquito!", "sim": "Abelha!"}),
+        "sim": ('Estrela de "A Teia de Charlotte"?',
+                {"não": "Percevejo!", "sim": "Aranha!"}),
+    }),
+})
+
+def folhas(t):
+    return 1 if isinstance(t, str) else sum(folhas(s) for s in t[1].values())
+
+def altura(t):
+    return 0 if isinstance(t, str) else 1 + max(altura(s) for s in t[1].values())
+
+def desenha(ax, t, x0, x1, prof, h):
+    """Posiciona cada nó: y pela profundidade, x pela fatia de folhas abaixo dele."""
+    y, x = h - prof, (x0 + x1) / 2
+    if isinstance(t, str):
+        ax.text(x, y, t, ha='center', va='center', fontsize=8,
+                bbox=dict(boxstyle='round,pad=0.35', fc='#dbe9f6', ec='#4a7fb5'))
+        return x, y
+    ax.text(x, y, t[0], ha='center', va='center', fontsize=8,
+            bbox=dict(boxstyle='round,pad=0.35', fc='#f6ead0', ec='#b58a4a'))
+    total, ini = folhas(t), x0
+    for resposta, sub in t[1].items():
+        larg = (x1 - x0) * folhas(sub) / total
+        xs, ys = desenha(ax, sub, ini, ini + larg, prof + 1, h)
+        ax.annotate("", xy=(xs, ys + 0.18), xytext=(x, y - 0.18),
+                    arrowprops=dict(arrowstyle='->', color='#888', lw=1))
+        ax.text((x + xs) / 2, (y + ys) / 2, resposta, fontsize=7, color='#444',
+                ha='center', va='center',
+                bbox=dict(boxstyle='round,pad=0.15', fc='white', ec='none', alpha=0.9))
+        ini += larg
+    return x, y
+
+h = altura(bicho)
+fig, ax = plt.subplots(figsize=(11, 1.15 * h + 0.8))
+desenha(ax, bicho, 0, 1, 0, h)
+ax.set_xlim(-0.06, 1.06)
+ax.set_ylim(-0.35, h + 0.35)
+ax.axis('off')
+plt.tight_layout()
+plt.show()
+```
+
+Cada caixa clara é um **nó de decisão**: ela faz uma pergunta e nos manda por um caminho diferente conforme a resposta. Cada caixa azul é uma **folha**: ela não pergunta nada, apenas devolve uma previsão.
+
+## O que as árvores têm de bom
+
+Árvores de decisão têm muito a seu favor.
+
+::: {.conceito}
+São muito fáceis de entender e interpretar, e o processo pelo qual chegam a uma previsão é **completamente transparente**. Ao contrário de todos os outros modelos vistos até aqui, uma árvore lida naturalmente com uma mistura de atributos numéricos (número de patas) e categóricos (gostoso ou não), e consegue até classificar dados em que alguns atributos estão faltando.
+:::
+
+Esse primeiro ponto merece ser dito com todas as letras, porque é a novidade do capítulo. Você já construiu quatro classificadores neste livro, e nenhum deles se explicava:
+
+- O k-vizinhos da [seção 9.1](../cap09/01-o-modelo.qmd) responde "porque os cinco pontos mais parecidos com este foram assim". É uma justificativa, mas não é uma explicação: ela não diz *o que*, nos dados, importou.
+- O Naive Bayes do [Capítulo 10](../cap10/index.qmd) devolve um produto de milhares de probabilidades condicionais. Dá para inspecionar as palavras mais indicativas, mas a decisão em si é uma conta que ninguém refaz de cabeça.
+- A regressão logística do [Capítulo 13](../cap13/index.qmd) devolve um vetor de coeficientes. Eles têm interpretação — mas só sob hipóteses sobre a escala e a independência das variáveis, e o [Capítulo 12](../cap12/index.qmd) mostrou como essa interpretação desmorona quando duas variáveis andam juntas.
+
+Uma árvore não precisa de nada disso. A figura acima **é** o modelo. Não há uma representação separada, mais fiel, escondida atrás dela.
+
+## O que as árvores têm de ruim
+
+Duas coisas, e as duas moldam o resto do capítulo.
+
+A primeira: encontrar a árvore **ótima** para um conjunto de dados é um problema computacionalmente muito difícil. Vamos contornar isso construindo uma árvore boa o bastante em vez de uma ótima — que já dá bastante trabalho, para conjuntos grandes.
+
+A segunda, mais importante: é muito fácil (e muito ruim) construir árvores **sobreajustadas** aos dados de treino, que não generalizam para dados novos. Essa é a mesma armadilha que o [Capítulo 8](../cap08/index.qmd) descreveu em abstrato, e a árvore é o modelo deste livro que cai nela com mais facilidade — ela tem, literalmente, a capacidade de fazer uma pergunta por exemplo do treino até que cada um fique sozinho na sua folha. A [seção 14.6](06-florestas-aleatorias.qmd) trata disso.
+
+## O que vamos construir
+
+A maioria das pessoas divide as árvores de decisão em **árvores de classificação**, que produzem saídas categóricas, e **árvores de regressão**, que produzem saídas numéricas. Aqui vamos nos concentrar nas de classificação, e percorrer o algoritmo **ID3** para aprender uma árvore a partir de dados rotulados. Para simplificar, os problemas serão de saída binária: "devo contratar este candidato?", "devo mostrar a propaganda A ou a B para este visitante?", "comer esta comida que achei na geladeira do escritório vai me deixar doente?".
+
+::: {.callout-important}
+## Este capítulo não usa gradiente descendente, e isso não é um detalhe
+
+Do [Capítulo 11](../cap11/index.qmd) ao [13](../cap13/index.qmd), o roteiro foi sempre o mesmo: escrever um modelo com parâmetros, escrever uma função de perda, derivar o gradiente, descer. A árvore quebra esse roteiro por completo, e o motivo é estrutural, não uma escolha de implementação: **não existe parâmetro contínuo para derivar**. A "escolha" que o algoritmo faz a cada passo é qual atributo usar para dividir os dados — uma escolha entre um número finito de alternativas discretas, sobre a qual não se pode calcular uma derivada.
+
+No lugar do gradiente entra uma **busca gulosa**: em cada nó, avalia-se cada atributo disponível, escolhe-se o melhor pelo critério da [seção 14.3](03-a-entropia-de-uma-particao.qmd), e nunca se revê a escolha. É por isso que o [Capítulo 5](../cap05/index.qmd) já avisava, na abertura, que as árvores de decisão estavam entre os modelos que não passariam por ele.
+:::
+
+::: {.callout-tip collapse="true"}
+## Na prática: o que se faz com isso
+
+Uma árvore de decisão sozinha raramente é o modelo final de um sistema em produção — ela é frágil demais, pelo motivo que a [seção 14.6](06-florestas-aleatorias.qmd) vai medir. O que domina hoje o aprendizado sobre dados tabulares são os **comitês de árvores**: florestas aleatórias e, sobretudo, *gradient boosted trees* (`XGBoost`, `LightGBM`, `HistGradientBoostingClassifier` do `scikit-learn`). Em dados em formato de tabela — a maior parte do que existe numa empresa —, esses métodos costumam bater redes neurais, e por margem confortável.
+
+A árvore isolada continua tendo dois usos reais. O primeiro é ser **auditável**: em contextos onde a decisão precisa ser justificada a um humano — crédito, admissão, triagem —, uma árvore rasa que se lê numa página vale mais do que um modelo mais preciso que não se explica. O segundo é ser um **diagnóstico**: treinar uma árvore rasa nos seus dados e olhar os primeiros dois níveis é uma forma rápida e barata de descobrir quais atributos carregam sinal, antes de escolher o modelo de verdade.
+
+Um aviso para quando você for comparar com a biblioteca: a árvore do `scikit-learn` **não** é a deste capítulo. `DecisionTreeClassifier` implementa uma variante do CART, que faz sempre divisões **binárias** sobre atributos **numéricos** — `x[3] <= 2.5` —, e por isso exige que atributos categóricos sejam convertidos a número antes. O ID3 que vamos escrever faz uma divisão com **um ramo por valor** de um atributo categórico, que é o que torna a árvore do vice-presidente de Talentos legível do jeito que ela é.
 :::
