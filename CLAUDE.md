@@ -156,7 +156,9 @@ content/cap09/
 
 **Todo `.qmd` novo precisa ser registrado em `_quarto.yml`** sob `book.chapters` — arquivo não listado não aparece no livro. A ordem vem do YAML, não do nome do arquivo; para reordenar, `git mv` e atualize o YAML na mesma operação. `make teste` verifica isso: `test_todo_qmd_esta_registrado_no_quarto_yml` (e o teste que confere os totais contra o `LIVRO`) falham se um `.qmd` existir sem entrada no YAML.
 
-"For Further Exploration" fecha todo capítulo do Grus. Não vira arquivo: vira uma seção *Leituras adicionais* no fim do `index.qmd` do capítulo.
+"For Further Exploration" fecha quase todo capítulo do Grus. Não vira arquivo: vira uma seção *Leituras adicionais* no fim do `index.qmd` do capítulo.
+
+**Duas exceções, ambas conferidas no PDF e já codificadas no `LIVRO` de `scripts/gerar-stubs.py`:** o capítulo 16 do Grus (o nosso 13, Regressão Logística) fecha com "For Further **Investigation**", e o capítulo 1 não tem seção de leituras — termina em "Onward". Duas revisões independentes já apontaram o "Investigation" como inconsistência a uniformizar; **não é.** O comentário no gerador avisa isso na fonte.
 
 ### O pacote `scratch/` — vendorizado literalmente, nunca editado
 
