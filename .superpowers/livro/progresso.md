@@ -335,3 +335,87 @@ de esconder, ele tem um `callout-warning` explicando que a diferença é do otim
 que importa (0,904 → 0,972 quando as outras variáveis entram) é robusto na solução
 exata. Também corrige a leitura frouxa que o cap. 11 deixava: **a regressão múltipla
 TEM fórmula fechada** (equação normal); os modelos sem nenhuma começam no cap. 13.
+
+---
+
+## Rodada — capítulos 12 a 14 e as duas primeiras revisões gerais
+
+**FECHADOS:** 5, 6, 7, 9, 10, 11. **Em portão:** 13. **Em correção:** 12.
+**Em escrita:** 14. **Callouts faltantes:** 8. **Na fila:** 15, 16, 17.
+**Briefs medidos e prontos:** 12 a 17, todos.
+
+### As revisões gerais começaram (tarefa #28), e valeram mais que o esperado
+
+Decidi começá-las sobre o prefixo estável em vez de esperar os 17 capítulos —
+o que elas acham vira lição para os capítulos ainda por escrever.
+
+**Frente 1: promessas e dívidas.** Levantou as **135 referências cruzadas** e abriu
+o alvo de cada uma. Nenhum Crítico; a restrição de audiência está limpa no livro
+inteiro. Quatro promessas quebradas, corrigidas: o cap. 5 dizia que o k-vizinhos é
+"o único modelo que não passa por este capítulo" (são quatro: 9, 10, 14, 17,
+conferido módulo a módulo); o cap. 2 mandava lembrar de algo "do Capítulo 8" que
+está no 1; o cap. 3 dizia "um exemplo que você já conhece, do Capítulo 8", oito
+capítulos antes de ele existir; o cap. 8.6 omitia o 12 da lista de regressões.
+
+**Frente 2: os 35 callouts "Na prática" lidos em sequência.** Achou o Crítico
+estrutural que nenhuma revisão de capítulo veria: **o cap. 8 tem seis seções e
+ZERO callouts "Na prática"** — e por isso `train_test_split` estreia no cap. 9,
+um capítulo depois daquele que existe para explicá-lo.
+
+### Ruling Q — revisor que não roda não conta
+
+As duas frentes só valeram porque **executaram** em vez de julgar plausível. A
+frente 2 rodou `scikit-learn` 1.9 no container e pegou uma afirmação publicada
+errada: o cap. 7 dizia que o `PCA` "pode devolver (0,924; 0,383) ou (−0,924;
+−0,383) dependendo de detalhes numéricos do SVD". Conferi com os quatro solvers
+e o estocástico em cinco sementes: **sempre o mesmo sinal** — o `svd_flip` fixa
+por convenção. A correção ficou melhor que o original, porque agora diz que a
+biblioteca escolhe por você sem avisar.
+
+Vale para os briefs futuros: **todo callout "Na prática" tem afirmação sobre
+software que nenhuma renderização verifica** (os chunks são `eval: false`). É a
+única parte do livro sem rede de proteção automática.
+
+### Dois falsos positivos de revisão, ambos pegos por conferência
+
+1. "O cap. 9.3 não cita PCA nem o cap. 7" — **cita**, linha 86. A busca falhou
+   pela minúscula em "capítulo".
+2. "O cap. 13 escreve *For Further Investigation* e os outros escrevem
+   *Exploration*; uniformize" — **não uniformize.** As duas variantes existem no
+   Grus, conferido extraindo o texto do PDF. Apontado por **duas** revisões
+   independentes. Agora está marcado no `CLAUDE.md` e num comentário em
+   `scripts/gerar-stubs.py`, na fonte.
+
+**Padrão: um revisor errado é sempre plausível. Conferir custa minutos.**
+
+### Erros meus nesta rodada
+
+- **Contrato do cap. 10:** escrevi que o classificador que nunca aponta spam é "o
+  par 98,1%/1,4% do teste do Luke". O teste do Luke aponta alguém — precisão
+  1,4%, revocação 0,5%, ambas definidas. Quem tem precisão indefinida e revocação
+  zero é o outro classificador do cap. 8 (98,6%). O corretor aplicou fielmente o
+  que escrevi; o portão pegou. **O contrato precisa da mesma verificação que o
+  texto.**
+
+### Achados técnicos que viraram conteúdo
+
+- **Cap. 12:** três mecanismos inventados para explicar o 0,84 (semente, poucos
+  passos, imprecisão) — os três falsificados por medição. A causa real é um
+  ciclo-limite determinístico do SGD. E a solução exata `[30.579, 0.9725, -1.865,
+  0.9232]` é **idêntica dígito a dígito ao que o Grus imprime**: ele publicou a
+  exata, o nosso gradiente é aproximado.
+- **Cap. 13:** o `assert` de igualdade exata de float **passa por sorte** — `==`
+  vale em 2.169 de 5.000 épocas, `isclose` em 5.000 de 5.000, e só 8 de 200
+  produtos escalares são bit-idênticos. O capítulo absolvia o construto que o
+  cap. 10 condena; agora concorda com ele.
+- **Cap. 13:** sem reescalonar, o ajuste **mente antes de quebrar** — perda `-0.0`
+  no primeiro ponto, `ValueError` no segundo. Melhor material do capítulo, e não
+  estava no meu brief: o escritor achou.
+
+### Infra desta rodada
+
+- `scripts/render-seguro.sh` (lock + detecção de edição concorrente),
+  `make refresh CAP=NN`, `tests/test_freeze.py`, `tests/test_gradiente.py`.
+  Suíte: 21 → **24 testes**.
+- Lixo de render na raiz (`index.html`) agora é limpo pela regra "apaga o `.html`
+  que tem um `.qmd` de mesmo nome", que preserva o `spoiler.html` versionado.
