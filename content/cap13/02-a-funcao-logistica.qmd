@@ -4,7 +4,215 @@
 Esta seção corresponde a *The Logistic Function*, do capítulo 16 de @grus2019.
 :::
 
+A seção anterior terminou com um pedido preciso: uma função que receba a reta inteira dos reais e devolva um número em $[0, 1]$, crescente e suave. A escolha da regressão logística é a **função logística**:
+
+```{python}
+#| label: logistic
+import math
+
+def logistic(x: float) -> float:
+    return 1.0 / (1 + math.exp(-x))
+```
+
+Uma linha. É útil ver o formato dela antes de qualquer conta:
+
+```{python}
+#| label: fig-logistica
+#| fig-cap: "A função logística"
+from matplotlib import pyplot as plt
+
+grade = [x / 10 for x in range(-100, 101)]
+
+plt.plot(grade, [logistic(x) for x in grade])
+plt.axhline(0, color='gray', linewidth=0.8)
+plt.axhline(1, color='gray', linewidth=0.8)
+plt.axhline(0.5, color='gray', linestyle=':', linewidth=0.8)
+plt.axvline(0, color='gray', linestyle=':', linewidth=0.8)
+plt.xlabel("x")
+plt.ylabel("logistic(x)")
+plt.title("A função logística")
+plt.show()
+```
+
+Conforme a entrada fica grande e positiva, a saída chega cada vez mais perto de 1; conforme fica grande e negativa, chega cada vez mais perto de 0. Em zero ela vale exatamente 0,5. É exatamente a forma pedida na seção anterior.
+
+Ela tem também uma propriedade conveniente: a derivada se escreve em função da própria função.
+
+```{python}
+#| label: logistic-prime
+def logistic_prime(x: float) -> float:
+    y = logistic(x)
+    return y * (1 - y)
+```
+
+Isso vai importar daqui a pouco — é o que torna o gradiente deste modelo simples o bastante para caber em uma linha.
+
+Com ela, o modelo fica:
+
+$$
+y_i = f(\mathbf{x}_i \cdot \beta) + \varepsilon_i
+$$
+
+onde $f$ é a função logística. Repare no que **não** mudou: $\mathbf{x}_i \cdot \beta$ continua ali, com a coluna de 1 e tudo. A estrutura linear do [Capítulo 12](../cap12/index.qmd) sobreviveu inteira; ganhou uma função por cima.
+
+## Por que não dá para minimizar quadrados
+
+Na regressão linear, ajustamos o modelo minimizando a soma dos erros ao quadrado, e a [seção 11.3](../cap11/03-maxima-verossimilhanca.qmd) mostrou que isso acabava escolhendo o $\beta$ que **maximiza a verossimilhança dos dados** — não por coincidência, mas como consequência de supor erros normais.
+
+Aqui as duas coisas deixam de ser equivalentes. O alvo é binário: um usuário paga ou não paga, e o "erro" de um ponto não é um desvio normalmente distribuído em torno de uma reta — é a diferença entre um rótulo em $\{0, 1\}$ e uma probabilidade em $[0, 1]$. Supor erros normais aqui seria supor algo que os dados desmentem por construção. Some a suposição, some a equivalência, e sobra apenas um dos dois lados: **a verossimilhança**. Vamos maximizá-la diretamente, por gradiente descendente.
+
+Dado um $\beta$, o modelo diz que cada $y_i$ vale 1 com probabilidade $f(\mathbf{x}_i \cdot \beta)$ e 0 com probabilidade $1 - f(\mathbf{x}_i \cdot \beta)$. Essas duas frases se juntam numa só expressão:
+
+$$
+p(y_i \mid \mathbf{x}_i, \beta) = f(\mathbf{x}_i \cdot \beta)^{y_i} \, \bigl(1 - f(\mathbf{x}_i \cdot \beta)\bigr)^{1 - y_i}
+$$
+
+O truque é o expoente. Se $y_i$ é 0, o primeiro fator vira $f^0 = 1$ e sobra $1 - f(\mathbf{x}_i \cdot \beta)$; se $y_i$ é 1, o segundo fator vira 1 e sobra $f(\mathbf{x}_i \cdot \beta)$. Uma fórmula, os dois casos, sem `if`.
+
+Como na [seção 11.3](../cap11/03-maxima-verossimilhanca.qmd), é mais simples trabalhar com o **logaritmo** da verossimilhança:
+
+$$
+\log L(\beta \mid \mathbf{x}_i, y_i) = y_i \log f(\mathbf{x}_i \cdot \beta) + (1 - y_i) \log \bigl(1 - f(\mathbf{x}_i \cdot \beta)\bigr)
+$$
+
+Como o log é estritamente crescente, qualquer $\beta$ que maximize a log-verossimilhança maximiza também a verossimilhança, e vice-versa.
+
+::: {.conceito}
+Falta um último ajuste, e ele é de sinal. **O gradiente descendente minimiza**; a máquina construída no [Capítulo 5](../cap05/index.qmd) sabe descer, não subir. E maximizar uma função é exatamente o mesmo que minimizar o negativo dela.
+
+Por isso o que vamos otimizar se chama **log-verossimilhança negativa**. Não é uma quantidade nova: é a log-verossimilhança da [seção 11.3](../cap11/03-maxima-verossimilhanca.qmd) com o sinal trocado, para que o otimizador que já temos possa ser usado sem modificação. Fora deste livro você vai encontrá-la com outro nome — *log loss*, ou *binary cross-entropy* —, que é a mesma função sob rótulos diferentes.
+:::
+
+## A perda e o seu gradiente
+
+Para um único ponto:
+
+```{python}
+#| label: nll-ponto
+from scratch.linear_algebra import Vector, dot
+
+def _negative_log_likelihood(x: Vector, y: float, beta: Vector) -> float:
+    """A log-verossimilhança negativa de um único ponto"""
+    if y == 1:
+        return -math.log(logistic(dot(x, beta)))
+    else:
+        return -math.log(1 - logistic(dot(x, beta)))
+```
+
+Supondo que os pontos são independentes entre si, a verossimilhança do conjunto é o **produto** das verossimilhanças individuais — e portanto a log-verossimilhança é a **soma** dos logs:
+
+```{python}
+#| label: nll-total
+from typing import List
+
+def negative_log_likelihood(xs: List[Vector],
+                            ys: List[float],
+                            beta: Vector) -> float:
+    return sum(_negative_log_likelihood(x, y, beta)
+               for x, y in zip(xs, ys))
+```
+
+Um pouco de cálculo dá o gradiente:
+
+```{python}
+#| label: nll-gradiente
+from scratch.linear_algebra import vector_sum
+
+def _negative_log_partial_j(x: Vector, y: float, beta: Vector, j: int) -> float:
+    """A j-ésima derivada parcial, para um único ponto"""
+    return -(y - logistic(dot(x, beta))) * x[j]
+
+def _negative_log_gradient(x: Vector, y: float, beta: Vector) -> Vector:
+    """O gradiente, para um único ponto"""
+    return [_negative_log_partial_j(x, y, beta, j)
+            for j in range(len(beta))]
+
+def negative_log_gradient(xs: List[Vector],
+                          ys: List[float],
+                          beta: Vector) -> Vector:
+    return vector_sum([_negative_log_gradient(x, y, beta)
+                       for x, y in zip(xs, ys)])
+```
+
+::: {.exemplo}
+"Um pouco de cálculo" é uma frase que costuma esconder trabalho. Aqui não esconde muito, e vale fazer a conta — é ela que explica por que `logistic_prime` foi definida lá em cima.
+
+Escreva $f$ para $f(\mathbf{x} \cdot \beta)$. A perda de um ponto é
+
+$$
+-\log L = -y \log f - (1 - y)\log(1 - f)
+$$
+
+Derivando em relação a $\beta_j$: a derivada de $\mathbf{x} \cdot \beta$ em relação a $\beta_j$ é $x_j$ (o mesmo argumento da [seção 12.3](../cap12/03-ajustando-o-modelo.qmd)), e a derivada de $f$ é $f(1-f)$ — a propriedade conveniente. Pela regra da cadeia:
+
+$$
+\frac{\partial}{\partial \beta_j}(-\log L) = -y\,\frac{f(1-f)}{f}\,x_j + (1-y)\,\frac{f(1-f)}{1-f}\,x_j
+$$
+
+Os cancelamentos são o ponto: o $f$ do denominador do primeiro termo mata o $f$ do numerador, e o $(1-f)$ do segundo faz o mesmo. Sobra
+
+$$
+\bigl[-y(1-f) + (1-y)f\bigr] x_j = (f - y)\, x_j
+$$
+
+que é exatamente `-(y - logistic(dot(x, beta))) * x[j]`.
+
+Agora compare com o gradiente da regressão múltipla, `2 * err * x_j`, onde `err` era `previsão - y`. **É a mesma forma:** resíduo vezes $x_j$. O que mudou foi o significado de "previsão" — antes um número qualquer, agora uma probabilidade — e o fator 2 desapareceu no caminho. Se a estrutura do gradiente parece familiar, é porque ela é.
+:::
+
+## Uma armadilha que ainda vai explodir
+
+Olhe de novo o `_negative_log_likelihood`. Quando `y` é 0, ele calcula `math.log(1 - logistic(dot(x, beta)))`. Isso pressupõe que `logistic` nunca devolva exatamente `1.0` — porque `log(0)` não existe.
+
+Matematicamente, a pressuposição está certa: a função logística é estritamente menor que 1 para todo $x$ finito. Em `float64`, está errada:
+
+```{python}
+#| label: saturacao
+for x in [10, 20, 30, 35, 36, 37, 40]:
+    print(f"logistic({x:>2}) = {logistic(x)!r:<22} 1 - logistic({x:>2}) = {1 - logistic(x)!r}")
+```
+
 ::: {.callout-warning}
-## Em construção
-O conteúdo desta seção ainda será escrito.
+## `logistic(37)` é `1.0`, e isso não é arredondamento de exibição
+
+A partir de $x \approx 36{,}74$, `logistic(x)` devolve **exatamente** `1.0` — o `repr` acima mostra que não há dígitos escondidos. A razão é aritmética de ponto flutuante: `math.exp(-37)` vale cerca de $8{,}5 \times 10^{-17}$, e somar isso a 1 em `float64` não muda nada. O menor incremento representável acima de 1 é $2^{-52} \approx 2{,}2 \times 10^{-16}$, e uma parcela menor que **metade** disso ($1{,}11 \times 10^{-16}$) desaparece no arredondamento. O denominador vira `1.0` exato, e `1/1.0` é `1.0`.
+
+Esse é, aliás, o limiar preciso: $\log(1{,}11 \times 10^{-16}) \approx -36{,}74$ — o mesmo 36,74 medido acima. Não é um valor mágico da função logística; é a mantissa do `float64` aparecendo.
+
+Consequência direta: `1 - logistic(37)` é `0.0`, e `math.log(0.0)` levanta `ValueError: math domain error`.
+
+Isso não é uma curiosidade sobre ponto flutuante. É uma bomba armada no código que acabamos de escrever, e ela **vai** explodir na próxima seção — não em algum caso patológico raro, mas na primeira conta do primeiro ponto do conjunto de dados, se um único passo preparatório for esquecido.
+
+O outro extremo tem um limite parecido e menos gentil: para $x$ muito negativo, `math.exp(-x)` estoura o alcance do `float64` e `logistic` levanta `OverflowError` em vez de devolver zero. O `logistic(-800)` deste código não devolve `0.0`; ele quebra.
+:::
+
+::: {.callout-tip collapse="true"}
+## Na prática: `scipy` e `scikit-learn`
+
+Nenhuma biblioteca séria calcula `log(1 - sigmoid(x))` do jeito que acabamos de escrever, e vale ver as duas saídas que elas usam.
+
+A primeira é ter uma versão da logística que não estoura. O `scipy` traz `scipy.special.expit`, que é a mesma função com um nome antigo (*expit* é o inverso do *logit*), implementada em C:
+
+```python
+from scipy.special import expit
+
+expit(800)     # 1.0
+expit(-800)    # 0.0, sem OverflowError
+```
+
+Repare que `expit(-800)` devolve `0.0` em vez de quebrar — melhor que o nosso, mas ainda saturado. Trocar `logistic` por `expit` **não** resolveria o problema desta seção: `expit(37)` também é `1.0` exato, e `log(1 - 1.0)` continua sendo `log(0)`.
+
+A segunda saída é a que realmente resolve, e é conceitual: **nunca calcular a probabilidade para depois tirar o log**. O `scipy` tem `log_expit`, que devolve $\log f(x)$ direto, sem passar pelo número intermediário:
+
+```python
+from scipy.special import log_expit
+
+log_expit(-800)    # -800.0, exato
+```
+
+`math.log(expit(-800))` levantaria `ValueError`; `log_expit(-800)` devolve `-800.0` sem esforço. É a mesma ideia da [seção 11.3](../cap11/03-maxima-verossimilhanca.qmd), onde a log-verossimilhança foi calculada como soma de logs em vez de log de um produto: o número minúsculo nunca chega a existir na memória.
+
+Há ainda uma terceira postura, mais bruta, e é a que a métrica pronta do `scikit-learn` adota. `sklearn.metrics.log_loss` **corta** as probabilidades para dentro de $[\epsilon, 1-\epsilon]$ antes de tirar o log, com $\epsilon$ igual ao épsilon de máquina. Ela nunca levanta exceção: dar a ela uma probabilidade de `1.0` para um rótulo `0` devolve cerca de 36,04, que é $-\log(2{,}2 \times 10^{-16})$. É um número grande, sinalizando um erro grave, mas é um número — e é isso que ela devolve em vez do `ValueError` que o nosso código vai produzir na próxima seção.
+
+As três abordagens são defensáveis. A que **não** é defensável é a nossa, e ela está aqui de propósito: o erro que você vai ver na próxima seção é o que essas bibliotecas gastam código para esconder de você.
 :::

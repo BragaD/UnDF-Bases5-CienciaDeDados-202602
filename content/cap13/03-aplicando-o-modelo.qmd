@@ -4,7 +4,281 @@
 Esta seção corresponde a *Applying the Model*, do capítulo 16 de @grus2019.
 :::
 
+Temos todas as peças: os dados, a função logística, a perda e o seu gradiente. Falta ajustar — e é aqui que este capítulo se separa dos dois anteriores.
+
+::: {.callout-important}
+## Não existe fórmula fechada para esta
+
+A [seção 11.1](../cap11/01-o-modelo.qmd) ajustou uma reta com duas médias, uma covariância e uma variância — sem laço nenhum. A [seção 12.3](../cap12/03-ajustando-o-modelo.qmd) usou gradiente descendente para a regressão múltipla, mas deixou registrado que **a solução exata existia**: bastaria resolver um sistema linear, o que aquele capítulo não fez por decisão de escopo, não por impossibilidade.
+
+Aqui a situação muda de natureza. A condição de otimalidade da regressão logística — o gradiente igualado a zero — envolve $\beta$ **dentro** de uma exponencial, e não há manipulação algébrica que isole $\beta$ de lá. Não é uma conta pesada demais para caber num chunk: é uma conta que não existe. A [seção 5.5](../cap05/05-ajustando-modelos.qmd) prometeu que este dia chegaria, e chegou. Daqui em diante, no resto deste livro, o gradiente descendente deixa de ser a alternativa prática e passa a ser o único caminho até um modelo.
+:::
+
+```{python}
+#| label: importa-statistics
+#| include: false
+from scratch.statistics import standard_deviation
+import matplotlib.pyplot as plt
+plt.close('all')
+```
+
+```{python}
+#| label: importa
+from scratch.logistic_regression import (
+    xs, ys, logistic, negative_log_likelihood, negative_log_gradient,
+)
+
+len(xs), xs[0], ys[0]
+```
+
+::: {.callout-note}
+Cada página deste livro roda num kernel próprio, então as funções escritas na [seção anterior](02-a-funcao-logistica.qmd) não existem aqui. `scratch/logistic_regression.py` traz exatamente o mesmo código — é o módulo do livro-texto, copiado literalmente —, junto com os dados. Importar dali não é atalho: é o mesmo `logistic`, o mesmo `negative_log_likelihood` e o mesmo `negative_log_gradient` que você acabou de ver serem construídos.
+:::
+
+## O que acontece se você simplesmente ajustar
+
+O gradiente descendente precisa de um ponto de partida. Como sempre, um chute aleatório, com semente fixa:
+
+```{python}
+#| label: chute-inicial
+import random
+
+random.seed(0)
+beta = [random.random() for _ in range(3)]
+beta
+```
+
+Antes de gastar 5.000 passos, vale avaliar a perda uma vez, nesse ponto de partida. É a conta mais barata do capítulo: `negative_log_likelihood(xs, ys, beta)`.
+
+```{python}
+#| label: estouro
+try:
+    perda = negative_log_likelihood(xs, ys, beta)
+    print(f"perda inicial: {perda}")
+except ValueError as e:
+    print(f"{type(e).__name__}: {e}")
+```
+
+Não houve ajuste ruim, convergência lenta nem coeficiente estranho. **O programa quebrou antes do primeiro passo.** Vale rastrear exatamente onde.
+
+```{python}
+#| label: dissecando
+from scratch.linear_algebra import dot
+
+for i in [0, 1]:
+    d = dot(xs[i], beta)
+    print(f"ponto {i}: x = {xs[i]}, y = {ys[i]}")
+    print(f"   dot(x, beta) = {d:.2f}")
+    print(f"   logistic(...) = {logistic(d)!r}")
+    print(f"   1 - logistic(...) = {1 - logistic(d)!r}")
+```
+
+O culpado é o **salário**. O primeiro usuário tem 48.000, e o coeficiente inicial sorteado para essa coluna foi 0,42 — o produto escalar dá 20.188,81, dominado inteiramente por aquela parcela. A experiência, que vale 0,7, contribui com 0,53; o termo constante, com 0,84. As outras duas colunas simplesmente não participam da conta.
+
+E `logistic(20188.81)` é `1.0`, exato, pela razão que a [seção anterior](02-a-funcao-logistica.qmd) mediu: qualquer entrada acima de 36,74 satura.
+
+Repare no que acontece com os dois primeiros pontos, porque eles falham de maneiras diferentes:
+
+```{python}
+#| label: dois-modos-de-falhar
+from scratch.logistic_regression import _negative_log_likelihood
+
+for i in [0, 1]:
+    try:
+        print(f"ponto {i} (y = {ys[i]}): perda = {_negative_log_likelihood(xs[i], ys[i], beta)!r}")
+    except ValueError as e:
+        print(f"ponto {i} (y = {ys[i]}): {type(e).__name__}: {e}")
+```
+
 ::: {.callout-warning}
-## Em construção
-O conteúdo desta seção ainda será escrito.
+## Duas falhas, e a silenciosa é a pior
+
+O ponto 0 tem `y = 1`, então a perda dele é `-math.log(logistic(...))`, que é `-log(1.0)`, que é **`-0.0`**. Nenhum erro: o modelo declara certeza absoluta de que este usuário paga, e a perda registra zero — perfeição — para um $\beta$ que foi **sorteado ao acaso segundos atrás**. Se todos os rótulos fossem 1, este ajuste reportaria perda zero e ninguém veria problema nenhum.
+
+O ponto 1 tem `y = 0`. A perda dele é `-math.log(1 - logistic(...))`, e `1 - 1.0` é `0.0`. Aí sim: `ValueError: math domain error`.
+
+A falha barulhenta é a sorte deste conjunto de dados — 148 dos 200 usuários têm `y = 0`, então o erro aparece no segundo ponto e é impossível de ignorar. A falha silenciosa é a que deveria assustar mais: ela não interrompe nada e produz um número que parece ótimo.
+:::
+
+## O conserto
+
+O conserto é o mesmo passo que a [seção 13.1](01-o-problema.qmd) já tinha dado por higiene, e que aqui é a diferença entre existir um modelo e o programa quebrar: **reescalonar**. A função vem da [seção 7.6](../cap07/06-reescalonamento.qmd) e é escrita em linha, porque o módulo onde ela mora não pode ser importado neste livro:
+
+```{python}
+#| label: rescale
+from typing import List, Tuple
+from scratch.linear_algebra import Vector, vector_mean
+from scratch.statistics import standard_deviation
+
+def scale(data: List[Vector]) -> Tuple[Vector, Vector]:
+    """devolve a média e o desvio padrão de cada posição"""
+    dim = len(data[0])
+    means = vector_mean(data)
+    stdevs = [standard_deviation([vector[i] for vector in data])
+              for i in range(dim)]
+    return means, stdevs
+
+def rescale(data: List[Vector]) -> List[Vector]:
+    """cada posição passa a ter média 0 e desvio padrão 1"""
+    dim = len(data[0])
+    means, stdevs = scale(data)
+    rescaled = [v[:] for v in data]
+    for v in rescaled:
+        for i in range(dim):
+            if stdevs[i] > 0:
+                v[i] = (v[i] - means[i]) / stdevs[i]
+    return rescaled
+
+rescaled_xs = rescale(xs)
+[round(v, 4) for v in rescaled_xs[0]]
+```
+
+O mesmo primeiro ponto, o mesmo $\beta$ sorteado, agora sem drama:
+
+```{python}
+#| label: ponto-inofensivo
+d = dot(rescaled_xs[0], beta)
+print(f"dot(x, beta) = {d:.4f}")
+print(f"logistic(...) = {logistic(d):.4f}")
+print(f"perda no conjunto todo = {negative_log_likelihood(rescaled_xs, ys, beta):.4f}")
+```
+
+::: {.conceito}
+De 20.188,81 para −0,8059. Nada mudou no modelo, no otimizador ou nos dados — a mesma pessoa, com a mesma experiência e o mesmo salário, continua ali. O que mudou foi a **unidade**: salário deixou de ser medido em reais e passou a ser medido em desvios padrão a partir da média.
+
+Vale enunciar por que a diferença é tão violenta aqui e era só incômoda na regressão linear. Um modelo linear não tem teto: se o produto escalar der 20.000, a previsão é 20.000 — um número absurdo, mas um número, e o gradiente ainda aponta para algum lugar. A logística tem teto, e o alcance útil dela é aproximadamente $[-37, 37]$. Fora dessa janela, a função é **constante** em `float64`: derivada zero, gradiente zero, nenhuma informação sobre para onde ir. Reescalonar não é uma otimização de desempenho; é o que coloca os dados dentro da faixa em que a função ainda tem inclinação.
+:::
+
+## O ajuste
+
+Separamos treino e teste com o `train_test_split` do [Capítulo 8](../cap08/index.qmd) e descemos o gradiente:
+
+```{python}
+#| label: divide
+from scratch.machine_learning import train_test_split
+
+random.seed(0)
+x_train, x_test, y_train, y_test = train_test_split(rescaled_xs, ys, 0.33)
+
+len(x_train), len(x_test)
+```
+
+134 pontos de treino, 66 de teste. Agora o laço, que é o gradiente descendente em lote completo do [Capítulo 5](../cap05/03-usando-o-gradiente.qmd) — sem minilotes, porque com 134 pontos e três parâmetros não há razão para complicar:
+
+```{python}
+#| label: ajusta
+#| warning: false
+import tqdm
+from scratch.gradient_descent import gradient_step
+
+learning_rate = 0.01
+
+# ponto de partida aleatório, sorteado depois da divisão
+beta = [random.random() for _ in range(3)]
+perdas = []
+
+with tqdm.trange(5000) as t:
+    for epoch in t:
+        gradient = negative_log_gradient(x_train, y_train, beta)
+        beta = gradient_step(beta, gradient, -learning_rate)
+        loss = negative_log_likelihood(x_train, y_train, beta)
+        perdas.append(loss)
+        t.set_description(f"loss: {loss:.3f} beta: {beta}")
+
+[round(b, 4) for b in beta], round(perdas[-1], 4)
+```
+
+O $\beta$ ajustado é aproximadamente `[-2.02, 4.69, -4.47]`, com perda final de 39,96 no conjunto de treino. Vale ver como a perda chegou lá:
+
+```{python}
+#| label: fig-perda
+#| fig-cap: "Log-verossimilhança negativa no conjunto de treino, por época (escala logarítmica no eixo x)"
+plt.plot(range(1, len(perdas) + 1), perdas)
+plt.xscale('log')
+plt.xlabel("época (escala logarítmica)")
+plt.ylabel("log-verossimilhança negativa")
+plt.title("Convergência do ajuste")
+plt.show()
+```
+
+```{python}
+#| label: perdas-marcos
+for e in [1, 10, 100, 1000, 5000]:
+    print(f"época {e:>5}: perda = {perdas[e - 1]:.4f}")
+```
+
+A queda é quase toda no começo. Depois da primeira época a perda está em 113,07; na décima já caiu para 61,76; na centésima, 41,22 — a menos de 4% do valor final. Na milésima o número já é 39,9635, e as 4.000 épocas restantes mexem na quarta casa decimal. É o padrão que a [seção 5.3](../cap05/03-usando-o-gradiente.qmd) descreveu — queda rápida no início, cada vez mais lenta perto do mínimo — e é por isso que 5.000 passos aqui são generosidade, não necessidade.
+
+## Voltando às unidades originais
+
+Os coeficientes acima valem para os dados reescalonados. Dá para convertê-los de volta às unidades do mundo, desfazendo a transformação:
+
+```{python}
+#| label: desescalona
+means, stdevs = scale(xs)
+
+beta_unscaled = [(beta[0]
+                  - beta[1] * means[1] / stdevs[1]
+                  - beta[2] * means[2] / stdevs[2]),
+                 beta[1] / stdevs[1],
+                 beta[2] / stdevs[2]]
+
+beta_unscaled
+```
+
+E dá para verificar que os dois vetores descrevem o **mesmo** modelo, comparando a verossimilhança que cada um atribui ao conjunto completo:
+
+```{python}
+#| label: mesma-verossimilhanca
+assert (negative_log_likelihood(xs, ys, beta_unscaled) ==
+        negative_log_likelihood(rescaled_xs, ys, beta))
+
+negative_log_likelihood(xs, ys, beta_unscaled)
+```
+
+::: {.callout-note}
+Repare que este `assert` compara `float` por **igualdade exata**, e passa. Não é sorte nem descuido: as duas expressões percorrem os mesmos 200 pontos, na mesma ordem, e para cada ponto o produto escalar reescalonado e o produto escalar desescalonado produzem o mesmo `float64` bit a bit — a conversão é linear, e o Grus a escreveu de modo que as operações se cancelem exatamente. É a exceção que confirma a regra: comparar floats por igualdade normalmente é erro (o [Capítulo 10](../cap10/03-implementacao.qmd) tem um exemplo em que isso quebra), e só se faz quando se sabe *por que* os bits têm de coincidir.
+:::
+
+## Interpretando os coeficientes
+
+Infelizmente, estes coeficientes não são tão fáceis de ler quanto os de uma regressão linear. Mantendo tudo o mais constante:
+
+- um ano a mais de experiência **adiciona 1,65 à entrada** da função logística;
+- dez mil a mais de salário **subtrai 2,88 da entrada** da função logística.
+
+O impacto disso na *saída*, porém, depende de onde a entrada já estava. Se `dot(beta, x_i)` já é grande — probabilidade perto de 1 —, aumentá-lo ainda mais quase não muda nada; se está perto de zero, um empurrão pequeno muda bastante. É a curva em S da seção anterior aparecendo na interpretação: **o mesmo aumento no argumento vale coisas diferentes em pontos diferentes**.
+
+```{python}
+#| label: perfis
+for exp, sal in [(2.0, 60000), (5.0, 66700), (8.0, 60000), (8.0, 100000)]:
+    p = logistic(dot(beta_unscaled, [1.0, exp, sal]))
+    print(f"{exp:4.1f} anos de experiência, salário {sal:>6} -> P(paga) = {p:.4f}")
+```
+
+O que dá para afirmar com segurança é o sinal: mantendo tudo o mais constante, **mais experiência aumenta** a chance de pagar, e **salário maior diminui**. O segundo sinal parece estranho até você lembrar do gráfico da [seção 13.1](01-o-problema.qmd), em que os pagantes se concentravam embaixo à direita. Com 8 anos de experiência, um salário de 60.000 dá 99% de chance de conta paga; o mesmo profissional ganhando 100.000 cai para 0,1%.
+
+::: {.callout-warning}
+Nada disso é uma afirmação causal. O modelo não diz que aumentar o salário de alguém faria a pessoa cancelar a assinatura. Ele diz que, **nestes 200 usuários**, quem ganha mais tende a não assinar — e a explicação plausível (quem tem experiência e ganha pouco está procurando emprego) é uma história que nós contamos, não algo que o ajuste tenha demonstrado. É a mesma advertência da [seção 12.4](../cap12/04-interpretando-o-modelo.qmd), e ela não fica mais fraca porque a saída agora é uma probabilidade.
+:::
+
+::: {.callout-tip collapse="true"}
+## Na prática: `scikit-learn`
+
+```python
+from sklearn.linear_model import LogisticRegression
+
+X = [x[1:] for x in xs]          # sem a coluna de 1
+modelo = LogisticRegression().fit(X, ys)
+
+modelo.intercept_, modelo.coef_
+```
+
+Três coisas que vale saber, agora que você viu o código por dentro.
+
+**A biblioteca não quebra com os dados brutos.** Rodar o código acima nos `xs` sem reescalonar funciona: ela devolve intercepto 8,41 e coeficientes 1,51 e −0,00027, na mesma vizinhança do nosso `beta_unscaled` — `[8.93, 1.65, -0.000288]`. Isso não contradiz nada do que esta seção mostrou; é o resultado de um trabalho de engenharia que a implementação faz e a nossa não. O solucionador padrão (`lbfgs`) usa curvatura de segunda ordem, e por isso não sofre com colunas de escalas diferentes do jeito que um passo fixo sofre; e a perda é calculada por rotinas numericamente estáveis, que nunca formam `1 - 1.0`. A saturação em `float64` continua existindo — ela é uma propriedade do tipo, não do código —, mas nenhuma linha do seu programa a encontra. O `ValueError` que abriu esta seção é, literalmente, o que você paga para ver o mecanismo.
+
+**Ela regulariza por padrão, e você não pediu.** `LogisticRegression` aplica penalidade L2 com `C=1.0` a menos que você diga o contrário — a mesma regularização *ridge* da [seção 12.8](../cap12/08-regularizacao.qmd), aqui ligada de fábrica. É por isso que os coeficientes dela saem um pouco encolhidos em relação aos nossos. Aumentar `C` afrouxa a penalidade; com ela praticamente desligada e os dados reescalonados, a biblioteca devolve `[-2.11, 4.53, -4.40]` contra os nossos `[-2.02, 4.69, -4.47]`, e a diferença que sobra é a distância entre um otimizador que converge de verdade e 5.000 passos de tamanho fixo.
+
+**Reescalonar continua sendo boa ideia mesmo assim** — não pelo `ValueError`, que a biblioteca não tem, mas pela penalidade. Uma penalidade que soma quadrados de coeficientes trata todas as colunas com o mesmo rigor, e um coeficiente medido em "por real de salário" é numericamente minúsculo perto de um medido em "por ano de experiência". Sem reescalonar, a regularização pune as duas colunas de forma desigual por um motivo que não tem nada a ver com o problema. O `StandardScaler` da [seção 7.6](../cap07/06-reescalonamento.qmd) é a resposta.
 :::

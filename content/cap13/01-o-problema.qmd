@@ -4,7 +4,195 @@
 Esta seção corresponde a *The Problem*, do capítulo 16 de @grus2019.
 :::
 
-::: {.callout-warning}
-## Em construção
-O conteúdo desta seção ainda será escrito.
+O [Capítulo 1](../cap01/03-hipotese-motivadora-datasciencester.qmd) já encostou neste problema. Lá, com um punhado de usuários e nenhuma técnica, olhamos anos de experiência contra conta paga, vimos que os extremos pagavam e o meio não, e escrevemos um classificador com os cortes chutados à mão — `if anos < 3.0 ... elif anos < 8.5 ...`. Aquele código foi apresentado como o que era: um modelo que lê os cortes dos próprios dados que deveria explicar, e que não sobrevive ao primeiro usuário novo.
+
+Agora temos ferramentas. Vamos refazer o problema direito.
+
+## Os dados
+
+O conjunto tem cerca de 200 usuários anonimizados, e para cada um sabemos três coisas: **anos de experiência** como cientista de dados, **salário**, e se a pessoa **pagou** pela conta premium. Como é típico com variáveis categóricas, o alvo é representado como 0 (não pagou) ou 1 (pagou) — a mesma variável indicadora que a [seção 12.1](../cap12/01-o-modelo.qmd) usou para "tem doutorado", agora do lado de fora do modelo, como a coisa a prever.
+
+Cada linha bruta é `[experiência, salário, conta_paga]`. Convertendo para o formato de que precisamos — com a coluna de 1 na frente, pela convenção do capítulo anterior:
+
+```python
+xs = [[1.0] + row[:2] for row in data]    # [1, experiência, salário]
+ys = [row[2] for row in data]             # conta_paga
+```
+
+```{python}
+#| label: importa-dados
+#| include: false
+import random
+random.seed(0)
+from scratch.logistic_regression import xs, ys
+from scratch.multiple_regression import least_squares_fit, predict
+import matplotlib.pyplot as plt
+plt.close('all')
+```
+
+```{python}
+#| label: mostra-dados
+len(xs), xs[0], ys[0], sum(ys)
+```
+
+São 200 usuários, dos quais 52 pagaram — 26% da base. A primeira linha é um usuário com 0,7 ano de experiência, salário de 48.000 e conta paga.
+
+::: {.callout-note}
+## Por que o `import` está escondido
+
+O chunk que importa está marcado com `#| include: false`, pelo mesmo motivo dos capítulos 11 e 12: `scratch/multiple_regression.py` importa `scratch/statistics.py` e `scratch/probability.py`, e esses dois têm chamadas `plt.*` soltas no nível do módulo — cinco e dezoito, respectivamente. Sem o `plt.close('all')` logo depois, figuras que ninguém pediu apareceriam no meio da página. O `random.seed(0)` antes do `import` existe porque `multiple_regression` também roda, no nível do módulo, um trecho de reamostragem aleatória sem semente.
+
+`scratch/logistic_regression.py`, por outro lado, é limpo: ele define os dados e as funções deste capítulo e não desenha nada na importação.
+:::
+
+Vale olhar os dados antes de modelar:
+
+```{python}
+#| label: fig-usuarios
+#| fig-cap: "Usuários pagantes e não pagantes"
+experiencia = [x[1] for x in xs]
+salario = [x[2] for x in xs]
+
+plt.scatter([e for e, y in zip(experiencia, ys) if y == 1],
+            [s for s, y in zip(salario, ys) if y == 1],
+            marker='+', label='paga')
+plt.scatter([e for e, y in zip(experiencia, ys) if y == 0],
+            [s for s, y in zip(salario, ys) if y == 0],
+            marker='.', label='não paga')
+plt.xlabel("anos de experiência")
+plt.ylabel("salário")
+plt.legend(loc='upper left')
+plt.title("Usuários pagantes e não pagantes")
+plt.show()
+```
+
+Os pagantes ficam quase todos **abaixo** da nuvem principal, e sobretudo à direita dela: **muita experiência e salário relativamente baixo**. Faz algum sentido — quem tem experiência e ainda não está ganhando bem talvez esteja procurando emprego, que é para o que serve uma conta premium numa rede de cientistas de dados. Há também um punhado de pagantes no canto inferior esquerdo, com pouca experiência e os salários mais baixos do conjunto.
+
+Guarde essa observação; ela vai reaparecer como um coeficiente negativo na [seção 13.3](03-aplicando-o-modelo.qmd), e o sinal negativo assusta quem não olhou o gráfico antes.
+
+## A tentativa óbvia
+
+A primeira tentativa óbvia é usar regressão linear e achar o melhor modelo:
+
+$$
+\text{conta paga} = \beta_0 + \beta_1 \,\text{experiência} + \beta_2 \,\text{salário} + \varepsilon
+$$
+
+Nada impede de modelar o problema assim. Literalmente nada: a função `least_squares_fit` do [Capítulo 12](../cap12/03-ajustando-o-modelo.qmd) aceita qualquer lista de `ys`, e não tem como saber que estes só valem 0 e 1.
+
+Antes de ajustar, um passo de higiene: **reescalonar**. Experiência vai de 0,1 a 10; salário vai de 30.000 a 107.000. Com amplitudes que diferem por um fator de quase 8.000, a coluna do salário domina qualquer produto escalar, e o gradiente descendente com taxa de aprendizado única não tem chance. A função é a mesma que a [seção 7.6](../cap07/06-reescalonamento.qmd) construiu; como aquele módulo não pode ser importado neste livro, escrevemos as duas funções aqui:
+
+```{python}
+#| label: rescale
+from typing import List, Tuple
+from scratch.linear_algebra import Vector, vector_mean
+from scratch.statistics import standard_deviation
+
+def scale(data: List[Vector]) -> Tuple[Vector, Vector]:
+    """devolve a média e o desvio padrão de cada posição"""
+    dim = len(data[0])
+    means = vector_mean(data)
+    stdevs = [standard_deviation([vector[i] for vector in data])
+              for i in range(dim)]
+    return means, stdevs
+
+def rescale(data: List[Vector]) -> List[Vector]:
+    """cada posição passa a ter média 0 e desvio padrão 1"""
+    dim = len(data[0])
+    means, stdevs = scale(data)
+    rescaled = [v[:] for v in data]
+    for v in rescaled:
+        for i in range(dim):
+            if stdevs[i] > 0:
+                v[i] = (v[i] - means[i]) / stdevs[i]
+    return rescaled
+
+rescaled_xs = rescale(xs)
+[round(v, 4) for v in rescaled_xs[0]]
+```
+
+A coluna de 1 sobrevive intacta: o desvio padrão dela é zero, e `rescale` deixa em paz qualquer dimensão sem variação em vez de dividir por zero.
+
+::: {.callout-important}
+## Reescalonar aqui é higiene; na próxima seção vira sobrevivência
+
+Neste ajuste linear, esquecer o `rescale` produziria um modelo ruim — coeficientes que não convergem, uma taxa de aprendizado que serve para uma coluna e não para a outra. Chato, mas visível: o número sai errado e você percebe.
+
+Na [seção 13.3](03-aplicando-o-modelo.qmd), com o mesmo conjunto de dados e o mesmo tipo de otimizador, esquecer este passo não produz um modelo ruim. Produz um `ValueError` na primeira conta, antes do primeiro passo de gradiente. Vale voltar a esta linha depois de ver aquilo acontecer.
+:::
+
+Agora o ajuste, com o `least_squares_fit` do capítulo anterior, sem uma linha de mudança:
+
+```{python}
+#| label: ajuste-linear
+#| warning: false
+from scratch.multiple_regression import least_squares_fit, predict
+
+random.seed(0)
+learning_rate = 0.001
+beta = least_squares_fit(rescaled_xs, ys, learning_rate, 1000, 1)
+
+[round(b, 4) for b in beta]
+```
+
+::: {.callout-note}
+O `#| warning: false` é obrigatório em qualquer chunk que chame `least_squares_fit`: a função usa `tqdm.trange` por dentro, o `tqdm` escreve em `stderr`, e o Quarto captura `stderr` como aviso. Sem essa opção, dezenas de linhas de barra de progresso apareceriam aqui. A [seção 12.3](../cap12/03-ajustando-o-modelo.qmd) discute o julgamento por trás disso.
+:::
+
+O modelo rodou e devolveu coeficientes. Vamos ver as previsões contra os valores reais:
+
+```{python}
+#| label: fig-linear-probabilidades
+#| fig-cap: "Regressão linear para prever contas pagas"
+previsoes = [predict(x_i, beta) for x_i in rescaled_xs]
+
+plt.scatter(previsoes, ys, marker='.')
+plt.axvline(0, color='gray', linestyle=':')
+plt.axvline(1, color='gray', linestyle=':')
+plt.xlabel("previsto")
+plt.ylabel("real")
+plt.title("Regressão linear para prever contas pagas")
+plt.show()
+```
+
+## Os dois problemas
+
+O primeiro salta do gráfico. As duas linhas pontilhadas marcam 0 e 1, os únicos valores que a variável a prever assume. Boa parte dos pontos está fora delas:
+
+```{python}
+#| label: previsoes-fora-do-intervalo
+negativas = sum(1 for p in previsoes if p < 0)
+acima_de_um = sum(1 for p in previsoes if p > 1)
+
+print(f"previsões negativas:  {negativas}")
+print(f"previsões acima de 1: {acima_de_um}")
+print(f"mínimo: {min(previsoes):.4f}   máximo: {max(previsoes):.4f}")
+```
+
+Gostaríamos que a saída ficasse entre 0 e 1, para poder lê-la como probabilidade — uma previsão de 0,25 significaria "25% de chance de ser assinante". Isso seria perfeitamente aceitável. Mas as previsões deste modelo vão de **−0,58** a **1,44**: 37 dos 200 usuários recebem uma previsão negativa, e um recebe previsão acima de 1. Não há leitura possível para uma probabilidade negativa.
+
+O segundo problema é mais sutil, e é sobre a validade do ajuste, não sobre a interpretação da saída. A regressão linear supõe que os erros são **não correlacionados** com as colunas de `x` — é uma das hipóteses que a [seção 12.2](../cap12/02-hipoteses-do-minimos-quadrados.qmd) listou. Aqui essa hipótese é violada por construção. O coeficiente de experiência é positivo (mais experiência, maior previsão), então o modelo produz valores altos para quem tem muita experiência. Só que o valor real é, no máximo, 1. Logo, uma previsão muito alta **obriga** o erro a ser muito negativo — o erro passa a depender de `x`, exatamente o que a hipótese proibia. A consequência não é cosmética: a estimativa de $\beta$ fica **enviesada**.
+
+::: {.conceito}
+O que queremos, no lugar disso: que valores grandes e positivos de `dot(x_i, beta)` correspondam a probabilidades **próximas de 1**, e valores grandes e negativos, a probabilidades **próximas de 0** — com uma transição suave no meio.
+
+Repare no que essa formulação **não** pede. Ela não pede um modelo diferente, nem um otimizador diferente, nem abandonar o produto escalar. `dot(x_i, beta)` continua sendo o coração da coisa; a estrutura linear do capítulo anterior sobrevive inteira. O que falta é uma função aplicada **depois** dele, que pegue a reta inteira dos reais e a comprima dentro de $[0, 1]$. É essa função que a [próxima seção](02-a-funcao-logistica.qmd) apresenta.
+:::
+
+::: {.callout-tip collapse="true"}
+## Na prática: `scikit-learn`
+
+O ajuste que acabamos de fazer tem nome na literatura estatística — **modelo de probabilidade linear** — e não é uma bobagem completa: quando as probabilidades envolvidas ficam longe de 0 e de 1, ele aproxima razoavelmente bem e tem a vantagem de coeficientes diretamente interpretáveis. Fora dessa faixa, ele é o que você viu no gráfico.
+
+O ponto para esta seção é outro: **a biblioteca não avisa**. `LinearRegression().fit(X, y)` com `y` binário roda, converge, devolve `coef_` e `score`, e nenhuma linha de aviso menciona que o alvo só tem dois valores:
+
+```python
+from sklearn.linear_model import LinearRegression
+
+X = [x[1:] for x in xs]      # sem a coluna de 1
+modelo = LinearRegression().fit(X, ys)
+modelo.predict(X).min()      # negativo
+```
+
+A escolha certa para um alvo binário é `LogisticRegression` — que é o que este capítulo constrói do zero, e que aparece no callout da [seção 13.3](03-aplicando-o-modelo.qmd). Escolher entre as duas é decisão de quem modela, não da biblioteca.
 :::
