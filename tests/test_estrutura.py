@@ -60,20 +60,39 @@ def test_todo_href_do_quarto_yml_existe_no_disco():
     assert not quebrados, "hrefs apontando para nada: " + ", ".join(sorted(quebrados))
 
 
+# Alvo de link markdown que NÃO menciona `dados` — `](../cap06/index.qmd)`.
+# O lookahead negativo é o ponto: `](../dados/x.csv)` NÃO casa, e por isso
+# continua sendo pego pela regra abaixo. Ver a docstring do teste.
+LINK_MD_SEM_DADOS = re.compile(r"\]\((?![^)]*dados)[^)]*\)")
+
+
 def test_nenhum_qmd_usa_caminho_relativo_de_dados():
     """execute-dir: project => o cwd é a raiz. '../../dados/' nunca resolve.
 
-    Detecta construções `../dados/` e `Path("../dados")` na mesma linha.
-    Deixa passar navegação cross-capítulo legítima como `[Capítulo 5](../cap05/index.qmd)`.
-    Limite conhecido: construções multi-linha (prefixo atribuído em uma linha, usado em outra)
-    não são detectadas.
+    Detecta `../dados/`, `../../dados/` e `Path("../dados")` — a co-ocorrência de
+    um caminho-pai com a palavra `dados` na mesma linha.
+
+    Antes de aplicar a regra, remove o ALVO de links markdown que não mencionem
+    `dados`. Sem isso o teste acusa prosa legítima, e não em casos raros: este é um
+    livro em português sobre *dados*, cujos capítulos se referenciam com
+    `[Capítulo 6](../cap06/index.qmd)` — a palavra e o `../` caem na mesma linha o
+    tempo todo. O caso que motivou isto foi
+    `content/cap01/03-hipotese-motivadora-datasciencester.qmd`.
+
+    Isto aumenta a PRECISÃO sem reduzir a cobertura: um link markdown que aponte
+    para `dados` (`[x](../dados/y.csv)`) não é removido e continua acusado, e
+    nenhuma outra forma de escrever um caminho deixa de ser vista.
+
+    Limite conhecido, o mesmo de antes: construções multi-linha (prefixo atribuído
+    numa linha, usado noutra) não são detectadas.
     """
     ofensores = [
         str(p.relative_to(RAIZ))
         for p in CONTENT.rglob("*.qmd")
         if any(
-            re.search(r"\.\.[/\\]", line) and "dados" in line
+            re.search(r"\.\.[/\\]", limpa) and "dados" in limpa
             for line in p.read_text(encoding="utf-8").split("\n")
+            for limpa in [LINK_MD_SEM_DADOS.sub("]()", line)]
         )
     ]
     assert not ofensores, "caminho relativo de dados em: " + ", ".join(sorted(ofensores))

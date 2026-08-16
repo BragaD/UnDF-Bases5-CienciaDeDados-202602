@@ -4,7 +4,426 @@
 Esta seção corresponde a *Motivating Hypothetical: DataSciencester*, do capítulo 1 de @grus2019.
 :::
 
+Parabéns! Você acabou de ser contratado para liderar a área de ciência de dados da **DataSciencester**, *a* rede social para cientistas de dados.
+
+Apesar de ser feita *para* cientistas de dados, a DataSciencester nunca investiu em construir a própria prática de ciência de dados. Esse vai ser o seu trabalho. Ao longo do livro, você vai aprender os conceitos da área resolvendo problemas que aparecem no seu dia de trabalho — às vezes olhando dados que os usuários forneceram, às vezes dados gerados pela interação deles com o site, e às vezes dados de experimentos que você mesmo vai desenhar.
+
+E como a DataSciencester tem uma cultura forte de "não foi inventado aqui", você vai construir as próprias ferramentas do zero. No fim, vai ter um entendimento bastante sólido dos fundamentos — e estará pronto para aplicá-lo numa empresa com premissa menos duvidosa, ou em qualquer outro problema que lhe interesse.
+
+::: {.callout-important}
+## Leia o código pela ideia, não pela sintaxe
+
+Esta seção tem código Python de verdade, rodando, e você ainda não estudou Python neste livro — o [Capítulo 2](../cap02/index.qmd) é que faz isso.
+
+Isso é proposital, e é assim que @grus2019 abre o livro dele. A intenção não é que você escreva este código agora, e sim que veja o formato do trabalho antes de aprender as ferramentas: que tipo de pergunta se faz, que tipo de resposta se obtém, e quão pouco código separa uma da outra.
+
+Leia procurando a ideia. A sintaxe volta no próximo capítulo, com calma.
+:::
+
+## Encontrando os Conectores
+
+É seu primeiro dia, e o VP de Redes está cheio de perguntas sobre os usuários. Até agora ele não tinha a quem perguntar, então está bastante animado com a sua chegada.
+
+Em particular, ele quer identificar quem são os "conectores" entre os cientistas de dados. Para isso, ele lhe entrega um dump da rede inteira da DataSciencester.
+
+::: {.callout-note}
+Na vida real ninguém entrega os dados prontos na sua mão. Obter dado é um problema próprio, e o [Capítulo 6](../cap06/index.qmd) é dedicado a ele.
+:::
+
+O dump é uma lista de usuários, cada um representado por um `dict` com um `id` (um número) e um `name` que, numa dessas coincidências cósmicas, rima com o `id`:
+
+```{python}
+#| label: usuarios
+users = [
+    { "id": 0, "name": "Hero" },
+    { "id": 1, "name": "Dunn" },
+    { "id": 2, "name": "Sue" },
+    { "id": 3, "name": "Chi" },
+    { "id": 4, "name": "Thor" },
+    { "id": 5, "name": "Clive" },
+    { "id": 6, "name": "Hicks" },
+    { "id": 7, "name": "Devin" },
+    { "id": 8, "name": "Kate" },
+    { "id": 9, "name": "Klein" }
+]
+```
+
+Ele também lhe dá os dados de amizade, como uma lista de pares de `id`s:
+
+```{python}
+#| label: pares-amizade
+friendship_pairs = [(0, 1), (0, 2), (1, 2), (1, 3), (2, 3), (3, 4),
+                    (4, 5), (5, 6), (5, 7), (6, 8), (7, 8), (8, 9)]
+```
+
+O par `(0, 1)` indica que o cientista de dados de `id` 0 (Hero) e o de `id` 1 (Dunn) são amigos. A rede inteira tem esta forma:
+
+```{python}
+#| label: fig-rede-datasciencester
+#| fig-cap: "A rede da DataSciencester"
+#| echo: false
+from matplotlib import pyplot as plt
+
+posicoes = {0: (0, 1), 1: (1, 0), 2: (1, 2), 3: (2, 1), 4: (3, 1),
+            5: (4, 1), 6: (5, 2), 7: (5, 0), 8: (6, 1), 9: (7, 1)}
+
+fig, ax = plt.subplots(figsize=(8, 2.6))
+for i, j in friendship_pairs:
+    xi, yi = posicoes[i]
+    xj, yj = posicoes[j]
+    ax.plot([xi, xj], [yi, yj], color="0.6", zorder=1)
+
+for user in users:
+    x, y = posicoes[user["id"]]
+    ax.scatter([x], [y], s=900, color="#cfe2f3", edgecolors="0.3", zorder=2)
+    ax.text(x, y, str(user["id"]), ha="center", va="center", zorder=3)
+
+ax.set_axis_off()
+ax.set_aspect("equal")
+plt.tight_layout()
+plt.show()
+```
+
+Uma lista de pares não é a forma mais confortável de trabalhar. Para achar todas as amizades do usuário 1, você teria que percorrer a lista inteira procurando pares que o contenham — e com muitos pares isso demora.
+
+Melhor construir um `dict` em que as chaves são os `id`s e os valores são as listas de amigos. Ainda é preciso olhar cada par uma vez para montar o `dict`, mas só uma vez; depois disso, as consultas saem baratas:
+
+```{python}
+#| label: dict-amizades
+# Inicializa o dict com uma lista vazia para cada id de usuário:
+friendships = {user["id"]: [] for user in users}
+
+# E percorre os pares de amizade para preenchê-lo:
+for i, j in friendship_pairs:
+    friendships[i].append(j)  # adiciona j como amigo de i
+    friendships[j].append(i)  # adiciona i como amigo de j
+
+friendships
+```
+
+Com as amizades num `dict`, fica fácil fazer perguntas ao grafo. Por exemplo: qual é o número médio de conexões?
+
+Primeiro somamos o total de conexões, percorrendo o tamanho de cada lista de amigos:
+
+```{python}
+#| label: total-conexoes
+def number_of_friends(user):
+    """Quantos amigos o _user_ tem?"""
+    user_id = user["id"]
+    friend_ids = friendships[user_id]
+    return len(friend_ids)
+
+total_connections = sum(number_of_friends(user) for user in users)
+total_connections
+```
+
+E dividimos pelo número de usuários:
+
+```{python}
+#| label: media-conexoes
+num_users = len(users)
+avg_connections = total_connections / num_users
+num_users, avg_connections
+```
+
+Também é fácil achar as pessoas mais conectadas — as que têm mais amigos. Como há poucos usuários, dá para simplesmente ordená-las da que tem mais para a que tem menos:
+
+```{python}
+#| label: ordena-por-amigos
+# Cria uma lista de (user_id, number_of_friends).
+num_friends_by_id = [(user["id"], number_of_friends(user)) for user in users]
+
+num_friends_by_id.sort(
+    key=lambda id_and_friends: id_and_friends[1],  # ordena por num_friends
+    reverse=True)                                  # do maior para o menor
+
+num_friends_by_id
+```
+
+Uma forma de pensar no que acabamos de fazer é como uma maneira de identificar quem é central na rede. E, de fato, o que calculamos tem nome: é a métrica de rede chamada **centralidade de grau**.
+
+::: {.exemplo}
+Essa métrica tem a virtude de ser fácil de calcular, mas nem sempre dá o resultado que a intuição esperaria.
+
+Repare no Thor (`id` 4): ele tem apenas duas conexões, enquanto Dunn (`id` 1) tem três. Só que, olhando o desenho da rede, o Thor parece bem mais central — ele é a única ponte entre os dois grupos. Tire o Thor e a rede se parte em dois; tire o Dunn e quase nada muda.
+
+Existem noções de centralidade que capturam isso melhor, e elas são o assunto do capítulo 22 de @grus2019. **Esse capítulo está fora do escopo desta disciplina** — fica como leitura para quem se interessar.
+:::
+
+## Cientistas de Dados que Você Talvez Conheça
+
+Enquanto você ainda preenche a papelada de admissão, a VP de Confraternização passa pela sua mesa. Ela quer estimular mais conexões entre os membros e pede que você projete um sugeridor de "Cientistas de Dados que Você Talvez Conheça".
+
+Seu primeiro instinto é sugerir que as pessoas talvez conheçam os amigos dos seus amigos. Então você escreve um código que percorre os amigos e coleta os amigos deles:
+
+```{python}
+#| label: foaf-ruim
+def foaf_ids_bad(user):
+    """foaf é abreviação de 'friend of a friend' — amigo de um amigo."""
+    return [foaf_id
+            for friend_id in friendships[user["id"]]
+            for foaf_id in friendships[friend_id]]
+
+foaf_ids_bad(users[0])
+```
+
+O resultado tem problemas. Ele inclui o usuário 0 duas vezes, porque Hero é de fato amigo dos dois amigos dele. Inclui os usuários 1 e 2, embora ambos já sejam amigos do Hero. E inclui o usuário 3 duas vezes, porque Chi é alcançável por dois caminhos diferentes:
+
+```{python}
+#| label: amizades-0-1-2
+friendships[0], friendships[1], friendships[2]
+```
+
+Saber que duas pessoas são amigas de amigos por vários caminhos parece informação útil. Então talvez o que se queira seja uma **contagem** de amigos em comum — e provavelmente convém excluir quem o usuário já conhece:
+
+```{python}
+#| label: amigos-de-amigos
+from collections import Counter  # não vem carregado por padrão
+
+def friends_of_friends(user):
+    user_id = user["id"]
+    return Counter(
+        foaf_id
+        for friend_id in friendships[user_id]       # para cada amigo meu,
+        for foaf_id in friendships[friend_id]       # encontre os amigos dele
+        if foaf_id != user_id                       # que não sejam eu
+        and foaf_id not in friendships[user_id]     # nem meus amigos.
+    )
+
+friends_of_friends(users[3])
+```
+
+Isso diz corretamente à Chi (`id` 3) que ela tem dois amigos em comum com Hero (`id` 0), mas só um com Clive (`id` 5).
+
+Como cientista de dados, você sabe que também pode ser interessante conhecer usuários com interesses parecidos — um bom exemplo do lado "conhecimento do domínio" da profissão. Depois de perguntar por aí, você consegue esses dados, como uma lista de pares `(user_id, interest)`:
+
+```{python}
+#| label: interesses
+interests = [
+    (0, "Hadoop"), (0, "Big Data"), (0, "HBase"), (0, "Java"),
+    (0, "Spark"), (0, "Storm"), (0, "Cassandra"),
+    (1, "NoSQL"), (1, "MongoDB"), (1, "Cassandra"), (1, "HBase"),
+    (1, "Postgres"), (2, "Python"), (2, "scikit-learn"), (2, "scipy"),
+    (2, "numpy"), (2, "statsmodels"), (2, "pandas"), (3, "R"), (3, "Python"),
+    (3, "statistics"), (3, "regression"), (3, "probability"),
+    (4, "machine learning"), (4, "regression"), (4, "decision trees"),
+    (4, "libsvm"), (5, "Python"), (5, "R"), (5, "Java"), (5, "C++"),
+    (5, "Haskell"), (5, "programming languages"), (6, "statistics"),
+    (6, "probability"), (6, "mathematics"), (6, "theory"),
+    (7, "machine learning"), (7, "scikit-learn"), (7, "Mahout"),
+    (7, "neural networks"), (8, "neural networks"), (8, "deep learning"),
+    (8, "Big Data"), (8, "artificial intelligence"), (9, "Hadoop"),
+    (9, "Java"), (9, "MapReduce"), (9, "Big Data")
+]
+```
+
+Hero (`id` 0) não tem amigos em comum com Klein (`id` 9), mas os dois compartilham interesse em Java e big data.
+
+É fácil escrever uma função que encontra quem tem determinado interesse:
+
+```{python}
+#| label: quem-gosta-de
+def data_scientists_who_like(target_interest):
+    """Encontra os ids de todos os usuários que gostam do interesse dado."""
+    return [user_id
+            for user_id, user_interest in interests
+            if user_interest == target_interest]
+
+data_scientists_who_like("Python")
+```
+
+Funciona, mas precisa examinar a lista inteira de interesses a cada busca. Com muitos usuários e interesses — ou com muitas buscas — vale mais construir um índice de interesses para usuários:
+
+```{python}
+#| label: indice-interesses
+from collections import defaultdict
+
+# As chaves são interesses, os valores são listas de user_ids com aquele interesse
+user_ids_by_interest = defaultdict(list)
+
+for user_id, interest in interests:
+    user_ids_by_interest[interest].append(user_id)
+
+# E outro de usuários para interesses
+interests_by_user_id = defaultdict(list)
+
+for user_id, interest in interests:
+    interests_by_user_id[user_id].append(interest)
+
+user_ids_by_interest["Python"], interests_by_user_id[3]
+```
+
+Agora fica fácil descobrir quem tem mais interesses em comum com um dado usuário: percorra os interesses dele, para cada interesse percorra os outros usuários que o têm, e conte quantas vezes cada um aparece.
+
+```{python}
+#| label: interesses-em-comum
+def most_common_interests_with(user):
+    return Counter(
+        interested_user_id
+        for interest in interests_by_user_id[user["id"]]
+        for interested_user_id in user_ids_by_interest[interest]
+        if interested_user_id != user["id"]
+    )
+
+most_common_interests_with(users[3])
+```
+
+Com isso daria para construir um sugeridor mais rico, combinando amigos em comum e interesses em comum. Esse tipo de aplicação é o assunto do capítulo 23 de @grus2019 — **também fora do escopo desta disciplina.**
+
+## Salários e Experiência
+
+Bem na hora em que você ia almoçar, o VP de Relações Públicas pergunta se você pode fornecer alguns fatos curiosos sobre quanto ganham os cientistas de dados. Dado de salário é sensível, claro, mas ele consegue lhe passar um conjunto anônimo com o `salary` (em dólares) e o `tenure` (tempo de casa, em anos) de cada usuário:
+
+```{python}
+#| label: salarios
+salaries_and_tenures = [(83000, 8.7), (88000, 8.1),
+                        (48000, 0.7), (76000, 6),
+                        (69000, 6.5), (76000, 7.5),
+                        (60000, 2.5), (83000, 10),
+                        (48000, 1.9), (63000, 4.2)]
+```
+
+O passo natural seria começar desenhando o gráfico — e é o [Capítulo 3](../cap03/index.qmd) que ensina a fazer isso. Olhando os números, parece claro que quem tem mais tempo de casa ganha mais. Como transformar isso num fato curioso?
+
+A primeira ideia é olhar o salário médio para cada tempo de casa:
+
+```{python}
+#| label: salario-por-tempo
+# As chaves são anos, os valores são listas de salários para aquele tempo de casa.
+salary_by_tenure = defaultdict(list)
+
+for salary, tenure in salaries_and_tenures:
+    salary_by_tenure[tenure].append(salary)
+
+# As chaves são anos, cada valor é o salário médio para aquele tempo de casa.
+average_salary_by_tenure = {
+    tenure: sum(salaries) / len(salaries)
+    for tenure, salaries in salary_by_tenure.items()
+}
+
+average_salary_by_tenure
+```
+
+Isso não serve de nada, porque **nenhum dos usuários tem o mesmo tempo de casa** — o que estamos reportando é simplesmente o salário de cada indivíduo, com um rótulo diferente.
+
 ::: {.callout-warning}
-## Em construção
-O conteúdo desta seção ainda será escrito.
+Este é o momento mais instrutivo do capítulo, e é fácil passar batido por ele.
+
+O código está certo. O `dict` está correto. A média foi calculada corretamente. E o resultado **não significa nada** — porque agrupar por uma variável contínua, quando cada observação tem um valor distinto, produz grupos de tamanho um.
+
+Nenhuma mensagem de erro vai avisar. Nenhum teste vai falhar. A única coisa entre esse resultado e um relatório publicado é alguém olhar e perceber.
+:::
+
+Mais promissor é agrupar os tempos de casa em faixas:
+
+```{python}
+#| label: faixas-tempo-casa
+def tenure_bucket(tenure):
+    if tenure < 2:
+        return "less than two"
+    elif tenure < 5:
+        return "between two and five"
+    else:
+        return "more than five"
+```
+
+Agora dá para agrupar os salários correspondentes a cada faixa:
+
+```{python}
+#| label: salario-por-faixa
+# As chaves são faixas, os valores são listas de salários daquela faixa.
+salary_by_tenure_bucket = defaultdict(list)
+
+for salary, tenure in salaries_and_tenures:
+    bucket = tenure_bucket(tenure)
+    salary_by_tenure_bucket[bucket].append(salary)
+
+# As chaves são faixas, os valores são o salário médio daquela faixa.
+average_salary_by_bucket = {
+    tenure_bucket: sum(salaries) / len(salaries)
+    for tenure_bucket, salaries in salary_by_tenure_bucket.items()
+}
+
+average_salary_by_bucket
+```
+
+E aí está o seu fato curioso: *"Cientistas de dados com mais de cinco anos de casa ganham 65% a mais do que os com menos de dois!"*
+
+Repare que a escolha das faixas foi arbitrária. O que queríamos era uma afirmação sobre o efeito de mais um ano de experiência sobre o salário médio — e, quando você souber fazer isso direito, poderá formulá-la de forma bem mais precisa. É o que a regressão linear faz, no [Capítulo 11](../cap11/index.qmd).
+
+## Contas Pagas
+
+Ao voltar para a sua mesa, a VP de Receita está esperando. Ela quer entender quais usuários pagam por conta e quais usam a versão gratuita. Ela não lhe diz os nomes, mas informa que o tempo de casa de cada usuário parece se relacionar com isso.
+
+Olhando os dados, você percebe que parece haver uma correspondência: quem tem muito pouco tempo de casa paga, quem tem muito tempo de casa paga, e quem está no meio não paga.
+
+```{python}
+#| label: prever-pago
+def predict_paid_or_unpaid(years_experience):
+    if years_experience < 3.0:
+        return "paid"
+    elif years_experience < 8.5:
+        return "unpaid"
+    else:
+        return "paid"
+
+[predict_paid_or_unpaid(anos) for anos in [0.7, 2.5, 4.2, 6.5, 8.7, 10]]
+```
+
+::: {.callout-warning}
+Este modelo tem uma propriedade que vale reconhecer desde já: os cortes em 3,0 e 8,5 anos foram lidos **do próprio conjunto de dados**, olhando onde as respostas mudavam.
+
+Ele acerta tudo — nos dados que o produziram. Sobre quanto ele acertaria num usuário novo, este exercício não diz absolutamente nada.
+
+Esse é o problema central do aprendizado de máquina, e ele tem nome: *overfitting*. O [Capítulo 8](../cap08/index.qmd) é dedicado a ele, e a partir dali todo modelo do livro vai ser avaliado em dados que ele não viu durante o ajuste.
+:::
+
+## Tópicos de Interesse
+
+Ao fim do seu primeiro dia, a VP de Estratégia de Conteúdo pede dados sobre quais assuntos os usuários mais têm interesse, para planejar a pauta do blog.
+
+Uma abordagem simples é contar as palavras. Pegue cada interesse, coloque em minúsculas, quebre em palavras, e conte:
+
+```{python}
+#| label: contagem-palavras
+words_and_counts = Counter(word
+                           for user, interest in interests
+                           for word in interest.lower().split())
+
+for word, count in words_and_counts.most_common():
+    if count > 1:
+        print(word, count)
+```
+
+Isso já dá uma pauta razoável — os assuntos que aparecem mais de uma vez são justamente os que interessam a mais de uma pessoa.
+
+::: {.callout-note}
+Reparou que "big" e "data" aparecem separados? Quebrar por espaço destrói "Big Data" como termo único, e o mesmo acontece com "machine learning" e "neural networks".
+
+Tratar texto de forma menos ingênua é assunto do capítulo 21 de @grus2019, **fora do escopo desta disciplina**. O que vale registrar aqui é que a decisão de quebrar por espaço não foi neutra: ela mudou a resposta.
+:::
+
+## Adiante
+
+Foi um primeiro dia cheio. Você usou contagem, agrupamento, indexação, média e um classificador improvisado — sem ter estudado formalmente nenhuma dessas coisas. Também produziu, no caminho, dois resultados errados de formas instrutivas: uma média que não significava nada e um modelo que só funciona nos dados que o geraram.
+
+É esse o formato do livro. Cada capítulo pega uma das ferramentas que apareceram aqui de improviso e a constrói direito, do zero.
+
+::: {.callout-tip collapse="true"}
+## Na prática: o que se faz com isso
+
+Nada nesta seção precisaria ser escrito à mão numa empresa de verdade.
+
+O grafo de amizades seria um `networkx.Graph`, e a centralidade de grau sairia de uma chamada:
+
+```python
+import networkx as nx
+
+G = nx.Graph(friendship_pairs)
+nx.degree_centrality(G)          # e também betweenness, closeness, PageRank...
+```
+
+Os agrupamentos de salário por faixa seriam um `groupby` do `pandas`. Os índices de interesses seriam uma tabela num banco de dados, com índice de verdade.
+
+Nenhuma dessas bibliotecas é usada neste livro, e a razão não é purismo: é que `nx.degree_centrality(G)` devolve um número sem lhe dar meio de julgar se aquele número responde à sua pergunta. Você acabou de ver que a centralidade de grau diz que o Thor é periférico, quando ele é a única ponte da rede. Quem construiu a métrica enxerga essa limitação; quem só chamou a função, não.
 :::
