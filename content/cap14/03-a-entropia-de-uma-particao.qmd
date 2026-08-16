@@ -49,9 +49,7 @@ def partition_entropy(subsets: List[List[Any]]) -> float:
                for subset in subsets)
 ```
 
-::: {.callout-note}
 As três primeiras funções são as da [seção 14.2](02-entropia.qmd), repetidas aqui porque cada página deste livro renderiza num kernel próprio: nomes definidos numa página não existem na outra. Elas também vivem em `scratch/decision_trees.py`, e é de lá que as próximas seções vão importá-las.
-:::
 
 ## Os dados do vice-presidente de Talentos
 
@@ -151,9 +149,13 @@ for key in ['level', 'lang', 'tweets', 'phd']:
 | `lang` | 0,860132 |
 | `phd` | 0,892159 |
 
-Todos os quatro reduzem a incerteza inicial de 0,940 bit — nenhum atributo é puro ruído aqui. Mas o menor de todos, e portanto o vencedor, é `level`: particionar os candidatos por senioridade deixa a incerteza média em **0,694 bit**, uma redução de cerca de 0,247 bit.
+Os quatro ficam abaixo da incerteza inicial de 0,940 bit, e é tentador ler isso como "todos carregam alguma informação". **Não carrega essa conclusão**: a entropia de uma partição nunca é maior que a do conjunto inteiro — o ganho é não negativo por construção —, então "reduziu a incerteza" não distingue sinal de ruído. Nenhum atributo poderia ter falhado nesse teste.
 
-Dá para ver por quê olhando a partição:
+Dá para medir o quanto isso engana. Acrescentando aos mesmos 14 candidatos uma coluna sorteada ao acaso entre três valores, sem relação nenhuma com o alvo, o ganho médio em 1.000 sorteios é de **0,131 bit** — e nunca deu zero, nem uma vez; o menor sorteio ficou em 0,0013. Ou seja: nesta base, ruído puro rende mais que o `phd`, cujo ganho é de 0,048 bit. Com 14 exemplos, quase tudo parece informativo.
+
+O que a tabela sustenta é a comparação, não o julgamento individual: o menor de todos, e portanto o vencedor, é `level`. Particionar os candidatos por senioridade deixa a incerteza média em **0,694 bit**, uma redução de cerca de 0,247 bit.
+
+A partição mostra por quê:
 
 ```{python}
 #| label: particao-por-level
@@ -182,7 +184,7 @@ for key in ['lang', 'tweets', 'phd']:
 
 ```{python}
 #| label: fig-particao-barras
-#| fig-cap: "Entropia da partição por atributo. A linha tracejada é a entropia antes de perguntar qualquer coisa; a barra verde é o atributo vencedor."
+#| fig-cap: "Entropia da partição por atributo. A linha tracejada é a entropia antes de perguntar qualquer coisa; o vencedor está em verde — nome, barra e valor. No painel da direita a barra vencedora tem largura zero, que é justamente o ponto: `tweets` deixa os sêniores sem nenhuma incerteza."
 #| echo: false
 from matplotlib import pyplot as plt
 
@@ -200,9 +202,18 @@ def painel(ax, dados, atributos, titulo):
     ax.set_xlim(0, 1.1)
     ax.set_xlabel("entropia da partição (bits)")
     ax.set_title(titulo, fontsize=10)
+    # o vencedor pode ter entropia zero, e aí a barra some: o nome e o valor
+    # em verde e em negrito são o que o torna visível na figura.
+    for rotulo, h in zip(ax.get_yticklabels(), hs):
+        if h == min(hs):
+            rotulo.set_color('tab:green')
+            rotulo.set_fontweight('bold')
     for b, h in zip(barras, hs):
+        venceu = h == min(hs)
         ax.text(h + 0.02, b.get_y() + b.get_height() / 2,
-                f"{h:.3f}".replace('.', ','), va='center', fontsize=8)
+                f"{h:.3f}".replace('.', ','), va='center', fontsize=8,
+                color='tab:green' if venceu else 'black',
+                fontweight='bold' if venceu else 'normal')
 
 painel(ax1, inputs, ['level', 'lang', 'tweets', 'phd'], "Os 14 candidatos")
 painel(ax2, senior_inputs, ['lang', 'tweets', 'phd'], "Só os 5 sêniores")
@@ -263,14 +274,16 @@ for key in ['id', 'level', 'lang', 'tweets', 'phd']:
     print(f"{key:8s} {partition_entropy_by(com_id, key, 'did_well'):.6f}")
 ```
 
-O `id` vence, com folga, e por goleada: **0,000000** contra os 0,694 do `level`. Pelo critério que acabamos de escrever, o número de matrícula é o melhor preditor de desempenho em entrevista de que dispomos.
+O `id` vence por goleada: **0,000000** contra os 0,694 do `level`. Pelo critério que acabamos de escrever, o número de matrícula é o melhor preditor de desempenho em entrevista de que dispomos.
 
 ::: {.callout-warning}
 Um modelo que depende do `id` **tem certeza** de não generalizar. Ele acerta 100% dos dados de treino e não tem nada a dizer sobre o candidato número 15, porque nunca viu o número 15.
 
 O critério de entropia não erra a conta — ele calcula exatamente o que promete. O que ele não sabe é a diferença entre "este atributo explica o fenômeno" e "este atributo identifica a linha". Nada na fórmula distingue as duas coisas, e é por isso que a responsabilidade fica com você: **evite (ou agrupe em faixas) atributos com muitos valores distintos ao construir árvores de decisão**.
 
-Isso não é uma peculiaridade de um dataset de brinquedo. É a mesma classe de erro do classificador do [Capítulo 1](../cap01/index.qmd) que lia os cortes de idade dos próprios dados que deveria explicar — e a mesma coisa que um identificador de usuário, um carimbo de tempo com precisão de milissegundo ou um número de pedido fazem, discretamente, com qualquer modelo em que entrem por acidente.
+Isso não é uma peculiaridade de um dataset de brinquedo. É a mesma classe de erro do classificador da [seção 1.3](../cap01/03-hipotese-motivadora-datasciencester.qmd), que lia dos próprios dados que deveria explicar os cortes de anos de experiência — e a mesma coisa que um identificador de usuário, um carimbo de tempo com precisão de milissegundo ou um número de pedido fazem, discretamente, com qualquer modelo em que entrem por acidente.
+
+Decidir o que entra como atributo é, portanto, uma etapa do trabalho e não um detalhe de preparação de dados. É o assunto da [seção 8.6](../cap08/06-extracao-e-selecao-de-atributos.qmd), e este é o exemplo mais nítido dela em todo o livro: a coluna com o maior ganho de informação é a que precisa ser removida.
 :::
 
 ::: {.callout-tip collapse="true"}

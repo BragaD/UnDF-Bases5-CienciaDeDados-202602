@@ -16,11 +16,7 @@ Mas o nosso processo de construção é **determinístico** — os mesmos dados 
 
 A primeira peça é reamostrar os dados. Em vez de treinar cada árvore com todas as `inputs` do conjunto de treino, treinamos cada árvore com o resultado de `bootstrap_sample(inputs)`.
 
-::: {.callout-note}
-Esse é o mesmo `bootstrap_sample` do [Capítulo 12](../cap12/06-digressao-o-bootstrap.qmd) — sortear, com reposição, tantos elementos quanto a amostra original tem. Lá o objetivo era **medir incerteza**: reamostrava-se para ver o quanto uma estatística balançava. Aqui o objetivo é outro: reamostrar para obter conjuntos de treino diferentes, cada um produzindo uma árvore diferente.
-
-A mecânica é idêntica; o uso, não. É o tipo de reaproveitamento que compensa reconhecer, porque a mesma linha de código serve para duas coisas que não têm nada a ver uma com a outra.
-:::
+Esse é o mesmo `bootstrap_sample` do [Capítulo 12](../cap12/06-digressao-o-bootstrap.qmd) — sortear, com reposição, tantos elementos quanto a amostra original tem. Lá o objetivo era **medir incerteza**: reamostrava-se para ver o quanto uma estatística balançava. Aqui o objetivo é outro, reamostrar para obter conjuntos de treino diferentes, cada um produzindo uma árvore diferente. A mecânica é idêntica; o uso, não — e é o tipo de reaproveitamento que compensa reconhecer, porque a mesma linha de código serve para duas coisas sem relação uma com a outra.
 
 ```{python}
 #| label: floresta-bootstrap
@@ -36,11 +32,7 @@ def bootstrap_sample(data: List[X]) -> List[X]:
 
 Como cada árvore é construída com dados diferentes, cada árvore sai diferente das outras.
 
-::: {.exemplo}
-Há um benefício de brinde nisso. Uma amostra bootstrap de tamanho $n$ deixa de fora, em média, cerca de 37% dos exemplos originais — a chance de um exemplo específico nunca ser sorteado em $n$ tentativas é $(1 - 1/n)^n$, que converge para $1/e \approx 0{,}368$.
-
-Esses exemplos não sorteados são chamados **out-of-bag**, e são um conjunto de teste honesto para aquela árvore em particular: ela nunca os viu. Isso permite estimar o desempenho da floresta **usando todos os dados como treino**, sem separar um conjunto de teste — o que, em conjuntos pequenos, é uma vantagem real. É o `oob_score` do `scikit-learn`.
-:::
+Há um benefício de brinde nisso. Uma amostra bootstrap de tamanho $n$ deixa de fora, em média, cerca de 37% dos exemplos originais — a chance de um exemplo específico nunca ser sorteado em $n$ tentativas é $(1 - 1/n)^n$, que converge para $1/e \approx 0{,}368$. Esses exemplos não sorteados são chamados **out-of-bag**, e são um conjunto de teste honesto para aquela árvore em particular: ela nunca os viu. Isso permite estimar o desempenho da floresta **usando todos os dados como treino**, sem separar um conjunto de teste — o que, em conjuntos pequenos, é uma vantagem real.
 
 A técnica de treinar vários modelos em reamostras bootstrap e combinar as saídas chama-se **bootstrap aggregating**, ou **bagging**.
 
@@ -100,6 +92,12 @@ def build_tree_forest(inputs: List[Any],
 
 A diferença em relação ao `build_tree_id3` da [seção 14.5](05-juntando-tudo.qmd) cabe em cinco linhas — o `if`/`else` que reduz `split_attributes` a `sampled_split_candidates` antes do `min`. Todo o resto é idêntico.
 
+::: {.callout-note}
+No livro-texto, essa modificação aparece como **fragmento**, não como função: @grus2019 mostra apenas as cinco linhas que mudam. E o fragmento não roda como está — ele lê `split_candidates` em vez de `split_attributes` e consulta um `self.num_split_candidates`, resíduo de uma versão anterior em que a árvore era uma classe. Não há `self` em lugar nenhum do capítulo, e o pacote `scratch/decision_trees.py` termina no `build_tree_id3`, sem código de floresta.
+
+A função acima é esse fragmento **completado**: as cinco linhas do livro, com o resto vindo do `build_tree_id3` e o `self.` virando um parâmetro com valor padrão.
+:::
+
 E a combinação das saídas é uma votação simples:
 
 ```{python}
@@ -121,10 +119,10 @@ random.seed(12)
 floresta = [build_tree_forest(bootstrap_sample(inputs), atributos, 'did_well')
             for _ in range(100)]
 
-raizes = Counter(t.attribute if isinstance(t, Split) else '(folha só)'
+raizes = Counter(t.attribute if isinstance(t, Split) else '(só uma folha)'
                  for t in floresta)
 for atributo, n in raizes.most_common():
-    print(f"{atributo:12s} {n:3d} árvores")
+    print(f"{atributo:15s} {n:3d} árvore{'s' if n > 1 else ''}")
 ```
 
 ::: {.callout-warning}
@@ -155,7 +153,7 @@ As três previsões coincidem com as da árvore única, mas agora vêm com algo 
 ::: {.callout-important}
 Catorze exemplos não permitem **medir** se a floresta é melhor que a árvore. Com esse tamanho, qualquer comparação de acurácia oscila mais em função de qual exemplo caiu em qual lado do que em função do método, e uma medição dessas diria mais sobre o sorteio do que sobre o algoritmo.
 
-Esse é exatamente o erro que a [seção 8.3](../cap08/03-overfitting-e-underfitting.qmd) descreve, e que este projeto já cometeu na prática: uma medição feita sobre poucas repetições é um chute com aparência de número. Então vamos medir direito, num conjunto grande o bastante para a resposta significar alguma coisa.
+A [seção 8.3](../cap08/03-overfitting-e-underfitting.qmd) mostra o tamanho desse efeito em números: numa base pequena e desbalanceada, a quantidade de positivos que cai no conjunto de teste varia de 0 a 6 só em função da semente. Uma medição feita sobre poucas repetições é um chute com aparência de número — e este projeto já cometeu esse erro na prática. Então vamos medir direito, num conjunto grande o bastante para a resposta significar alguma coisa.
 :::
 
 ## Medindo o que a floresta compra
@@ -191,7 +189,44 @@ def gera(n: int, ruido: float = 0.15) -> List[Linha]:
     return linhas
 ```
 
-O conjunto de treino tem 200 linhas com 15% de ruído; o de teste tem 1.000 linhas **sem** ruído, para medir o quanto cada modelo recuperou a regra verdadeira em vez de decorar as corrupções. Repetimos o experimento inteiro 20 vezes, com dados novos a cada vez, e comparamos quatro estratégias:
+O conjunto de treino tem 200 linhas com 15% de ruído; o de teste tem 1.000 linhas **sem** ruído, para medir o quanto cada modelo recuperou a regra verdadeira em vez de decorar as corrupções. Repetimos o experimento inteiro 20 vezes, com dados novos a cada vez.
+
+Falta uma peça antes de comparar. A [seção 14.4](04-criando-uma-arvore.qmd) disse que o remédio mais simples contra o crescimento sem freio seria uma condição de parada, e não a implementou. É uma linha dentro do `build_tree_id3`:
+
+```{python}
+#| label: floresta-podada
+def build_tree_podada(inputs: List[Any],
+                      split_attributes: List[str],
+                      target_attribute: str,
+                      max_depth: int,
+                      profundidade: int = 0) -> DecisionTree:
+    """Igual ao build_tree_id3, exceto por virar folha ao atingir max_depth."""
+    label_counts = Counter(getattr(input, target_attribute) for input in inputs)
+    most_common_label = label_counts.most_common(1)[0][0]
+
+    if len(label_counts) == 1:
+        return Leaf(most_common_label)
+    if not split_attributes:
+        return Leaf(most_common_label)
+    if profundidade >= max_depth:            # a única linha nova
+        return Leaf(most_common_label)
+
+    def split_entropy(attribute: str) -> float:
+        return partition_entropy_by(inputs, attribute, target_attribute)
+
+    best_attribute = min(split_attributes, key=split_entropy)
+
+    partitions = partition_by(inputs, best_attribute)
+    new_attributes = [a for a in split_attributes if a != best_attribute]
+
+    subtrees = {valor: build_tree_podada(sub, new_attributes, target_attribute,
+                                         max_depth, profundidade + 1)
+                for valor, sub in partitions.items()}
+
+    return Split(best_attribute, subtrees, default_value=most_common_label)
+```
+
+É o `max_depth` do `DecisionTreeClassifier`, escrito à mão. Com ele, dá para comparar as duas respostas ao sobreajuste — encolher a árvore e multiplicar as árvores — na mesma medição, em vez de acreditar em uma delas:
 
 ```{python}
 #| label: floresta-sintetico-experimento
@@ -200,19 +235,28 @@ def acuracia(prever, dados) -> float:
 
 random.seed(0)
 
-resultados = {'árvore única': [], 'só bagging': [],
+resultados = {'árvore única': [], 'árvore prof. 1': [], 'árvore prof. 2': [],
+              'árvore prof. 3': [], 'só bagging': [],
               'floresta (2 de 8)': [], 'floresta (3 de 8)': []}
-no_proprio_treino = []
+no_proprio_treino = {'árvore única': [], 'árvore prof. 2': []}
 
 for _ in range(20):
     treino = gera(200)
     teste = gera(1000, ruido=0.0)
 
     arvore = build_tree_id3(treino, ATRIBUTOS, 'alvo')
-    no_proprio_treino.append(
+    no_proprio_treino['árvore única'].append(
         acuracia(lambda linha: classify(arvore, linha), treino))
     resultados['árvore única'].append(
         acuracia(lambda linha: classify(arvore, linha), teste))
+
+    for d in (1, 2, 3):
+        podada = build_tree_podada(treino, ATRIBUTOS, 'alvo', d)
+        resultados[f'árvore prof. {d}'].append(
+            acuracia(lambda linha: classify(podada, linha), teste))
+        if d == 2:
+            no_proprio_treino['árvore prof. 2'].append(
+                acuracia(lambda linha: classify(podada, linha), treino))
 
     bagging = [build_tree_id3(bootstrap_sample(treino), ATRIBUTOS, 'alvo')
                for _ in range(50)]
@@ -220,23 +264,34 @@ for _ in range(20):
         acuracia(lambda linha: forest_classify(bagging, linha), teste))
 
     for k in (2, 3):
-        mata = [build_tree_forest(bootstrap_sample(treino), ATRIBUTOS, 'alvo', k)
-                for _ in range(50)]
+        floresta_k = [build_tree_forest(bootstrap_sample(treino), ATRIBUTOS,
+                                        'alvo', k)
+                      for _ in range(50)]
         resultados[f'floresta ({k} de 8)'].append(
-            acuracia(lambda linha: forest_classify(mata, linha), teste))
+            acuracia(lambda linha: forest_classify(floresta_k, linha), teste))
 
-print(f"{'árvore única, no treino':20s} "
-      f"média={sum(no_proprio_treino) / len(no_proprio_treino):.4f}\n")
-
+for nome, valores in no_proprio_treino.items():
+    print(f"{nome:18s} NO TREINO  média={sum(valores) / len(valores):.4f}")
+print()
 for nome, valores in resultados.items():
     media = sum(valores) / len(valores)
-    print(f"{nome:20s} média={media:.4f}  pior={min(valores):.3f}  "
+    print(f"{nome:18s} no teste   média={media:.4f}  pior={min(valores):.3f}  "
           f"melhor={max(valores):.3f}")
 ```
 
-Leia a primeira linha ao lado da segunda. A árvore única acerta **99,7%** dos exemplos que usou para se construir — inclusive os 15% cujo rótulo foi invertido de propósito, que ela só consegue acertar decorando-os um a um, com perguntas sobre os seis atributos de puro ruído. Sobre dados novos, ela cai para 82%. A distância entre esses dois números é o sobreajuste, medido.
+Comece pela árvore sem poda, que é o modelo da [seção 14.5](05-juntando-tudo.qmd). Ela acerta **99,7%** dos exemplos que usou para se construir — inclusive os 15% cujo rótulo foi invertido de propósito, que ela só consegue acertar decorando-os um a um, com perguntas sobre os seis atributos de puro ruído. Sobre dados novos, cai para **82,4%**. A distância entre esses dois números é o sobreajuste, medido.
 
 (Por que 99,7% e não 100%? Porque com 200 sorteios sobre $3^8 = 6.561$ combinações possíveis de atributos, de vez em quando duas linhas idênticas recebem rótulos diferentes — e aí nem uma árvore infinitamente profunda consegue separá-las. O passo 2 do ID3 devolve o rótulo majoritário e erra o outro.)
+
+Os três comitês fazem o que se espera deles: 90,8% só com o bagging, 91,7% e **92,8%** com o sorteio de atributos — até dez pontos percentuais acima da árvore sozinha, e sem que ninguém precise dizer nada ao algoritmo sobre a estrutura do problema.
+
+E aí vem a linha que estraga o final feliz. A árvore de **profundidade 2** — duas perguntas, nove folhas, um modelo que cabe num cartão — acerta **100,00%** do conjunto de teste, nas 20 repetições, sem uma única exceção. Nenhuma floresta chega perto.
+
+Repare no que ela faz no treino: **84,95%**, muito *pior* que os 99,7% da árvore sem poda. Não é acaso — 85% é exatamente a fração de rótulos que não foram corrompidos. A árvore rasa acerta todo o sinal e erra todo o ruído, que é o comportamento correto, e a árvore profunda "melhora" esse número decorando as corrupções uma a uma. **O modelo pior no treino é o melhor no teste, e a diferença é grande.**
+
+Não é sorte: é a estrutura do problema. A regra verdadeira é `(a0 == 'x') or (a1 == 'y')` — dois atributos, duas perguntas. Com profundidade 2, a árvore pergunta exatamente duas vezes; o critério de entropia escolhe `a0` e `a1`, que são os únicos com sinal; e o limite a impede de perguntar sobre o ruído, que é como a árvore sem poda decora. Ela não tem para onde crescer, e isso aqui é uma vantagem.
+
+A profundidade importa nos dois sentidos, e a tabela mostra a curva inteira: com **uma** pergunta só, 77,3% — não dá para expressar um "ou" entre dois atributos com uma pergunta; com **três**, 94,6% — sobra uma pergunta, e ela é gasta no ruído; sem limite, 82,4%. O desempenho sobe até o modelo ter exatamente a capacidade da regra verdadeira e desce a partir dali. É o U do compromisso viés-variância da [seção 8.5](../cap08/05-vies-e-variancia.qmd), desenhado por um modelo que não tem um único parâmetro contínuo.
 
 ::: {.conceito}
 As duas fontes de aleatoriedade contribuem, e contribuem por motivos diferentes.
@@ -245,10 +300,64 @@ O **bagging** sozinho já resolve boa parte do problema: cada árvore decora um 
 
 O **sorteio de atributos** acrescenta um ganho a mais, e o mecanismo é sutil: sem ele, as 50 árvores tendem a escolher os mesmos primeiros atributos, porque a reamostra muda pouco o ranking dos melhores. Árvores parecidas erram parecido, e votar entre modelos que erram juntos não corrige nada. Forçar cada divisão a escolher entre poucos atributos sorteados **descorrelaciona** as árvores, e é a correlação entre elas, não a qualidade individual de cada uma, que limita o ganho de um comitê.
 
-É por isso que uma floresta aleatória usa árvores propositalmente piores que a melhor árvore possível. Cada uma sozinha é um **aprendiz fraco**; o comitê é forte porque os erros não se somam.
+É por isso que uma floresta aleatória usa **árvores deliberadamente piores** que a melhor árvore possível: individualmente cada uma acerta menos, e é justamente por isso que elas erram em lugares diferentes. O comitê é forte porque os erros não se somam.
 :::
 
-Isso é um exemplo de uma técnica mais ampla chamada **aprendizado de comitê** (*ensemble learning*), em que combinamos vários aprendizes fracos — tipicamente modelos de viés alto e variância baixa — para produzir um modelo forte no conjunto.
+Isso é um exemplo de uma técnica mais ampla chamada **aprendizado de comitê** (*ensemble learning*): combinar muitos modelos medíocres para produzir um bom. E vale dizer com precisão que tipo de modelo medíocre a floresta combina, porque é fácil errar isso. Ela combina árvores de **viés baixo e variância alta** — árvores que crescem até decorar o próprio treino, exatamente como os dois primeiros números da medição acima mostram —, e o que a média entre elas reduz é a **variância**. Reamostrar é uma imitação barata de "obter mais dados", que é a saída que a [seção 8.5](../cap08/05-vies-e-variancia.qmd) indica para variância alta, e não para viés alto.
+
+::: {.callout-warning}
+## Um deslize do livro-texto, e ele vale como conteúdo
+
+Neste ponto, @grus2019 escreve que o aprendizado de comitê combina vários aprendizes fracos, "tipicamente modelos de **viés alto e variância baixa**". Está trocado — e a troca é instrutiva, porque descreve com exatidão **outro** método.
+
+Viés alto com variância baixa é a definição de *underfitting* da [seção 8.5](../cap08/05-vies-e-variancia.qmd): um modelo que erra sistematicamente e erra a mesma coisa em qualquer conjunto de treino. Uma árvore sem poda é o oposto exato disso, e este capítulo acabou de medir: 99,7% no treino contra 82,4% em dados novos é viés baixíssimo com variância altíssima. E se as árvores de uma floresta tivessem mesmo viés alto e variância baixa, tirar a média entre elas não adiantaria nada — elas errariam todas do mesmo jeito, e a média de erros idênticos é o mesmo erro. A floresta só funciona porque a premissa da frase é falsa.
+
+O método que de fato parte de modelos de viés alto é o **boosting**, mencionado no fim desta seção. Ele usa árvores propositalmente rasas — às vezes com uma pergunta só — e as encadeia, cada uma treinada para corrigir o resíduo das anteriores, reduzindo **viés**. Floresta e boosting atacam pontas opostas do mesmo compromisso, e a expressão *weak learner*, que é vocabulário de boosting, é provavelmente o que arrastou a frase para o lado errado.
+:::
+
+## Então quando é que a floresta ganha?
+
+O ganho da floresta sobre a árvore **sem poda** é real, e é ganho de variância: 82,4% para 92,8%, com as duas fontes de aleatoriedade contribuindo separadamente. Nada disso muda. O que muda é a moral da história, porque a árvore de duas perguntas ganhou de todas as florestas por sete pontos percentuais — e é um modelo que se desenha numa página.
+
+A objeção óbvia é que escolhemos a profundidade 2 sabendo a regra verdadeira, o que ninguém pode fazer na vida real. Ela tem resposta, e a resposta é medível: separe uma parte do treino como conjunto de **validação**, escolha a profundidade por ela, e não olhe o teste — a receita da [seção 8.3](../cap08/03-overfitting-e-underfitting.qmd).
+
+```{python}
+#| label: floresta-escolhendo-profundidade
+random.seed(1)
+
+PROFUNDIDADES = [1, 2, 3, 4, 5, 8]
+escolhidas: Counter = Counter()
+no_teste = []
+
+for _ in range(20):
+    treino = gera(200)
+    teste = gera(1000, ruido=0.0)
+    ajuste, validacao = treino[:150], treino[150:]   # 150 para ajustar, 50 para escolher
+
+    def nota(d: int) -> float:
+        candidata = build_tree_podada(ajuste, ATRIBUTOS, 'alvo', d)
+        return acuracia(lambda linha: classify(candidata, linha), validacao)
+
+    melhor = max(PROFUNDIDADES, key=nota)
+    escolhidas[melhor] += 1
+
+    final = build_tree_podada(treino, ATRIBUTOS, 'alvo', melhor)
+    no_teste.append(acuracia(lambda linha: classify(final, linha), teste))
+
+print(f"profundidades escolhidas: {dict(sorted(escolhidas.items()))}")
+print(f"acurácia no teste: média={sum(no_teste) / len(no_teste):.4f}  "
+      f"pior={min(no_teste):.4f}")
+```
+
+Cinquenta linhas de validação bastam para encontrar a profundidade 2, nas 20 repetições, sem que ninguém tenha contado a regra ao procedimento. Em 19 delas a árvore resultante acerta o teste inteiro; numa, o ruído do treino faz o critério de entropia escolher um atributo errado na raiz e ela cai para 87,9%. A média fica em 99,4% — ainda muito acima de qualquer floresta.
+
+::: {.conceito}
+A conclusão honesta deste experimento não é a que se costuma contar.
+
+Quando a estrutura verdadeira é simples o bastante para caber numa árvore rasa, a resposta mais barata **não** é a floresta: é uma regra de parada. Ela custa uma linha de código, é encontrada por um conjunto de validação, e devolve um modelo que continua legível.
+
+A floresta ganha quando não se sabe de antemão que a estrutura é simples — que é o caso comum. Ela chegou a 92,8% aqui sem que ninguém lhe dissesse nada sobre o problema. E há um caso em que a vantagem da árvore podada desaparece por construção: se a regra verdadeira envolvesse seis atributos em vez de dois, nenhuma profundidade rasa a expressaria, e podar deixaria de ser resposta. Este experimento não mede esse caso, e vale registrar que não mede.
+:::
 
 ## O que a floresta cobra
 
@@ -257,12 +366,18 @@ Vale terminar o capítulo onde ele começou.
 A [seção 14.1](01-o-que-e-uma-arvore-de-decisao.qmd) abriu dizendo que a árvore é o primeiro modelo deste livro que um humano lê — que a figura **é** o modelo, e que dá para discordar dela. As cem árvores acima, tomadas em conjunto, não são legíveis por ninguém. Não existe figura. A resposta para "por que este candidato foi classificado assim?" passou de um caminho de duas perguntas para "porque 78 de 100 árvores, cada uma treinada num subconjunto sorteado dos dados usando um subconjunto sorteado dos atributos, votaram assim".
 
 ::: {.callout-important}
-Esse é o compromisso, e ele é honesto: a floresta aleatória compra generalização com a única moeda que tornava a árvore especial.
+Esse é o compromisso: a floresta aleatória compra generalização com a única moeda que tornava a árvore especial.
 
-Não há resposta universal sobre qual lado escolher. Se o modelo precisa ser auditado por um humano — decisões de crédito, triagem médica, admissão —, uma árvore rasa que se lê numa página pode valer mais do que alguns pontos de acurácia. Se ele só precisa acertar, a floresta ganha quase sempre.
+Só que ela nem sempre precisa pagar. A medição desta seção mostrou um conjunto em que o modelo mais legível é também o mais preciso — a árvore de duas perguntas —, e o preço da legibilidade ali é zero. Quando esse for o caso, a troca não existe, e supor que ela existe custa acurácia além de custar transparência. **Vale medir antes de assumir.**
+
+Quando a troca existe de fato, não há resposta universal sobre qual lado escolher. Se o modelo precisa ser auditado por um humano — decisões de crédito, triagem médica, admissão —, uma árvore rasa que se lê numa página pode valer mais do que alguns pontos de acurácia. Se ele só precisa acertar, a floresta ganha quase sempre.
 
 O que **não** vale é fingir que não houve troca. Existe uma indústria inteira de ferramentas de "explicabilidade" para modelos de comitê, e todas elas produzem explicações **aproximadas**, reconstruídas por fora do modelo. A explicação da árvore da [seção 14.4](04-criando-uma-arvore.qmd) não era uma aproximação: era o modelo.
 :::
+
+E é aqui que o capítulo entrega o aluno ao próximo. A árvore comprou não linearidade **de graça**: ela nunca precisou de produto escalar, de coeficiente, de reescalonamento nem do gradiente descendente do [Capítulo 5](../cap05/index.qmd), porque perguntar "qual é o valor?" já dobra a fronteira sozinho. O que ela pagou foi legibilidade, e pagou só quando virou floresta.
+
+O [Capítulo 15](../cap15/index.qmd) compra a mesma não linearidade de volta ao gradiente — a rede neural é uma pilha de funções deriváveis, e todo o maquinário que este capítulo dispensou volta inteiro, taxa de aprendizado inclusive. E o preço, dessa vez, vem cobrado adiantado: o modelo que sai de lá não é legível nem de longe, nem por aproximação, nem quando é um só.
 
 ::: {.callout-tip collapse="true"}
 ## Na prática: `RandomForestClassifier`

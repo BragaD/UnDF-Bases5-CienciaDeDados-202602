@@ -4,7 +4,130 @@
 Esta seção corresponde a *Choosing k*, do capítulo 20 de @grus2019.
 :::
 
+Na seção anterior, *k* foi escolhido por fatores completamente fora do nosso controle: primeiro o orçamento dava para três encontros, depois para dois. Em geral não é assim, e a pergunta cai no seu colo. Quantos grupos existem nestes dados?
+
+Há várias formas de responder. Uma delas é razoavelmente fácil de entender: desenhar a soma dos erros ao quadrado — a distância de cada ponto à média do grupo dele — como função de *k*, e olhar onde o gráfico "dobra".
+
+A função que calcula esse erro é curta:
+
+```{python}
+#| label: erro-total
+from typing import List
+from scratch.linear_algebra import Vector, squared_distance
+from scratch.clustering import KMeans
+
+def squared_clustering_errors(inputs: List[Vector], k: int) -> float:
+    """calcula o erro quadrático total de agrupar as entradas com k-means"""
+    clusterer = KMeans(k)
+    clusterer.train(inputs)
+    means = clusterer.means
+    assignments = [clusterer.classify(input) for input in inputs]
+
+    return sum(squared_distance(input, means[cluster])
+               for input, cluster in zip(inputs, assignments))
+```
+
+::: {.callout-note}
+Diferente de `KMeans`, esta função **não** é importada de `scratch.clustering`: no pacote do livro-texto ela vive dentro do `main()` do módulo, e não no nível dele. Como o `main()` não roda na importação — e nem deveria, já que ele tenta ler uma imagem que não existe no nosso repositório —, a função é escrita aqui em linha.
+
+É a mesma política que o [Capítulo 6](../cap06/index.qmd) e o [Capítulo 7](../cap07/index.qmd) já aplicaram a outros módulos: quando o código de que precisamos não está disponível como importação limpa, ele é reescrito no `.qmd`, e o pacote `scratch` permanece cópia literal do original.
+:::
+
+Aplicando aos vinte usuários da seção anterior, para todo *k* de 1 a 20:
+
+```{python}
+#| label: fig-cotovelo
+#| fig-cap: "Erro quadrático total em função do número de grupos"
+#| warning: false
+import random
+from matplotlib import pyplot as plt
+
+inputs: List[Vector] = [[-14, -5], [13, 13], [20, 23], [-19, -11], [-9, -16],
+                        [21, 27], [-49, 15], [26, 13], [-46, 5], [-34, -1],
+                        [11, 15], [-49, 0], [-22, -16], [19, 28], [-12, -8],
+                        [-13, -19], [-41, 8], [-11, -6], [-25, -9], [-18, -3]]
+
+random.seed(0)
+ks = range(1, len(inputs) + 1)
+errors = [squared_clustering_errors(inputs, k) for k in ks]
+
+plt.plot(ks, errors, marker='.')
+plt.xticks(list(ks))
+plt.xlabel("k")
+plt.ylabel("erro quadrático total")
+plt.title("Erro total vs. nº de grupos")
+plt.show()
+```
+
+O cotovelo está em *k* = 3, e é nítido. Os números por trás da curva deixam a leitura mais precisa:
+
+```{python}
+#| label: tabela-erros
+for k, erro in list(zip(ks, errors))[:8]:
+    queda = "" if k == 1 else f"  ({100 * (erro / errors[k - 2] - 1):+.0f}%)"
+    print(f"k = {k:2d}   erro = {erro:9.1f}{queda}")
+```
+
+De 1 para 2 grupos o erro cai 70%; de 2 para 3, outros 73%. De 3 para 4 ele cai 15%, e a partir dali — na escala do gráfico, que precisa acomodar os 15 mil do *k* = 1 — a curva vira quase uma reta rente ao eixo. A leitura usual é essa: até *k* = 3 cada grupo novo está separando coisas que de fato estavam misturadas; depois disso, ele só está partindo grupos que já eram coesos. O método concorda com o que o olho já tinha dito na figura das localizações.
+
+## A armadilha da métrica que sempre melhora
+
+Só que essa concordância é sorte de um conjunto de dados fácil, e o método tem um problema que precisa ser dito com todas as letras.
+
+::: {.callout-important}
+## O erro só desce, então ele não pode escolher
+
+Com o agrupamento **ótimo** para cada *k*, acrescentar um grupo nunca aumenta o erro total. O argumento é o mesmo de sempre: a melhor solução com *k* grupos continua disponível como candidata quando se permitem *k* + 1 — basta deixar o grupo extra com um ponto qualquer emprestado do vizinho —, então o melhor com *k* + 1 é, no máximo, tão ruim quanto o melhor com *k*.
+
+Leve isso ao extremo. Com *k* = *n*, cada ponto vira o próprio grupo, cada média coincide com o ponto que ela representa, e o erro é **exatamente zero**. Vinte grupos de um usuário cada: erro perfeito, e vinte festas com uma pessoa em cada.
+
+Uma métrica que atinge o valor perfeito na resposta mais inútil possível não pode, sozinha, escolher a resposta.
+:::
+
+Esse defeito não é novo neste livro. Ele é, ponto por ponto, o mesmo do R² da [seção 12.5](../cap12/05-qualidade-do-ajuste.qmd), que também nunca piora quando se acrescenta uma variável à regressão — inclusive uma coluna de puro ruído. Lá, uma métrica que nunca desce não servia para decidir quais variáveis merecem entrar no modelo; aqui, uma métrica que nunca sobe não serve para decidir quantos grupos existem. O remédio, nos dois casos, é o mesmo: a métrica interna informa, mas quem decide é um critério de fora dela.
+
+E é aqui que a diferença entre este capítulo e os dezesseis anteriores fica concreta. Na regressão, o critério de fora existia e tinha nome: medir em dados que o modelo não viu. Aqui não há esse recurso, porque não há resposta certa nos dados novos tampouco. Sobram três caminhos, todos honestos e nenhum automático:
+
+- **O uso decide.** Foi o que aconteceu na seção anterior: o orçamento dava para dois encontros, então *k* = 2. Uma gráfica que imprime cinco cores fixa *k* = 5. Não é uma limitação do método — é o método sendo usado do jeito certo, com a restrição real do problema no lugar de um critério inventado.
+- **O gráfico decide, com o olho de quem lê.** É o cotovelo. Funciona quando existe um cotovelo, e boa parte dos conjuntos reais não tem nenhum: a curva desce suave, sem dobra, e a escolha vira arbitrária.
+- **Uma métrica de forma decide.** Existem medidas que penalizam grupos ruins em vez de premiar grupos numerosos — a mais comum é a *silhueta*, que compara, para cada ponto, a distância média aos vizinhos do próprio grupo com a distância média ao grupo mais próximo. Diferente do erro quadrático, ela **não** melhora automaticamente com *k* maior, e por isso pode ter um máximo interior.
+
+## A curva não desce sempre
+
+Há um segundo detalhe na figura, e ele contradiz aparentemente o que o parágrafo anterior afirmou. Olhe os valores de novo, agora até o fim:
+
+```{python}
+#| label: tabela-completa
+for k, erro in zip(ks, errors):
+    seta = "  <-- subiu" if k > 1 and erro > errors[k - 2] else ""
+    print(f"k = {k:2d}   erro = {erro:8.1f}{seta}")
+```
+
 ::: {.callout-warning}
-## Em construção
-O conteúdo desta seção ainda será escrito.
+## Por que a curva medida sobe em alguns pontos
+
+Cinco dos dezenove degraus da curva **sobem** em vez de descer. O erro em *k* = 9 é maior que em *k* = 8, e o de *k* = 18 é mais de seis vezes o de *k* = 17. Pior: em *k* = 20, com um grupo disponível por usuário, o erro deveria ser zero — e não é.
+
+Não há contradição com a caixa anterior. Aquele argumento é sobre o agrupamento **ótimo**, e o que a curva mostra é o resultado do **nosso algoritmo**, que não encontra o ótimo: cada ponto do gráfico é uma execução independente do k-means, com a sua própria atribuição inicial aleatória e o seu próprio ótimo local. Uma execução com *k* = 9 pode terminar num arranjo pior do que uma execução afortunada com *k* = 8.
+
+O caso de *k* = 20 é o mais didático dos vinte. Existe uma solução de erro zero, ela é óbvia para qualquer pessoa, e o algoritmo não a encontra — porque começou com atribuições sorteadas, alguns grupos nasceram vazios e receberam pontos emprestados pelo `random.choice` de `cluster_means`, e a configuração resultante já era estável. Nenhum dos dois passos consegue escapar dela.
+
+Se você levar uma única coisa desta figura, que seja esta: **um número que sai de um algoritmo aleatório sem semente não é uma medida, é uma amostra de tamanho 1.** Rodar cada *k* dez vezes e ficar com o menor erro — que é o que o `scikit-learn` faz por padrão — deixaria a curva bem mais próxima da monótona. Não a tornaria monótona: só menos ruidosa.
+:::
+
+::: {.callout-tip collapse="true"}
+## Na prática: `scikit-learn`
+
+O erro quadrático total que acabamos de calcular à mão é o atributo `inertia_` de um `KMeans` já ajustado, e a curva do cotovelo é um laço de três linhas:
+
+```python
+from sklearn.cluster import KMeans
+
+erros = [KMeans(n_clusters=k, random_state=0).fit(inputs).inertia_
+         for k in range(1, 21)]
+```
+
+Para a silhueta, `sklearn.metrics.silhouette_score(inputs, modelo.labels_)` devolve um número entre −1 e 1 — quanto mais alto, mais os grupos estão separados uns dos outros —, e o *k* escolhido é o que maximiza esse número. Repare na diferença de natureza: a inércia é minimizada e sempre pode ser reduzida; a silhueta é maximizada e tem um máximo interior. É por isso que ela serve de critério e a inércia, sozinha, não serve.
+
+Vale saber que existem também algoritmos que **não** exigem *k*: o `DBSCAN` do `scikit-learn` descobre o número de grupos a partir de um raio de vizinhança e de uma densidade mínima, e ainda marca pontos isolados como ruído em vez de forçá-los para dentro de algum grupo. Isso não faz a pergunta desaparecer — apenas a troca por outra, sobre o raio, que também não tem resposta correta.
 :::

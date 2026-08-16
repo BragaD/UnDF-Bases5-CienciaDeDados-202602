@@ -4,7 +4,185 @@
 Esta seção corresponde a *The Model*, do capítulo 20 de @grus2019.
 :::
 
+Cada entrada será, como de costume neste livro, um vetor num espaço de *d* dimensões — uma lista de números. O objetivo é duplo: identificar grupos de entradas parecidas e, quando fizer sentido, achar um **valor representativo** de cada grupo.
+
+Os dois objetivos aparecem juntos com frequência. Se cada entrada é um vetor numérico que representa o título de um post de blog, os grupos podem revelar sobre o que os usuários escrevem — e o valor representativo de cada grupo é um título fictício que resume o assunto. Se cada entrada é uma cor de uma imagem com milhares delas, e você precisa imprimir uma versão com dez cores, os grupos dizem *quais* dez cores usar e o representante de cada grupo *é* a cor a ser impressa.
+
+## k-means
+
+Um dos métodos mais simples é o **k-means**. O número de grupos, *k*, é escolhido de antemão — não é descoberto, é decidido —, e a meta é dividir as entradas em conjuntos $S_1, \dots, S_k$ de modo a minimizar a soma total das distâncias ao quadrado de cada ponto até a média do grupo a que ele pertence.
+
+Enunciada assim, a tarefa parece um problema de busca: basta experimentar todas as divisões possíveis e ficar com a melhor. O tamanho dessa busca é o primeiro obstáculo:
+
+```{python}
+#| label: particoes
+from functools import lru_cache
+
+@lru_cache(maxsize=None)
+def particoes(n: int, k: int) -> int:
+    """De quantas formas se pode dividir n pontos em exatamente k grupos não vazios."""
+    if k > n:
+        return 0
+    if k == 1 or k == n:
+        return 1
+    # o n-ésimo ponto ou entra num dos k grupos já formados pelos outros n-1...
+    # ...ou abre sozinho o k-ésimo grupo
+    return k * particoes(n - 1, k) + particoes(n - 1, k - 1)
+
+def br(n: int) -> str:
+    """separador de milhar no padrão brasileiro"""
+    return f"{n:,}".replace(",", ".")
+
+print(f"20 pontos em 3 grupos: {br(particoes(20, 3))}")
+print(f"20 pontos em 5 grupos: {br(particoes(20, 5))}")
+print(f"50 pontos em 5 grupos: {br(particoes(50, 5))}")
+```
+
+Vinte pontos. Vinte é um conjunto de dados que cabe numa folha de papel, e já são mais de meio bilhão de maneiras de dividi-lo em três. Encontrar a divisão ótima é, de fato, um problema difícil — e não do tipo que espera por um computador mais rápido.
+
+::: {.conceito}
+Por isso o k-means não procura o ótimo. Ele é um algoritmo **iterativo** que costuma achar um bom agrupamento, e consiste em repetir dois passos exatos:
+
+1. Comece com *k* médias, que são pontos no espaço de *d* dimensões.
+2. **Atribua** cada ponto à média de que ele está mais próximo.
+3. Se nenhuma atribuição mudou, pare: os grupos estão prontos.
+4. Se alguma mudou, **recalcule** as médias e volte ao passo 2.
+
+Nenhum dos dois passos tem parâmetro a ajustar, taxa de aprendizado ou derivada. Cada um é uma conta fechada.
+:::
+
+::: {.callout-note}
+## Otimização sem gradiente
+
+O [Capítulo 5](../cap05/index.qmd) construiu o gradiente descendente e avisou que quatro modelos deste livro não passariam por lá. O k-means é o último deles, e é o mais claro dos quatro: existe uma quantidade a minimizar — a soma das distâncias ao quadrado —, e mesmo assim não se calcula derivada nenhuma.
+
+O motivo é que a variável sobre a qual se está otimizando não é contínua. "A que grupo o ponto 7 pertence" é uma escolha entre *k* alternativas discretas; não há um passo pequeno nessa direção, então não há gradiente a descer. O que existe são dois passos que, cada um à sua maneira, não pioram a resposta.
+:::
+
+## O código
+
+Vamos precisar de uma função auxiliar que conte em quantas coordenadas dois vetores diferem. Ela serve para acompanhar o progresso do treino — quantas atribuições mudaram de uma iteração para a seguinte:
+
+```{python}
+#| label: num-diferencas
+from scratch.linear_algebra import Vector
+
+def num_differences(v1: Vector, v2: Vector) -> int:
+    assert len(v1) == len(v2)
+    return len([x1 for x1, x2 in zip(v1, v2) if x1 != x2])
+
+assert num_differences([1, 2, 3], [2, 1, 3]) == 2
+assert num_differences([1, 2], [1, 2]) == 0
+```
+
+Também precisamos de uma função que, dados os vetores e a atribuição de cada um a um grupo, calcule as médias dos grupos:
+
+```{python}
+#| label: medias-dos-grupos
+from typing import List
+import random
+from scratch.linear_algebra import vector_mean
+
+def cluster_means(k: int,
+                  inputs: List[Vector],
+                  assignments: List[int]) -> List[Vector]:
+    # clusters[i] contém as entradas cuja atribuição é i
+    clusters = [[] for i in range(k)]
+    for input, assignment in zip(inputs, assignments):
+        clusters[assignment].append(input)
+
+    # se um grupo ficou vazio, use um ponto qualquer no lugar da média
+    return [vector_mean(cluster) if cluster else random.choice(inputs)
+            for cluster in clusters]
+```
+
+::: {.callout-note}
+## Uma dívida do capítulo 4
+
+A [seção 4.1](../cap04/01-vetores.qmd) definiu `vector_mean` e prometeu que ela era "o coração do algoritmo de k-means". A linha acima é a cobrança dessa promessa: o passo de recalcular os centros é, literalmente, uma chamada a `vector_mean` por grupo.
+
+Repare também no `if cluster else random.choice(inputs)`. Um grupo pode ficar **vazio** — nada impede que, depois de uma rodada de atribuições, nenhum ponto seja o mais próximo de uma certa média. A média de uma coleção vazia não existe, então o código escolhe um ponto ao acaso para fazer as vezes de centro. É uma remenda, não uma solução elegante, e ela tem consequência: é uma das razões pelas quais duas execuções do mesmo código sobre os mesmos dados podem terminar em lugares diferentes.
+:::
+
+Com as duas peças, o algoritmo cabe numa classe. Não sabemos de antemão quantas iterações serão necessárias, então usamos `itertools.count`, que produz um iterável infinito, e saímos dele com um `return` quando as atribuições param de mudar:
+
+```{python}
+#| label: kmeans
+import itertools
+import tqdm
+from scratch.linear_algebra import squared_distance
+
+class KMeans:
+    def __init__(self, k: int) -> None:
+        self.k = k                      # número de grupos
+        self.means = None
+
+    def classify(self, input: Vector) -> int:
+        """devolve o índice do grupo mais próximo da entrada"""
+        return min(range(self.k),
+                   key=lambda i: squared_distance(input, self.means[i]))
+
+    def train(self, inputs: List[Vector]) -> None:
+        # Começa com atribuições aleatórias
+        assignments = [random.randrange(self.k) for _ in inputs]
+
+        with tqdm.tqdm(itertools.count()) as t:
+            for _ in t:
+                # Calcula as médias e encontra as novas atribuições
+                self.means = cluster_means(self.k, inputs, assignments)
+                new_assignments = [self.classify(input) for input in inputs]
+
+                # Vê quantas atribuições mudaram, e se terminamos
+                num_changed = num_differences(assignments, new_assignments)
+                if num_changed == 0:
+                    return
+
+                # Senão, mantém as novas atribuições e recalcula as médias
+                assignments = new_assignments
+                self.means = cluster_means(self.k, inputs, assignments)
+                t.set_description(f"changed: {num_changed} / {len(inputs)}")
+```
+
+A barra de progresso vem do `tqdm`, apresentado na [seção 7.7](../cap07/07-um-parenteses-tqdm.qmd). Como o laço é sobre um gerador infinito, o `tqdm` não tem como estimar quanto falta — ele mostra só quantas iterações já passaram e a descrição que atualizamos a cada volta.
+
 ::: {.callout-warning}
-## Em construção
-O conteúdo desta seção ainda será escrito.
+## `warning: false` em todo chunk que treina
+
+O `tqdm` escreve no fluxo de erro padrão, e um notebook captura esse fluxo inteiro como saída da célula. Sem `#| warning: false`, cada renderização deste livro despejaria dezenas de linhas de barra de progresso no meio da página. Todo chunk das próximas seções que chame `train` leva essa opção — inclusive os que produzem figuras.
+:::
+
+## Por que ele para, e por que isso não basta
+
+Duas propriedades do algoritmo precisam ser ditas juntas, porque cada uma sozinha engana.
+
+::: {.conceito}
+**O k-means sempre converge.** O argumento é curto: existe um número finito de maneiras de atribuir *n* pontos a *k* grupos. Nenhum dos dois passos aumenta a soma das distâncias ao quadrado — recalcular a média de um grupo é, por definição, escolher o ponto que minimiza essa soma dentro dele; e reatribuir cada ponto ao centro mais próximo só pode diminuir a distância daquele ponto. Como o valor nunca sobe e há finitas configurações, o algoritmo não pode ficar rodando para sempre: em algum momento uma iteração não muda nada, e ele para.
+
+**Mas ele converge para um ótimo local.** "Não piorar" não é o mesmo que "chegar ao melhor". O ponto de parada é uma configuração da qual nenhum dos dois passos consegue sair — e qual delas você alcança depende inteiramente das atribuições aleatórias iniciais, sorteadas na primeira linha de `train`.
+:::
+
+As duas afirmações juntas dão a forma exata do algoritmo: ele é confiável quanto a terminar e não é confiável quanto ao *onde*. Trocar a semente troca o resultado, e a [seção 17.5](05-exemplo-clustering-de-cores.qmd) vai mostrar duas execuções do mesmo código, sobre os mesmos dados e com o mesmo *k*, produzindo respostas visivelmente diferentes.
+
+É por isso que todo chunk deste capítulo fixa a semente com `random.seed`. Aqui isso não é apenas a boa prática de reprodutibilidade que o livro adota desde o começo: sem a semente, o texto simplesmente não descreveria a figura ao lado dele.
+
+::: {.callout-tip collapse="true"}
+## Na prática: `scikit-learn`
+
+O equivalente do que você acabou de escrever:
+
+```python
+from sklearn.cluster import KMeans
+
+modelo = KMeans(n_clusters=3, random_state=12).fit(X)
+modelo.cluster_centers_      # as médias
+modelo.labels_               # o grupo de cada ponto
+modelo.predict(X_novo)       # o nosso `classify`
+```
+
+O que a biblioteca esconde é justamente o problema do ótimo local, e ela o esconde de dois jeitos:
+
+- **`n_init`** — por padrão, o `scikit-learn` roda o algoritmo inteiro dez vezes, cada uma com uma inicialização diferente, e devolve o melhor dos dez resultados. É força bruta contra o acaso: continua sendo um ótimo local, só que o melhor de dez.
+- **`init='k-means++'`** — em vez de sortear as atribuições iniciais uniformemente, escolhe os centros iniciais um a um, com probabilidade proporcional à distância ao centro já escolhido mais próximo. Centros iniciais espalhados caem em ótimos locais melhores, e com muito mais frequência.
+
+Nenhum dos dois **resolve** o problema; os dois o tornam menos provável. O atributo `inertia_` do modelo ajustado guarda exatamente a soma de distâncias ao quadrado que a [seção 17.4](04-escolhendo-k.qmd) vai calcular à mão.
 :::

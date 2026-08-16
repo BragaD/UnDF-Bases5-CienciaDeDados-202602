@@ -26,7 +26,7 @@ class Split(NamedTuple):
 DecisionTree = Union[Leaf, Split]
 ```
 
-São doze linhas, e nelas cabe o modelo inteiro. Compare com o que os capítulos anteriores precisavam guardar: um vetor `beta` de coeficientes que só significa alguma coisa junto com a documentação de qual coluna é qual, ou — no caso do k-vizinhos — o conjunto de dados inteiro.
+São onze linhas, e nelas cabe o modelo inteiro. Compare com o que os capítulos anteriores precisavam guardar: um vetor `beta` de coeficientes que só significa alguma coisa junto com a documentação de qual coluna é qual, ou — no caso do k-vizinhos — o conjunto de dados inteiro.
 
 Com essa representação, a árvore de contratação da [seção anterior](04-criando-uma-arvore.qmd) fica assim:
 
@@ -186,7 +186,7 @@ E também dá para aplicá-la a dados com valores inesperados:
 
 ```{python}
 #| label: juntando-intern
-# Deve prever True
+# Prevê True — e o callout abaixo é sobre o motivo
 assert classify(tree, Candidate("Intern", "Java", True, True))
 
 estagiario = Candidate("Intern", "Java", True, True)
@@ -205,7 +205,6 @@ Ou seja: a resposta para "como se sai um estagiário?" é "como se sai a maioria
 Este é um defeito da **interface**, não do algoritmo. Um `classify` que devolvesse `(previsão, viu_esse_valor)` — ou que levantasse uma exceção diante de um valor não visto — daria ao chamador a chance de tratar o caso. Vale a pena guardar a lição de forma geral: **a maioria dos modelos, na maioria das bibliotecas, não distingue "eu sei" de "eu chutei o mais comum"**, e a previsão sai com a mesma cara nos dois casos. Se essa distinção importa para o seu problema, ela precisa ser construída por fora.
 :::
 
-::: {.callout-warning}
 ## O guloso não encontra a menor árvore
 
 A [seção 14.4](04-criando-uma-arvore.qmd) afirmou que o ID3 pode produzir uma árvore maior do que a necessária. Agora que `build_tree_id3` existe, dá para mostrar.
@@ -231,7 +230,9 @@ for key in ['a', 'b', 'c']:
     print(f"{key} {partition_entropy_by(dados, key, 'alvo'):.6f}")
 ```
 
-Sozinhos, nem `a` nem `b` reduzem a incerteza em nada — cada um deles deixa os dois lados meio a meio, entropia 1,000000. Só o par `(a, b)` decide o alvo, e o critério guloso, que olha um atributo de cada vez, é **cego para isso**. Já `c` oferece uma redução pequena mas real, então é ele que vence o primeiro passo:
+Sozinhos, nem `a` nem `b` reduzem a incerteza em nada — cada um deles deixa os dois lados meio a meio, entropia 1,000000. Só o par `(a, b)` decide o alvo, e o critério guloso, que olha um atributo de cada vez, é **cego para isso**. Já `c` oferece uma redução pequena mas real, então é ele que vence o primeiro passo.
+
+Construímos duas árvores: uma com os três atributos, como o algoritmo faria, e outra escondendo `c` dele.
 
 ```{python}
 #| label: juntando-guloso-arvores
@@ -247,13 +248,41 @@ for nome, t in [("com a, b, c", guloso), ("só com a, b", enxuta)]:
           f"acertos={certos}/{len(dados)}")
 ```
 
-As duas árvores acertam os oito exemplos. A gulosa gasta **seis folhas** para isso; escondendo `c` do algoritmo, quatro bastam. E note que "esconder `c`" não é uma opção disponível na vida real — se soubéssemos de antemão quais atributos atrapalham, não precisaríamos do algoritmo.
+As duas acertam os oito exemplos de treino. A gulosa gasta **seis folhas** para isso; escondendo `c` do algoritmo, quatro bastam. Em vez de acreditar na contagem, vale olhar:
 
-Uma árvore com mais folhas para o mesmo desempenho no treino é uma árvore que particionou os dados mais finamente sem necessidade, e essa é precisamente a receita para generalizar pior.
+```{python}
+#| label: juntando-guloso-imprime
+for nome, t in [("com a, b, c", guloso), ("só com a, b", enxuta)]:
+    print(f"--- {nome} ---")
+    imprime(t)
+```
+
+A árvore enxuta **é** a regra `a != b`, escrita como árvore, e nada mais. A gulosa começa perguntando `c`, que não tem relação nenhuma com o alvo, e a partir daí é obrigada a reconstruir a regra inteira **duas vezes**, uma dentro de cada ramo de `c` — e mesmo assim não termina o serviço, porque nem toda combinação de `(a, b)` apareceu dentro de cada ramo.
+
+Isso tem consequência medível, e ela não aparece no treino. Os oito exemplos não cobrem as oito combinações possíveis de `(a, b, c)`: algumas se repetem e duas nunca aparecem. Testando as duas árvores contra as oito, com o alvo verdadeiro `a != b`:
+
+```{python}
+#| label: juntando-guloso-oito
+import itertools
+
+todas = [Exemplo(a, b, c, a != b)
+         for a, b, c in itertools.product([0, 1], repeat=3)]
+
+for nome, t in [("com a, b, c", guloso), ("só com a, b", enxuta)]:
+    erros = [(d.a, d.b, d.c) for d in todas if classify(t, d) != d.alvo]
+    print(f"{nome:12s} acertos={8 - len(erros)}/8  erra em {erros}")
+```
+
+A enxuta acerta as oito. A gulosa erra duas — e são exatamente as duas que não estavam no treino. Ela decorou os ramos de `c` que viu e não tem o que dizer sobre os que não viu, que é o mecanismo do sobreajuste na sua forma mais nua.
+
+::: {.callout-warning}
+Uma árvore com mais folhas para o mesmo desempenho no treino é uma árvore que particionou os dados mais finamente sem necessidade, e essa é precisamente a receita para generalizar pior. Aqui o "pior" foi de 8/8 para 6/8, sobre um problema de três atributos binários.
+
+E note que "esconder `c`" não é uma opção disponível na vida real — se soubéssemos de antemão quais atributos atrapalham, não precisaríamos do algoritmo.
 :::
 
 ::: {.callout-important}
-Como o objetivo aqui era demonstrar **como** construir uma árvore, nós a construímos sobre o conjunto de dados inteiro. Como sempre, se estivéssemos realmente tentando criar um bom modelo para alguma coisa, teríamos coletado mais dados e os dividido em subconjuntos de treino, validação e teste — como a [seção 8.4](../cap08/04-correcao.qmd) insistiu.
+Como o objetivo aqui era demonstrar **como** construir uma árvore, nós a construímos sobre o conjunto de dados inteiro. Como sempre, se estivéssemos realmente tentando criar um bom modelo para alguma coisa, teríamos coletado mais dados e os dividido em subconjuntos de treino, validação e teste — como a [seção 8.3](../cap08/03-overfitting-e-underfitting.qmd) insistiu.
 
 Sem essa divisão, os `14/14` acima não medem absolutamente nada sobre a qualidade do modelo. Eles medem apenas que o algoritmo fez o que promete fazer: dividir até a pureza.
 :::

@@ -1,7 +1,13 @@
 # Cap. 15 — Redes Neurais: relatório de escrita
 
 **Status:** 5 arquivos escritos (`index` + 4 seções). Nenhum arquivo criado, renomeado ou apagado.
-Render e testes: ver no fim.
+
+**Verificação:** `render OK (tentativa 2)` no primeiro render. O aviso de edição concorrente
+apontou `cap14/06`, `cap17/06` e `cap17/index` — **nenhum arquivo do cap. 15**, então o `_freeze`
+deste capítulo é confiável. Conferi todas as saídas executadas dentro de
+`_freeze/content/cap15/*/execute-results/html.json` e abri as três figuras: cada número do texto
+bate com a saída, e cada figura mostra o que a prosa diz que ela mostra. Depois disso fiz três
+correções de precisão (ver "Correções pós-render") e rodei um segundo render + `make teste`.
 
 ## Números — todos medidos no container, nenhum de memória
 
@@ -45,6 +51,18 @@ Render e testes: ver no fim.
   desempacota exatamente dois) — que é a motivação direta do cap. 16.
 - Arco da interpretabilidade: anunciado no `index`, plantado no `.conceito` do fim da §3 (a rede
   achou os mesmos dois atributos em ordem trocada; soluções equivalentes) e fechado na §4.
+
+## Correções pós-render (minhas, na releitura)
+
+Três afirmações que eu tinha escrito e que a verificação não sustentava:
+
+1. **§1** dizia que, no XOR, "as correções da regra de treino se cancelam exatamente" — mecanismo
+   que eu não medi. Testei seis sementes: os pesos finais **variam** (`[[0,0]]`, `[[0,-1]]`,
+   `[[1,0]]`…), a acurácia dá **0,5 nas seis**. O texto agora afirma o que foi medido.
+2. **§4** dizia que no platô "cada alteração isolada piora a perda". Falso: a perda **cai**, de
+   ~597 (época 25) a ~589 (época 100) — o gradiente existe e aponta certo, só é minúsculo.
+   Reescrito com os números.
+3. **§2** o chunk da figura usava `dir` como nome de eixo, sombreando a builtin. Renomeado.
 
 ## O que ficou de fora, e por quê
 

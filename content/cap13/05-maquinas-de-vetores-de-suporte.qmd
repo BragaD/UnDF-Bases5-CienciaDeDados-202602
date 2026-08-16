@@ -15,7 +15,7 @@ plt.close('all')
 ```
 
 ::: {.callout-note}
-De novo o de sempre: kernel próprio, `beta` não atravessa páginas — a regra está no callout da [seção 13.3](03-aplicando-o-modelo.qmd). O bloco a seguir vem escondido pelo mesmo motivo da [seção 13.4](04-qualidade-do-ajuste.qmd): ele refaz o `rescale`, a divisão treino/teste e as mesmas 5.000 épocas daquela seção, e no fim desfaz a escala. A saída é o `beta_unscaled` da seção 13.3 — os coeficientes em anos e em reais, que é a forma de que precisamos para desenhar a fronteira no plano do gráfico.
+De novo o de sempre: kernel próprio, `beta` não atravessa páginas — a regra está no callout da [seção 13.3](03-aplicando-o-modelo.qmd). O bloco a seguir vem escondido pelo mesmo motivo da [seção 13.4](04-qualidade-do-ajuste.qmd): ele refaz o `rescale`, a divisão treino/teste e os mesmos 5.000 epochs daquela seção, e no fim desfaz a escala. A saída é o `beta_unscaled` da seção 13.3 — os coeficientes em anos e em reais, que é a forma de que precisamos para desenhar a fronteira no plano do gráfico.
 :::
 
 ```{python}
@@ -116,7 +116,7 @@ A pergunta que abre esta seção é: e se a fronteira fosse o pedido principal?
 Neste ponto @grus2019 escreve que o hiperplano corta o *espaço de parâmetros*. É um deslize, e vale desfazê-lo com cuidado, porque os dois espaços têm três dimensões neste problema e trocá-los é fácil.
 
 - O **espaço de atributos** é onde os dados moram: cada ponto é um usuário, $(1, \text{experiência}, \text{salário})$. É o plano da figura logo acima. A fronteira é o conjunto $\{\mathbf{x} : \beta \cdot \mathbf{x} = 0\}$ — um conjunto de **x**, portanto um objeto deste espaço.
-- O **espaço de parâmetros** é onde mora o $\beta$: cada ponto dele é um modelo candidato inteiro. Foi por ele que o gradiente descendente caminhou na [seção 13.3](03-aplicando-o-modelo.qmd) — as 5.000 épocas são uma trajetória aqui, não ali —, e é sobre ele que se desenha a superfície de perda do [Capítulo 5](../cap05/index.qmd).
+- O **espaço de parâmetros** é onde mora o $\beta$: cada ponto dele é um modelo candidato inteiro. Foi por ele que o gradiente descendente caminhou na [seção 13.3](03-aplicando-o-modelo.qmd) — os 5.000 epochs são uma trajetória aqui, não ali —, e é sobre ele que se desenha a superfície de perda do [Capítulo 5](../cap05/index.qmd).
 
 O que provavelmente gera o deslize é uma simetria real: $\beta \cdot \mathbf{x} = 0$ define um hiperplano nos **dois** espaços, dependendo de qual dos dois vetores você segura fixo. Com $\beta$ fixo e $\mathbf{x}$ variando, sai a fronteira de decisão. Com um $\mathbf{x}$ fixo e $\beta$ variando, sai o conjunto de todos os modelos que consideram aquele usuário exatamente limítrofe — um objeto legítimo e útil, mas que não é o que está desenhado no gráfico.
 
@@ -190,10 +190,10 @@ for epoch in range(1, max(marcos) + 1):
     if epoch in marcos:
         norma = math.sqrt(dot(beta_sep, beta_sep))
         perda = negative_log_likelihood(xs_sep, ys_sep, beta_sep)
-        print(f"época {epoch:>6}: |beta| = {norma:8.4f}   perda = {perda:.6f}")
+        print(f"epoch {epoch:>6}: |beta| = {norma:8.4f}   perda = {perda:.6f}")
 ```
 
-O comprimento de $\beta$ cresce sem parar e a perda desce em direção a zero sem nunca chegar. O gradiente descendente não "converge" aqui — ele apenas anda cada vez mais devagar, e para onde estava quando você mandou parar. **O modelo que você obtém é uma função de quantas épocas você teve paciência de rodar**, o que é uma forma desconfortável de escolher um modelo.
+O comprimento de $\beta$ cresce sem parar e a perda desce em direção a zero sem nunca chegar. O gradiente descendente não "converge" aqui — ele apenas anda cada vez mais devagar, e para onde estava quando você mandou parar. **O modelo que você obtém é uma função de quantos epochs você teve paciência de rodar**, o que é uma forma desconfortável de escolher um modelo.
 
 É por isso que o `LogisticRegression` do `scikit-learn` liga a regularização de fábrica, como o callout da [seção 13.3](03-aplicando-o-modelo.qmd) mencionou: a penalidade sobre o tamanho de $\beta$ é o que impede essa fuga para o infinito. A máquina de vetores de suporte não precisa desse remendo — o critério de margem já é uma restrição sobre o tamanho do vetor, embutida na definição do problema.
 :::
@@ -259,6 +259,9 @@ for marcador, classe in [('+', 1), ('.', 0)]:
                     marker=marcador, s=90)
 
 esquerda.set_yticks([])
+esquerda.set_ylim(-1, 1)
+esquerda.set_box_aspect(0.3)   # o painel da esquerda é uma reta, não um plano
+esquerda.set_anchor("N")
 esquerda.set_xlabel("x")
 esquerda.set_title("Uma dimensão: nenhum corte separa")
 
@@ -287,7 +290,7 @@ Usar máquinas de vetores de suporte sem depender de software de otimização es
 
 Três capítulos, uma escada, e o degrau de cima é este. A [seção 11.1](../cap11/01-o-modelo.qmd) ajustou uma reta com uma **fórmula fechada** — duas médias, uma covariância, uma variância, sem laço nenhum. O [Capítulo 12](../cap12/index.qmd) manteve a fórmula fechada existindo e parou de usá-la: a solução exata era um sistema linear que aquele capítulo escolheu não resolver, por escopo. Aqui ela não existe, e a promessa da [seção 5.5](../cap05/05-ajustando-modelos.qmd) foi cobrada — o gradiente descendente deixou de ser conveniência e virou a única via até um modelo. É assim no resto do livro.
 
-Há uma segunda herança, e ela só ficou visível na figura desta seção. Os três modelos da escada, mais a máquina de vetores de suporte, decidem todos comparando `dot(x, beta)` com um limiar — e produto escalar contra limiar é, sempre, um **hiperplano no espaço de atributos**. Uma reta, no nosso caso. Os 21 usuários do lado errado dela não estão lá por falta de épocas de treino: estão lá porque nenhuma reta os colocaria do lado certo. O truque do kernel é uma saída para isso, e uma saída cara — ele compra a curvatura trocando o espaço, sem abandonar o produto escalar, e paga com um custo que cresce entre o quadrado e o cubo do número de pontos, e com uma fronteira que ninguém mais consegue ler.
+Há uma segunda herança, e ela só ficou visível na figura desta seção. Os três modelos da escada, mais a máquina de vetores de suporte, decidem todos comparando `dot(x, beta)` com um limiar — e produto escalar contra limiar é, sempre, um **hiperplano no espaço de atributos**. Uma reta, no nosso caso. Os 21 usuários do lado errado dela não estão lá por falta de epochs de treino: estão lá porque nenhuma reta os colocaria do lado certo. O truque do kernel é uma saída para isso, e uma saída cara — ele compra a curvatura trocando o espaço, sem abandonar o produto escalar, e paga com um custo que cresce entre o quadrado e o cubo do número de pontos, e com uma fronteira que ninguém mais consegue ler.
 
 O [Capítulo 14](../cap14/index.qmd) chega à curvatura por um caminho que não tem nada disso. A árvore de decisão não tem produto escalar, não tem coeficiente, não tem gradiente e não tem ponto de partida aleatório; ela pergunta uma coisa de cada vez — "salário acima de 60.000?" — e a fronteira que sai é feita de degraus paralelos aos eixos. Uma consequência disso fecha justamente a lição da [seção 13.3](03-aplicando-o-modelo.qmd): para uma árvore, **medir salário em reais ou em desvios padrão é rigorosamente indiferente**. Reescalonar não muda uma única pergunta que ela faça, porque toda pergunta é sobre a **ordem** dos valores de uma coluna, e reescalonar preserva a ordem. O `ValueError` da primeira conta, a saturação em `float64`, a taxa de aprendizado que serve para uma coluna e não para a outra — nada disso existe no próximo capítulo. Some o problema inteiro, junto com o produto escalar que o criava.
 

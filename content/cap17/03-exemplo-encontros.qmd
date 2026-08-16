@@ -4,7 +4,168 @@
 Esta seção corresponde a *Example: Meetups*, do capítulo 20 de @grus2019.
 :::
 
+Para comemorar o crescimento da DataSciencester, a vice-presidente de Recompensas ao Usuário quer organizar encontros presenciais para os usuários da sua cidade, com cerveja, pizza e camisetas da empresa. Você conhece a localização de todos eles, e ela pede que você escolha locais de encontro que fiquem convenientes para todo mundo.
+
+As localizações estão em quarteirões a leste e ao norte do centro da cidade — um par de números por usuário, vinte usuários:
+
+```{python}
+#| label: pontos
+from typing import List
+from scratch.linear_algebra import Vector
+
+inputs: List[Vector] = [[-14, -5], [13, 13], [20, 23], [-19, -11], [-9, -16],
+                        [21, 27], [-49, 15], [26, 13], [-46, 5], [-34, -1],
+                        [11, 15], [-49, 0], [-22, -16], [19, 28], [-12, -8],
+                        [-13, -19], [-41, 8], [-11, -6], [-25, -9], [-18, -3]]
+
+len(inputs)
+```
+
+```{python}
+#| label: fig-localizacoes
+#| fig-cap: "As localizações dos usuários da sua cidade"
+from matplotlib import pyplot as plt
+
+xs, ys = zip(*inputs)
+
+plt.scatter(xs, ys, color="#333388")
+plt.title("Localizações dos usuários")
+plt.xlabel("quarteirões a leste do centro")
+plt.ylabel("quarteirões ao norte do centro")
+plt.axis([-60, 40, -30, 40])
+plt.show()
+```
+
+Dependendo de como você olha, vê dois ou três grupos. É fácil enxergar porque os dados têm duas dimensões e cabem num gráfico; com mais dimensões, seria bem mais difícil de julgar a olho — e é exatamente por isso que se escreve o algoritmo.
+
+::: {.callout-note}
+`KMeans` não é redefinido aqui: vem de `scratch.clustering`, o mesmo código da [seção anterior](02-o-modelo.qmd). Cada página deste livro roda num kernel próprio, então nomes definidos numa página não existem em outra — mas o pacote `scratch`, copiado literalmente do repositório do livro-texto, existe em todas.
+
+Importar `scratch.clustering` é seguro: ao contrário de alguns outros módulos do pacote, ele não desenha gráficos, não escreve arquivos e não faz asserções sobre dados aleatórios ao ser importado. Nada roda no corpo dele.
+:::
+
+## Três encontros
+
+Suponha primeiro que o orçamento dê para três encontros:
+
+```{python}
+#| label: treina-k3
+#| warning: false
+import random
+from scratch.clustering import KMeans
+
+random.seed(12)                    # para você obter o mesmo resultado
+clusterer = KMeans(k=3)
+clusterer.train(inputs)
+
+for media in sorted(clusterer.means):
+    print([round(coord, 2) for coord in media])
+```
+
+Três grupos, centrados em torno de [−43,8; 5,4], [−15,9; −10,3] e [18,3; 19,8]. É perto desses três pontos que se deve procurar um bar com espaço para o pessoal.
+
+```{python}
+#| label: fig-tres-grupos
+#| fig-cap: "Os usuários divididos em três grupos. O número preto marca o centro de cada um."
+#| warning: false
+from scratch.linear_algebra import vector_mean
+
+def desenha_grupos(grupos: List[List[Vector]], titulo: str) -> None:
+    for i, (grupo, marca, cor) in enumerate(zip(grupos, ['D', 'o', '*'],
+                                                ['r', 'g', 'b']), start=1):
+        xs, ys = zip(*grupo)
+        plt.scatter(xs, ys, color=cor, marker=marca)
+
+        # e um número no centro do grupo
+        x, y = vector_mean(grupo)
+        plt.plot(x, y, marker='$' + str(i) + '$', color='black')
+
+    plt.title(titulo)
+    plt.xlabel("quarteirões a leste do centro")
+    plt.ylabel("quarteirões ao norte do centro")
+    plt.axis([-60, 40, -30, 40])
+    plt.show()
+
+atribuicoes_3 = [clusterer.classify(ponto) for ponto in inputs]
+grupos_3 = [[p for p, a in zip(inputs, atribuicoes_3) if a == i] for i in range(3)]
+
+desenha_grupos(grupos_3, "Localizações -- 3 grupos")
+```
+
 ::: {.callout-warning}
-## Em construção
-O conteúdo desta seção ainda será escrito.
+## O centro do grupo não é um usuário
+
+Repare que os números pretos da figura caem em posições onde não há ponto nenhum. As médias são pontos do espaço, não elementos do conjunto de dados — e nada garante que exista um endereço utilizável ali.
+
+Achar um bar perto de [−15,9; −10,3] é trabalho de uma pessoa com um mapa. O algoritmo não sabe que existem ruas, nem que aquele quarteirão é um viaduto. Ele responde a uma pergunta geométrica; a pergunta original era logística, e a tradução de uma para a outra continua sendo humana.
+:::
+
+## Dois encontros
+
+Você mostra o resultado à vice-presidente, que informa que agora o orçamento só dá para **dois** encontros. Sem problema:
+
+```{python}
+#| label: treina-k2
+#| warning: false
+random.seed(0)
+clusterer_2 = KMeans(k=2)
+clusterer_2.train(inputs)
+
+for media in sorted(clusterer_2.means):
+    print([round(coord, 2) for coord in media])
+```
+
+Um dos encontros continua perto de [18,3; 19,8]; o outro passa a ficar em [−25,9; −4,7].
+
+```{python}
+#| label: fig-dois-grupos
+#| fig-cap: "Os mesmos usuários divididos em dois grupos"
+#| warning: false
+atribuicoes_2 = [clusterer_2.classify(ponto) for ponto in inputs]
+grupos_2 = [[p for p, a in zip(inputs, atribuicoes_2) if a == i] for i in range(2)]
+
+desenha_grupos(grupos_2, "Localizações -- 2 grupos")
+```
+
+Comparando as duas figuras, o grupo da direita ficou intacto e os dois da esquerda viraram um só. Dá para conferir isso sem depender do olho, verificando se cada grupo da solução com *k* = 3 cabe inteiro dentro de algum grupo da solução com *k* = 2:
+
+```{python}
+#| label: encaixe
+def encaixa(grupos_finos: List[List[Vector]],
+            grupos_grossos: List[List[Vector]]) -> bool:
+    """todo grupo fino está contido em algum grupo grosso?"""
+    grossos = [{tuple(p) for p in g} for g in grupos_grossos]
+    return all(any({tuple(p) for p in fino} <= grosso for grosso in grossos)
+               for fino in grupos_finos)
+
+encaixa(grupos_3, grupos_2)
+```
+
+::: {.callout-important}
+## Isso deu certo aqui, e não é uma garantia
+
+É tentador ler a figura acima como "*k* = 2 é a versão grossa de *k* = 3", como se aumentar *k* fosse sempre subdividir os grupos que já existiam. **Não é.**
+
+O k-means com *k* = 2 e o k-means com *k* = 3 são duas otimizações independentes, cada uma com a sua inicialização aleatória e o seu ótimo local. Nada no algoritmo obriga a solução de *k* + 1 a refinar a de *k*, e a [seção 17.5](05-exemplo-clustering-de-cores.qmd) mostra um caso real em que mudar apenas a semente — nem sequer o *k* — reorganiza os grupos por inteiro.
+
+Neste conjunto de vinte pontos, com estas duas sementes, o encaixe aconteceu. É um fato sobre estes dados, não sobre o método. O algoritmo que **garante** essa propriedade por construção existe, e é o da [seção 17.6](06-clustering-hierarquico.qmd).
+:::
+
+::: {.callout-tip collapse="true"}
+## Na prática: `scikit-learn`
+
+O mesmo experimento, com a biblioteca:
+
+```python
+from sklearn.cluster import KMeans
+
+modelo = KMeans(n_clusters=3, random_state=12).fit(inputs)
+modelo.cluster_centers_    # as três médias
+modelo.labels_             # o grupo de cada um dos 20 usuários
+modelo.inertia_            # a soma das distâncias ao quadrado
+```
+
+Os centros não saem idênticos aos nossos, e a razão é a mesma de sempre neste livro: a inicialização é diferente. O `scikit-learn` usa `k-means++` e roda o algoritmo dez vezes por padrão, ficando com o melhor resultado — enquanto o nosso `train` sorteia uma atribuição inicial uniforme e aceita o primeiro ótimo local que encontrar.
+
+Com vinte pontos em duas dimensões, essa diferença não aparece: os três grupos são separados o suficiente para que quase qualquer inicialização chegue lá. Ela começa a pesar quando os grupos se tocam, e vira o assunto principal quando os pontos são centenas de milhares — o caso da [seção 17.5](05-exemplo-clustering-de-cores.qmd).
 :::

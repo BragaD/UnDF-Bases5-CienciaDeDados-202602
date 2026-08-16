@@ -19,6 +19,8 @@ Nossa árvore vai consistir de **nós de decisão** (que fazem uma pergunta e no
 
 Note o passo 6: cada ramo continua com **um atributo a menos**. Um atributo já usado não é reperguntado dentro do próprio ramo — dentro dele, todo mundo tem o mesmo valor daquele atributo, então perguntar de novo não separaria nada.
 
+E note o que **não** está na lista: uma condição de parada. Os passos 1 e 2 param quando não sobrou dúvida ou quando não sobrou pergunta, e nenhum dos dois é um freio — os dois são o fim natural do crescimento. O jeito mais simples de conter uma árvore seria acrescentar um: profundidade máxima, mínimo de exemplos para dividir um nó, mínimo de exemplos numa folha. O ID3 não tem nenhum, e a [seção 14.6](06-florestas-aleatorias.qmd) vai atacar o mesmo problema por um caminho completamente diferente — e depois medir os dois.
+
 ## Guloso quer dizer o quê
 
 Esse é o que se chama de algoritmo **guloso**, porque a cada passo ele escolhe a opção imediatamente melhor.
@@ -33,14 +35,15 @@ Em compensação, o ID3 é fácil de entender e de implementar, o que faz dele u
 
 ## Percorrendo o algoritmo à mão
 
-Vamos executar esses passos manualmente sobre os dados dos candidatos. As funções e os dados são exatamente os da [seção anterior](03-a-entropia-de-uma-particao.qmd), então em vez de reescrevê-los importamos do pacote:
+A [seção anterior](03-a-entropia-de-uma-particao.qmd) já executou à mão os primeiros passos deste algoritmo sobre os dados dos candidatos: `level` venceu a disputa da raiz com 0,694 bit; o grupo `Mid` saiu puro e virou folha na hora, pelo passo 1; e o grupo `Senior` foi resolvido por `tweets`, com entropia exatamente zero. Falta o terceiro ramo — e é nele que aparece uma coisa que ainda não vimos.
+
+As funções e os dados são exatamente os de lá, então em vez de reescrevê-los importamos do pacote:
 
 ```{python}
 #| label: criando-import
 #| output: false
 from collections import Counter
-from scratch.decision_trees import (data_entropy, partition_by,
-                                    partition_entropy_by, inputs, senior_inputs)
+from scratch.decision_trees import (partition_by, partition_entropy_by, inputs)
 ```
 
 ::: {.callout-note}
@@ -54,42 +57,7 @@ for key in ['level','lang','tweets','phd']:
 Isso significa que **importar o módulo já imprime** as quatro entropias, com dezesseis casas decimais, antes de qualquer código nosso rodar. É um efeito colateral clássico de código escrito para ser lido de cima a baixo, e é a razão pela qual o pacote `scratch/` nunca é editado neste livro: a adaptação vive no `.qmd`, para que um `diff` contra o repositório original continue limpo.
 :::
 
-O conjunto tem rótulos `True` e `False` misturados, e quatro atributos disponíveis. O passo 1 e o passo 2 não se aplicam, então vamos ao passo 4: qual partição tem a menor entropia?
-
-```{python}
-#| label: criando-melhor-atributo
-atributos = ['level', 'lang', 'tweets', 'phd']
-
-for key in atributos:
-    print(f"{key:8s} {partition_entropy_by(inputs, key, 'did_well'):.6f}")
-
-melhor = min(atributos, key=lambda a: partition_entropy_by(inputs, a, 'did_well'))
-print(f"\nvencedor: {melhor}")
-```
-
-A menor entropia vem de dividir por `level`, então precisamos de uma subárvore para cada valor possível de `level`.
-
-```{python}
-#| label: criando-ramos-level
-for valor, grupo in partition_by(inputs, 'level').items():
-    rotulos = [c.did_well for c in grupo]
-    print(f"{valor:7s} n={len(grupo)}  {dict(Counter(rotulos))}  "
-          f"H={data_entropy(rotulos):.4f}")
-```
-
-**Todo candidato `Mid` está rotulado `True`.** Pelo passo 1, a subárvore de `Mid` é simplesmente uma folha que prevê `True`. Acabou aquele ramo.
-
-Para os `Senior` temos uma mistura de `True` e `False`, então é preciso dividir de novo. Restam três atributos — `level` já foi usado:
-
-```{python}
-#| label: criando-ramo-senior
-for key in ['lang', 'tweets', 'phd']:
-    print(f"{key:8s} {partition_entropy_by(senior_inputs, key, 'did_well'):.6f}")
-```
-
-A próxima divisão é por `tweets`, que resulta numa partição de entropia zero: para os candidatos de nível `Senior`, tuitar sempre resultou em `True` e não tuitar sempre resultou em `False`. Os dois ramos abaixo de `tweets` são folhas, pelo passo 1.
-
-Falta o ramo dos `Junior`:
+Os cinco juniores continuam misturados, então o passo 6 se aplica: repetimos tudo dentro do ramo, com os atributos que restaram. São três — `level` já foi gasto e não volta.
 
 ```{python}
 #| label: criando-ramo-junior
@@ -99,7 +67,7 @@ for key in ['lang', 'tweets', 'phd']:
     print(f"{key:8s} {partition_entropy_by(junior_inputs, key, 'did_well'):.6f}")
 ```
 
-Mesma coisa, por outro atributo: dividir os juniores por `phd` dá **0,000000**. Conferindo diretamente:
+Mesma coisa que aconteceu com os sêniores, por outro atributo: dividir os juniores por `phd` dá **0,000000**. Conferindo diretamente:
 
 ```{python}
 #| label: criando-junior-phd
@@ -108,7 +76,7 @@ for valor, grupo in partition_by(junior_inputs, 'phd').items():
           f"{dict(Counter(c.did_well for c in grupo))}")
 ```
 
-Nenhum doutorado sempre resultou em `True`, e doutorado sempre resultou em `False`. Os três ramos terminaram, e a árvore está completa:
+Entre os juniores, quem não tem doutorado se saiu bem — sempre; quem tem, se saiu mal — sempre. Os três ramos terminaram, e a árvore está completa:
 
 ```{python}
 #| label: fig-arvore-contratacao-manual
@@ -162,8 +130,14 @@ plt.show()
 
 Duas perguntas bastam para classificar qualquer candidato, e frequentemente uma só. Repare no que essa figura permite: você pode discordar dela. Pode dizer ao vice-presidente que a regra dos sêniores está apoiada em cinco pessoas, ou que `phd` prever fracasso entre juniores é provavelmente ruído. Não dá para fazer isso com um vetor de coeficientes ou com uma lista de vizinhos — é essa a moeda que a árvore paga a mais.
 
+## A pergunta que este ID3 não sabe fazer
+
+O `partition_by` da [seção 14.3](03-a-entropia-de-uma-particao.qmd) abre **um ramo por valor distinto** do atributo. Sobre `level`, isso dá três ramos e é exatamente o que se quer. Sobre uma coluna contínua — salário, temperatura, idade em dias —, dá um ramo por valor: duzentos salários diferentes viram duzentos ramos de um exemplo cada, todos de entropia zero. É a coluna de matrícula daquela seção outra vez, agora **sem que ninguém tenha acrescentado uma coluna boba**: basta a coluna ser contínua. É por isso que as implementações de verdade não perguntam "qual é o valor?", e sim "**o valor está acima de tal limiar?**" — `salário > 60.000?` —, escolhendo o limiar junto com o atributo, entre os cortes possíveis, pelo mesmo critério de entropia. Divisão binária, dois ramos, uma fatia grande dos dados em cada. É o que faz o CART, e é a diferença estrutural entre a árvore do `scikit-learn` e a nossa.
+
+Duas consequências disso valem registrar. A primeira separa a árvore de todos os modelos dos capítulos [11](../cap11/index.qmd) a [13](../cap13/index.qmd): como toda pergunta é sobre a **ordem** dos valores de uma coluna, e reescalonar preserva a ordem, **medir salário em reais ou em desvios padrão é rigorosamente indiferente para uma árvore**. Não há normalização a fazer, e a fronteira que sai é feita de degraus paralelos aos eixos, em vez do hiperplano inclinado que o produto escalar produzia. A segunda é menos confortável: a árvore que sabe perguntar por limiar também sabe tratar um atributo faltante — mandando o exemplo pelos dois lados, com peso — e a nossa não sabe nem uma coisa nem outra.
+
 ::: {.callout-tip collapse="true"}
-## Na prática: o que a biblioteca faz com a mesma gulodice
+## Na prática: a biblioteca é gulosa igual — e o que ela acrescenta
 
 O `DecisionTreeClassifier` do `scikit-learn` é guloso pelo mesmo motivo que o nosso: encontrar a árvore ótima é intratável. O que a biblioteca acrescenta não é busca, é **controle de crescimento** — porque a árvore que este capítulo constrói cresce até a pureza total, e isso é sobreajuste garantido:
 
@@ -171,7 +145,6 @@ O `DecisionTreeClassifier` do `scikit-learn` é guloso pelo mesmo motivo que o n
 from sklearn.tree import DecisionTreeClassifier
 
 DecisionTreeClassifier(
-    criterion='entropy',
     max_depth=3,          # não pergunte mais que 3 vezes
     min_samples_split=10, # não divida um nó com menos de 10 exemplos
     min_samples_leaf=5,   # não crie folha com menos de 5 exemplos
@@ -183,5 +156,5 @@ Os três primeiros são **pré-poda**: interrompem o crescimento antes que ele a
 
 O `ccp_alpha` é **pós-poda** (*minimal cost-complexity pruning*): cresce a árvore inteira e depois remove os ramos cujo ganho não compensa o tamanho, controlado por um parâmetro $\alpha$ que penaliza o número de folhas. É a mesma forma de regularização que a [seção 12.8](../cap12/08-regularizacao.qmd) aplicou aos coeficientes de uma regressão — penalizar a complexidade do modelo dentro do próprio critério de ajuste —, só que aqui a complexidade se conta em folhas em vez de em magnitude de parâmetros.
 
-O algoritmo deste capítulo não tem nenhum dos dois. Ele para apenas quando os rótulos ficam puros ou quando os atributos acabam, que são os passos 1 e 2 do ID3. A [seção 14.6](06-florestas-aleatorias.qmd) ataca o mesmo problema por um caminho completamente diferente: em vez de encolher a árvore, construir muitas árvores grandes e fazê-las votar.
+O algoritmo deste capítulo não tem nenhum dos dois. Ele para apenas quando os rótulos ficam puros ou quando os atributos acabam, que são os passos 1 e 2 do ID3. A [seção 14.6](06-florestas-aleatorias.qmd) ataca o mesmo problema por um caminho completamente diferente — em vez de encolher a árvore, construir muitas árvores grandes e fazê-las votar — e depois mede os dois caminhos lado a lado. O resultado não é o que se espera.
 :::

@@ -4,7 +4,208 @@
 Esta seção corresponde a *Example: Clustering Colors*, do capítulo 20 de @grus2019.
 :::
 
+O vice-presidente de Brindes desenhou uns adesivos bonitos da DataSciencester para distribuir nos encontros. O problema é a gráfica: a impressora de adesivos aceita no máximo **cinco cores** por peça. E como a vice-presidente de Arte está de licença, ele pergunta se você não teria um jeito de modificar o desenho para que ele use só cinco cores.
+
+Uma imagem é um arranjo bidimensional de pixels, e cada pixel é ele próprio um vetor de três dimensões — vermelho, verde e azul — que indica a cor. Fazer uma versão de cinco cores, então, é fazer duas coisas:
+
+1. Escolher cinco cores.
+2. Atribuir uma delas a cada pixel.
+
+Isso é exatamente k-means com *k* = 5, em três dimensões: agrupar os pixels no espaço RGB e depois pintar cada pixel com a cor média do grupo dele. Repare que a estrutura espacial da imagem — quem está do lado de quem — é jogada fora: o algoritmo vê uma sacola de pontos coloridos, não um desenho.
+
+## Carregando a imagem
+
+O `matplotlib` lê arquivos de imagem através da biblioteca `pillow`, que já está no ambiente deste livro:
+
+```{python}
+#| label: carrega-imagem
+import matplotlib.image as mpimg
+
+img = mpimg.imread("dados/imagem-cores.jpg") / 256   # reescala para [0, 1)
+
+altura, largura, canais = img.shape
+print(f"{largura} x {altura} pixels, {canais} canais por pixel")
+print(f"total: {altura * largura:,} pixels".replace(",", "."))
+```
+
+::: {.callout-important}
+## A imagem do livro-texto não está aqui
+
+O código-fonte do livro-texto aponta para um `girl_with_book.jpg` que o autor não distribui; o texto dele manda o leitor apontar para uma imagem qualquer que tenha à mão. Este livro precisa de algo que renderize igual em qualquer clone do repositório, então a imagem entra commitada, em `dados/imagem-cores.jpg`, e o caminho é a partir da raiz do projeto.
+
+A escolha é a *Composition II in Red, Blue, and Yellow* (1930), de Piet Mondrian, em domínio público. Não é uma escolha neutra, e vale dizer por quê: um quadro feito de campos chapados de cor primária é o caso mais favorável possível para o k-means. As cores da imagem já formam meia dúzia de amontoados apertados no espaço RGB, com quase nada entre eles — ou seja, os grupos existem *antes* do algoritmo, e a resposta é quase óbvia.
+
+Com uma fotografia comum, cheia de gradientes e sombras, não haveria amontoado nenhum: as cores preencheriam o espaço de forma contínua, o k-means dividiria esse contínuo em cinco fatias, e nenhum valor de *k* pareceria mais correto que os outros. Este exemplo é bonito porque é o caso fácil; a [seção anterior](04-escolhendo-k.qmd) é sobre o que fazer quando ele não é.
+:::
+
+Cada linha de `img` é uma linha de pixels, e cada pixel é um vetor de três números entre 0 e 1:
+
+```{python}
+#| label: primeiro-pixel
+primeira_linha = img[0]
+primeiro_pixel = primeira_linha[0]
+vermelho, verde, azul = primeiro_pixel
+
+[round(float(canal), 3) for canal in (vermelho, verde, azul)]
+```
+
+Por baixo, `img` é um array do `numpy` — é o que o `mpimg.imread` devolve. Nosso `KMeans` trabalha com listas de Python, então achatamos tudo numa lista única de pixels:
+
+```{python}
+#| label: achata
+# .tolist() converte um array do numpy numa lista de Python
+pixels = [pixel.tolist() for row in img for pixel in row]
+
+len(pixels), pixels[0]
+```
+
+## Cinco cores
+
+São 355.200 pontos em três dimensões — quatro ordens de grandeza a mais que os vinte usuários da seção anterior. Este é o único treino deste livro que demora o suficiente para a barra de progresso do `tqdm` fazer diferença de verdade:
+
+```{python}
+#| label: treina-cores
+#| warning: false
+import time
+import random
+from scratch.clustering import KMeans
+
+random.seed(0)
+
+inicio = time.time()
+clusterer = KMeans(5)
+clusterer.train(pixels)     # isso pode demorar
+print(f"treino concluído em {time.time() - inicio:.0f} s")
+```
+
+Cinco cores. Vale olhar não só quais são, mas quanto da imagem cada uma cobre:
+
+```{python}
+#| label: cores-e-tamanhos
+from collections import Counter
+
+atribuicoes = [clusterer.classify(pixel) for pixel in pixels]
+tamanhos = Counter(atribuicoes)
+
+for i, media in enumerate(clusterer.means):
+    rgb = [round(255 * canal) for canal in media]
+    fatia = 100 * tamanhos[i] / len(pixels)
+    print(f"{str(rgb):18s} {tamanhos[i]:>7} pixels   ({fatia:4.1f}%)")
+```
+
+Um azul, um vermelho, um bege, um preto e um branco, escritos na escala de 0 a 255 que costuma aparecer em editores de imagem. O vermelho sozinho ocupa metade da tela. Recolorir a imagem é trocar cada pixel pela média do grupo dele:
+
+```{python}
+#| label: fig-recolorida
+#| fig-cap: "À esquerda, o quadro original; à direita, a versão com as cinco cores escolhidas pelo k-means."
+from typing import List
+from scratch.linear_algebra import Vector
+from matplotlib import pyplot as plt
+
+def recolor(pixel: Vector) -> Vector:
+    cluster = clusterer.classify(pixel)     # índice do grupo mais próximo
+    return clusterer.means[cluster]         # média do grupo mais próximo
+
+nova_img = [[recolor(pixel) for pixel in row]   # recolore esta linha de pixels
+            for row in img]                     # para cada linha da imagem
+
+fig, ax = plt.subplots(1, 2, figsize=(9, 4.6))
+ax[0].imshow(img)
+ax[0].axis('off')
+ax[0].set_title("original")
+ax[1].imshow(nova_img)
+ax[1].axis('off')
+ax[1].set_title("5 cores")
+plt.show()
+```
+
+À primeira vista funcionou: o vermelho, o branco, o preto e o azul saíram limpos, os campos ficaram chapados, e o resultado é imprimível. Agora olhe o canto inferior direito.
+
+## O amarelo sumiu
+
+O quadro tem *Yellow* no título, e o bloco amarelo não sobreviveu — ele foi pintado com o mesmo bege da borda da tela. Isso não é defeito de implementação; é o k-means fazendo exatamente o que se pediu.
+
+```{python}
+#| label: amarelo
+from scratch.linear_algebra import squared_distance
+
+amarelo = img[545][560].tolist()     # um pixel dentro do bloco amarelo
+print("cor do pixel: ", [round(255 * canal) for canal in amarelo])
+
+grupo = clusterer.classify(amarelo)
+print("caiu no grupo:", [round(255 * canal) for canal in clusterer.means[grupo]])
+
+parecidos = sum(1 for p in pixels if squared_distance(p, amarelo) < 0.01)
+print(f"pixels dessa cor: {parecidos} ({100 * parecidos / len(pixels):.2f}% da imagem)")
+```
+
 ::: {.callout-warning}
-## Em construção
-O conteúdo desta seção ainda será escrito.
+## Uma cor rara é uma cor barata de sacrificar
+
+Menos de 1% dos pixels são amarelos. O que o k-means minimiza é a soma dos erros ao quadrado sobre **todos** os pixels, e nessa conta os poucos milhares de pixels amarelos pesam menos que uma melhora minúscula espalhada pelos 177 mil pixels vermelhos. Gastar um dos cinco grupos no amarelo *piora* o objetivo.
+
+Ou seja: o algoritmo não errou. Ele otimizou a métrica que recebeu, e a métrica não sabe que "amarelo" é uma das três cores do título do quadro. Essa informação existe, mas é sua, não dos dados.
+
+Este é o mesmo aviso do [Capítulo 8](../cap08/index.qmd) numa roupa nova. Lá, um modelo com boa acurácia podia ser inútil porque a classe que interessava era rara — e a acurácia, sendo uma média sobre todos os exemplos, não a enxergava. Aqui a classe rara é uma cor, e o efeito é idêntico: **uma média sobre o conjunto inteiro é cega para o que é raro, por mais importante que seja.**
+
+Se o amarelo importasse, as saídas seriam aumentar *k*, ponderar os pixels por alguma noção de importância, ou simplesmente fixar o amarelo à mão e deixar o k-means escolher as outras quatro cores. Nenhuma delas é o algoritmo se corrigindo; todas são uma pessoa recolocando a informação que a métrica não tinha.
+:::
+
+## A mesma pergunta, outra resposta
+
+A [seção 17.2](02-o-modelo.qmd) afirmou que o k-means converge sempre, mas para um ótimo local que depende da inicialização. Com vinte pontos bem separados, isso era teoria. Com 355.200 pixels, fica visível. Basta trocar a semente — mesmos dados, mesmo *k*, mesmo código:
+
+```{python}
+#| label: treina-outra-semente
+#| warning: false
+random.seed(1)
+outro = KMeans(5)
+outro.train(pixels)
+
+for media in outro.means:
+    print([round(255 * canal) for canal in media])
+```
+
+```{python}
+#| label: fig-outra-semente
+#| fig-cap: "O mesmo k-means, com k = 5, sobre os mesmos 355.200 pixels — mudando apenas a semente do gerador aleatório."
+outra_img = [[outro.means[outro.classify(pixel)] for pixel in row]
+             for row in img]
+
+plt.figure(figsize=(4.8, 4.8))
+plt.imshow(outra_img)
+plt.axis('off')
+plt.title("5 cores, semente 1")
+plt.show()
+```
+
+::: {.callout-important}
+## O que aconteceu com esta execução
+
+Compare as duas listas de cores. A segunda execução gastou **dois** dos cinco grupos em vermelhos quase idênticos — uma diferença de umas poucas unidades em cada canal, que o olho não distingue — e, para pagar por isso, fundiu o azul e o preto num único azul-marinho escuro.
+
+O efeito na figura é claro: o bloco azul do canto inferior esquerdo e as linhas pretas do quadro viraram a mesma cor. Uma das três cores do título desapareceu, agora por outro motivo; e a divisão do vermelho em dois tons imperceptíveis desperdiçou metade do orçamento de cores da gráfica.
+
+Nada disso é aleatório no sentido de "sem explicação". É um ótimo local: a partir daquelas atribuições iniciais, nenhum dos dois passos do algoritmo consegue mover um único ponto de forma a melhorar o erro. O algoritmo terminou corretamente, no lugar errado.
+
+A moral operacional é curta: **com k-means, uma execução não é um resultado.** Rode várias vezes, com inicializações diferentes, e compare — que é precisamente o que a opção `n_init` do `scikit-learn` faz por você.
+:::
+
+::: {.callout-tip collapse="true"}
+## Na prática: `scikit-learn`
+
+O mesmo trabalho, com a biblioteca:
+
+```python
+from sklearn.cluster import KMeans
+
+modelo = KMeans(n_clusters=5, n_init=10, random_state=0).fit(pixels)
+nova = modelo.cluster_centers_[modelo.labels_].reshape(img.shape)
+```
+
+Duas linhas, e uma fração do tempo que o nosso treino imprimiu acima. A diferença de velocidade aqui é real e grande, porque o `scikit-learn` faz as contas em `numpy` compilado, sobre a matriz inteira de uma vez, enquanto o nosso código percorre 355.200 listas de três elementos em Python puro, uma a uma, a cada iteração. Esse é o preço da transparência que este livro escolheu pagar, e este é o capítulo em que ele fica mais caro.
+
+Para imagens grandes existe ainda o `MiniBatchKMeans`, que a cada iteração atualiza as médias usando só uma amostra dos pontos — a mesma ideia do gradiente estocástico da [seção 5.6](../cap05/06-minibatch-e-estocastico.qmd), aplicada a um algoritmo que não tem gradiente. Ele converge para um resultado um pouco pior e muito mais depressa.
+
+Fora do mundo do aprendizado de máquina, aliás, o problema tem nome próprio e soluções antigas: reduzir uma imagem a *n* cores se chama **quantização de cor**, e `PIL.Image.quantize(colors=5)` faz isso com algoritmos desenhados especificamente para o caso — mediana de cortes, octree — que costumam preservar melhor as cores raras, justamente porque não minimizam uma média sobre todos os pixels.
 :::

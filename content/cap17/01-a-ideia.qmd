@@ -4,7 +4,84 @@
 Esta seção corresponde a *The Idea*, do capítulo 20 de @grus2019.
 :::
 
+Todos os modelos que você construiu até aqui tinham uma resposta certa em algum lugar. A flor era *setosa*, *versicolor* ou *virginica*. O e-mail era spam ou não era. O usuário passava tantos minutos por dia no site. O dígito escrito à mão era um 7. Em cada caso, alguém — um botânico, um usuário que apertou "marcar como spam", um relógio, uma pessoa que olhou a imagem e digitou o número — já tinha respondido à pergunta antes, e o modelo aprendeu a imitar essa resposta.
+
+Este capítulo é o único do livro em que ninguém respondeu nada.
+
+::: {.callout-important}
+## O que sai de cena
+
+O [Capítulo 8](../cap08/index.qmd) construiu o vocabulário com que este livro julga um modelo: dividir treino e teste, medir acurácia, precisão e revocação, desconfiar de um ajuste bom demais. Todo esse vocabulário depende de uma coisa só — a existência de uma resposta correta contra a qual comparar a previsão.
+
+Aqui não há uma. Não há rótulo, portanto não há acerto; não há acerto, portanto não há acurácia, matriz de confusão nem R². E não há conjunto de teste, porque "generalizar para dados que o modelo não viu" pressupõe que exista algo a acertar neles.
+
+A pergunta muda de forma. Ela deixa de ser *o modelo acerta?* e passa a ser **o agrupamento é útil?** — e a resposta a essa depende inteiramente do que você vai fazer com o agrupamento depois.
+:::
+
+Modelos que aprendem a partir de dados rotulados se chamam **supervisionados**; a [seção 8.2](../cap08/02-o-que-e-machine-learning.qmd) já usou o termo. Clustering é o exemplo deste livro do outro tipo: **não supervisionado**, em que se trabalha com dados completamente sem rótulo — ou em que os rótulos existem e nós os ignoramos de propósito.
+
+## Os grupos estão no dado
+
+A observação que sustenta o capítulo inteiro é simples: sempre que você olha para uma fonte de dados, é provável que ela forme **grupos** por conta própria.
+
+Um cadastro com o endereço de pessoas muito ricas de uma cidade não espalha os pontos uniformemente pelo mapa — há concentrações em alguns bairros e quase ninguém em outros. Um conjunto com quantas horas por semana cada pessoa trabalha tem um amontoado enorme em torno de 40. Um cadastro de eleitores com idade, renda e composição familiar forma agrupamentos que consultores políticos reconhecem e batizam: "mães de família da periferia", "aposentados sem filhos em casa", "jovens sem emprego formal".
+
+Nenhum desses grupos foi colocado ali por um algoritmo. Eles são propriedade do fenômeno que gerou os dados. O que um algoritmo de clustering faz é **encontrá-los**.
+
+Vale ver isso acontecendo com números. Suponha que uma pesquisa de emprego tenha coletado a jornada semanal de mil pessoas, num país onde a lei obriga o empregador a conceder certos benefícios a quem trabalha 20 horas por semana ou mais:
+
+```{python}
+#| label: fig-horas-trabalhadas
+#| fig-cap: "Jornada semanal de mil pessoas. Os dois grupos não foram desenhados: eles são o que sobra depois que a lei e o costume agiram sobre as jornadas."
+import random
+from matplotlib import pyplot as plt
+
+random.seed(17)
+
+# a maioria trabalha em tempo integral, perto de 40 horas
+horas = [random.gauss(40, 3) for _ in range(800)]
+# e uma minoria trabalha logo abaixo do limite que gera direito a benefícios
+horas += [random.gauss(19.5, 1.2) for _ in range(200)]
+
+plt.hist(horas, bins=40, color="#4477aa", edgecolor="white")
+plt.xlabel("horas trabalhadas por semana")
+plt.ylabel("nº de pessoas")
+plt.title("Ninguém disse ao histograma onde estão os grupos")
+plt.show()
+```
+
+Os dados acima são inventados, mas o formato não é: o segundo amontoado, logo *abaixo* das 20 horas, é o que se espera de um empregador que evita cruzar o limite legal. Repare que o gráfico não recebeu nenhuma informação sobre grupos. Ele recebeu mil números e desenhou onde eles caem — e os dois montes apareceram sozinhos.
+
+## Não existe o agrupamento correto
+
+Em uma dimensão, como no histograma acima, o olho resolve. Em duas, também. O problema começa em dez, ou em três mil, e é aí que se precisa de um algoritmo. Mas o algoritmo herda uma dificuldade que já estava no problema, e não vai embora:
+
+::: {.conceito}
+**Em geral, não existe um agrupamento "correto".**
+
+O esquema que separa "jovens sem emprego formal" de "estudantes de pós-graduação" e o esquema que os junta num grupo só não são um certo e o outro errado. Cada um é mais adequado *segundo a própria métrica* de quão bons são os grupos.
+
+E "quão bons são os grupos" é uma escolha de quem modela, não um fato do conjunto de dados. Nos dezesseis capítulos anteriores, a métrica de sucesso vinha de fora, junto com os rótulos. Aqui ela vem de você.
+:::
+
+Há uma segunda consequência, mais prática e igualmente inconveniente: **os grupos não se rotulam sozinhos**. O algoritmo devolve "grupo 0", "grupo 1", "grupo 2". Quem descobre que o grupo 1 é "quem compra só na promoção" é uma pessoa, olhando os dados que caíram dentro dele. Essa etapa não é opcional e não é automatizável — é a diferença entre uma partição e uma descoberta.
+
 ::: {.callout-warning}
-## Em construção
-O conteúdo desta seção ainda será escrito.
+## Dois `k` que não têm nada a ver um com o outro
+
+O algoritmo desta seção se chama **k-means**, e o do [Capítulo 9](../cap09/index.qmd) se chamava **k-vizinhos mais próximos**. Os dois têm um `k` no nome, usam distância euclidiana e param por aí.
+
+No k-vizinhos, `k` é *quantos vizinhos votam* na classificação de um ponto novo, e o modelo é supervisionado. No k-means, `k` é *quantos grupos existem*, e não há nada a classificar porque não há classe. Confundir os dois é um erro comum e caro; a semelhança está no nome, não na ideia.
+:::
+
+::: {.callout-tip collapse="true"}
+## Na prática: o que se faz com isso
+
+Sem rótulo e sem métrica externa, é justo perguntar para que serve. Os usos mais comuns:
+
+- **Segmentação.** Uma empresa com milhões de clientes e nenhuma etiqueta neles agrupa por comportamento de compra e trata cada grupo de um jeito. O critério de sucesso não é interno ao algoritmo: é se a campanha desenhada para o grupo 2 vendeu mais que a campanha genérica.
+- **Compressão e quantização.** Substituir cada ponto pelo centro do grupo dele reduz drasticamente o número de valores distintos. É exatamente o que a [seção 17.5](05-exemplo-clustering-de-cores.qmd) vai fazer com as cores de uma imagem.
+- **Exploração.** Antes de ter hipótese nenhuma, agrupar e olhar o que caiu junto é uma forma barata de descobrir que os dados têm estrutura — ou de descobrir que o "grupo" mais nítido é, na verdade, um defeito de coleta.
+
+O `scikit-learn` reúne isso em `sklearn.cluster`, com uma dúzia de algoritmos diferentes. Vale saber desde já que a lista é longa **porque** não existe resposta certa: cada algoritmo carrega uma definição diferente de "grupo" — bolas compactas, regiões densas, cadeias conectadas — e devolve respostas diferentes sobre os mesmos dados. As seções seguintes constroem dois deles e mostram, lado a lado, o quanto discordam.
 :::
