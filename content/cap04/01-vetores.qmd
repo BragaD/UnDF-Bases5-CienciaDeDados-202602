@@ -4,7 +4,307 @@
 Esta seção corresponde a *Vectors*, do capítulo 4 de @grus2019.
 :::
 
-::: {.callout-warning}
-## Em construção
-O conteúdo desta seção ainda será escrito.
+Abstratamente, **vetores** são objetos que podem ser somados entre si para formar novos vetores, e que podem ser multiplicados por *escalares* — números — também para formar novos vetores.
+
+Concretamente, para os nossos fins, vetores são pontos em algum espaço de dimensão finita. Você pode não pensar nos seus dados como vetores, mas essa costuma ser uma forma útil de representar dado numérico.
+
+Se você tem altura, peso e idade de muitas pessoas, pode tratar cada pessoa como um vetor de três dimensões, `[altura, peso, idade]`. Se você dá uma disciplina com quatro provas, pode tratar cada aluno como um vetor de quatro dimensões, `[prova1, prova2, prova3, prova4]`.
+
+A abordagem mais simples, construindo do zero, é representar vetores como listas de números. Uma lista de três números corresponde a um vetor no espaço tridimensional, e vice-versa.
+
+Fazemos isso com um *alias* de tipo, dizendo que um `Vector` é apenas uma lista de `float`:
+
+```{python}
+#| label: alias-vector
+from typing import List
+
+Vector = List[float]
+
+height_weight_age = [70,   # polegadas
+                     170,  # libras
+                     40]   # anos
+
+grades = [95,   # prova1
+          80,   # prova2
+          75,   # prova3
+          62]   # prova4
+
+height_weight_age, grades
+```
+
+::: {.conceito}
+`Vector = List[float]` não cria um tipo novo. É um **apelido**: em tempo de execução, um `Vector` *é* uma lista comum, com todos os métodos de lista e nenhuma restrição adicional.
+
+O que ele muda é a legibilidade. Uma função declarada como `def dot(v: Vector, w: Vector) -> float` diz o que faz antes de você ler o corpo — e é essa mesma anotação que um verificador de tipos usa para acusar erro sem executar nada.
+
+Este é o primeiro exemplo de um hábito que atravessa o livro inteiro: **o código do @grus2019 anota tipos em 168 das suas 259 funções.** Vale se acostumar.
+:::
+
+## Aritmética componente a componente
+
+Vamos precisar fazer aritmética com vetores. Como listas de Python não são vetores — e portanto não oferecem nenhuma facilidade aritmética —, temos que construir essas ferramentas nós mesmos.
+
+Começando pela soma. Vetores somam **componente a componente**: se dois vetores `v` e `w` têm o mesmo comprimento, a soma deles é o vetor cujo primeiro elemento é `v[0] + w[0]`, cujo segundo é `v[1] + w[1]`, e assim por diante. Se não têm o mesmo comprimento, não é permitido somá-los.
+
+Somar `[1, 2]` e `[2, 1]` resulta em `[1 + 2, 2 + 1]`, ou seja, `[3, 3]`.
+
+Dá para implementar isso facilmente com `zip` e uma compreensão de lista:
+
+```{python}
+#| label: add
+def add(v: Vector, w: Vector) -> Vector:
+    """Soma os elementos correspondentes"""
+    assert len(v) == len(w), "vectors must be the same length"
+
+    return [v_i + w_i for v_i, w_i in zip(v, w)]
+
+assert add([1, 2, 3], [4, 5, 6]) == [5, 7, 9]
+
+add([1, 2, 3], [4, 5, 6])
+```
+
+::: {.callout-important}
+## O `assert` é a documentação deste livro
+
+Repare que a função tem duas linhas de `assert` com papéis completamente diferentes.
+
+O de dentro, `assert len(v) == len(w)`, é uma **verificação de contrato**: ele roda toda vez que a função é chamada e falha alto se alguém passar vetores de tamanhos diferentes. Sem ele, o `zip` truncaria em silêncio no menor dos dois, e você receberia um vetor mais curto sem qualquer aviso — que é bem pior do que um erro.
+
+O de fora, `assert add([1, 2, 3], [4, 5, 6]) == [5, 7, 9]`, é um **exemplo executável**. Ele mostra o que a função faz melhor do que uma frase, e não pode envelhecer: se alguém quebrar a `add`, a linha falha na hora em que o módulo é importado.
+
+O livro-texto usa esse padrão **417 vezes**. Não é enfeite — é como ele afirma o que cada função faz.
+:::
+
+Subtrair funciona do mesmo jeito:
+
+```{python}
+#| label: subtract
+def subtract(v: Vector, w: Vector) -> Vector:
+    """Subtrai os elementos correspondentes"""
+    assert len(v) == len(w), "vectors must be the same length"
+
+    return [v_i - w_i for v_i, w_i in zip(v, w)]
+
+assert subtract([5, 7, 9], [4, 5, 6]) == [1, 2, 3]
+
+subtract([5, 7, 9], [4, 5, 6])
+```
+
+Às vezes vamos querer somar uma **lista** de vetores componente a componente — criar um novo vetor cujo primeiro elemento é a soma de todos os primeiros elementos, cujo segundo é a soma de todos os segundos, e assim por diante:
+
+```{python}
+#| label: vector-sum
+def vector_sum(vectors: List[Vector]) -> Vector:
+    """Soma todos os elementos correspondentes"""
+    # Verifica que vectors não está vazio
+    assert vectors, "no vectors provided!"
+
+    # Verifica que os vetores têm todos o mesmo tamanho
+    num_elements = len(vectors[0])
+    assert all(len(v) == num_elements for v in vectors), "different sizes!"
+
+    # o i-ésimo elemento do resultado é a soma de todo vector[i]
+    return [sum(vector[i] for vector in vectors)
+            for i in range(num_elements)]
+
+assert vector_sum([[1, 2], [3, 4], [5, 6], [7, 8]]) == [16, 20]
+
+vector_sum([[1, 2], [3, 4], [5, 6], [7, 8]])
+```
+
+Também vamos precisar multiplicar um vetor por um escalar, o que fazemos simplesmente multiplicando cada elemento por esse número:
+
+```{python}
+#| label: scalar-multiply
+def scalar_multiply(c: float, v: Vector) -> Vector:
+    """Multiplica cada elemento por c"""
+    return [c * v_i for v_i in v]
+
+assert scalar_multiply(2, [1, 2, 3]) == [2, 4, 6]
+
+scalar_multiply(2, [1, 2, 3])
+```
+
+Com essas duas peças, calcular a **média componente a componente** de uma lista de vetores do mesmo tamanho sai de graça:
+
+```{python}
+#| label: vector-mean
+def vector_mean(vectors: List[Vector]) -> Vector:
+    """Calcula a média elemento a elemento"""
+    n = len(vectors)
+    return scalar_multiply(1/n, vector_sum(vectors))
+
+assert vector_mean([[1, 2], [3, 4], [5, 6]]) == [3, 4]
+
+vector_mean([[1, 2], [3, 4], [5, 6]])
+```
+
+::: {.exemplo}
+`vector_mean` é o **centroide** de um conjunto de pontos — a posição média deles no espaço.
+
+Guarde essa função. Ela é o coração do algoritmo de k-means, no [Capítulo 17](../cap17/index.qmd): agrupar pontos e recalcular o centro de cada grupo é, literalmente, chamar `vector_mean` repetidas vezes.
+:::
+
+## O produto escalar
+
+Uma ferramenta menos óbvia é o **produto escalar** (*dot product*). O produto escalar de dois vetores é a soma dos produtos componente a componente:
+
+```{python}
+#| label: dot
+def dot(v: Vector, w: Vector) -> float:
+    """Calcula v_1 * w_1 + ... + v_n * w_n"""
+    assert len(v) == len(w), "vectors must be same length"
+
+    return sum(v_i * w_i for v_i, w_i in zip(v, w))
+
+assert dot([1, 2, 3], [4, 5, 6]) == 32  # 1 * 4 + 2 * 5 + 3 * 6
+
+dot([1, 2, 3], [4, 5, 6])
+```
+
+Duas linhas de código. É a função mais usada do livro inteiro.
+
+Mas o que ela **mede**? Essa é a parte que importa, e é a que costuma ficar de fora quando se aprende a chamar a função pronta.
+
+::: {.conceito}
+Se `w` tem magnitude 1, o produto escalar `dot(v, w)` mede **o quanto o vetor `v` se estende na direção de `w`**.
+
+Por exemplo, se `w = [1, 0]`, então `dot(v, w)` é simplesmente a primeira componente de `v`. Outra forma de dizer a mesma coisa: é o comprimento do vetor que você obteria **projetando** `v` sobre `w`.
+:::
+
+```{python}
+#| label: fig-projecao
+#| fig-cap: "O produto escalar como projeção: `dot(v, w)` mede o quanto `v` avança na direção de `w`"
+#| echo: false
+import math
+from matplotlib import pyplot as plt
+
+v = [2.0, 1.0]
+w = [0.5, 1.0]
+
+# w normalizado, e a projeção de v sobre essa direção
+mag_w = math.sqrt(w[0]**2 + w[1]**2)
+u = [w[0] / mag_w, w[1] / mag_w]
+escala = v[0] * u[0] + v[1] * u[1]          # dot(v, u)
+proj = [escala * u[0], escala * u[1]]
+
+fig, ax = plt.subplots(figsize=(6, 4))
+ax.annotate("", xy=v, xytext=(0, 0),
+            arrowprops=dict(arrowstyle="-|>", lw=2, color="#1f4e79"))
+ax.annotate("", xy=w, xytext=(0, 0),
+            arrowprops=dict(arrowstyle="-|>", lw=2, color="#1f4e79"))
+ax.annotate("", xy=proj, xytext=(0, 0),
+            arrowprops=dict(arrowstyle="-|>", lw=2, color="#c00000"))
+ax.plot([v[0], proj[0]], [v[1], proj[1]], ls=":", color="0.4")
+
+ax.text(v[0] + 0.06, v[1], "v", fontsize=12)
+ax.text(w[0] + 0.06, w[1], "w", fontsize=12)
+ax.text(proj[0] - 0.30, proj[1] + 0.10, "projeção de v em w", fontsize=9, color="#c00000")
+
+ax.set_xlim(-0.3, 2.6)
+ax.set_ylim(-0.3, 1.8)
+ax.set_aspect("equal")
+ax.spines[["top", "right"]].set_visible(False)
+plt.tight_layout()
+plt.show()
+```
+
+Usando o produto escalar, fica fácil calcular a **soma dos quadrados** de um vetor:
+
+```{python}
+#| label: sum-of-squares
+def sum_of_squares(v: Vector) -> float:
+    """Retorna v_1 * v_1 + ... + v_n * v_n"""
+    return dot(v, v)
+
+assert sum_of_squares([1, 2, 3]) == 14  # 1 * 1 + 2 * 2 + 3 * 3
+
+sum_of_squares([1, 2, 3])
+```
+
+E, com ela, a **magnitude** (ou comprimento) do vetor:
+
+```{python}
+#| label: magnitude
+import math
+
+def magnitude(v: Vector) -> float:
+    """Retorna a magnitude (ou comprimento) de v"""
+    return math.sqrt(sum_of_squares(v))   # math.sqrt é a raiz quadrada
+
+assert magnitude([3, 4]) == 5
+
+magnitude([3, 4])
+```
+
+::: {.exemplo}
+`magnitude([3, 4]) == 5` é o triângulo 3-4-5 do teorema de Pitágoras, que você viu no ensino médio.
+
+Não é coincidência: a magnitude de um vetor **é** a hipotenusa, generalizada para qualquer número de dimensões. Toda vez que este livro medir "quão longe" ou "quão grande", vai ser esta conta.
+:::
+
+## Distância
+
+Agora temos todas as peças para calcular a distância entre dois vetores, definida como:
+
+$$\sqrt{(v_1 - w_1)^2 + \dots + (v_n - w_n)^2}$$
+
+Em código:
+
+```{python}
+#| label: distancia
+def squared_distance(v: Vector, w: Vector) -> float:
+    """Calcula (v_1 - w_1) ** 2 + ... + (v_n - w_n) ** 2"""
+    return sum_of_squares(subtract(v, w))
+
+def distance(v: Vector, w: Vector) -> float:
+    """Calcula a distância entre v e w"""
+    return math.sqrt(squared_distance(v, w))
+
+distance([1, 2, 3], [4, 5, 6])
+```
+
+Talvez fique mais claro escrita assim — é a mesma função:
+
+```{python}
+#| label: distancia-alternativa
+def distance(v: Vector, w: Vector) -> float:
+    return magnitude(subtract(v, w))
+
+distance([1, 2, 3], [4, 5, 6])
+```
+
+::: {.conceito}
+Compare as duas versões. A primeira diz *como calcular*: subtraia, eleve ao quadrado, some, tire a raiz. A segunda diz *o que é*: **a distância entre dois pontos é a magnitude da diferença entre eles**.
+
+As duas produzem exatamente o mesmo número. A segunda é preferível não por ser mais curta, mas porque nomeia a ideia — e ideias com nome são as que você reconhece quando reaparecem.
+:::
+
+Isso é o bastante para começar. Estas funções vão ser usadas intensamente pelo resto do livro.
+
+::: {.callout-tip collapse="true"}
+## Na prática: NumPy — e por que não o usamos aqui
+
+Tudo o que você construiu nesta seção existe pronto, mais rápido e mais completo:
+
+```python
+import numpy as np
+
+v = np.array([1, 2, 3])
+w = np.array([4, 5, 6])
+
+v + w                      # add
+v - w                      # subtract
+2 * v                      # scalar_multiply
+np.mean([v, w], axis=0)    # vector_mean
+v @ w                      # dot
+np.linalg.norm(v)          # magnitude
+np.linalg.norm(v - w)      # distance
+```
+
+A diferença de desempenho não é pequena: o NumPy guarda os números num bloco contíguo de memória e executa as operações em código compilado e vetorizado, enquanto a nossa lista de `float` é um vetor de ponteiros para objetos Python, percorrido um por um pelo interpretador. Em vetores grandes, a diferença é de ordens de grandeza.
+
+**O autor do livro-texto diz isso explicitamente**, no meio deste mesmo capítulo: usar listas como vetores é ótimo para exposição e péssimo para desempenho, e em código de produção você deve usar o NumPy. E encerra o capítulo observando que toda essa maquinaria vem de graça com a biblioteca.
+
+Então a regra deste livro — nada de NumPy — não é uma opinião sobre engenharia. É uma escolha sobre **ordem de aprendizado**. `v @ w` devolve um número; ele não lhe diz que aquele número mede projeção, nem que ele vira zero quando os vetores são perpendiculares, nem por que ele aparece no meio de uma rede neural. Depois desta seção, você olha `v @ w` e enxerga a soma dos produtos.
 :::

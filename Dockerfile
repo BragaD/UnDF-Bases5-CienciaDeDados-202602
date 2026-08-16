@@ -32,6 +32,21 @@ WORKDIR /livro
 COPY pyproject.toml uv.lock .python-version ./
 RUN uv sync --frozen --no-cache
 
+# Determinismo do hash de strings. Sem isto, a ordem de iteração de um `set`
+# varia a cada processo — e `scratch/naive_bayes.py:113` tem, no nível do módulo,
+# um `assert` de igualdade EXATA de float sobre uma soma que percorre um Set[str].
+# Soma de ponto flutuante não é associativa, então a ordem muda o último bit e o
+# assert falha. Medido neste container: 2 de 15 sementes falham no import; com
+# PYTHONHASHSEED=0, 15 de 15 passam.
+#
+# A correção fica AQUI, e não em scratch/, porque aquele pacote é vendorizado
+# literalmente e nunca editado. Isto é propriedade do ambiente, e combina com a
+# postura do livro — semente explícita em todo chunk estocástico.
+#
+# Fica depois do `uv sync` de propósito: assim mexer nesta linha não invalida as
+# camadas caras de apt-get, Quarto e dependências.
+ENV PYTHONHASHSEED=0
+
 EXPOSE 4201
 
 CMD ["quarto", "preview", "--host", "0.0.0.0", "--port", "4201", "--no-browser"]

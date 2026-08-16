@@ -4,7 +4,225 @@
 Esta seção corresponde a *Matrices*, do capítulo 4 de @grus2019.
 :::
 
+Uma **matriz** é uma coleção bidimensional de números. Vamos representá-las como listas de listas, em que cada lista interna tem o mesmo tamanho e representa uma *linha* da matriz.
+
+Se `A` é uma matriz, então `A[i][j]` é o elemento da *i*-ésima linha e da *j*-ésima coluna. Seguindo a convenção matemática, vamos frequentemente usar letras maiúsculas para nomear matrizes:
+
+```{python}
+#| label: alias-matrix
+from typing import List
+
+Vector = List[float]
+
+# Outro alias de tipo
+Matrix = List[List[float]]
+
+A = [[1, 2, 3],   # A tem 2 linhas e 3 colunas
+     [4, 5, 6]]
+
+B = [[1, 2],      # B tem 3 linhas e 2 colunas
+     [3, 4],
+     [5, 6]]
+
+A, B
+```
+
 ::: {.callout-warning}
-## Em construção
-O conteúdo desta seção ainda será escrito.
+Em matemática, você normalmente chamaria a primeira linha da matriz de "linha 1" e a primeira coluna de "coluna 1".
+
+Como estamos representando matrizes com listas de Python, que são indexadas a partir de zero, vamos chamá-las de "linha 0" e "coluna 0". Essa diferença de uma unidade é uma fonte inesgotável de erro para quem traduz uma fórmula de um livro de matemática para código — vale ter consciência dela toda vez.
+:::
+
+## Forma, linhas e colunas
+
+Dada essa representação de lista de listas, a matriz `A` tem `len(A)` linhas e `len(A[0])` colunas, o que chamamos de sua **forma** (*shape*):
+
+```{python}
+#| label: shape
+from typing import Tuple
+
+def shape(A: Matrix) -> Tuple[int, int]:
+    """Retorna (# de linhas de A, # de colunas de A)"""
+    num_rows = len(A)
+    num_cols = len(A[0]) if A else 0   # número de elementos da primeira linha
+    return num_rows, num_cols
+
+assert shape([[1, 2, 3], [4, 5, 6]]) == (2, 3)   # 2 linhas, 3 colunas
+
+shape(A), shape(B)
+```
+
+Se uma matriz tem *n* linhas e *k* colunas, dizemos que é uma matriz *n* × *k*. Podemos pensar em cada linha de uma matriz *n* × *k* como um vetor de tamanho *k*, e em cada coluna como um vetor de tamanho *n*:
+
+```{python}
+#| label: linhas-colunas
+def get_row(A: Matrix, i: int) -> Vector:
+    """Retorna a i-ésima linha de A (como um Vector)"""
+    return A[i]                # A[i] já é a i-ésima linha
+
+def get_column(A: Matrix, j: int) -> Vector:
+    """Retorna a j-ésima coluna de A (como um Vector)"""
+    return [A_i[j]             # j-ésimo elemento da linha A_i
+            for A_i in A]      # para cada linha A_i
+
+get_row(A, 0), get_column(A, 1)
+```
+
+::: {.exemplo}
+Repare na assimetria de custo entre as duas funções, que a representação impõe.
+
+Pegar uma linha é imediato: ela já existe como lista. Pegar uma coluna exige percorrer **todas** as linhas montando uma lista nova. Numa matriz de um milhão de linhas, `get_row` é instantânea e `get_column` percorre o milhão.
+
+Nada disso é acidente da nossa implementação — é consequência de ter escolhido guardar por linhas. Quem escolhe uma estrutura de dados escolhe também quais operações vão ser baratas.
+:::
+
+Também vamos querer criar uma matriz a partir da sua forma e de uma função que gera os elementos. Dá para fazer isso com uma compreensão de lista aninhada:
+
+```{python}
+#| label: make-matrix
+from typing import Callable
+
+def make_matrix(num_rows: int,
+                num_cols: int,
+                entry_fn: Callable[[int, int], float]) -> Matrix:
+    """
+    Retorna uma matriz num_rows x num_cols
+    cuja entrada (i, j) é entry_fn(i, j)
+    """
+    return [[entry_fn(i, j)             # dado i, cria uma lista
+             for j in range(num_cols)]  #   [entry_fn(i, 0), ... ]
+            for i in range(num_rows)]   # cria uma lista para cada i
+```
+
+Com essa função, dá para construir uma matriz **identidade** 5 × 5 — com 1 na diagonal e 0 no resto — assim:
+
+```{python}
+#| label: identity
+def identity_matrix(n: int) -> Matrix:
+    """Retorna a matriz identidade n x n"""
+    return make_matrix(n, n, lambda i, j: 1 if i == j else 0)
+
+assert identity_matrix(5) == [[1, 0, 0, 0, 0],
+                              [0, 1, 0, 0, 0],
+                              [0, 0, 1, 0, 0],
+                              [0, 0, 0, 1, 0],
+                              [0, 0, 0, 0, 1]]
+
+identity_matrix(5)
+```
+
+::: {.callout-note}
+Honestidade sobre o que acabamos de construir: `get_row`, `get_column` e `identity_matrix` **não são usadas por nenhum outro capítulo deste livro**.
+
+Elas estão aqui porque completam o quadro — são o vocabulário mínimo com que qualquer texto de álgebra linear conversa, e você vai encontrá-las em qualquer biblioteca que use depois. Mas vale saber a diferença entre o que este capítulo entrega para o resto do livro (`dot`, `distance`, `vector_mean`, `magnitude`, `make_matrix`) e o que ele entrega para a sua formação.
+:::
+
+## Para que servem matrizes
+
+Matrizes vão nos importar por três razões.
+
+**Primeira: uma matriz representa um conjunto de dados formado por vários vetores**, bastando considerar cada vetor como uma linha. Se você tem altura, peso e idade de mil pessoas, pode colocá-las numa matriz de 1.000 × 3:
+
+```{python}
+#| label: dados-como-matriz
+data = [[70, 170, 40],
+        [65, 120, 26],
+        [77, 250, 19],
+        # ....
+       ]
+
+shape(data)
+```
+
+Esse é o formato em que praticamente todo dado tabular chega: uma linha por observação, uma coluna por variável.
+
+**Segunda: uma matriz *n* × *k* pode representar uma função linear** que leva vetores de *k* dimensões em vetores de *n* dimensões. Várias técnicas e conceitos adiante envolvem funções desse tipo — as camadas de uma rede neural, no [Capítulo 15](../cap15/index.qmd), são exatamente isso.
+
+**Terceira: matrizes representam relações binárias.** No [Capítulo 1](../cap01/index.qmd), representamos as arestas de uma rede como uma coleção de pares. Uma representação alternativa é criar uma matriz `A` em que `A[i][j]` vale 1 se os nós `i` e `j` estão conectados, e 0 caso contrário.
+
+Lá tínhamos:
+
+```{python}
+#| label: pares-amizade
+friendships = [(0, 1), (0, 2), (1, 2), (1, 3), (2, 3), (3, 4),
+               (4, 5), (5, 6), (5, 7), (6, 8), (7, 8), (8, 9)]
+```
+
+A mesma informação, como matriz:
+
+```{python}
+#| label: matriz-amizade
+#                user 0  1  2  3  4  5  6  7  8  9
+friend_matrix = [[0, 1, 1, 0, 0, 0, 0, 0, 0, 0],  # user 0
+                 [1, 0, 1, 1, 0, 0, 0, 0, 0, 0],  # user 1
+                 [1, 1, 0, 1, 0, 0, 0, 0, 0, 0],  # user 2
+                 [0, 1, 1, 0, 1, 0, 0, 0, 0, 0],  # user 3
+                 [0, 0, 0, 1, 0, 1, 0, 0, 0, 0],  # user 4
+                 [0, 0, 0, 0, 1, 0, 1, 1, 0, 0],  # user 5
+                 [0, 0, 0, 0, 0, 1, 0, 0, 1, 0],  # user 6
+                 [0, 0, 0, 0, 0, 1, 0, 0, 1, 0],  # user 7
+                 [0, 0, 0, 0, 0, 0, 1, 1, 0, 1],  # user 8
+                 [0, 0, 0, 0, 0, 0, 0, 0, 1, 0]]  # user 9
+
+shape(friend_matrix)
+```
+
+Se há poucas conexões, essa representação é bem mais ineficiente, porque você acaba guardando um monte de zeros. Em compensação, com a matriz fica muito mais rápido verificar se dois nós estão conectados: em vez de percorrer a lista de arestas, basta uma consulta direta.
+
+```{python}
+#| label: consulta-matriz
+assert friend_matrix[0][2] == 1, "0 and 2 are friends"
+assert friend_matrix[0][8] == 0, "0 and 8 are not friends"
+
+friend_matrix[0][2], friend_matrix[0][8]
+```
+
+E, para encontrar as conexões de um nó, basta olhar a linha (ou a coluna) correspondente:
+
+```{python}
+#| label: amigos-do-cinco
+# basta olhar uma linha
+friends_of_five = [i
+                   for i, is_friend in enumerate(friend_matrix[5])
+                   if is_friend]
+
+friends_of_five
+```
+
+::: {.conceito}
+Compare os dois custos, com $n$ usuários e $m$ amizades.
+
+**Lista de pares:** ocupa espaço proporcional a $m$ — só o que existe. Mas perguntar "0 e 2 são amigos?" exige percorrer a lista inteira: $O(m)$.
+
+**Matriz de adjacência:** responde a mesma pergunta com uma consulta direta, $O(1)$. Mas ocupa $n^2$ posições, **existindo a amizade ou não**.
+
+Com dez usuários, a matriz tem 100 posições e 24 delas são diferentes de zero. Numa rede social de verdade, com milhões de usuários e algumas centenas de amigos cada, a matriz teria trilhões de posições quase todas zeradas — e não caberia em memória nenhuma.
+
+Não existe representação certa; existe a que serve à pergunta que você faz. Essa escolha reaparece em quase todo problema deste livro.
+:::
+
+Com um grafo pequeno, dá simplesmente para guardar a lista de conexões junto de cada nó e acelerar tudo. Mas, num grafo grande e em evolução, isso provavelmente sairia caro demais para manter.
+
+Matrizes voltam ao longo do livro inteiro.
+
+::: {.callout-tip collapse="true"}
+## Na prática: NumPy e matrizes esparsas
+
+Como na seção anterior, tudo isto existe pronto:
+
+```python
+import numpy as np
+
+A = np.array([[1, 2, 3], [4, 5, 6]])
+
+A.shape          # shape
+A[0]             # get_row
+A[:, 1]          # get_column — e aqui SEM percorrer as linhas em Python
+np.eye(5)        # identity_matrix
+A @ B            # multiplicação de matrizes, que nem chegamos a implementar
+```
+
+Repare em `A[:, 1]`. No nosso código, pegar uma coluna custa percorrer todas as linhas; no NumPy, o array conhece o próprio *layout* de memória e devolve uma visão da coluna sem copiar nada. É a mesma ideia com um custo diferente — e você só percebe a diferença se tiver escrito a versão cara antes.
+
+Para o caso da matriz de adjacência quase toda zerada, existe uma família inteira de estruturas em `scipy.sparse`, que guardam só as posições não nulas e recuperam boa parte da velocidade de consulta sem pagar os $n^2$ de memória. É a resposta de engenharia para o dilema que a seção acabou de descrever.
 :::

@@ -137,12 +137,20 @@ def test_modulos_importaveis_sem_rede():
         cwd=RAIZ,
         capture_output=True,
         text=True,
+        # Este dicionário SUBSTITUI o ambiente inteiro do subprocess — nada que
+        # esteja no ambiente do container chega aqui se não estiver listado.
+        # É por isso que PYTHONHASHSEED precisa ser repetido: o `ENV` do
+        # Dockerfile existe (e é obrigatório, ver CLAUDE.md), mas fica invisível
+        # para este subprocess justamente por causa desta substituição. Sem ele,
+        # naive_bayes.py:113 — um assert de igualdade exata de float sobre uma
+        # soma que percorre um Set[str] — falha em ~1 de 8 rodadas.
         env={
             "MPLBACKEND": "Agg",
             "PATH": "/opt/venv/bin:/usr/bin:/bin",
             "HOME": "/tmp",
             "LANG": "pt_BR.UTF-8",
             "LC_ALL": "pt_BR.UTF-8",
+            "PYTHONHASHSEED": "0",
         },
     )
     assert r.returncode == 0, r.stderr

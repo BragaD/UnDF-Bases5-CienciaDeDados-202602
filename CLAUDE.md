@@ -191,6 +191,10 @@ Dois detalhes herdados, já pagos no Bases 3:
 
 `MPLBACKEND=Agg` é obrigatório: sem display, o matplotlib estoura ao importar.
 
+**`PYTHONHASHSEED=0` também é obrigatório, e o motivo é sutil.** `scratch/naive_bayes.py:113` tem, no nível do módulo, um `assert` de igualdade **exata** de float sobre uma soma que percorre um `Set[str]`. A ordem de iteração de um `set` depende do hash das strings, que o Python randomiza por processo, e soma de ponto flutuante não é associativa — então a ordem muda o último bit e o assert falha. Medido neste container: **2 de 15 sementes falham no import; com `PYTHONHASHSEED=0`, 15 de 15 passam.**
+
+Isso torna instável qualquer coisa que importe aquele módulo — hoje a suíte de testes, e o **render do capítulo 10** (que *é* Naive Bayes) assim que ele for escrito. A correção fica no `Dockerfile`, não em `scratch/`, porque o pacote é vendorizado literalmente e nunca editado: é propriedade do ambiente, e combina com a postura do livro de fixar semente em todo chunk estocástico.
+
 ### Verificação
 
 1. **O `quarto render` é o teste.** Os módulos do `scratch/` executam `assert` no nível do módulo (`assert add([1, 2, 3], [4, 5, 6]) == [5, 7, 9]`, `linear_algebra.py:21`). Importar o pacote roda a suíte do próprio livro: um upgrade que quebre `add`, `dot` ou `mean` derruba o render no import, em vez de publicar um número errado em silêncio.
