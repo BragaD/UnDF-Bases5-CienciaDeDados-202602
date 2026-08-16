@@ -156,6 +156,8 @@ de_meaned = de_mean(pca_data)
 
 (Se não fizermos isso, é bem provável que nossas técnicas identifiquem a própria média em vez da variação nos dados.)
 
+Centralizar é a metade da [7.6](06-reescalonamento.qmd) que sobrou: mesma translação, sem dividir pelo desvio padrão. Por que só a metade — e quando a outra também precisa vir junto — é o que a "Na prática" desta seção fecha.
+
 ```{python}
 #| label: fig-pca-demeaned
 #| fig-cap: "Dados depois de remover a média"
@@ -165,6 +167,7 @@ plt.scatter(xs2, ys2, s=15, color="darkblue")
 plt.axhline(0, color="gray", linewidth=0.5)
 plt.axvline(0, color="gray", linewidth=0.5)
 plt.title("Dados depois de remover a média")
+plt.gca().set_aspect("equal", adjustable="box")
 plt.show()
 ```
 
@@ -174,7 +177,15 @@ A forma da nuvem de pontos não mudou nada — só o centro dela, que agora é a
 
 Agora, dada uma matriz $X$ de dados centralizados, podemos perguntar qual é a direção que captura a maior variância nos dados.
 
-Especificamente, dada uma direção $d$ (um vetor de magnitude 1), cada linha $x$ da matriz se estende `dot(x, d)` na direção $d$. E todo vetor $w$ não nulo determina uma direção, se o reescalonarmos para ter magnitude 1:
+Por que variância, e não alguma outra medida de espalhamento? Porque projetar os dados numa única direção e depois tentar reconstruí-los a partir só dessa projeção perde exatamente a variação que ficou de fora dela — e a direção que **maximiza** a variância capturada é a mesma que **minimiza** o quanto se perde ao descartar o resto. São o mesmo problema, visto de dois lados; este capítulo, como o Grus, resolve pelo lado que dá uma função mais fácil de diferenciar.
+
+::: {.conceito}
+A direção de maior variância é a direção em que os dados menos se parecem com um ponto só — o que sobra de informação depois de projetar tudo nela e aceitar não guardar mais nada. Reduzir dimensionalidade é escolher, de propósito, o que descartar primeiro: o que varia menos.
+:::
+
+Vale fixar também os dois sentidos da palavra **componente**, porque o restante desta seção usa os dois: primeiro, uma **componente principal** é uma *direção* — um vetor de magnitude 1, como o `fpc` que `first_principal_component` devolve daqui a pouco. Depois, quando um ponto é projetado nessa direção, o número que sai da projeção — o `dot(v, w)` que a seção "Projetando e removendo", adiante, vai calcular — também é chamado de "a componente" daquele ponto. A primeira é uma seta no espaço original; a segunda é uma coordenada nova, medida ao longo dela.
+
+Especificamente, dada uma direção $d$ (um vetor de magnitude 1), a projeção de cada linha $x$ da matriz sobre $d$ tem comprimento `dot(x, d)` — é o quanto daquele ponto "cabe" naquela direção. E todo vetor $w$ não nulo determina uma direção, se o reescalonarmos para ter magnitude 1:
 
 ```{python}
 #| label: direction
@@ -197,6 +208,10 @@ def directional_variance(data: List[Vector], w: Vector) -> float:
     return sum(dot(v, w_dir) ** 2 for v in data)
 ```
 
+::: {.callout-note}
+Apesar do nome e do *docstring*, `directional_variance` não divide por $n$: é uma **soma de quadrados**, não a variância no sentido em que o resto deste livro usa a palavra. Como os dados já passaram por `de_mean`, essa soma é proporcional à variância de verdade — dividir por $n$ mudaria a escala do número, mas não a direção $w$ que o maximiza, que é tudo que interessa aqui. Se você for comparar este valor contra a fórmula de variância que já conhece, é este o motivo do descompasso.
+:::
+
 Gostaríamos de achar a direção que maximiza essa variância. Podemos fazer isso com gradiente descendente, assim que tivermos a função de gradiente:
 
 ```{python}
@@ -207,6 +222,10 @@ def directional_variance_gradient(data: List[Vector], w: Vector) -> Vector:
     return [sum(2 * dot(v, w_dir) * v[i] for v in data)
             for i in range(len(w))]
 ```
+
+::: {.callout-note}
+Nem este capítulo nem o @grus2019 derivam essa fórmula — vale aceitá-la como dada, mas com a razão de ela ser legítima: `directional_variance` soma termos $(v \cdot w_{dir})^2$, e a derivada de um quadrado como esse em relação a cada coordenada de $w$ é o dobro do produto interno vezes a coordenada correspondente de $v$ — exatamente o `2 * dot(v, w_dir) * v[i]` acima, somado sobre todos os pontos. É cálculo de uma variável aplicado termo a termo, não uma fórmula nova.
+:::
 
 E agora a primeira componente principal é justamente a direção que maximiza a função `directional_variance`:
 
@@ -237,6 +256,10 @@ assert 0.382 < fpc[1] < 0.384
 fpc
 ```
 
+::: {.callout-important}
+Repare no sinal: `step_size` aqui é **positivo**. Todo o resto deste livro passa passo negativo para `gradient_step` — para andar *contra* o gradiente e minimizar algum erro, como o [Capítulo 5](../cap05/03-usando-o-gradiente.qmd) explica ao apresentar essa mesma função. Aqui não há erro para minimizar: queremos **maximizar** a variância direcional, então andamos **com** o gradiente. É o único uso ascendente do livro inteiro — e é o mesmo `gradient_step` de cinco linhas do Capítulo 5, usado ao contrário.
+:::
+
 ::: {.callout-note}
 Este chunk não fixa semente: o "palpite aleatório" inicial (`guess`) na verdade não é aleatório nenhum — é sempre `[1.0, 1.0]`. O gradiente descendente parte sempre do mesmo lugar e segue sempre o mesmo caminho, então o resultado é determinístico sem precisar de `random.seed`. Isso é diferente da correlação sem semente da [seção 7.1](01-explorando-seus-dados.qmd) — lá havia aleatoriedade de verdade escondida atrás de um `assert`; aqui não há nenhuma.
 :::
@@ -245,7 +268,7 @@ No conjunto de dados centralizado, isso devolve a direção aproximadamente $(0{
 
 ```{python}
 #| label: fig-pca-primeiro-componente
-#| fig-cap: "Primeiro componente principal"
+#| fig-cap: "Primeira componente principal"
 escala = 30
 plt.scatter(xs2, ys2, s=15, color="darkblue")
 plt.plot([-escala * fpc[0], escala * fpc[0]],
@@ -253,7 +276,8 @@ plt.plot([-escala * fpc[0], escala * fpc[0]],
         color="black", linewidth=1.5)
 plt.axhline(0, color="gray", linewidth=0.5)
 plt.axvline(0, color="gray", linewidth=0.5)
-plt.title("Primeiro componente principal")
+plt.title("Primeira componente principal")
+plt.gca().set_aspect("equal", adjustable="box")
 plt.show()
 ```
 
@@ -289,15 +313,16 @@ Como este conjunto de exemplo é só bidimensional, depois de removermos a prime
 
 ```{python}
 #| label: fig-pca-residual
-#| fig-cap: "Dados depois de remover o primeiro componente principal"
+#| fig-cap: "Dados depois de remover a primeira componente principal"
 xs3 = [p[0] for p in residual]
 ys3 = [p[1] for p in residual]
 plt.scatter(xs3, ys3, s=15, color="darkblue")
-plt.title("Dados depois de remover o primeiro componente principal")
+plt.title("Dados depois de remover a primeira componente principal")
+plt.gca().set_aspect("equal", adjustable="box")
 plt.show()
 ```
 
-Os pontos ainda têm duas coordenadas, mas agora estão essencialmente alinhados ao longo de uma reta — quase toda a variação que sobrou está numa única direção, a segunda componente principal.
+Os pontos ainda têm duas coordenadas, mas em duas dimensões, remover a projeção sobre uma direção deixa exatamente a direção ortogonal — daí a reta perfeita: toda a variação que sobrou está numa única direção, a segunda componente principal.
 
 ## Muitas componentes
 
@@ -331,11 +356,13 @@ transformado = transform(de_meaned, componentes)
 transformado[:5]
 ```
 
-Com as duas componentes deste exemplo bidimensional, `transform` só reexpressa cada ponto num novo par de eixos — não reduz nada. O ganho aparece quando `num_components` é bem menor que o número de dimensões originais: um conjunto de centenas de colunas pode virar um punhado de componentes que ainda capturam a maior parte da variação.
+Com as duas componentes deste exemplo bidimensional, `transform` só reexpressa cada ponto num novo par de eixos — não reduz nada. O ganho aparece quando `num_components` é bem menor que o número de dimensões originais: um conjunto de centenas de colunas pode virar um punhado de componentes que ainda capturam a maior parte da variação. É o problema que ficou em aberto na [seção 7.1](01-explorando-seus-dados.qmd): a matriz de dispersão é uma ferramenta de triagem que não escala além de um punhado de dimensões. PCA é a resposta para quando há dimensões demais até para desenhar essa matriz.
 
 Essa técnica é valiosa por duas razões. Primeiro, ela pode ajudar a limpar os dados, eliminando dimensões de ruído e consolidando dimensões fortemente correlacionadas. Segundo, depois de extrair uma representação de baixa dimensão dos dados, dá para usar uma variedade de técnicas que não funcionam tão bem em dados de alta dimensão — o assunto da [seção sobre a maldição da dimensionalidade](../cap09/03-a-maldicao-da-dimensionalidade.qmd), que já citava esta seção antes mesmo de ela existir. Ela também é a resposta que o [Capítulo 8](../cap08/06-extracao-e-selecao-de-atributos.qmd), sobre seleção de atributos, prometia: uma forma de **remover** atributos em vez de criá-los, quando o número deles é grande demais.
 
 Ao mesmo tempo, embora essa técnica possa ajudar a construir modelos melhores, ela também pode tornar esses modelos mais difíceis de interpretar. É fácil entender uma conclusão como "cada ano a mais de experiência aumenta o salário médio em 10 mil reais". É bem mais difícil dar sentido a "cada aumento de 0,1 na terceira componente principal aumenta o salário médio em 10 mil reais".
+
+É aqui que se fecha a distância anunciada na abertura deste capítulo. O dado que chegou pelos canos do [Capítulo 6](../cap06/index.qmd) — torto, incompleto, cheio de outliers e datas impossíveis — passou por sete seções e chega a este ponto explorado, tipado, limpo, agregado, em escala comum e, agora, com dimensões a menos. É exatamente o formato que a máquina de gradiente descendente do [Capítulo 5](../cap05/index.qmd) espera receber.
 
 ::: {.callout-tip collapse="true"}
 ## Na prática: `scikit-learn`

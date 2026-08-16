@@ -13,7 +13,18 @@ build: ## Constrói a imagem Docker
 preview: ## Preview com hot-reload em http://localhost:4201
 	$(COMPOSE) up
 
-render: ## Renderiza o livro para _book/ (com retentativa automática)
+render: ## Renderiza o livro para _book/ (retentativa automática, um render por vez)
+# ATENÇÃO: este alvo é SERIALIZADO. Dois `quarto render` simultâneos sobre o mesmo
+# `_freeze/` corrompem o cache — um grava o resultado de um chunk enquanto o outro
+# lê o índice, e o livro sai com saída trocada entre páginas, sem erro nenhum na
+# tela. O livro é escrito por vários agentes em paralelo, cada um responsável por um
+# capítulo, então isso deixou de ser hipótese e virou questão de tempo.
+#
+# O lock é um `mkdir`, que é atômico em qualquer POSIX (`flock` não existe no macOS
+# de fábrica). O `trap` devolve o lock mesmo se o render abortar ou levar Ctrl-C.
+# Depois de 30 min esperando, o lock é considerado preso — um agente morto não pode
+# bloquear o livro para sempre — e é removido com aviso na tela.
+#
 # No macOS, o bind mount do Docker às vezes falha ao remover os diretórios
 # `*_files` temporários que o Quarto cria e apaga no fim do render — eles ficam
 # com `figure-html/` e `mediabag/` vazios dentro, e o `rmdir` estoura com
@@ -27,7 +38,20 @@ render: ## Renderiza o livro para _book/ (com retentativa automática)
 #
 # Isto vive aqui, e não na cabeça de quem roda, porque a alternativa já custou
 # horas: um agente ficou preso em laço tentando entender um render que abortava.
-	@for i in 1 2 3 4 5 6; do \
+	@espera=0; \
+	while ! mkdir .render-lock 2>/dev/null; do \
+	  if [ $$espera -eq 0 ]; then \
+	    echo "outro render em andamento neste repositório; aguardando a vez..."; \
+	  fi; \
+	  espera=$$((espera + 1)); \
+	  if [ $$espera -gt 180 ]; then \
+	    echo "lock preso há mais de 30 min (agente morto?); removendo e seguindo."; \
+	    rm -rf .render-lock; \
+	  fi; \
+	  sleep 10; \
+	done; \
+	trap 'rm -rf .render-lock' EXIT INT TERM; \
+	for i in 1 2 3 4 5 6; do \
 	  find content -name '*_files' -type d -exec rm -rf {} + 2>/dev/null || true; \
 	  find content -name '*.html' -type f -delete 2>/dev/null || true; \
 	  if $(RUN) quarto render; then \

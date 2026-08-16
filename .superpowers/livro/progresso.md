@@ -15,8 +15,8 @@ cap04 Álgebra Linear · cap08 Machine Learning · cap09 k-Vizinhos (MODELO DE E
 
 | Cap | Grus | Título | Seções | Escrito | Rev.Didática | Rev.Conteúdo | Fechado |
 |-----|------|--------|--------|---------|--------------|--------------|---------|
-| 5  | 8  | Gradiente Descendente      | 6 | – | – | – | – |
-| 6  | 9  | Obtendo Dados              | 5 | – | – | – | – |
+| 5  | 8  | Gradiente Descendente      | 6 | ok | ok | ok | FECHADO |
+| 6  | 9  | Obtendo Dados              | 5 | ok | ok | ok | FECHADO |
 | 7  | 10 | Trabalhando com Dados      | 8 | – | – | – | – |
 | 10 | 13 | Naive Bayes                | 5 | – | – | – | – |
 | 11 | 14 | Regressão Linear Simples   | 3 | – | – | – | – |
@@ -167,3 +167,43 @@ partir de dano real (render em segundo plano; contornar a corrida à mão; make 
 Motivo: a corrida custou ~8 interrupções e travou o escritor do cap 7 num laço de horas
 (314k tokens, 149 chamadas, zero progresso). Ele leu a instrução de não usar make clean,
 não associou ao sintoma, e usou. Argumento para automatizar em vez de documentar.
+- CAP 6: **PRONTO**. Portão final sem defeito novo. O revisor reproduziu as duas
+  afirmações testáveis por conta própria (html.parser desaninhando em silêncio; os
+  Counter do dateutil). A adjudicação do except verificada linha a linha: o callout diz
+  explicitamente que o repositório do Grus usa `except:` pelado, então quem comparar não
+  acha que copiamos errado. Arco da escada de fragilidade sustentado ponta a ponta.
+- CAP 7: 2 revisões independentes em voo. Pedi julgamento sobre se é um capítulo ou dois
+  (7 seções utilitárias + PCA do zero como oitava).
+- CAP 10: 2 revisões em voo. Pedi julgamento sobre se ele COBRA a dívida do cap 8 —
+  2800 ham x 500 spam, baseline 84,7% x modelo 91,5%, que é a piada do "Luke" com dados
+  reais — e se usa o contraste com o cap 9 (um não treina e guarda tudo; o outro treina
+  contando e joga os dados fora).
+- CAP 11: escritor em voo.
+- CAP 10, REVISÃO DE CONTEÚDO: 0 Crítico, 1 Importante, 2 Menores. O revisor recalculou
+  à mão: 300*ln(0.01) = -1381.551, acurácia (80+675)/825 = 91,5%, precisão 80/104 = 76,9%,
+  revocação 80/126 = 63,5% — todos batendo com o HTML. Números do próprio Grus citados
+  para comparação conferidos contra o PDF.
+  IMPORTANTE: o capítulo omite a lista "How could we get better performance?" (p.176-177)
+  sem callout de omissão — e isso deixa `drop_final_s` no módulo vendorizado como objeto
+  morto e inexplicado.
+  MENOR NOTÁVEL (deriva entre capítulos): o cap 10 diz que o shuffle do cap 5 "embaralha
+  os lotes errados"; o cap 5 é preciso ao dizer que embaralha os ÍNDICES DE INÍCIO, não
+  os pontos. A paráfrase afrouxou o que a fonte acertou. -> tipo de achado que a REVISÃO
+  GERAL do livro precisa caçar sistematicamente.
+
+## TENDÊNCIA DAS REVISÕES DE CONTEÚDO (o guia está absorvendo as lições)
+cap 5: 1 Crítico + 1 Importante + 1 Menor
+cap 6: 0 Crítico, 0 Importante, 3 Menores (2 herdados do Grus)
+cap 10: 0 Crítico, 1 Importante, 2 Menores
+- CAP 7, REVISÃO DE CONTEÚDO: **0 Crítico, 0 Importante**, 1 Menor (que é uma ressalva,
+  não defeito). Revisão confirmatória, não corretiva — a verificação anterior já tinha
+  pego as 5 divergências.
+  O revisor confirmou por DERIVAÇÃO, não medição: correlation(xs,ys1) ~= 0.894 porque
+  Var(ys1)=1.25 e Cov=1, logo 1/sqrt(1.25). Mais forte que rodar.
+  As 8 figuras abertas uma a uma e conferidas contra a prosa: nenhuma divergência.
+  ERRO NO LIVRO IMPRESSO confirmado: o Grus afirma price2.closing_price == 51.03 com
+  closing_price=106.03 definido duas páginas antes. 106.03/2 = 53.015, e 51.03 = 102.06/2,
+  o preço do exemplo ANTERIOR. Erro de manutenção de texto que sobreviveu à publicação.
+  O capítulo o enquadra corretamente.
+  dataclass: 0 usos no pacote do Grus contra 21 de NamedTuple, confirmado por grep
+  independente. O Grus dedica seção inteira a algo que o código dele nunca usa.

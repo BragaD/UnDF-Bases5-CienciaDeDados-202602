@@ -4,7 +4,116 @@
 Esta seção corresponde a *Maximum Likelihood Estimation*, do capítulo 14 de @grus2019.
 :::
 
-::: {.callout-warning}
-## Em construção
-O conteúdo desta seção ainda será escrito.
+As duas seções anteriores minimizaram a mesma quantidade por dois caminhos diferentes: a soma dos erros ao quadrado. Mas por que **essa** soma? Somar os erros absolutos também puniria desvios grandes. Somar os erros elevados à quarta potência também. Cada uma dessas escolhas produz um modelo diferente, e até aqui a única razão dada para preferir o quadrado foi que ele tem fórmula fechada (seção 11.1) e forma de tigela convexa, fácil de descer (seção 11.2). Conveniência matemática não é a mesma coisa que estar certo.
+
+Esta seção dá a justificativa que faltava: **estimação por máxima verossimilhança**. Ela mostra que, sob uma suposição específica e razoável sobre os erros, minimizar a soma dos erros ao quadrado não é uma escolha entre outras — é a **única** escolha consistente com essa suposição.
+
+## O que é verossimilhança
+
+Comece de um jeito mais geral, sem regressão ainda. Imagine uma amostra de dados $v_1, \ldots, v_n$ vinda de uma distribuição que depende de um parâmetro desconhecido $\theta$ (theta). A probabilidade de observar exatamente essa amostra, dado $\theta$, é:
+
+$$
+p(v_1, \ldots, v_n \mid \theta)
+$$
+
+Essa expressão responde à pergunta "conhecido $\theta$, quão provável é ver estes dados?". A ideia central da máxima verossimilhança é girar a pergunta ao contrário: **os dados já foram vistos** — são fixos, estão na sua tela. O que não se sabe é $\theta$. Encarada assim, a mesma expressão vira uma função de $\theta$, chamada de **verossimilhança**:
+
+$$
+L(\theta \mid v_1, \ldots, v_n)
+$$
+
+::: {.conceito}
+Um valor de $\theta$ que tornaria os dados observados extremamente improváveis é, intuitivamente, um mau candidato — se aquele $\theta$ fosse o real, seria uma coincidência e tanto ver justamente estes dados. O $\theta$ **mais plausível**, sob essa lógica, é o que torna os dados que você de fato observou os **menos surpreendentes possível**: o valor de $\theta$ que maximiza $L(\theta \mid v_1, \ldots, v_n)$.
+
+Isso vale tanto para distribuições discretas (onde $p$ é uma massa de probabilidade) quanto para distribuições contínuas (onde $p$ é uma densidade) — a lógica de virar a pergunta ao contrário não muda.
+:::
+
+## Aplicando à regressão
+
+Uma suposição comum sobre o modelo de regressão — e é uma suposição, feita de fora, não algo que os dados provem sozinhos — é que os erros $\varepsilon_i$ são normalmente distribuídos, com média 0 e algum desvio padrão $\sigma$ (conhecido). Não é uma suposição arbitrária: quando o erro é, de fato, a soma de muitos fatores pequenos e independentes — o humor do usuário naquele dia, o que mais estava competindo por atenção dele, um problema de rede — esse tipo de soma tende a se comportar como uma normal, mesmo sem nenhum dos fatores individuais ser normal. Mas continua sendo uma suposição, não uma consequência automática dos dados, e vale checá-la quando o modelo importa de verdade.
+
+Sob essa suposição, a verossimilhança de ver um único par $(x_i, y_i)$, dados candidatos $\alpha$ e $\beta$, é a densidade normal avaliada no erro daquele ponto:
+
+$$
+L(\alpha, \beta \mid x_i, y_i, \sigma) = \frac{1}{\sqrt{2\pi}\,\sigma} \exp\left(-\frac{(y_i - \alpha - \beta x_i)^2}{2\sigma^2}\right)
+$$
+
+Repare que $y_i - \alpha - \beta x_i$ é exatamente o negativo do que a função `error` da [seção 11.1](01-o-modelo.qmd) calcula — e como ele aparece elevado ao quadrado, o sinal não importa.
+
+::: {.conceito}
+Vale parar na forma dessa expressão antes de seguir para a álgebra, porque ela já contém o argumento inteiro.
+
+O termo dentro do `exp` é **negativo** e **quadrático** no erro. Um candidato $(\alpha, \beta)$ que erra bastante para algum ponto $x_i$ — produz um resíduo grande — faz esse termo despencar para um número muito negativo, e `exp` de um número muito negativo é um fator perto de zero: aquele ponto se torna "surpreendente" sob esse candidato, e puxa a verossimilhança inteira para baixo.
+
+E porque o erro está **ao quadrado** dentro do `exp`, dobrar o tamanho de um resíduo não dobra a penalidade — ela cresce muito mais rápido que isso, porque dobrar o resíduo quadruplica o expoente. Um modelo que erra um pouco em todo lugar é julgado com muito mais indulgência, sob esta conta, do que um modelo que acerta quase tudo e erra feio num único ponto. É a mesma preferência — por muitos erros pequenos em vez de um erro enorme — que já vimos a soma dos erros ao quadrado impor nas duas seções anteriores. Não é coincidência: é a mesma conta, vista de dois ângulos.
+:::
+
+## Por que isso equivale a mínimos quadrados
+
+Os erros de pontos diferentes são tratados como independentes entre si, então a verossimilhança do conjunto de dados inteiro é o **produto** das verossimilhanças individuais:
+
+$$
+L(\alpha, \beta \mid \text{dados}, \sigma) = \prod_{i=1}^{n} \frac{1}{\sqrt{2\pi}\,\sigma} \exp\left(-\frac{(y_i - \alpha - \beta x_i)^2}{2\sigma^2}\right)
+$$
+
+O produto de exponenciais é a exponencial da soma dos expoentes, e o fator $\frac{1}{\sqrt{2\pi}\,\sigma}$ não depende de $\alpha$ nem de $\beta$ — só se repete $n$ vezes. Isolando o que de fato varia com $\alpha$ e $\beta$:
+
+$$
+L(\alpha, \beta \mid \text{dados}, \sigma) = \left(\frac{1}{\sqrt{2\pi}\,\sigma}\right)^{n} \exp\left(-\frac{1}{2\sigma^2} \sum_{i=1}^{n} (y_i - \alpha - \beta x_i)^2\right)
+$$
+
+E o somatório dentro do `exp` é, a menos do sinal já discutido, exatamente `sum_of_sqerrors(alpha, beta, x, y)` — a mesma função que a [seção 11.1](01-o-modelo.qmd) escreveu. Chame essa soma de $S(\alpha, \beta)$. A expressão inteira fica $\left(\frac{1}{\sqrt{2\pi}\sigma}\right)^n \exp\left(-\frac{S(\alpha, \beta)}{2\sigma^2}\right)$ — uma constante positiva (que não depende de $\alpha, \beta$) vezes $\exp(-S(\alpha, \beta) / 2\sigma^2)$.
+
+`exp` é uma função estritamente crescente, e $1/2\sigma^2$ é um número positivo fixo (não depende de $\alpha$ nem $\beta$). Maximizar $\exp(-S(\alpha,\beta) / 2\sigma^2)$ sobre $(\alpha, \beta)$ é, portanto, exatamente o mesmo problema que **minimizar** $S(\alpha, \beta)$ sobre $(\alpha, \beta)$.
+
+::: {.callout-important}
+## O argumento inteiro, numa frase
+
+Sob a suposição de que os erros são normais, o $(\alpha, \beta)$ que **maximiza a verossimilhança dos dados observados** é exatamente o mesmo $(\alpha, \beta)$ que **minimiza a soma dos erros ao quadrado**. Mínimos quadrados não é uma escolha de conveniência: é a consequência direta de assumir erros normais. Escolher outra função de perda — erro absoluto, por exemplo — corresponde, por este mesmo raciocínio ao contrário, a assumir uma distribuição diferente para o erro (para o erro absoluto, uma distribuição de Laplace).
+:::
+
+## Vendo isso nos dados
+
+O argumento acima é sobre a forma da função, não sobre nenhum $\sigma$ específico — o resultado vale para qualquer $\sigma$ fixo, porque $\sigma$ nunca aparece na comparação entre candidatos. Ainda assim, ajuda ver a diferença de escala em números concretos. A [seção 11.1](01-o-modelo.qmd) já comparou o modelo de mínimos quadrados com o pior modelo linear razoável — sempre prever a média de `y`, ignorando `x` — para calcular R². Vamos reaproveitar essa comparação aqui:
+
+```{python}
+#| label: importa-mle
+#| include: false
+from scratch.simple_linear_regression import (
+    sum_of_sqerrors, num_friends_good, daily_minutes_good,
+    alpha, beta,
+)
+from scratch.statistics import mean
+import matplotlib.pyplot as plt
+plt.close('all')
+```
+
+```{python}
+#| label: compara-verossimilhancas
+S_minimos_quadrados = sum_of_sqerrors(alpha, beta,
+                                      num_friends_good, daily_minutes_good)
+S_sempre_a_media = sum_of_sqerrors(mean(daily_minutes_good), 0,
+                                   num_friends_good, daily_minutes_good)
+
+S_minimos_quadrados, S_sempre_a_media
+```
+
+O modelo de mínimos quadrados soma cerca de 13.197 de erro ao quadrado; sempre prever a média soma cerca de 19.670 — a mesma variação total que a seção 11.1 chamou de `total_sum_of_squares`. Qualquer que seja $\sigma$, o fator $\exp(-S/2\sigma^2)$ do modelo de mínimos quadrados é maior do que o do modelo "sempre a média", porque seu expoente é menos negativo: $S$ é bem menor. Sob a suposição de erros normais, os dados observados são muito mais prováveis com o $(\alpha, \beta)$ que a seção 11.1 encontrou do que com qualquer alternativa que ignore `x` — inclusive a mais simples de todas.
+
+## O que isso amarra
+
+Este capítulo montou o mesmo resultado três vezes, cada vez respondendo a uma pergunta diferente:
+
+- A [seção 11.1](01-o-modelo.qmd) respondeu **como** ajustar $\alpha$ e $\beta$ diretamente, com uma fórmula fechada que só existe porque este problema é simples o bastante para resolver a álgebra à mão.
+- A [seção 11.2](02-usando-gradiente-descendente.qmd) respondeu **como** ajustar os mesmos parâmetros iterando, pelo caminho geral do [Capítulo 5](../cap05/index.qmd) — o caminho que continua funcionando mesmo quando a fórmula fechada desaparece.
+- Esta seção respondeu **por que** minimizar a soma dos erros ao quadrado, para começo de conversa, era a coisa certa a fazer.
+
+A suposição de erros normais é o que amarra as três. Quando ela deixa de valer — porque `y` não é mais uma quantidade contínua, mas sim uma decisão binária (sim ou não, comprou ou não comprou) —, o mesmo raciocínio de máxima verossimilhança continua de pé, mas a distribuição assumida para os dados muda, de normal para Bernoulli. É exatamente o que o [Capítulo 13](../cap13/index.qmd), sobre regressão logística, faz: a verossimilhança vira outra função, a perda deixa de ser soma de quadrados e passa a ser log-verossimilhança negativa, e — porque essa nova função não tem uma álgebra tão gentil quanto esta — a fórmula fechada desaparece de vez. O caminho da seção 11.2 é o único que sobra.
+
+::: {.callout-tip collapse="true"}
+## Na prática: o que se faz com isso
+
+Nenhuma chamada de `scikit-learn` pede para você escrever uma verossimilhança. `LinearRegression().fit(X, y)` resolve o sistema de mínimos quadrados sem perguntar nada sobre a distribuição dos erros — o argumento desta seção já está embutido na escolha do método, não no código que você chama.
+
+Mas a suposição de erros normais volta à tona no momento em que se quer mais do que uma previsão pontual: intervalos de confiança para $\alpha$ e $\beta$, testes de hipótese sobre se $\beta$ é realmente diferente de zero, ou um valor-p. Ferramentas como `statsmodels`, em Python, calculam tudo isso — e todos esses números dependem, na base, da mesma suposição de normalidade que esta seção acabou de justificar. O [Capítulo 12](../cap12/index.qmd), sobre regressão múltipla, chega perto desse território ao discutir erros padrão dos coeficientes: a pergunta "esse coeficiente é confiável, ou pode ser só ruído?" é, no fundo, a mesma pergunta desta seção, aplicada de novo.
 :::

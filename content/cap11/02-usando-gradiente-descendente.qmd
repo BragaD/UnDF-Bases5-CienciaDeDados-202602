@@ -4,7 +4,117 @@
 Esta seção corresponde a *Using Gradient Descent*, do capítulo 14 de @grus2019.
 :::
 
-::: {.callout-warning}
-## Em construção
-O conteúdo desta seção ainda será escrito.
+A [seção anterior](01-o-modelo.qmd) ajustou $\alpha$ e $\beta$ com uma fórmula fechada — duas médias, uma correlação, dois desvios padrão, sem laço nenhum. Isso só foi possível porque a regressão linear simples é um caso particularmente simples: derivar a soma dos erros ao quadrado à mão, igualar a zero e resolver o sistema dá conta do recado. Esta seção resolve o **mesmo problema**, com os **mesmos dados**, pelo caminho construído no [Capítulo 5](../cap05/index.qmd): gradiente descendente. O objetivo não é achar uma resposta melhor — é mostrar que os dois caminhos, o direto e o iterativo, chegam ao mesmo lugar.
+
+Como cada `.qmd` deste livro roda num kernel próprio, os nomes definidos na seção anterior não existem aqui. Em vez de reescrever `error`, `sum_of_sqerrors` e o resultado já ajustado, importamos do mesmo pacote vendorizado que a seção anterior usou — é o mesmo código, só sem repetir:
+
+```{python}
+#| label: importa-fechada
+#| include: false
+from scratch.simple_linear_regression import (
+    error, sum_of_sqerrors,
+    num_friends_good, daily_minutes_good,
+    alpha as alpha_fechada, beta as beta_fechada,
+)
+import matplotlib.pyplot as plt
+plt.close('all')
+```
+
+::: {.callout-note}
+`scratch/simple_linear_regression.py` importa de `scratch.statistics` no próprio nível do módulo — o que dispara, por tabela, as cinco chamadas `plt.*` daquele módulo, documentadas na seção anterior. Daí o `#| include: false` e o `plt.close('all')`.
+
+O módulo também roda, no nível do módulo (não atrás de um `if __name__ == "__main__"`), os mesmos `assert` que a seção anterior escreveu à mão — inclusive o que calcula `alpha, beta = least_squares_fit(num_friends_good, daily_minutes_good)`. É esse `alpha` e esse `beta` — os valores de mínimos quadrados, já calculados — que importamos aqui como `alpha_fechada` e `beta_fechada`, para comparar com o que o gradiente descendente vai encontrar sozinho.
+:::
+
+```{python}
+#| label: mostra-fechada
+alpha_fechada, beta_fechada
+```
+
+## O gradiente da soma dos erros ao quadrado
+
+Se escrevermos `theta = [alpha, beta]`, o problema é idêntico ao que o [Capítulo 5](../cap05/05-ajustando-modelos.qmd) já resolveu para uma reta com parâmetros conhecidos: minimizar o erro quadrático ajustando `theta` um passo de cada vez. A diferença é só o dado — ali era uma reta perfeita, `y = 20x + 5`; aqui são os 203 pontos reais e ruidosos da DataSciencester.
+
+O Grus escreve as duas derivadas parciais diretamente, em vez de embrulhá-las numa função `linear_gradient` separada como a seção 5.5 fez:
+
+```{python}
+#| label: treina-gradiente
+#| warning: false
+import random
+import tqdm
+from scratch.gradient_descent import gradient_step
+
+num_epochs = 10000
+random.seed(0)
+
+guess = [random.random(), random.random()]  # começa com um valor aleatório
+
+learning_rate = 0.00001
+
+with tqdm.trange(num_epochs) as t:
+    for _ in t:
+        alpha, beta = guess
+
+        # derivada parcial da perda em relação a alpha
+        grad_a = sum(2 * error(alpha, beta, x_i, y_i)
+                     for x_i, y_i in zip(num_friends_good,
+                                         daily_minutes_good))
+
+        # derivada parcial da perda em relação a beta
+        grad_b = sum(2 * error(alpha, beta, x_i, y_i) * x_i
+                     for x_i, y_i in zip(num_friends_good,
+                                         daily_minutes_good))
+
+        # perda, só para mostrar na barra de progresso
+        loss = sum_of_sqerrors(alpha, beta,
+                               num_friends_good, daily_minutes_good)
+        t.set_description(f"loss: {loss:.3f}")
+
+        # finalmente, atualiza o palpite
+        guess = gradient_step(guess, [grad_a, grad_b], -learning_rate)
+
+alpha, beta = guess
+assert 22.9 < alpha < 23.0
+assert 0.9 < beta < 0.905
+
+alpha, beta
+```
+
+::: {.callout-note}
+`grad_a` e `grad_b` são exatamente `linear_gradient` da [seção 5.5](../cap05/05-ajustando-modelos.qmd) escrita por extenso: a soma (não a média) das derivadas de `error(...) ** 2` sobre todos os pontos, uma parcial para cada parâmetro. `gradient_step` é a mesma função de cinco linhas que o Capítulo 5 construiu e que este livro reaproveita em todo capítulo que ajusta um modelo — aqui ela recebe a soma dos gradientes em vez da média, o que só reescala a taxa de aprendizado, não muda o destino.
+
+`learning_rate = 0.00001` é bem menor que o `0.001` usado na seção 5.5. Faz sentido: ali `x` variava de -50 a 49; aqui `x` é número de amigos, com o mesmo alcance de grandeza, mas o gradiente soma sobre 203 pontos em vez de usar a média — uma soma maior pede um passo menor para não disparar para fora da tigela, a mesma lição da [seção 5.4](../cap05/04-escolhendo-o-tamanho-do-passo.qmd).
+:::
+
+## As duas respostas, lado a lado
+
+```{python}
+#| label: compara-metodos
+diferenca_alpha = abs(alpha - alpha_fechada)
+diferenca_beta = abs(beta - beta_fechada)
+
+alpha_fechada, alpha, diferenca_alpha
+```
+
+```{python}
+#| label: compara-beta
+beta_fechada, beta, diferenca_beta
+```
+
+A fórmula fechada deu $\alpha \approx 22{,}9476$ e $\beta \approx 0{,}9039$. Dez mil epochs de gradiente descendente, partindo de um `theta` aleatório e sem nunca ver a fórmula fechada, encontraram $\alpha \approx 22{,}9476$ e $\beta \approx 0{,}9039$ — a mesma resposta até a quarta casa decimal.
+
+::: {.exemplo}
+Isso é a promessa da [seção 5.5](../cap05/05-ajustando-modelos.qmd) cumprida por inteiro. Aquela seção mostrou que a soma dos erros ao quadrado, para um modelo linear, é uma função **convexa** de `theta` — uma tigela de verdade, sem vales escondidos — e que por isso gradiente descendente sempre converge para o mesmo ponto, não importa onde `theta` começa. A fórmula fechada da seção 11.1 encontra o fundo dessa tigela de uma vez, resolvendo a álgebra diretamente. O gradiente descendente desta seção encontra o mesmo fundo aos tropeços, um passo pequeno de cada vez. Os dois caminhos convergem porque é o **mesmo** fundo — não por coincidência.
+:::
+
+Vale perguntar por que passar pelo caminho mais lento, já que a fórmula fechada existe e é exata. A resposta é que ela **só** existe porque este problema é simples o bastante: uma única variável explicativa e uma função de erro cuja derivada dá para igualar a zero e resolver à mão. A [seção 11.3](03-maxima-verossimilhanca.qmd), a seguir, explica de onde vem essa função de erro específica. E assim que o problema cresce um pouco — mais de uma variável explicativa, no [Capítulo 12](../cap12/index.qmd) — a álgebra ainda fecha, mas fica pesada o bastante para valer a pena revisitar. A regressão logística do [Capítulo 13](../cap13/index.qmd) e as redes neurais dos capítulos seguintes não têm fórmula fechada **nenhuma**: para elas, o gradiente descendente que você acabou de usar aqui não é uma alternativa mais lenta — é o único caminho que existe.
+
+::: {.callout-tip collapse="true"}
+## Na prática: diferenciação automática
+
+`grad_a` e `grad_b` acima foram derivadas à mão: alguém (o Grus, neste caso) pegou `sum_of_sqerrors`, aplicou a regra da cadeia em relação a cada parâmetro, e transcreveu o resultado em código. Para dois parâmetros isso é tedioso, mas viável. Para uma rede neural com milhares ou milhões de parâmetros — assunto dos capítulos [15](../cap15/index.qmd) e [16](../cap16/index.qmd) — é inviável.
+
+Bibliotecas como PyTorch e TensorFlow resolvem isso com **diferenciação automática** (*autodiff*): em vez de pedir a derivada pronta, elas registram cada operação aplicada aos parâmetros — multiplicação, soma, potência — e aplicam a regra da cadeia automaticamente, operação por operação, na volta. O nome técnico do caso que aparece em redes neurais é *backpropagation*, e é literalmente a mesma ideia que `grad_a` e `grad_b` calculam aqui, só que mecanizada para não depender de alguém derivar a função à mão a cada modelo novo.
+
+O gradiente descendente em si — dar um passo pequeno na direção oposta ao gradiente, repetir — não muda nada. O que a diferenciação automática elimina é exatamente o trabalho manual que este chunk fez.
 :::

@@ -19,7 +19,13 @@ def tokenize(text: str) -> Set[str]:
 assert tokenize("Data Science is science") == {"data", "science", "is"}
 ```
 
-O retorno é um `set` porque, para o modelo, só importa **se** uma palavra apareceu, não quantas vezes — a mesma escolha que sustenta a suavização da [seção anterior](02-um-filtro-mais-sofisticado.qmd): cada palavra do vocabulário é um atributo sim-ou-não. `Set`, junto com `Counter`, `defaultdict` e `NamedTuple`, foi apresentado no [Capítulo 2](../cap02/index.qmd); aqui os quatro trabalham juntos.
+O retorno é um `set` porque, para o modelo, só importa **se** uma palavra apareceu, não quantas vezes — a mesma escolha que sustenta a suavização da [seção anterior](02-um-filtro-mais-sofisticado.qmd): cada palavra do vocabulário é um atributo sim-ou-não. `Set`, `defaultdict` e `NamedTuple`, todos apresentados no [Capítulo 2](../cap02/index.qmd), trabalham juntos nesta seção; `Counter` entra em cena mais adiante, na seção 10.5.
+
+::: {.callout-important}
+## A decisão que este `set` já tomou
+
+Guardar só **se** cada palavra apareceu, e não **quantas vezes**, não é um detalhe de implementação — é a escolha que decide qual das duas famílias de Naive Bayes para texto você está construindo. Este capítulo constrói a versão *Bernoulli*: cada palavra é presente ou ausente. A outra família, *multinomial*, guardaria contagens e perguntaria quantas vezes a palavra apareceu, não só se apareceu — é a variante mais comum na prática para texto corrido, e volta a aparecer no callout de `scikit-learn`, no fim desta seção.
+:::
 
 Também precisamos de um tipo para representar cada mensagem de treino:
 
@@ -32,9 +38,9 @@ class Message(NamedTuple):
     is_spam: bool
 ```
 
-Como o classificador precisa acumular tokens, contagens e rótulos ao longo do treino, ele vira uma classe. Seguindo a convenção do capítulo, chamamos os e-mails que não são spam de **ham**. O construtor recebe só um parâmetro — o pseudocontador $k$ a usar no cálculo das probabilidades — e inicializa um conjunto vazio de tokens, dois contadores (um por classe, mapeando token para número de mensagens em que ele aparece) e as contagens totais de mensagens de spam e de ham.
+Como o classificador precisa acumular tokens, contagens e rótulos ao longo do treino, ele vira uma classe. O construtor recebe só um parâmetro — o pseudocontador $k$ a usar no cálculo das probabilidades — e inicializa um conjunto vazio de tokens, dois contadores (um por classe, mapeando token para número de mensagens em que ele aparece) e as contagens totais de mensagens de spam e de ham.
 
-O método `train` percorre as mensagens de treino: primeiro incrementa a contagem de mensagens de spam ou de ham, depois tokeniza o texto e, para cada token, incrementa a contagem correspondente. O método `_probabilities` é um método "privado" que calcula $P(\text{token} \mid \text{spam})$ e $P(\text{token} \mid \text{ham})$ para um token, já com a suavização de pseudocontador da seção anterior embutida. E `predict`, como discutido ali, soma log-probabilidades em vez de multiplicar probabilidades pequenas — percorrendo o vocabulário inteiro, não só as palavras da mensagem:
+O método `train` percorre as mensagens de treino: primeiro incrementa a contagem de mensagens de spam ou de ham, depois tokeniza o texto e, para cada token, incrementa a contagem correspondente. O método `_probabilities` é um método "privado" que calcula $P(\text{token} \mid \text{spam})$ e $P(\text{token} \mid \text{ham})$ para um token, já com a suavização de pseudocontador da seção anterior embutida:
 
 ```{python}
 #| label: naive-bayes-classifier
@@ -76,38 +82,53 @@ class NaiveBayesClassifier:
         p_token_ham = (ham + self.k) / (self.ham_messages + 2 * self.k)
 
         return p_token_spam, p_token_ham
+```
 
-    def predict(self, text: str) -> float:
-        text_tokens = tokenize(text)
-        log_prob_if_spam = log_prob_if_ham = 0.0
+Falta o método que de fato decide: `predict`. Como prometido na [seção anterior](02-um-filtro-mais-sofisticado.qmd), a ausência de uma palavra é informação tanto quanto a presença — então o laço abaixo percorre **todo** o vocabulário visto no treino, não só as palavras da mensagem, e soma $\log(1 - P(\text{token}\mid\text{spam}))$ para cada token ausente. E, como discutido ali, soma log-probabilidades em vez de multiplicar probabilidades pequenas, para não sofrer *underflow*:
 
-        # Percorre cada palavra do nosso vocabulário
-        for token in self.tokens:
-            prob_if_spam, prob_if_ham = self._probabilities(token)
+```{python}
+#| label: naive-bayes-predict
+def predict(self, text: str) -> float:
+    text_tokens = tokenize(text)
+    log_prob_if_spam = log_prob_if_ham = 0.0
 
-            # Se o *token* aparece na mensagem,
-            # soma a log-probabilidade de vê-lo;
-            if token in text_tokens:
-                log_prob_if_spam += math.log(prob_if_spam)
-                log_prob_if_ham += math.log(prob_if_ham)
+    # Percorre cada palavra do nosso vocabulário
+    for token in self.tokens:
+        prob_if_spam, prob_if_ham = self._probabilities(token)
 
-            # senão, soma a log-probabilidade de _não_ vê-lo,
-            # que é log(1 - probabilidade de vê-lo)
-            else:
-                log_prob_if_spam += math.log(1.0 - prob_if_spam)
-                log_prob_if_ham += math.log(1.0 - prob_if_ham)
+        # Se o *token* aparece na mensagem,
+        # soma a log-probabilidade de vê-lo;
+        if token in text_tokens:
+            log_prob_if_spam += math.log(prob_if_spam)
+            log_prob_if_ham += math.log(prob_if_ham)
 
-        prob_if_spam = math.exp(log_prob_if_spam)
-        prob_if_ham = math.exp(log_prob_if_ham)
-        return prob_if_spam / (prob_if_spam + prob_if_ham)
+        # senão, soma a log-probabilidade de _não_ vê-lo,
+        # que é log(1 - probabilidade de vê-lo)
+        else:
+            log_prob_if_spam += math.log(1.0 - prob_if_spam)
+            log_prob_if_ham += math.log(1.0 - prob_if_ham)
+
+    prob_if_spam = math.exp(log_prob_if_spam)
+    prob_if_ham = math.exp(log_prob_if_ham)
+    return prob_if_spam / (prob_if_spam + prob_if_ham)
+
+NaiveBayesClassifier.predict = predict
 ```
 
 E agora temos um classificador.
 
-::: {.conceito}
-Repare no que `predict` faz com **cada** token do vocabulário, não só com os que aparecem na mensagem: para um token ausente, ele soma $\log(1 - P(\text{token} \mid \text{spam}))$ — a log-probabilidade de *não* vê-lo. Isso é a suposição de independência da seção anterior em ação: a ausência de uma palavra também carrega informação, e o modelo usa isso.
+::: {.callout-note}
+## Por que `predict` nasceu fora da classe
 
-É também o motivo pelo qual o loop percorre `self.tokens` (o vocabulário inteiro visto no treino) em vez de `text_tokens` (as palavras da mensagem sendo classificada). Uma mensagem curta contribui, mesmo assim, com um termo para cada uma das milhares de palavras do vocabulário — a maioria delas ausentes.
+`predict` está escrito como uma função comum, de nível zero, e só na última linha vira método: `NaiveBayesClassifier.predict = predict`. Isso funciona porque, em Python, um método **é** só uma função guardada como atributo da classe — atribuir depois da classe já existir é tão válido quanto escrever `def predict(self, ...)` dentro do `class` desde o início.
+
+Não é assim que `scratch/naive_bayes.py` faz — lá, `predict` é um método comum, definido dentro do `class` junto com os outros três, numa célula só. A separação aqui é só para dar a `predict` — a parte conceitualmente mais densa — sua própria introdução, sem que o resto da classe apareça reunido como parede de código. (E precisa ser exatamente assim: um chunk que começasse com `def predict(self, ...)` **indentado**, como se estivesse continuando a classe do chunk anterior, pareceria funcionar — o Quarto não acusaria nada — mas o método simplesmente não seria anexado à classe. É o mesmo bug, e o mesmo silêncio, do callout a seguir.)
+:::
+
+::: {.conceito}
+Repare no que `predict` faz com **cada** token do vocabulário, não só com os que aparecem na mensagem: para um token ausente, ele soma $\log(1 - P(\text{token} \mid \text{spam}))$ — a log-probabilidade de *não* vê-lo, cumprindo a promessa da seção anterior de que a ausência também é informação.
+
+É também o motivo pelo qual o laço percorre `self.tokens` (o vocabulário inteiro visto no treino) em vez de `text_tokens` (as palavras da mensagem sendo classificada). Uma mensagem curta contribui, mesmo assim, com um termo para cada uma das milhares de palavras do vocabulário — a maioria delas ausentes.
 :::
 
 ::: {.callout-tip collapse="true"}
@@ -127,7 +148,9 @@ modelo.fit(X, y_treino)
 modelo.predict_proba(vetorizador.transform(textos_novos))
 ```
 
-O `CountVectorizer` faz a tokenização — de forma mais sofisticada que o `tokenize` acima, com opções para *n*-gramas, remoção de palavras comuns (*stop words*) e limites de frequência. O `alpha` do `BernoulliNB` é exatamente o pseudocontador $k$: o mesmo truque de suavização, só com outro nome. E por trás dos panos, a biblioteca também soma log-probabilidades em vez de multiplicar — o mesmo cuidado com *underflow* que você acabou de implementar à mão.
+O `CountVectorizer` faz a tokenização — de forma mais sofisticada que o `tokenize` acima, com opções para *n*-gramas, remoção de palavras comuns (*stop words*) e limites de frequência. O `alpha` do `BernoulliNB` é exatamente o pseudocontador $k$: o mesmo truque de suavização, só com outro nome. E nos bastidores, a biblioteca também soma log-probabilidades em vez de multiplicar — o mesmo cuidado com *underflow* que você acabou de implementar à mão.
+
+`BernoulliNB` é a metade da história. O `scikit-learn` também tem `MultinomialNB`, que guarda **contagens** em vez de presença/ausência — a família que o callout no início desta seção mencionou, e a escolha mais comum para texto corrido na prática. Trocar de um para o outro é trocar `binary=True` por `binary=False` no `CountVectorizer` (ou usar `TfidfVectorizer`, que pesa cada contagem pela raridade da palavra no corpus todo); o resto do código muda pouco. Duas coisas que a biblioteca esconde e que valem saber que existem: `fit_prior`, que por padrão estima $P(S)$ e $P(\lnot S)$ pelas proporções reais do treino em vez de assumir 50/50 como fizemos na [seção 10.1](01-um-filtro-de-spam-bem-burro.qmd); e `binarize`, que decide o limiar de contagem para "presente" quando você passa dados que ainda não são binários.
 
 Nada disso muda o que o modelo *é*: contar palavras por classe, suavizar, e combinar via Bayes assumindo independência.
 :::

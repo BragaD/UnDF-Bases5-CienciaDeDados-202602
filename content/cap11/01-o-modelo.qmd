@@ -4,7 +4,209 @@
 Esta seção corresponde a *The Model*, do capítulo 14 de @grus2019.
 :::
 
+Voltamos à rede social fictícia DataSciencester, que aparece em vários capítulos deste livro. A pergunta de negócio é simples de enunciar: existe relação entre quantos amigos um usuário tem e quanto tempo por dia ele passa no site? E se existe, dá para descrevê-la com números — não só "existe uma tendência", mas "cada amigo a mais vale, em média, tantos minutos a mais"?
+
+O primeiro passo, que você provavelmente já viu antes de chegar a este livro, é medir a **correlação**: um único número entre -1 e 1 que resume o quanto duas variáveis variam juntas. `scratch/statistics.py` — o pacote vendorizado do livro-texto — já traz essa função pronta, junto com os dados da própria DataSciencester:
+
+```{python}
+#| label: importa-dados
+#| include: false
+from scratch.statistics import num_friends_good, daily_minutes_good, mean, correlation
+import matplotlib.pyplot as plt
+plt.close('all')
+```
+
+::: {.callout-note}
+`scratch/statistics.py` tem cinco chamadas `plt.*` soltas no nível do módulo — o `import` acima dispara todas elas. O chunk é `#| include: false` para que essas figuras não pedidas não apareçam na página, e `plt.close('all')` limpa o que sobrou antes que vaze para a próxima célula. O módulo também roda uma bateria de `assert` no próprio nível do módulo (`assert 7.3333 < mean(num_friends) < 7.3334`, e outros), mas são todos sobre dado fixo, sem aleatoriedade — sempre passam, e importar o módulo é, na prática, rodar a suíte de testes dele.
+
+`num_friends_good` e `daily_minutes_good` já vêm **sem** um usuário-outlier removido pelo próprio livro-texto: alguém com 100 amigos "declarados", quase certamente uma conta de teste ou um erro de captura, que distorceria qualquer estatística calculada sobre a lista inteira.
+:::
+
+```{python}
+#| label: descreve-dados
+len(num_friends_good), mean(num_friends_good), mean(daily_minutes_good)
+```
+
+```{python}
+#| label: correlacao-dados
+correlation(num_friends_good, daily_minutes_good)
+```
+
+São 203 usuários. Em média, cada um tem quase 7 amigos e passa cerca de 29 minutos por dia no site. E a correlação — pouco mais de 0,57 — diz que existe uma tendência real: mais amigos, mais tempo. Mas repare no que esse número **não** diz. Ele não diz se um amigo a mais vale, em média, 10 segundos ou 10 minutos a mais de uso. Ele não dá uma equação. Para isso, precisamos de outra coisa: um modelo.
+
+## O modelo
+
+::: {.callout-important}
+Vamos supor que você já se convenceu de que ter mais amigos **causa** mais tempo no site — e não o contrário (quem já passa mais tempo no site tende a fazer mais amigos ali), nem um terceiro fator que produz os dois efeitos ao mesmo tempo (por exemplo, ter mais tempo livre em geral). Correlação sozinha nunca prova isso; é uma suposição que se traz de fora dos dados, não uma conclusão que se tira deles. O capítulo segue com essa suposição porque o objetivo aqui é regressão, não inferência causal — mas vale lembrar que ela está sendo feita.
+:::
+
+Com essa suposição em mãos, hipotetizamos que existem constantes $\alpha$ (alfa) e $\beta$ (beta) tais que:
+
+$$
+y_i = \beta x_i + \alpha + \varepsilon_i
+$$
+
+em que $y_i$ é o número de minutos que o usuário $i$ passa no site por dia, $x_i$ é o número de amigos que o usuário $i$ tem, e $\varepsilon_i$ é um termo de erro — esperamos que pequeno — que representa outros fatores não capturados por este modelo simples: o que o usuário faz da vida, se está de férias, quantos outros aplicativos disputam a atenção dele, e assim por diante.
+
+$\beta$ é a **inclinação**: quantos minutos a mais por dia um amigo adicional está associado a produzir. $\alpha$ é o **intercepto**: quantos minutos por dia o modelo prevê para um usuário com zero amigos.
+
+## Prevendo e medindo o erro
+
+Supondo que já sabemos escolher $\alpha$ e $\beta$, fazer previsões é imediato:
+
+```{python}
+#| label: predict-error
+def predict(alpha: float, beta: float, x_i: float) -> float:
+    return beta * x_i + alpha
+
+def error(alpha: float, beta: float, x_i: float, y_i: float) -> float:
+    """
+    O erro ao prever beta * x_i + alpha
+    quando o valor real é y_i
+    """
+    return predict(alpha, beta, x_i) - y_i
+```
+
+Como escolher $\alpha$ e $\beta$? Qualquer escolha das duas nos dá uma previsão para cada `x_i`. Como conhecemos o valor real `y_i`, podemos calcular o erro de cada par. O que gostaríamos de saber é o erro **total** sobre o conjunto de dados inteiro — mas somar os erros direto não presta: se a previsão para `x_1` está alta demais e a previsão para `x_2` está baixa demais na mesma proporção, os erros se cancelam e escondem um modelo ruim. A saída é somar os erros **ao quadrado**:
+
+```{python}
+#| label: sum-of-sqerrors
+from scratch.linear_algebra import Vector
+
+def sum_of_sqerrors(alpha: float, beta: float, x: Vector, y: Vector) -> float:
+    return sum(error(alpha, beta, x_i, y_i) ** 2
+               for x_i, y_i in zip(x, y))
+```
+
+A solução de **mínimos quadrados** é escolher o $\alpha$ e o $\beta$ que deixam `sum_of_sqerrors` a menor possível.
+
+## A fórmula fechada
+
+Aqui está a dívida deste capítulo com o [Capítulo 5](../cap05/index.qmd). Ao apresentar gradiente descendente, aquele capítulo mostrou como ajustar `theta = [inclinação, intercepto]` iterando — um passo pequeno de cada vez, na direção oposta ao gradiente do erro quadrático médio — e prometeu que a regressão linear simples tinha um jeito mais direto: uma **fórmula fechada**.
+
+Usando cálculo (ou álgebra tediosa, nas palavras do próprio Grus), o $\alpha$ e o $\beta$ que minimizam o erro são dados por:
+
+```{python}
+#| label: least-squares-fit
+from typing import Tuple
+from scratch.linear_algebra import Vector
+from scratch.statistics import correlation, standard_deviation, mean
+
+def least_squares_fit(x: Vector, y: Vector) -> Tuple[float, float]:
+    """
+    Dados dois vetores x e y,
+    encontra os valores de alpha e beta de mínimos quadrados
+    """
+    beta = correlation(x, y) * standard_deviation(y) / standard_deviation(x)
+    alpha = mean(y) - beta * mean(x)
+    return alpha, beta
+```
+
+::: {.exemplo}
+Nada de laço, nada de `theta` inicial aleatório, nada de taxa de aprendizado. `least_squares_fit` calcula duas médias, uma correlação (que por baixo é uma covariância dividida por dois desvios padrão) e dois desvios padrão — e devolve a resposta exata. É exatamente o que a [seção 5.5](../cap05/05-ajustando-modelos.qmd) prometeu: **duas médias, uma covariância, uma variância, sem laço nenhum**.
+
+Essa fórmula existe porque o problema é simples o bastante para ter solução fechada: derive `sum_of_sqerrors` em relação a $\alpha$ e a $\beta$, iguale as duas derivadas a zero, resolva o sistema — e o que sobra são só médias, variância e covariância. A [seção 11.2](02-usando-gradiente-descendente.qmd) resolve exatamente o mesmo problema pelo caminho do Capítulo 5, iterando em vez de calculando direto, e as duas respostas vão bater.
+:::
+
+Sem passar pela conta exata, vale pensar no porquê disso fazer sentido. A escolha de $\alpha$ diz que, ao ver o valor **médio** da variável independente `x`, prevemos o valor **médio** da variável dependente `y` — é por isso que `alpha = mean(y) - beta * mean(x)`. A escolha de $\beta$ diz que, a cada aumento de um desvio padrão em `x`, a previsão aumenta `correlation(x, y)` desvios padrão de `y`. Quando `x` e `y` são perfeitamente correlacionados, um aumento de um desvio padrão em `x` produz um aumento de exatamente um desvio padrão na previsão de `y`. Quando são perfeitamente anticorrelacionados, o aumento em `x` produz uma **queda** na previsão. E quando a correlação é zero, `beta` é zero — variar `x` não muda a previsão em nada.
+
+Como sempre, escrevemos um teste rápido:
+
+```{python}
+#| label: teste-least-squares
+x = [i for i in range(-100, 110, 10)]
+y = [3 * i - 5 for i in x]
+
+# Deveria encontrar que y = 3x - 5
+assert least_squares_fit(x, y) == (-5, 3)
+```
+
+Agora é fácil aplicar isso aos dados sem outlier que já carregamos:
+
+```{python}
+#| label: ajusta-dados-reais
+alpha, beta = least_squares_fit(num_friends_good, daily_minutes_good)
+assert 22.9 < alpha < 23.0
+assert 0.9 < beta < 0.905
+
+alpha, beta
+```
+
+Isso dá $\alpha \approx 22{,}95$ e $\beta \approx 0{,}904$. O modelo diz que esperamos que um usuário com $n$ amigos passe $22{,}95 + n \times 0{,}904$ minutos por dia no site. Ou seja: prevemos que um usuário sem nenhum amigo no DataSciencester ainda passaria uns 23 minutos por dia no site — e que cada amigo adicional está associado a quase mais um minuto de uso diário.
+
+## Olhando o ajuste
+
+Como o [Capítulo 3](../cap03/04-graficos-de-dispersao.qmd) mostrou, um gráfico de dispersão é a ferramenta certa para duas variáveis pareadas. Vamos usar o mesmo `plt.scatter`, agora com os 203 pontos reais, e desenhar a reta ajustada por cima:
+
+```{python}
+#| label: fig-regressao-amigos-minutos
+#| fig-cap: "Modelo de regressão linear simples sobre os dados da DataSciencester"
+plt.scatter(num_friends_good, daily_minutes_good)
+
+x_reta = [min(num_friends_good), max(num_friends_good)]
+y_reta = [predict(alpha, beta, x_i) for x_i in x_reta]
+plt.plot(x_reta, y_reta, color='black')
+
+plt.title("Regressão Linear Simples")
+plt.xlabel("# de amigos")
+plt.ylabel("minutos por dia")
+plt.show()
+```
+
+A reta passa razoavelmente perto da nuvem de pontos, mas está longe de tocar a maioria deles — a dispersão vertical em torno da reta é grande, principalmente para valores baixos de `x`, onde a maior parte dos dados está concentrada.
+
+## Quão bom é o ajuste?
+
+Olhar o gráfico dá uma impressão, mas "razoavelmente perto" não é uma métrica. A métrica usual para regressão é o **coeficiente de determinação** (ou R²), que mede a fração da variação total em `y` que o modelo captura:
+
+```{python}
+#| label: r-squared
+from scratch.statistics import de_mean
+
+def total_sum_of_squares(y: Vector) -> float:
+    """a variação quadrática total dos y_i em torno da média deles"""
+    return sum(v ** 2 for v in de_mean(y))
+
+def r_squared(alpha: float, beta: float, x: Vector, y: Vector) -> float:
+    """
+    a fração da variação em y capturada pelo modelo, que é igual a
+    1 menos a fração da variação em y NÃO capturada pelo modelo
+    """
+    return 1.0 - (sum_of_sqerrors(alpha, beta, x, y) /
+                  total_sum_of_squares(y))
+
+rsq = r_squared(alpha, beta, num_friends_good, daily_minutes_good)
+assert 0.328 < rsq < 0.330
+
+rsq
+```
+
+O R² dá cerca de 0,329. Para entender de onde vêm os limites dessa métrica, vale comparar com o pior modelo linear razoável: sempre prever a média de `y`, ignorando `x` completamente — o que corresponde a `alpha = mean(y)` e `beta = 0`. A soma dos erros ao quadrado desse modelo "vazio" é, por construção, exatamente igual a `total_sum_of_squares(y)`: sem informação nenhuma sobre `x`, o melhor palpite constante para cada ponto é a própria média. Isso dá R² = 0.
+
+O modelo de mínimos quadrados precisa ser **pelo menos** tão bom quanto esse, porque ele é, por definição, a escolha de $\alpha$ e $\beta$ que minimiza a soma dos erros ao quadrado — e "sempre prever a média" é só mais uma escolha possível de $\alpha$ e $\beta$ entre todas as que ele considerou. Logo a soma dos erros ao quadrado do modelo ajustado é **no máximo** a soma dos erros ao quadrado do modelo vazio, o que trava o R² entre 0 e 1: quanto mais alto, melhor o ajuste.
+
 ::: {.callout-warning}
-## Em construção
-O conteúdo desta seção ainda será escrito.
+## 0,329 não é "bom" nem "ruim" — é o que os dados sustentam
+
+Um R² de 0,329 diz que o número de amigos explica cerca de um terço da variação em quantos minutos alguém passa no site. Isso é um ajuste **razoável, mas nada além disso** — o modelo captura uma tendência real (a correlação de 0,57 já indicava isso), mas dois terços da variação vêm de outras coisas: hábitos individuais, o que cada pessoa faz na vida, fatores que este modelo de uma única variável não tem como enxergar. Um R² baixo não é sinal de erro de código; pode ser, e frequentemente é, sinal de que a variável escolhida não conta a história inteira.
+:::
+
+O [Capítulo 8](../cap08/index.qmd) deu o vocabulário para julgar modelos de classificação — acurácia, precisão, revocação. R² é a métrica equivalente para regressão: mede qualidade de ajuste, não corretude de categoria. A [seção 11.3](03-maxima-verossimilhanca.qmd), a seguir, dá a justificativa de fundo para minimizar exatamente essa soma de quadrados, em vez de qualquer outra medida de erro que também punisse desvios grandes.
+
+::: {.callout-tip collapse="true"}
+## Na prática: `scikit-learn`
+
+```python
+from sklearn.linear_model import LinearRegression
+
+X = [[x] for x in num_friends_good]
+y = daily_minutes_good
+
+modelo = LinearRegression().fit(X, y)
+modelo.intercept_, modelo.coef_[0]   # alpha, beta
+
+modelo.score(X, y)                    # R²
+```
+
+`LinearRegression` não itera e não pede taxa de aprendizado: ela resolve o sistema de mínimos quadrados por álgebra linear direta (decomposição em valores singulares), o equivalente industrial da fórmula fechada que você acabou de escrever à mão. `.score()` devolve o R² sem que você precise escrever `total_sum_of_squares` nem `r_squared` — mas é a mesma conta, e agora você sabe o que ela faz por dentro: soma de quadrados do modelo dividida pela soma de quadrados do modelo vazio, subtraída de 1.
 :::

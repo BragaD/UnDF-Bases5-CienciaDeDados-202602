@@ -79,7 +79,7 @@ O `scikit-learn` **nunca** aparece na implementação de uma seção. Só nesse 
 
 ```bash
 make render    # do projeto inteiro, nunca de subdiretório
-make teste     # 20 testes, todos precisam passar
+make teste     # 21 testes, todos precisam passar
 ```
 
 **Rode `make render` em primeiro plano e espere ele terminar.** Ele leva alguns minutos e imprime `render OK (tentativa N)` no fim.

@@ -129,15 +129,22 @@ def test_nenhuma_secao_inventa_numero_de_secao_do_grus():
     Deixa passar referências legítimas aos capítulos deste livro como "veja a seção 9.2
     deste capítulo" ou tabelas de sumário como `| [9.1](01-o-modelo.qmd) |`.
     """
-    padrao_numero = re.compile(r"se[çc][ãa]o\s+\d+\.\d+", re.IGNORECASE)
+    padrao_numero = re.compile(r"se[çc][ãa]o\s+(\d+)\.\d+", re.IGNORECASE)
     ofensores = []
     for p in CONTENT.rglob("*.qmd"):
+        # O número do NOSSO capítulo, tirado do caminho: content/cap07/... -> 7
+        m_cap = re.search(r"cap(\d+)", str(p))
+        nosso_cap = int(m_cap.group(1)) if m_cap else None
+
         texto = p.read_text(encoding="utf-8")
         for match in padrao_numero.finditer(texto):
-            # Verifica se 'grus' aparece nos ~80 caracteres após a correspondência
+            # "seção 7.1" dentro de content/cap07/ é a NOSSA numeração, legítima
+            # mesmo perto de uma citação ao Grus — o capítulo 7 daqui é o 10 dele.
+            if nosso_cap is not None and int(match.group(1)) == nosso_cap:
+                continue
             trecho = texto[match.start() : match.start() + 80].lower()
             if "grus" in trecho:
-                ofensores.append(str(p.relative_to(RAIZ)))
+                ofensores.append(f"{p.relative_to(RAIZ)}: {match.group(0)}")
                 break
     assert not ofensores, "número de seção inventado em: " + ", ".join(sorted(ofensores))
 

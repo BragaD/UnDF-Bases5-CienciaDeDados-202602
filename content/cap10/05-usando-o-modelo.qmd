@@ -63,12 +63,12 @@ for filename in glob.glob(path):
 ::: {.callout-important}
 Os dois chunks acima **não são executados** neste livro — repare no `eval: false` em ambos.
 
-O corpus SpamAssassin completo soma centenas de megabytes, espalhados por milhares de arquivos de e-mail. E o código logo acima descarta tudo, de cada arquivo, menos a linha `Subject:`. Baixar centenas de MB para usar uma linha de texto por arquivo não se justifica dentro de um repositório de livro — então este material vendoriza só o que o classificador de fato usa: `dados/spam-assuntos.csv`, com duas colunas, `assunto` e `is_spam`.
+O corpus SpamAssassin completo soma centenas de megabytes, espalhados por milhares de arquivos de e-mail. E o código logo acima descarta tudo, de cada arquivo, menos a linha `Subject:`. Baixar centenas de MB para usar uma linha de texto por arquivo não se justifica dentro de um repositório de livro — então este material já traz commitado só o que o classificador de fato usa: `dados/spam-assuntos.csv`, com duas colunas, `assunto` e `is_spam`.
 
 O código de download e o de varredura continuam aqui porque saber de onde o dado vem, e como alguém reduziria um e-mail inteiro a uma única linha, *é* parte da lição — a mesma razão pela qual o [Capítulo 9](../cap09/02-exemplo-o-dataset-iris.qmd) mostra o download do Iris sem executá-lo. O que não precisa acontecer a cada renderização é o download em si, nem a varredura de milhares de arquivos para produzir de novo o CSV que já está commitado.
 :::
 
-## Carregando o CSV vendorizado
+## Carregando os dados
 
 ```{python}
 #| label: carrega-csv
@@ -95,7 +95,7 @@ total, num_spam, num_ham
 
 2.800 contra 500 não é acidente de amostragem — é como o corpus real se parece: a maior parte do que chega numa caixa de entrada não é spam. E é exatamente o cenário em que a acurácia engana, que a [seção sobre correção](../cap08/04-correcao.qmd) do Capítulo 8 ensinou com a piada do teste de leucemia: quando uma classe domina, um modelo pode acertar muito e não fazer nada de útil.
 
-Um classificador que respondesse "não é spam" para tudo, sem examinar uma palavra sequer, já sairia com acurácia alta só por causa dessa proporção — o equivalente ao teste "não tem leucemia para ninguém" daquele capítulo. Vale calcular esse piso depois de separar treino e teste, adiante, e usá-lo como régua contra a qual o classificador de verdade precisa se provar melhor que nada.
+Um classificador que respondesse "não é spam" para tudo, sem examinar uma palavra sequer, já sairia com acurácia alta só por causa dessa proporção — o equivalente ao teste "não tem leucemia para ninguém" daquele capítulo. Calculamos esse piso adiante, depois de separar treino e teste, nas mesmas métricas — não só na acurácia, que é justamente a que mais esconde — e o usamos como régua: é o mínimo que o classificador treinado precisa superar.
 :::
 
 ## Treinando e avaliando
@@ -113,19 +113,36 @@ train_messages, test_messages = split_data(data, 0.75)
 len(train_messages), len(test_messages)
 ```
 
-2.475 mensagens de treino, 825 de teste. Antes de treinar, calculamos o piso prometido no callout acima: a acurácia de um classificador que respondesse sempre "não é spam", só olhando a composição do conjunto de teste.
+2.475 mensagens de treino, 825 de teste. Antes de treinar, calculamos o piso prometido no callout acima: como o classificador que respondesse sempre "não é spam" — tp = 0, fp = 0, sempre — se sairia nas métricas do [Capítulo 8](../cap08/04-correcao.qmd), só olhando a composição do conjunto de teste.
 
 ```{python}
 #| label: piso-sempre-ham
-baseline_ham = sum(1 for m in test_messages if not m.is_spam)
-baseline_accuracy = baseline_ham / len(test_messages)
+from scratch.machine_learning import accuracy, precision, recall, f1_score
 
-baseline_ham, len(test_messages), baseline_accuracy
+baseline_spam = sum(1 for m in test_messages if m.is_spam)
+baseline_ham = len(test_messages) - baseline_spam
+
+baseline_accuracy = accuracy(0, 0, baseline_spam, baseline_ham)
+baseline_recall = recall(0, 0, baseline_spam, baseline_ham)
+
+baseline_spam, baseline_ham, baseline_accuracy, baseline_recall
 ```
 
-699 das 825 mensagens de teste são ham, o que dá uma acurácia de 84,7% para um classificador que nunca examina uma palavra. É a régua.
+699 das 825 mensagens de teste são ham, o que já entrega a acurácia do piso: 84,7% — para um classificador que nunca examina uma palavra. A revocação conta outra história: **0,0**. Dos 126 spams do conjunto de teste, esse classificador encontra nenhum.
 
-Agora treinamos o classificador de verdade e geramos previsões para o conjunto de teste:
+E a precisão nem chega a ser uma conta possível:
+
+```{python}
+#| label: piso-precisao-indefinida
+try:
+    precision(0, 0, baseline_spam, baseline_ham)
+except ZeroDivisionError:
+    print("precisão indefinida: 0 verdadeiros positivos sobre 0 previsões de spam")
+```
+
+`precision` divide `tp` por `tp + fp`, e as duas são zero — o classificador nunca aponta "spam", então não há nada para dividir. É o par 98,1%/1,4% do teste do Luke, agora com dados reais: acurácia enorme, revocação zero, precisão que não existe.
+
+Agora treinamos o classificador propriamente dito e geramos previsões para o conjunto de teste:
 
 ```{python}
 #| label: treina-e-preve
@@ -148,8 +165,6 @@ confusion_matrix
 
 ```{python}
 #| label: metricas
-from scratch.machine_learning import precision, recall, accuracy
-
 tp = confusion_matrix[(True, True)]
 fp = confusion_matrix[(False, True)]
 fn = confusion_matrix[(True, False)]
@@ -160,18 +175,22 @@ tp, fp, fn, tn
 
 ```{python}
 #| label: precisao-revocacao
-accuracy(tp, fp, fn, tn), precision(tp, fp, fn, tn), recall(tp, fp, fn, tn)
+accuracy(tp, fp, fn, tn), precision(tp, fp, fn, tn), recall(tp, fp, fn, tn), f1_score(tp, fp, fn, tn)
 ```
 
-Nesta renderização: 80 verdadeiros positivos, 24 falsos positivos, 675 verdadeiros negativos e 46 falsos negativos. As funções `accuracy`, `precision` e `recall` são as mesmas do [Capítulo 8](../cap08/04-correcao.qmd) — importadas de `scratch.machine_learning`, não redefinidas aqui. A acurácia sai em 91,5%, a precisão em 76,9% e a revocação em 63,5%.
+Nesta renderização: 80 verdadeiros positivos, 24 falsos positivos, 675 verdadeiros negativos e 46 falsos negativos. `accuracy`, `precision`, `recall` e `f1_score` são as mesmas funções do [Capítulo 8](../cap08/04-correcao.qmd) — importadas de `scratch.machine_learning` no chunk do piso, não redefinidas aqui. A acurácia sai em 91,5%, a precisão em 76,9%, a revocação em 63,5% e o F1 em 0,696.
 
 ::: {.conceito}
-Compare com o piso da seção anterior: 84,7% de acurácia sem olhar para nenhuma palavra, contra 91,5% do classificador de verdade. É uma melhora real, não um efeito do desequilíbrio — diferente do teste do Luke, aqui o ganho vem de examinar o conteúdo da mensagem.
+Sete pontos de acurácia — 84,7% do piso contra 91,5% do classificador treinado — parecem pouco, e é exatamente aí que a acurácia engana, como a piada do Luke do Capítulo 8 avisou. As outras métricas contam outra história: o piso tinha revocação 0,0 e precisão indefinida; o classificador treinado tem revocação de 63,5% e F1 de 0,696 (o F1 do piso nem chega a existir — sem precisão, não há como calculá-lo). Não é uma melhora de sete pontos. É a diferença entre um modelo e nada, com um número de acurácia enorme escondendo os dois lados dela — igual ao teste do Luke, só que aqui o modelo treinado também existe, e vence por uma distância que a acurácia sozinha nunca mostraria.
 
-Ainda assim, a precisão e a revocação continuam moderadas, não excelentes. De cada 100 mensagens que o modelo aponta como spam, cerca de 23 são, na verdade, legítimas — e de cada 100 mensagens de spam de verdade, o modelo deixa passar cerca de 36. Para um classificador que olha só a linha de assunto, sem ver o corpo da mensagem, não é um resultado ruim; é o resultado de deliberadamente jogar fora quase toda a informação disponível, exatamente como o livro descreve.
+Ainda assim, a precisão e a revocação do classificador treinado continuam moderadas, não excelentes. De cada 100 mensagens que o modelo aponta como spam, cerca de 23 são, na verdade, legítimas — e de cada 100 mensagens que realmente são spam, o modelo deixa passar cerca de 36. Para um classificador que olha só a linha de assunto, sem ver o corpo da mensagem, não é um resultado ruim; é o resultado de deliberadamente jogar fora quase toda a informação disponível, exatamente como o livro descreve.
 :::
 
-Os números da nossa renderização ficam muito perto dos que @grus2019 relata rodando o mesmo código sobre o corpus completo — 84 verdadeiros positivos, 25 falsos positivos, 703 verdadeiros negativos, 44 falsos negativos, com precisão de 77% e revocação de 65%. A proximidade não é coincidência: o CSV vendorizado veio do mesmo corpus, só que reduzido antes, em vez de durante, a renderização — e é maior evidência de que vendorizar só os assuntos preservou o que o classificador de fato usa.
+Vale notar uma escolha que o modelo faz sem anunciar. `predict` devolve `prob_if_spam / (prob_if_spam + prob_if_ham)`, sem peso nenhum pela proporção real de spam no treino — o que equivale a assumir $P(\text{spam}) = P(\text{ham}) = 0{,}5$, a mesma simplificação da [seção 10.1](01-um-filtro-de-spam-bem-burro.qmd). Só que o treino tem 2.101 mensagens de ham para 374 de spam, não 50/50. Essa suposição embutida — e nunca corrigida por uma proporção real — explica parte dos 24 falsos positivos: o modelo empurra a decisão para "spam" com mais facilidade do que a proporção do treino justificaria. É também por onde o `scikit-learn` se afasta silenciosamente do nosso código, como o callout da seção anterior menciona: `BernoulliNB` usa `fit_prior=True` por padrão, estimando as duas probabilidades a partir das proporções de treino em vez de assumir 50/50.
+
+Vale parar também num detalhe fácil de passar batido: `predict` devolve uma **probabilidade**, não um rótulo — e o `> 0.5` do chunk `treina-e-preve` é uma escolha nossa, não uma exigência do modelo. O [Capítulo 8](../cap08/04-correcao.qmd) já avisou que, num filtro de spam, um falso positivo (e-mail importante que some no lixo) costuma custar mais caro que um falso negativo (propaganda que passa), e que por isso o limiar deveria pender para a precisão — um limiar mais alto que 0,5, trocando alguns dos 46 falsos negativos por menos dos 24 falsos positivos. É também o contraste mais limpo com o k-vizinhos do Capítulo 9: lá, `majority_vote` devolve um rótulo, ponto final, sem botão para girar depois. Aqui há um botão, e girá-lo é o que você de fato vai fazer ao usar isto.
+
+Os números da nossa renderização ficam muito perto dos que @grus2019 relata rodando o mesmo código sobre o corpus completo — 84 verdadeiros positivos, 25 falsos positivos, 703 verdadeiros negativos, 44 falsos negativos, com precisão de 77% e revocação de 65%. A proximidade não é coincidência: o CSV que carregamos veio do mesmo corpus, só reduzido antes, em vez de durante, a renderização — e é mais uma evidência de que manter só os assuntos preservou o que o classificador de fato usa.
 
 ::: {.callout-note}
 O livro observa, depois desses números: "presumivelmente faríamos melhor se olhássemos além da linha de assunto." É um lembrete de que o [Capítulo 8](../cap08/06-extracao-e-selecao-de-atributos.qmd) já tinha antecipado — o classificador Naive Bayes é adequado a atributos do tipo sim-ou-não, e a linha de assunto sozinha só entrega um subconjunto pequeno desses atributos. O corpo do e-mail inteiro daria muito mais palavras — muito mais atributos sim-ou-não — para o modelo condicionar sua decisão.
@@ -200,13 +219,35 @@ As palavras mais "spammy" desta renderização incluem *sale*, *money*, *rates*,
 Isso dá alguma confiança intuitiva de que o modelo está fazendo a coisa certa: ele não decorou rótulos, ele encontrou palavras que de fato diferenciam as duas classes neste corpus específico. "Perl" ser hammy não é uma verdade universal sobre spam — é uma verdade sobre *esta* lista de discussão, onde e-mails técnicos legítimos falam de Perl com frequência. Um corpus de e-mails corporativos teria palavras hammy completamente diferentes.
 :::
 
+## Como este modelo poderia melhorar
+
+@grus2019 fecha o capítulo com quatro sugestões de melhoria. Nenhuma delas é implementada aqui, mas vale registrar o que ficou de fora e por quê:
+
+- **Mais dados de treino** — a saída mais óbvia, e a que costuma compensar mais que qualquer ajuste no algoritmo.
+- Um limiar `min_count`, ignorando tokens vistos poucas vezes no treino. Palavras raras carregam pouca evidência estatística; incluí-las pode acrescentar ruído em vez de sinal.
+- Um **stemmer**: uma função que reduz palavras aparentadas à mesma forma, para que `cheap` e `cheapest` contem como o mesmo token. O próprio módulo vendorizado, `scratch/naive_bayes.py`, define um stemmer ingênuo que nenhuma seção deste capítulo chama:
+
+  ```python
+  def drop_final_s(word):
+      return re.sub("s$", "", word)
+  ```
+
+  Ele existe no código do livro como esboço de uma ideia, não como parte do classificador — daí não aparecer em nenhum chunk executado aqui. Um stemmer sério é bem mais delicado que remover um "s" final; o [Porter stemmer](https://tartarus.org/martin/PorterStemmer/), citado pelo próprio @grus2019, é o padrão da área.
+- Atributos "fantasmas", como um token artificial `contains:number` que marcaria a presença de qualquer dígito na mensagem — uma forma de extrair sinal que `tokenize` sozinho não captura, sem sair do modelo de atributos sim-ou-não.
+
 ## Contraste com o Capítulo 9
 
-Vale fechar comparando os dois classificadores construídos até aqui neste livro. O k-vizinhos mais próximos, do [Capítulo 9](../cap09/index.qmd), não tem parâmetro nenhum para ajustar e não passa por nenhuma etapa de treino — o "modelo" é literalmente o conjunto de dados guardado, e toda a conta acontece na hora de classificar um ponto novo. O Naive Bayes é o oposto: `train` faz um trabalho de verdade, percorrendo cada mensagem e acumulando contagens em `token_spam_counts` e `token_ham_counts`; depois de treinado, `predict` não olha mais para os dados de treino, só para as contagens já resumidas.
+Vale fechar comparando os dois classificadores construídos até aqui neste livro. O k-vizinhos mais próximos, do [Capítulo 9](../cap09/index.qmd), não passa por nenhuma etapa de treino — o "modelo" é literalmente o conjunto de dados guardado, e toda a conta acontece na hora de classificar um ponto novo. Isso não quer dizer que ele não tenha nada para ajustar: a [seção 9.2](../cap09/02-exemplo-o-dataset-iris.qmd) escolheu $k=5$ à mão, e o texto de lá já avisava que "numa aplicação real criaríamos um conjunto de validação para escolher". O Naive Bayes é o oposto na etapa de treino: `train` percorre cada mensagem e acumula contagens em `token_spam_counts` e `token_ham_counts`; depois de treinado, `predict` não olha mais para os dados brutos, só para essas contagens já resumidas.
+
+Repare que os dois modelos têm, cada um, um hiperparâmetro chamado $k$ — e são duas coisas diferentes com o mesmo nome. O $k$ do Capítulo 9 é o número de vizinhos que votam; o $k$ deste capítulo é o pseudocontador que suaviza uma contagem de palavras (seção 10.2). Não há relação entre os dois além da letra — vale desarmar a confusão antes que ela aconteça.
+
+Há um contraste mais interessante escondido nisso. A [seção 9.3](../cap09/03-a-maldicao-da-dimensionalidade.qmd) gastou uma seção inteira mostrando que a distância — a única ferramenta do k-vizinhos — desmorona em dimensão alta, porque dois pontos só ficam próximos se estiverem próximos em **todas** as dimensões ao mesmo tempo. O vocabulário deste capítulo tem milhares de palavras — milhares de dimensões, pela mesma contagem daquela seção — e o Naive Bayes não sente nada disso. A suposição de independência da [seção 10.2](02-um-filtro-mais-sofisticado.qmd) é exatamente o que evita o problema: em vez de medir distância num espaço de milhares de dimensões, o modelo multiplica milhares de probabilidades unidimensionais, palavra por palavra. É geometria trocada por contagem — e é por isso que este classificador continua funcionando exatamente onde o k-vizinhos desmoronaria.
 
 ::: {.conceito}
-Essa é uma diferença que vale generalizar. Modelos "preguiçosos" (*lazy*), como o k-vizinhos, adiam todo o trabalho para a hora da previsão e precisam guardar o conjunto de treino inteiro. Modelos que treinam de verdade, como o Naive Bayes, fazem o trabalho uma vez, guardam um resumo compacto — aqui, duas tabelas de contagens por palavra — e descartam os dados brutos. O compromisso troca tempo de treino por tempo de previsão, e memória de treino por memória de previsão.
+Essa é uma diferença que vale generalizar. Modelos "preguiçosos" (*lazy*), como o k-vizinhos, adiam todo o trabalho para a hora da previsão e precisam guardar o conjunto de treino inteiro. Modelos que passam por um treino de fato, como o Naive Bayes, fazem o trabalho uma vez, guardam um resumo compacto — aqui, duas tabelas de contagens por palavra — e descartam os dados brutos. O compromisso troca tempo de treino por tempo de previsão, e memória de treino por memória de previsão.
 :::
+
+O padrão que importa carregar adiante não é o Naive Bayes em si, mas essa postura: comprimir o treino em parâmetros pequenos e jogar fora o resto. Os capítulos de regressão, a partir daqui, fazem exatamente isso — só que os parâmetros deixam de ser contagens de palavras e passam a ser coeficientes ajustados por gradiente descendente.
 
 ::: {.callout-tip collapse="true"}
 ## Na prática: `scikit-learn`
@@ -237,7 +278,7 @@ confusion_matrix(y_teste, previsto)
 precision_score(y_teste, previsto), recall_score(y_teste, previsto)
 ```
 
-Os números não saem idênticos aos nossos — o `train_test_split` embaralha de outro jeito, e o `CountVectorizer` tokeniza com outra expressão regular por padrão (seu `token_pattern` default exige ao menos duas letras, o que descartaria tokens como o `"a"` que o nosso `tokenize` mantém). Mas a ideia é a mesma de ponta a ponta: contar palavras por classe, suavizar com um pseudocontador, combinar por Bayes assumindo independência.
+Os números não saem idênticos aos nossos, por três motivos: o `train_test_split` embaralha de outro jeito; o `CountVectorizer` tokeniza com outra expressão regular por padrão (seu `token_pattern` default exige ao menos duas letras, o que descartaria tokens como o `"a"` que o nosso `tokenize` mantém); e, o maior deles, `fit_prior=True` por padrão — a biblioteca estima $P(\text{spam})$ e $P(\text{ham})$ pelas proporções reais do treino (374 contra 2.101), não pelo 50/50 que o nosso `predict` assume desde a seção 10.1. Passar `fit_prior=False` reproduziria essa suposição, para quem quiser comparar as duas versões lado a lado. Mesmo com essas diferenças, a ideia é igual de ponta a ponta: contar palavras por classe, suavizar com um pseudocontador, combinar por Bayes assumindo independência.
 
-O que a biblioteca não faz por você é a parte mais importante desta seção: dizer *quais* palavras pesaram na decisão. `BernoulliNB` guarda o equivalente a `token_spam_counts` e `token_ham_counts` em `feature_log_prob_`, mas extrair dali as palavras mais "spammy" exige quase o mesmo código que você já escreveu — a introspecção não vem de graça só por trocar de biblioteca.
+O que a biblioteca não faz por você é a parte mais importante desta seção: dizer *quais* palavras pesaram na decisão. `BernoulliNB` guarda o equivalente a `token_spam_counts` e `token_ham_counts` em `feature_log_prob_`, mas extrair dali as palavras mais "spammy" exige quase o mesmo código que você já escreveu — a introspecção não vem de graça só por trocar de biblioteca. (E, como a seção de implementação mencionou, `BernoulliNB` é só metade da história — `MultinomialNB`, que conta em vez de marcar presença, é a escolha mais comum para texto corrido fora deste capítulo.)
 :::

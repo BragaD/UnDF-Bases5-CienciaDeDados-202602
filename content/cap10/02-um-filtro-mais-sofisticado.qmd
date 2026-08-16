@@ -14,7 +14,9 @@ $$
 P(X_1 = x_1, \ldots, X_n = x_n \mid S) = P(X_1 = x_1 \mid S) \times \cdots \times P(X_n = x_n \mid S)
 $$
 
-Intuitivamente, isso significa que saber se uma mensagem de spam contém a palavra *bitcoin* não te diz nada sobre se ela também contém *rolex*. É uma suposição extrema — daí o nome do método — e é fácil ver o quanto ela ignora: se o vocabulário fosse só *bitcoin* e *rolex*, e metade das mensagens de spam fosse "ganhe bitcoin" e a outra metade "rolex autêntico", o modelo estimaria
+Aqui, cada $x_i$ vale 1 se a palavra $w_i$ aparece na mensagem e 0 caso contrário — e o fator correspondente muda de acordo: quando $x_i = 1$ o fator é $P(X_i \mid S)$, a probabilidade de ver a palavra; quando $x_i = 0$ o fator é $1 - P(X_i \mid S)$, a probabilidade de **não** vê-la. A ausência de uma palavra é informação tanto quanto a presença, e o modelo vai usar as duas.
+
+Intuitivamente, a suposição significa que saber se uma mensagem de spam contém a palavra *bitcoin* não diz nada sobre se ela também contém *rolex*. É uma suposição extrema — daí o nome do método — e é fácil ver o quanto ela ignora: se o vocabulário fosse só *bitcoin* e *rolex*, e metade das mensagens de spam fosse "ganhe bitcoin" e a outra metade "rolex autêntico", o modelo estimaria
 
 $$
 P(X_1 = 1, X_2 = 1 \mid S) = P(X_1 = 1 \mid S)\, P(X_2 = 1 \mid S) = 0{,}5 \times 0{,}5 = 0{,}25
@@ -36,7 +38,7 @@ E a suposição de independência é o que permite calcular cada probabilidade d
 
 ## O problema do *underflow*
 
-Na prática, é melhor evitar multiplicar muitas probabilidades entre si, por causa de um problema chamado **underflow**: o computador não lida bem com números de ponto flutuante grudados demais em zero. Um vocabulário de milhares de palavras significa milhares de fatores entre 0 e 1 sendo multiplicados — e o produto pode ficar pequeno demais para o `float` representar, colapsando para exatamente `0.0`.
+Na prática, é melhor evitar multiplicar muitas probabilidades entre si, por causa de um problema chamado **underflow**. O menor `float` positivo normal fica em torno de $10^{-308}$ — e isso não é uma questão de precisão, é o alcance do expoente que a representação de ponto flutuante consegue guardar. Multiplicar, por exemplo, 300 fatores de 0,01 pediria algo perto de $10^{-600}$: não há expoente para isso, então o produto não fica impreciso — ele vira exatamente `0.0`, e leva a informação junto. Um vocabulário de milhares de palavras multiplica exatamente esse tipo de fator, milhares de vezes.
 
 Lembrando da álgebra: $\log(ab) = \log a + \log b$ e $\exp(\log x) = x$. Então, em vez de calcular $p_1 \times \cdots \times p_n$ diretamente, calculamos o equivalente — mas mais amigável ao ponto flutuante:
 
@@ -84,7 +86,7 @@ Falta só decidir como estimar $P(X_i \mid S)$ e $P(X_i \mid \lnot S)$ — a pro
 
 Isso causa um problema sério. Imagine que, no conjunto de treino, a palavra *data* só aparece em mensagens legítimas. Estimaríamos $P(\text{data} \mid S) = 0$ — e o classificador atribuiria probabilidade zero de spam a *qualquer* mensagem que contivesse "data", mesmo uma como "data sobre bitcoin grátis e rolex autêntico". Para evitar isso, usa-se **suavização** (*smoothing*).
 
-Em particular, escolhemos um **pseudocontador** $k$ e estimamos a probabilidade de ver a $i$-ésima palavra numa mensagem de spam como:
+Em particular, escolhemos um **pseudocontador** $k$ e estimamos a probabilidade de ver a $i$-ésima palavra numa mensagem de spam como (esta é a **suavização de Laplace**, também chamada de **regra da sucessão** — vale saber o nome para poder procurar o assunto por conta própria):
 
 $$
 P(X_i \mid S) = \frac{k + \text{número de spams contendo } w_i}{2k + \text{número de spams}}
@@ -94,8 +96,10 @@ E de forma análoga para $P(X_i \mid \lnot S)$. Ou seja: ao calcular as probabil
 
 ::: {.exemplo}
 Se *data* ocorre em 0 de 98 mensagens de spam, e $k = 1$, a estimativa vira $P(\text{data} \mid S) = 1/100 = 0{,}01$ — pequena, refletindo que *data* é rara em spam, mas nunca exatamente zero. É o que permite ao classificador atribuir alguma probabilidade de spam, por menor que seja, a mensagens que contêm a palavra.
+
+Não existe um valor único e correto de $k$ — é um hiperparâmetro como outro qualquer, normalmente escolhido por validação. Ao longo deste capítulo você vai ver $k=1$ aqui, $k=0{,}5$ como padrão da classe na próxima seção, e ainda outros valores nos callouts de `scikit-learn` (que chama o mesmo parâmetro de `alpha`). Nenhum é "o certo": são escolhas diferentes de quão forte suavizar.
 :::
 
 ::: {.callout-note}
-Este é o mesmo problema, e a mesma solução, do capítulo sobre extração de atributos: um atributo do tipo sim-ou-não (a palavra apareceu ou não) precisa de uma estimativa que nunca trave em 0 ou em 1 diante de pouco dado. Um pseudocontador tem o mesmo espírito de um *prior* fraco.
+Este é o mesmo problema, e a mesma solução, do [capítulo sobre extração de atributos](../cap08/06-extracao-e-selecao-de-atributos.qmd): um atributo do tipo sim-ou-não (a palavra apareceu ou não) precisa de uma estimativa que nunca trave em 0 ou em 1 diante de pouco dado. Um pseudocontador tem o mesmo espírito de um *prior* fraco — uma estimativa inicial, antes de olhar qualquer dado, que os dados corrigem aos poucos conforme chegam.
 :::
