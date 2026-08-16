@@ -4,7 +4,130 @@
 Esta seção corresponde a *Implementation*, do capítulo 13 de @grus2019.
 :::
 
-::: {.callout-warning}
-## Em construção
-O conteúdo desta seção ainda será escrito.
+Agora temos todas as peças para montar o classificador. Primeiro, uma função simples que transforma uma mensagem numa lista de palavras distintas: converte para minúsculas, usa uma expressão regular para extrair "palavras" (letras, números e apóstrofos), e usa um `set` para descartar as repetidas.
+
+```{python}
+#| label: tokenize
+from typing import Set
+import re
+
+def tokenize(text: str) -> Set[str]:
+    text = text.lower()                          # Converte para minúsculas,
+    all_words = re.findall("[a-z0-9']+", text)   # extrai as "palavras", e
+    return set(all_words)                        # remove as duplicadas.
+
+assert tokenize("Data Science is science") == {"data", "science", "is"}
+```
+
+O retorno é um `set` porque, para o modelo, só importa **se** uma palavra apareceu, não quantas vezes — a mesma escolha que sustenta a suavização da [seção anterior](02-um-filtro-mais-sofisticado.qmd): cada palavra do vocabulário é um atributo sim-ou-não. `Set`, junto com `Counter`, `defaultdict` e `NamedTuple`, foi apresentado no [Capítulo 2](../cap02/index.qmd); aqui os quatro trabalham juntos.
+
+Também precisamos de um tipo para representar cada mensagem de treino:
+
+```{python}
+#| label: message
+from typing import NamedTuple
+
+class Message(NamedTuple):
+    text: str
+    is_spam: bool
+```
+
+Como o classificador precisa acumular tokens, contagens e rótulos ao longo do treino, ele vira uma classe. Seguindo a convenção do capítulo, chamamos os e-mails que não são spam de **ham**. O construtor recebe só um parâmetro — o pseudocontador $k$ a usar no cálculo das probabilidades — e inicializa um conjunto vazio de tokens, dois contadores (um por classe, mapeando token para número de mensagens em que ele aparece) e as contagens totais de mensagens de spam e de ham.
+
+O método `train` percorre as mensagens de treino: primeiro incrementa a contagem de mensagens de spam ou de ham, depois tokeniza o texto e, para cada token, incrementa a contagem correspondente. O método `_probabilities` é um método "privado" que calcula $P(\text{token} \mid \text{spam})$ e $P(\text{token} \mid \text{ham})$ para um token, já com a suavização de pseudocontador da seção anterior embutida. E `predict`, como discutido ali, soma log-probabilidades em vez de multiplicar probabilidades pequenas — percorrendo o vocabulário inteiro, não só as palavras da mensagem:
+
+```{python}
+#| label: naive-bayes-classifier
+from typing import List, Tuple, Dict, Iterable
+import math
+from collections import defaultdict
+
+class NaiveBayesClassifier:
+    def __init__(self, k: float = 0.5) -> None:
+        self.k = k  # fator de suavização
+
+        self.tokens: Set[str] = set()
+        self.token_spam_counts: Dict[str, int] = defaultdict(int)
+        self.token_ham_counts: Dict[str, int] = defaultdict(int)
+        self.spam_messages = self.ham_messages = 0
+
+    def train(self, messages: Iterable[Message]) -> None:
+        for message in messages:
+            # Incrementa as contagens de mensagens
+            if message.is_spam:
+                self.spam_messages += 1
+            else:
+                self.ham_messages += 1
+
+            # Incrementa as contagens de palavras
+            for token in tokenize(message.text):
+                self.tokens.add(token)
+                if message.is_spam:
+                    self.token_spam_counts[token] += 1
+                else:
+                    self.token_ham_counts[token] += 1
+
+    def _probabilities(self, token: str) -> Tuple[float, float]:
+        """retorna P(token | spam) e P(token | ham)"""
+        spam = self.token_spam_counts[token]
+        ham = self.token_ham_counts[token]
+
+        p_token_spam = (spam + self.k) / (self.spam_messages + 2 * self.k)
+        p_token_ham = (ham + self.k) / (self.ham_messages + 2 * self.k)
+
+        return p_token_spam, p_token_ham
+
+    def predict(self, text: str) -> float:
+        text_tokens = tokenize(text)
+        log_prob_if_spam = log_prob_if_ham = 0.0
+
+        # Percorre cada palavra do nosso vocabulário
+        for token in self.tokens:
+            prob_if_spam, prob_if_ham = self._probabilities(token)
+
+            # Se o *token* aparece na mensagem,
+            # soma a log-probabilidade de vê-lo;
+            if token in text_tokens:
+                log_prob_if_spam += math.log(prob_if_spam)
+                log_prob_if_ham += math.log(prob_if_ham)
+
+            # senão, soma a log-probabilidade de _não_ vê-lo,
+            # que é log(1 - probabilidade de vê-lo)
+            else:
+                log_prob_if_spam += math.log(1.0 - prob_if_spam)
+                log_prob_if_ham += math.log(1.0 - prob_if_ham)
+
+        prob_if_spam = math.exp(log_prob_if_spam)
+        prob_if_ham = math.exp(log_prob_if_ham)
+        return prob_if_spam / (prob_if_spam + prob_if_ham)
+```
+
+E agora temos um classificador.
+
+::: {.conceito}
+Repare no que `predict` faz com **cada** token do vocabulário, não só com os que aparecem na mensagem: para um token ausente, ele soma $\log(1 - P(\text{token} \mid \text{spam}))$ — a log-probabilidade de *não* vê-lo. Isso é a suposição de independência da seção anterior em ação: a ausência de uma palavra também carrega informação, e o modelo usa isso.
+
+É também o motivo pelo qual o loop percorre `self.tokens` (o vocabulário inteiro visto no treino) em vez de `text_tokens` (as palavras da mensagem sendo classificada). Uma mensagem curta contribui, mesmo assim, com um termo para cada uma das milhares de palavras do vocabulário — a maioria delas ausentes.
+:::
+
+::: {.callout-tip collapse="true"}
+## Na prática: `scikit-learn`
+
+O `scikit-learn` traz `BernoulliNB`, que implementa essencialmente o mesmo algoritmo — Naive Bayes sobre atributos binários (presença ou ausência de cada palavra):
+
+```python
+from sklearn.feature_extraction.text import CountVectorizer
+from sklearn.naive_bayes import BernoulliNB
+
+vetorizador = CountVectorizer(binary=True)
+X = vetorizador.fit_transform(textos_treino)
+
+modelo = BernoulliNB(alpha=1.0)  # alpha é o k deste capítulo
+modelo.fit(X, y_treino)
+modelo.predict_proba(vetorizador.transform(textos_novos))
+```
+
+O `CountVectorizer` faz a tokenização — de forma mais sofisticada que o `tokenize` acima, com opções para *n*-gramas, remoção de palavras comuns (*stop words*) e limites de frequência. O `alpha` do `BernoulliNB` é exatamente o pseudocontador $k$: o mesmo truque de suavização, só com outro nome. E por trás dos panos, a biblioteca também soma log-probabilidades em vez de multiplicar — o mesmo cuidado com *underflow* que você acabou de implementar à mão.
+
+Nada disso muda o que o modelo *é*: contar palavras por classe, suavizar, e combinar via Bayes assumindo independência.
 :::

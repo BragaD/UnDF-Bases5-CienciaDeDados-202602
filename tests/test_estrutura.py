@@ -60,10 +60,17 @@ def test_todo_href_do_quarto_yml_existe_no_disco():
     assert not quebrados, "hrefs apontando para nada: " + ", ".join(sorted(quebrados))
 
 
-# Alvo de link markdown que NÃO menciona `dados` — `](../cap06/index.qmd)`.
-# O lookahead negativo é o ponto: `](../dados/x.csv)` NÃO casa, e por isso
-# continua sendo pego pela regra abaixo. Ver a docstring do teste.
-LINK_MD_SEM_DADOS = re.compile(r"\]\((?![^)]*dados)[^)]*\)")
+# Alvo de link markdown que não aponta para o DIRETÓRIO de dados.
+#
+# O lookahead exige `dados/` com barra, não a palavra `dados` solta. A primeira
+# versão pedia só a palavra, e isso quebrou: as seções do capítulo 7 se chamam
+# `01-explorando-seus-dados.qmd` e `05-manipulando-dados.qmd`, então QUALQUER
+# capítulo que linkasse para lá era acusado de usar caminho relativo de dados.
+# Pego pelo capítulo 10, que legitimamente aponta para o 7.
+#
+# Com a barra, `](../dados/x.csv)` continua não casando — e portanto continua
+# sendo pego pela regra abaixo, que é o defeito que este teste existe para achar.
+LINK_MD_SEM_DADOS = re.compile(r"\]\((?![^)]*dados/)[^)]*\)")
 
 
 def test_nenhum_qmd_usa_caminho_relativo_de_dados():
@@ -187,3 +194,38 @@ def test_livro_completo_88_secoes_105_arquivos():
 
     assert total_secoes == 88, f"esperava 88 seções, achei {total_secoes}"
     assert total_arquivos == 105, f"esperava 105 arquivos, achei {total_arquivos}"
+
+
+def test_nenhum_chunk_comeca_com_linha_indentada():
+    """Um chunk que abre com linha indentada é um bloco partido entre células — e
+    ele falha em SILÊNCIO.
+
+    O caso que motivou este teste: no capítulo 10, uma classe estava dividida em
+    quatro chunks, cada um com um `def` indentado, sem reabrir o `class`. O
+    `quarto render` não acusa nada; o IPython aceita a célula indentada e
+    simplesmente **não anexa o método à classe**. O livro publicaria uma classe
+    quebrada, sem erro, sem teste vermelho, sem nada na tela que denunciasse.
+
+    Cada `.qmd` roda num kernel próprio, mas os chunks DENTRO de um arquivo
+    compartilham estado — o que torna tentador continuar um bloco na célula
+    seguinte. Não funciona: o Python fecha o bloco no fim da célula.
+
+    A regra: todo chunk começa em coluna zero. Se um bloco (classe, função, laço,
+    `with`) precisa de mais de uma célula, ele está no chunk errado — junte tudo
+    numa célula só.
+    """
+    ofensores = []
+    for p in sorted(CONTENT.rglob("*.qmd")):
+        texto = p.read_text(encoding="utf-8")
+        for m in re.finditer(r"^```\{python\}\n(.*?)^```", texto, re.S | re.M):
+            for linha in m.group(1).split("\n"):
+                despido = linha.strip()
+                if not despido or despido.startswith("#"):
+                    continue  # opções `#|` e comentários não contam
+                if linha[:1] in (" ", "\t"):
+                    ofensores.append(f"{p.relative_to(RAIZ)}: {linha.strip()[:50]}")
+                break  # só a primeira linha de código de cada chunk importa
+    assert not ofensores, (
+        "chunk começando com linha indentada (bloco partido entre células, "
+        "falha silenciosa): " + "; ".join(ofensores)
+    )

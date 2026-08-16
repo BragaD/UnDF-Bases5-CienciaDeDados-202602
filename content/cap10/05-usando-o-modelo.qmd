@@ -4,7 +4,240 @@
 Esta seção corresponde a *Using Our Model*, do capítulo 13 de @grus2019.
 :::
 
+Um conjunto de dados popular (embora um tanto velho) é o [corpus público SpamAssassin](https://spamassassin.apache.org/old/publiccorpus/). @grus2019 usa os arquivos com prefixo *20021010*, e traz um script que baixa e descompacta o conjunto inteiro:
+
+```{python}
+#| label: download-spamassassin
+#| eval: false
+from io import BytesIO   # Para tratar bytes como um arquivo
+import requests          # Para baixar os arquivos, que
+import tarfile           # estão em formato .tar.bz.
+
+BASE_URL = "https://spamassassin.apache.org/old/publiccorpus"
+FILES = ["20021010_easy_ham.tar.bz2",
+         "20021010_hard_ham.tar.bz2",
+         "20021010_spam.tar.bz2"]
+
+# É aqui que os dados vão parar,
+# nos subdiretórios /spam, /easy_ham e /hard_ham.
+OUTPUT_DIR = 'spam_data'
+
+for filename in FILES:
+    # Usa requests para baixar o conteúdo de cada URL.
+    content = requests.get(f"{BASE_URL}/{filename}").content
+
+    # Envolve os bytes em memória para usá-los como um "arquivo".
+    fin = BytesIO(content)
+
+    # E extrai todos os arquivos para o diretório de saída.
+    with tarfile.open(fileobj=fin, mode='r:bz2') as tf:
+        tf.extractall(OUTPUT_DIR)
+```
+
+Depois de baixar, você teria três pastas — *spam*, *easy_ham* e *hard_ham* —, cada uma com centenas de e-mails, um por arquivo. Para simplificar, o livro olha só a linha de assunto de cada e-mail, identificada por começar com `"Subject:"`:
+
+```{python}
+#| label: extrai-assuntos
+#| eval: false
+import glob, re
+
+# modifique o caminho para onde você colocou os arquivos
+path = 'spam_data/*/*'
+
+data: List[Message] = []
+
+# glob.glob retorna todo nome de arquivo que casa com o caminho com curinga
+for filename in glob.glob(path):
+    is_spam = "ham" not in filename
+
+    # Há alguns caracteres inválidos nos e-mails; errors='ignore'
+    # pula-os em vez de levantar uma exceção.
+    with open(filename, errors='ignore') as email_file:
+        for line in email_file:
+            if line.startswith("Subject:"):
+                subject = line.lstrip("Subject: ")
+                data.append(Message(subject, is_spam))
+                break  # termina com este arquivo
+```
+
+::: {.callout-important}
+Os dois chunks acima **não são executados** neste livro — repare no `eval: false` em ambos.
+
+O corpus SpamAssassin completo soma centenas de megabytes, espalhados por milhares de arquivos de e-mail. E o código logo acima descarta tudo, de cada arquivo, menos a linha `Subject:`. Baixar centenas de MB para usar uma linha de texto por arquivo não se justifica dentro de um repositório de livro — então este material vendoriza só o que o classificador de fato usa: `dados/spam-assuntos.csv`, com duas colunas, `assunto` e `is_spam`.
+
+O código de download e o de varredura continuam aqui porque saber de onde o dado vem, e como alguém reduziria um e-mail inteiro a uma única linha, *é* parte da lição — a mesma razão pela qual o [Capítulo 9](../cap09/02-exemplo-o-dataset-iris.qmd) mostra o download do Iris sem executá-lo. O que não precisa acontecer a cada renderização é o download em si, nem a varredura de milhares de arquivos para produzir de novo o CSV que já está commitado.
+:::
+
+## Carregando o CSV vendorizado
+
+```{python}
+#| label: carrega-csv
+import csv
+from typing import List
+from scratch.naive_bayes import Message
+
+with open("dados/spam-assuntos.csv", newline="", encoding="utf-8") as f:
+    reader = csv.DictReader(f)
+    data: List[Message] = [Message(row["assunto"], row["is_spam"] == "True")
+                            for row in reader]
+
+total = len(data)
+num_spam = sum(1 for m in data if m.is_spam)
+num_ham = total - num_spam
+
+total, num_spam, num_ham
+```
+
+3.300 assuntos, 2.800 ham e 500 spam.
+
 ::: {.callout-warning}
-## Em construção
-O conteúdo desta seção ainda será escrito.
+## Um conjunto desequilibrado, de propósito
+
+2.800 contra 500 não é acidente de amostragem — é como o corpus real se parece: a maior parte do que chega numa caixa de entrada não é spam. E é exatamente o cenário em que a acurácia engana, que a [seção sobre correção](../cap08/04-correcao.qmd) do Capítulo 8 ensinou com a piada do teste de leucemia: quando uma classe domina, um modelo pode acertar muito e não fazer nada de útil.
+
+Um classificador que respondesse "não é spam" para tudo, sem examinar uma palavra sequer, já sairia com acurácia alta só por causa dessa proporção — o equivalente ao teste "não tem leucemia para ninguém" daquele capítulo. Vale calcular esse piso depois de separar treino e teste, adiante, e usá-lo como régua contra a qual o classificador de verdade precisa se provar melhor que nada.
+:::
+
+## Treinando e avaliando
+
+Como sempre que há aleatoriedade, fixamos a semente antes de dividir os dados — sem isso, cada renderização deste livro produziria uma divisão diferente, e a matriz de confusão abaixo não bateria com o texto que a descreve:
+
+```{python}
+#| label: divide-treino
+import random
+from scratch.machine_learning import split_data
+
+random.seed(0)      # só para você chegar às mesmas respostas
+train_messages, test_messages = split_data(data, 0.75)
+
+len(train_messages), len(test_messages)
+```
+
+2.475 mensagens de treino, 825 de teste. Antes de treinar, calculamos o piso prometido no callout acima: a acurácia de um classificador que respondesse sempre "não é spam", só olhando a composição do conjunto de teste.
+
+```{python}
+#| label: piso-sempre-ham
+baseline_ham = sum(1 for m in test_messages if not m.is_spam)
+baseline_accuracy = baseline_ham / len(test_messages)
+
+baseline_ham, len(test_messages), baseline_accuracy
+```
+
+699 das 825 mensagens de teste são ham, o que dá uma acurácia de 84,7% para um classificador que nunca examina uma palavra. É a régua.
+
+Agora treinamos o classificador de verdade e geramos previsões para o conjunto de teste:
+
+```{python}
+#| label: treina-e-preve
+from scratch.naive_bayes import NaiveBayesClassifier
+from collections import Counter
+
+model = NaiveBayesClassifier()
+model.train(train_messages)
+
+predictions = [(message, model.predict(message.text))
+               for message in test_messages]
+
+# Considera spam_probability > 0.5 como previsão de spam,
+# e conta as combinações de (é spam de fato, previu spam)
+confusion_matrix = Counter((message.is_spam, spam_probability > 0.5)
+                            for message, spam_probability in predictions)
+
+confusion_matrix
+```
+
+```{python}
+#| label: metricas
+from scratch.machine_learning import precision, recall, accuracy
+
+tp = confusion_matrix[(True, True)]
+fp = confusion_matrix[(False, True)]
+fn = confusion_matrix[(True, False)]
+tn = confusion_matrix[(False, False)]
+
+tp, fp, fn, tn
+```
+
+```{python}
+#| label: precisao-revocacao
+accuracy(tp, fp, fn, tn), precision(tp, fp, fn, tn), recall(tp, fp, fn, tn)
+```
+
+Nesta renderização: 80 verdadeiros positivos, 24 falsos positivos, 675 verdadeiros negativos e 46 falsos negativos. As funções `accuracy`, `precision` e `recall` são as mesmas do [Capítulo 8](../cap08/04-correcao.qmd) — importadas de `scratch.machine_learning`, não redefinidas aqui. A acurácia sai em 91,5%, a precisão em 76,9% e a revocação em 63,5%.
+
+::: {.conceito}
+Compare com o piso da seção anterior: 84,7% de acurácia sem olhar para nenhuma palavra, contra 91,5% do classificador de verdade. É uma melhora real, não um efeito do desequilíbrio — diferente do teste do Luke, aqui o ganho vem de examinar o conteúdo da mensagem.
+
+Ainda assim, a precisão e a revocação continuam moderadas, não excelentes. De cada 100 mensagens que o modelo aponta como spam, cerca de 23 são, na verdade, legítimas — e de cada 100 mensagens de spam de verdade, o modelo deixa passar cerca de 36. Para um classificador que olha só a linha de assunto, sem ver o corpo da mensagem, não é um resultado ruim; é o resultado de deliberadamente jogar fora quase toda a informação disponível, exatamente como o livro descreve.
+:::
+
+Os números da nossa renderização ficam muito perto dos que @grus2019 relata rodando o mesmo código sobre o corpus completo — 84 verdadeiros positivos, 25 falsos positivos, 703 verdadeiros negativos, 44 falsos negativos, com precisão de 77% e revocação de 65%. A proximidade não é coincidência: o CSV vendorizado veio do mesmo corpus, só que reduzido antes, em vez de durante, a renderização — e é maior evidência de que vendorizar só os assuntos preservou o que o classificador de fato usa.
+
+::: {.callout-note}
+O livro observa, depois desses números: "presumivelmente faríamos melhor se olhássemos além da linha de assunto." É um lembrete de que o [Capítulo 8](../cap08/06-extracao-e-selecao-de-atributos.qmd) já tinha antecipado — o classificador Naive Bayes é adequado a atributos do tipo sim-ou-não, e a linha de assunto sozinha só entrega um subconjunto pequeno desses atributos. O corpo do e-mail inteiro daria muito mais palavras — muito mais atributos sim-ou-não — para o modelo condicionar sua decisão.
+:::
+
+## O que o modelo aprendeu
+
+O classificador também deixa inspecionar quais palavras são mais e menos indicativas de spam — basta ordenar o vocabulário pela probabilidade de spam dado o token, usando a mesma conta de Bayes de uma palavra só da [primeira seção](01-um-filtro-de-spam-bem-burro.qmd):
+
+```{python}
+#| label: palavras-spammiest
+def p_spam_given_token(token: str, model: NaiveBayesClassifier) -> float:
+    # Não deveríamos chamar métodos "privados", mas é por uma boa causa.
+    prob_if_spam, prob_if_ham = model._probabilities(token)
+    return prob_if_spam / (prob_if_spam + prob_if_ham)
+
+words = sorted(model.tokens, key=lambda t: p_spam_given_token(t, model))
+
+print("mais spammy:", words[-10:])
+print("mais hammy:", words[:10])
+```
+
+As palavras mais "spammy" desta renderização incluem *sale*, *money*, *rates*, *mortgage* e *clearance* — o tipo de vocabulário publicitário que se espera de propaganda em massa. As mais "hammy" incluem *spambayes*, *users*, *apt* e *perl* — vocabulário técnico de listas de discussão sobre software livre, que é de onde vem boa parte do ham deste corpus.
+
+::: {.callout-note}
+Isso dá alguma confiança intuitiva de que o modelo está fazendo a coisa certa: ele não decorou rótulos, ele encontrou palavras que de fato diferenciam as duas classes neste corpus específico. "Perl" ser hammy não é uma verdade universal sobre spam — é uma verdade sobre *esta* lista de discussão, onde e-mails técnicos legítimos falam de Perl com frequência. Um corpus de e-mails corporativos teria palavras hammy completamente diferentes.
+:::
+
+## Contraste com o Capítulo 9
+
+Vale fechar comparando os dois classificadores construídos até aqui neste livro. O k-vizinhos mais próximos, do [Capítulo 9](../cap09/index.qmd), não tem parâmetro nenhum para ajustar e não passa por nenhuma etapa de treino — o "modelo" é literalmente o conjunto de dados guardado, e toda a conta acontece na hora de classificar um ponto novo. O Naive Bayes é o oposto: `train` faz um trabalho de verdade, percorrendo cada mensagem e acumulando contagens em `token_spam_counts` e `token_ham_counts`; depois de treinado, `predict` não olha mais para os dados de treino, só para as contagens já resumidas.
+
+::: {.conceito}
+Essa é uma diferença que vale generalizar. Modelos "preguiçosos" (*lazy*), como o k-vizinhos, adiam todo o trabalho para a hora da previsão e precisam guardar o conjunto de treino inteiro. Modelos que treinam de verdade, como o Naive Bayes, fazem o trabalho uma vez, guardam um resumo compacto — aqui, duas tabelas de contagens por palavra — e descartam os dados brutos. O compromisso troca tempo de treino por tempo de previsão, e memória de treino por memória de previsão.
+:::
+
+::: {.callout-tip collapse="true"}
+## Na prática: `scikit-learn`
+
+O mesmo experimento, de ponta a ponta, com a biblioteca:
+
+```python
+from sklearn.feature_extraction.text import CountVectorizer
+from sklearn.model_selection import train_test_split
+from sklearn.naive_bayes import BernoulliNB
+from sklearn.metrics import confusion_matrix, precision_score, recall_score
+
+textos = [m.text for m in data]
+rotulos = [m.is_spam for m in data]
+
+X_treino, X_teste, y_treino, y_teste = train_test_split(
+    textos, rotulos, test_size=0.25, random_state=0
+)
+
+vetorizador = CountVectorizer(binary=True, token_pattern=r"[a-z0-9']+", lowercase=True)
+X_treino_vec = vetorizador.fit_transform(X_treino)
+X_teste_vec = vetorizador.transform(X_teste)
+
+modelo = BernoulliNB(alpha=0.5).fit(X_treino_vec, y_treino)
+previsto = modelo.predict(X_teste_vec)
+
+confusion_matrix(y_teste, previsto)
+precision_score(y_teste, previsto), recall_score(y_teste, previsto)
+```
+
+Os números não saem idênticos aos nossos — o `train_test_split` embaralha de outro jeito, e o `CountVectorizer` tokeniza com outra expressão regular por padrão (seu `token_pattern` default exige ao menos duas letras, o que descartaria tokens como o `"a"` que o nosso `tokenize` mantém). Mas a ideia é a mesma de ponta a ponta: contar palavras por classe, suavizar com um pseudocontador, combinar por Bayes assumindo independência.
+
+O que a biblioteca não faz por você é a parte mais importante desta seção: dizer *quais* palavras pesaram na decisão. `BernoulliNB` guarda o equivalente a `token_spam_counts` e `token_ham_counts` em `feature_log_prob_`, mas extrair dali as palavras mais "spammy" exige quase o mesmo código que você já escreveu — a introspecção não vem de graça só por trocar de biblioteca.
 :::

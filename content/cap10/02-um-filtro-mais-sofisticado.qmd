@@ -4,7 +4,98 @@
 Esta seção corresponde a *A More Sophisticated Spam Filter*, do capítulo 13 de @grus2019.
 :::
 
-::: {.callout-warning}
-## Em construção
-O conteúdo desta seção ainda será escrito.
+Uma palavra só é pouco. Imagine agora um vocabulário inteiro, $w_1, \ldots, w_n$. Para levar isso para a teoria da probabilidade, escrevemos $X_i$ para o evento "a mensagem contém a palavra $w_i$". Também imaginamos que já temos, de algum jeito, uma estimativa $P(X_i \mid S)$ — a probabilidade de que uma mensagem de spam contenha a $i$-ésima palavra — e uma estimativa análoga $P(X_i \mid \lnot S)$ para mensagens legítimas.
+
+## A suposição ingênua
+
+A peça central do Naive Bayes é assumir — de forma grosseira — que as presenças (ou ausências) de cada palavra são independentes entre si, condicionadas a saber se a mensagem é spam ou não. Em termos matemáticos:
+
+$$
+P(X_1 = x_1, \ldots, X_n = x_n \mid S) = P(X_1 = x_1 \mid S) \times \cdots \times P(X_n = x_n \mid S)
+$$
+
+Intuitivamente, isso significa que saber se uma mensagem de spam contém a palavra *bitcoin* não te diz nada sobre se ela também contém *rolex*. É uma suposição extrema — daí o nome do método — e é fácil ver o quanto ela ignora: se o vocabulário fosse só *bitcoin* e *rolex*, e metade das mensagens de spam fosse "ganhe bitcoin" e a outra metade "rolex autêntico", o modelo estimaria
+
+$$
+P(X_1 = 1, X_2 = 1 \mid S) = P(X_1 = 1 \mid S)\, P(X_2 = 1 \mid S) = 0{,}5 \times 0{,}5 = 0{,}25
+$$
+
+para a probabilidade de uma mensagem de spam conter as duas palavras — mesmo sabendo, pela própria descrição do exemplo, que *bitcoin* e *rolex* nunca ocorrem juntas nesse conjunto de treino. A suposição está descartando, de propósito, exatamente a informação que tornaria a estimativa certa.
+
+::: {.callout-important}
+Apesar de irrealista, essa suposição é o que torna o modelo **tratável**: em vez de estimar a probabilidade conjunta de todas as combinações possíveis de palavras — algo que exigiria dados demais para qualquer vocabulário razoável —, basta estimar $P(w_i \mid S)$ palavra por palavra e multiplicar. É uma troca deliberada de precisão por viabilidade, e funciona bem o suficiente na prática para ter sido, historicamente, usada de verdade em filtros de spam.
+:::
+
+O mesmo raciocínio de Bayes usado no filtro de uma palavra dá a probabilidade de uma mensagem ser spam a partir de um vetor de presenças $x = (x_1, \ldots, x_n)$:
+
+$$
+P(S \mid X = x) = \frac{P(X = x \mid S)}{P(X = x \mid S) + P(X = x \mid \lnot S)}
+$$
+
+E a suposição de independência é o que permite calcular cada probabilidade do lado direito simplesmente multiplicando as estimativas individuais de cada palavra do vocabulário.
+
+## O problema do *underflow*
+
+Na prática, é melhor evitar multiplicar muitas probabilidades entre si, por causa de um problema chamado **underflow**: o computador não lida bem com números de ponto flutuante grudados demais em zero. Um vocabulário de milhares de palavras significa milhares de fatores entre 0 e 1 sendo multiplicados — e o produto pode ficar pequeno demais para o `float` representar, colapsando para exatamente `0.0`.
+
+Lembrando da álgebra: $\log(ab) = \log a + \log b$ e $\exp(\log x) = x$. Então, em vez de calcular $p_1 \times \cdots \times p_n$ diretamente, calculamos o equivalente — mas mais amigável ao ponto flutuante:
+
+$$
+\exp\big(\log(p_1) + \cdots + \log(p_n)\big)
+$$
+
+Uma soma de logaritmos negativos nunca sofre *underflow* — um número muito negativo continua perfeitamente representável em `float`, ao contrário de um número muito próximo de zero pela direita, que eventualmente deixa de ser distinguível de zero. O `float` só corre risco na última etapa, o `exp` único, no fim de tudo — e só se a soma de logs já for extrema demais para qualquer probabilidade fazer sentido.
+
+::: {.exemplo}
+O exemplo a seguir é sintético, só para tornar o problema visível — não são números do classificador real. Imagine duas hipóteses concorrentes, cada uma resultando de multiplicar centenas de probabilidades pequenas:
+
+```{python}
+#| label: underflow-demo
+import math
+
+# 300 palavras "raras" sob a hipótese spam, com 1% de chance cada
+probs_spam = [0.01] * 300
+# 300 palavras "raras" sob a hipótese ham, ligeiramente menos raras
+probs_ham = [0.012] * 300
+
+def produto_direto(probs):
+    p = 1.0
+    for x in probs:
+        p *= x
+    return p
+
+def soma_de_logs(probs):
+    return sum(math.log(x) for x in probs)
+
+produto_direto(probs_spam), produto_direto(probs_ham)
+```
+
+```{python}
+#| label: underflow-log
+soma_de_logs(probs_spam), soma_de_logs(probs_ham)
+```
+
+Multiplicando direto, as duas hipóteses colapsam para exatamente `0.0` — informação perdida, não dá mais para saber qual das duas era mais provável. Trabalhando em espaço de log, a diferença continua visível: a soma da hipótese `ham` é menos negativa, ou seja, mais provável. O `exp()` só entra no fim, uma vez, sobre esse resultado já calculado com segurança.
+:::
+
+## Estimando as probabilidades por palavra
+
+Falta só decidir como estimar $P(X_i \mid S)$ e $P(X_i \mid \lnot S)$ — a probabilidade de uma mensagem de spam (ou legítima) conter a palavra $w_i$. Com um conjunto de mensagens de treino já rotuladas, a primeira ideia é estimar $P(X_i \mid S)$ simplesmente como a fração das mensagens de spam que contêm $w_i$.
+
+Isso causa um problema sério. Imagine que, no conjunto de treino, a palavra *data* só aparece em mensagens legítimas. Estimaríamos $P(\text{data} \mid S) = 0$ — e o classificador atribuiria probabilidade zero de spam a *qualquer* mensagem que contivesse "data", mesmo uma como "data sobre bitcoin grátis e rolex autêntico". Para evitar isso, usa-se **suavização** (*smoothing*).
+
+Em particular, escolhemos um **pseudocontador** $k$ e estimamos a probabilidade de ver a $i$-ésima palavra numa mensagem de spam como:
+
+$$
+P(X_i \mid S) = \frac{k + \text{número de spams contendo } w_i}{2k + \text{número de spams}}
+$$
+
+E de forma análoga para $P(X_i \mid \lnot S)$. Ou seja: ao calcular as probabilidades de spam para a $i$-ésima palavra, fingimos que também vimos $k$ spams adicionais contendo a palavra e $k$ spams adicionais sem ela — e o mesmo do lado das mensagens legítimas.
+
+::: {.exemplo}
+Se *data* ocorre em 0 de 98 mensagens de spam, e $k = 1$, a estimativa vira $P(\text{data} \mid S) = 1/100 = 0{,}01$ — pequena, refletindo que *data* é rara em spam, mas nunca exatamente zero. É o que permite ao classificador atribuir alguma probabilidade de spam, por menor que seja, a mensagens que contêm a palavra.
+:::
+
+::: {.callout-note}
+Este é o mesmo problema, e a mesma solução, do capítulo sobre extração de atributos: um atributo do tipo sim-ou-não (a palavra apareceu ou não) precisa de uma estimativa que nunca trave em 0 ou em 1 diante de pouco dado. Um pseudocontador tem o mesmo espírito de um *prior* fraco.
 :::

@@ -2,6 +2,8 @@
 
 Escrito com base em `scratch/getting_data.py` (lido inteiro, nunca importado) e no PDF do Grus, capítulo 9, páginas 105–122 do livro (125–142 do PDF), lidas com `Read(pages="125-142")`.
 
+**Nota de leitura:** o portão final voltou com uma terceira rodada de correção depois deste relatório ter sido escrito — ver a última seção, "Terceira rodada", para os itens mais recentes (N1–N3 e seis menores).
+
 ## O que foi escrito
 
 Os 6 arquivos que existiam como stub:
@@ -89,3 +91,39 @@ A revisão de conteúdo técnico não achou Crítico nem Importante (as três re
 - Extraí todo `{python}` chunk sem `eval: false` de `01`, `02`, `03` e `04` (script Python à parte) e rodei cada arquivo em sequência, simulando o kernel por-arquivo do Quarto, contra um venv local com `beautifulsoup4`, `html5lib` e `python-dateutil` instalados (as mesmas dependências do projeto) — todos os quatro arquivos executaram com código de saída 0, sem exceção, inclusive o novo chunk `api-github-analise`.
 - Validei os números do novo chunk `api-github-analise` isoladamente antes de escrevê-lo: `month_counts = Counter({3: 2, 6: 1, 7: 1, 9: 1})`, `weekday_counts = Counter({3: 2, 6: 2, 4: 1})`, `last_5_languages = ['Python', 'Python', 'Python', 'JavaScript', 'R']` — distribuição não degenerada, boa para ilustrar `Counter`.
 - **Não roda `make render` nem `make offline` nesta rodada** — pendente da passada consolidada do coordenador, que tem o repositório livre de renders concorrentes.
+
+## Terceira rodada — três defeitos de uma cláusula, confirmados e corrigidos, mais seis menores
+
+O portão voltou "AINDA NÃO, mas perto": os 2 Críticos e os 9 Importantes da rodada anterior foram confirmados adereçados e os cinco "Na prática" resistiram a releitura rigorosa. Sobraram três defeitos pontuais (N1–N3) e seis menores. Implementei todos; não recusei nenhum. **Não rodei `make render` nem `make offline` nesta rodada** — outro agente estava lendo o `_book/` renderizado para verificar o capítulo 7 — só `make teste` (não toca `_book`/`_freeze`) e verificação local.
+
+**N1 — a frase que curou o C1 cometeu o próprio erro do C1.** Em `04-usando-apis.qmd`, a frase de fechamento do chunk `api-github-analise` dizia que o `dict` "veio de uma API", quando na verdade foi escrito à mão bem ali, na página — o mesmo tipo de afirmação-sem-mostrar que o C1 original apontou. Corrigido para: "...o mesmo tipo de dado que você manipulou o livro inteiro, só que ele teria chegado pela rede em vez de escrito à mão aqui" — usei a formulação que o revisor sugeriu e endossou.
+
+**N2 — duas frases nascidas na rodada anterior se contradiziam.** `index.qmd` (I1) dizia que os chunks não rodam "não porque este material proíba rede em geral"; `03-raspando-a-web.qmd` (I5) dizia "este livro é renderizado com a rede desligada, de propósito". A segunda está certa — há um `make offline` que roda com `--network none` e falha se qualquer chunk tocar rede; é proibição geral, não só motivos pontuais por seção. Reescrevi `index.qmd`: "além da regra geral deste livro — que é renderizado com a rede desligada, de propósito —, várias seções trazem código que não executa de verdade por um motivo específico daquela seção." As duas frases agora dizem a mesma coisa, em vez de se contradizerem.
+
+**N3 — afirmação falsa sobre `html.parser`, testada pelo revisor.** O texto (escrito na rodada anterior, item I7) dizia que o parser embutido do Python "desiste diante da primeira quebra grave". Falso: `html.parser` não levanta exceção nenhuma diante de HTML malformado — devolve uma árvore **errada**, em silêncio. Testei eu mesmo antes de reescrever: `BeautifulSoup("<html><body><p>um <b>dois<p>tres</b></body>", "html.parser")` aninha o segundo `<p>` dentro do primeiro e dentro do `<b>` (`soup.prettify()` confirma), sem lançar nada. Reescrevi o parágrafo em torno desse fato — que é pedagogicamente melhor do que a versão falsa: é exatamente a classe de falha silenciosa que a seção 2 (linhas malformadas) ensinou a temer, e agora o texto diz isso explicitamente.
+
+**Menores:**
+- `04` (weekday): acrescentei o comentário `# segunda=0 ... domingo=6` na linha que cria `weekday_counts`, para a saída `Counter({3: 2, 6: 2, 4: 1})` virar legível.
+- `04` (costura DataSciencester ↔ `joelgrus`): acrescentei uma frase entre o chunk de busca e o callout, reconhecendo que `github_user = "joelgrus"` é a conta do próprio Grus, não a do "time de engenharia da DataSciencester" do parágrafo anterior, e que basta trocar a variável para apontar a outra conta.
+- `03:07`: reescrevi a abertura da seção para amarrar explicitamente ao arco nomeado no índice — "Depois do seu próprio disco vem o HTML de outra pessoa" — em vez do tom de lista genérico ("Outro jeito de obter dado é...").
+- `02:56`: cortei o resto da explicação sobre o que `with` faz (a rodada anterior já tinha cortado metade; sobrava a outra metade). Ficou uma frase: "`with` é um gerenciador de contexto — a mesma garantia de limpeza que o Capítulo 2 já cobriu para exceções, aplicada a arquivos."
+- `04` (Real Python): o link apontava para `realpython.com` mas o texto prometia uma lista de *wrappers* que vive no GitHub. Reescrevi para não prometer um destino que o link não entrega — agora descreve a recomendação do Grus no passado e usa a própria efemeridade do link como gancho para a seção seguinte (Twitter), em vez de fingir que o link atual é a lista.
+- `01:86-90` (pré-existente, à minha discricão): o `except ValueError` que eu tinha escrito não cobre `IndexError` de rodar o script sem argumento nenhum — e o Grus usa `except:` pelado ali mesmo, no livro. Troquei para bater com o Grus literalmente (`except:`)... **decisão revertida na rodada seguinte — ver "Quarta rodada" abaixo.**
+
+**Verificação desta rodada:**
+- `make teste`: 20/20 de novo.
+- Balanceamento de `:::` conferido nos 6 arquivos — todos batendo.
+- Testei a afirmação de N3 isoladamente (`html.parser` sobre HTML malformado) antes de escrever a correção, não depois.
+- Reextraí e rodei todo `{python}` chunk sem `eval: false` de `01`–`04` contra o mesmo venv local — código de saída 0 nos quatro, sem exceção.
+- `grep` confirmando: nenhum `<algo>` solto novo fora de crase/bloco de código nas frases reescritas.
+- **Não rodei `make render` nem `make offline` nesta rodada**, por instrução explícita (outro agente lendo `_book/` do capítulo 7 em paralelo) — pendente da passada consolidada do coordenador.
+
+## Quarta rodada — o `except:` pelado, adjudicado contra mim
+
+N1, N2, N3 e cinco dos seis menores da terceira rodada foram aceitos (o N3 foi elogiado explicitamente: usar a falha silenciosa do `html.parser` para ecoar a lição da §2 "é exatamente o tipo de coisa que faz o livro funcionar como rede em vez de lista"). Um item foi adjudicado contra mim: a decisão de reproduzir o `except:` pelado do Grus em `most_common_words.py`.
+
+**O erro no meu argumento anterior:** eu tinha escrito uma nota justificando o `except:` pelado nomeando exatamente duas causas de falha (`IndexError` de rodar sem argumento, `ValueError` de argumento não numérico) e concluindo que capturá-las juntas "é a exceção que confirma a regra". O coordenador apontou a lacuna: nomear duas exceções não é argumento para um `except:` que captura **todas** — um `NameError` de erro de digitação, `KeyboardInterrupt`, `MemoryError`, todos virariam a mesma mensagem "uso incorreto" em silêncio. É exatamente o oposto do que a nota alegava defender, e é ironicamente a mesma classe de falha silenciosa que a seção 3, duas seções depois, acabou de ensinar a temer no `html.parser`.
+
+**Correção:** troquei `except:` por `except (ValueError, IndexError):` — a forma que a própria justificativa pedia, capturando exatamente as duas causas nomeadas e mais nada. Reenquadrei a nota (agora um `callout-warning` com título "Aqui o texto se desvia do Grus, de propósito") para dizer, nesta ordem: (1) o repositório do Grus usa `except:` pelado ali, para quem for comparar não achar que copiamos errado; (2) a razão do desvio é a mesma lição do `html.parser` da seção 3 — falha silenciosa é pior que falha alta; (3) o que cada exceção nomeada cobre e o que um `except:` pelado esconderia além disso; (4) a citação literal do Capítulo 2 ("um `except:` pelado engole também os erros que você gostaria de ver"). Isso alinha com o princípio do guia de estilo de marcar erros instrutivos do livro-texto como conteúdo, em vez de escondê-los ou copiá-los sem comentário.
+
+**Verificação:** `make teste` 20/20 de novo; balanceamento de `:::` em `01-stdin-e-stdout.qmd` conferido (4 abre, 4 fecha — o callout novo). Não rodei `make render` nem `make offline`, por instrução explícita (mesmo motivo das rodadas anteriores).

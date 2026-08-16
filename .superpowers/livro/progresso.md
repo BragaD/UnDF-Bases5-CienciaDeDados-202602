@@ -143,3 +143,27 @@ explícita de que trecho elogiado NÃO está isento de verificação.
   o específico como prevalecendo sobre o geral — leitura correta — e avisou. É a segunda
   vez que aquela lista causa atrito; a mudança de processo que fiz estava certa.
   make teste 20/20; todos os chunks não-eval:false extraídos e executados localmente, exit 0.
+- CAP 6, PORTÃO: AINDA NÃO. Três defeitos NOVOS da correção:
+  N1: a frase escrita para curar o C1 comete o erro do C1 — diz que o dado "veio de uma
+      API em vez de estar escrito à mão", e ele está escrito à mão logo acima.
+  N2: duas frases da MESMA rodada se anulam (o índice negando que o livro proíba rede em
+      geral; a §3 dizendo que ele renderiza com a rede desligada). Vieram de dois itens
+      diferentes da minha lista, corrigidos em sequência, sem releitura conjunta.
+  N3: "o html.parser desiste diante da primeira quebra" — o revisor TESTOU: não desiste,
+      devolve árvore errada em silêncio. E a verdade serve melhor ao capítulo.
+- CAP 6, RODADAS 3 e 4: N1-N3 + 6 menores corrigidos.
+  ADJUDIQUEI CONTRA O ESCRITOR num item: ele trocou por `except:` pelado (fidelidade ao
+  Grus) com nota defendendo. O argumento dele nomeava DUAS exceções e concluía por
+  capturar TODAS — e a §3 do mesmo capítulo acabara de ensinar que falha silenciosa é
+  pior que falha alta. Mandei `except (ValueError, IndexError)` com callout "Aqui o texto
+  se desvia do Grus, de propósito". Implementado.
+- CAP 6: conteúdo fechado, falta reverificação no portão.
+- CAP 10 despachado.
+
+## INFRAESTRUTURA CONSERTADA
+`make render` agora se autocura: limpa o lixo e repete até 6x, imprime "render OK
+(tentativa N)", nunca toca no _freeze. CLAUDE.md e guia com 3 proibições escritas a
+partir de dano real (render em segundo plano; contornar a corrida à mão; make clean).
+Motivo: a corrida custou ~8 interrupções e travou o escritor do cap 7 num laço de horas
+(314k tokens, 149 chamadas, zero progresso). Ele leu a instrução de não usar make clean,
+não associou ao sintoma, e usou. Argumento para automatizar em vez de documentar.

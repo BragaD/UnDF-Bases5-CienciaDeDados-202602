@@ -49,7 +49,7 @@ NAO_IMPORTAVEIS = {
         "working_with_data.py:148 abre 'stocks.csv' com caminho relativo ao cwd no corpo "
         "do módulo (upstream mantém o arquivo na raiz do repo; aqui dado vive em dados/), "
         "e as linhas 44-49 afirmam correlation(xs, ys1) numa janela cujo valor real "
-        "(~0.894) encosta na borda de (0.89, 0.91) SEM semente — falha ~1 vez em 3."
+        "(~0.894) encosta na borda de (0.89, 0.91) SEM semente — falha em 25% das execucoes (5006 de 20000 medidas)."
     ),
 }
 
@@ -127,7 +127,7 @@ def test_modulos_importaveis_sem_rede():
     getting_data.py:90 tem um requests.get no corpo do módulo — importá-lo
     dispara rede. working_with_data.py:148 abre 'stocks.csv' relativo ao cwd
     (o arquivo não vive na raiz deste repo) e suas linhas 44-49 afirmam uma
-    correlação sem semente que falha ~1 vez em 3. Nenhum dos dois é escondido:
+    correlação sem semente que falha em 25% das execuções. Nenhum dos dois é escondido:
     NAO_IMPORTAVEIS documenta o motivo de cada exclusão.
     """
     alvos = [m for m in MODULOS_EM_ESCOPO if m not in NAO_IMPORTAVEIS]
