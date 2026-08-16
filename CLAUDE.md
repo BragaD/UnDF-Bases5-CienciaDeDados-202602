@@ -124,6 +124,20 @@ Detalhes que importam se você for mexer nisso:
 - Depois de 30 minutos esperando, o lock é considerado preso (agente morto) e removido com aviso. Um agente que morreu não pode bloquear o livro para sempre.
 - `make offline` **não** pega o lock: ele apaga o `_freeze/` de propósito e é rodado deliberadamente antes de publicar, não em paralelo com escrita.
 
+### O `_freeze` envenenado — a falha mais silenciosa deste projeto
+
+**Sintoma:** o `.qmd` está certo, o `make render` diz `render OK`, e a página publicada em `_book/` continua mostrando a versão antiga. Rodar `make render` de novo não muda nada. Nenhum erro, nenhum aviso.
+
+**Causa:** o `freeze: auto` guarda, para cada arquivo, o par *(hash do fonte, markdown executado)*. Se alguém **edita o `.qmd` enquanto o render roda**, o Quarto executa a versão velha e grava esse resultado velho junto com o hash da versão **nova**. Dali em diante o hash bate, o cache é considerado válido, e aquele arquivo **nunca mais reexecuta sozinho**.
+
+Isto não é hipótese: já publicou três seções desatualizadas do capítulo 10 e uma do capítulo 7, e passou por um render inteiro sem uma linha de aviso. Foi encontrado só porque um revisor comparou o fonte com o HTML linha a linha.
+
+**Não dá para detectar comparando hashes** — o hash bate; é exatamente esse o problema. O que se detecta é a *causa*: um `.qmd` cuja data de modificação mudou entre o começo e o fim do render.
+
+**O `scripts/render-seguro.sh` faz isso automaticamente.** Ele fotografa os mtimes antes e depois, e se algum arquivo mudou no meio, apaga o `_freeze` só desses e renderiza de novo (até 3 rodadas). Se ainda assim houver edição concorrente, ele avisa em caixa alta, nomeia os arquivos e **sai com sucesso** — porque o render funcionou, e um agente que vê "falha" tende a rodar `make clean`, que é o remédio errado.
+
+**Se você desconfiar de uma página específica**, o remédio manual é `make refresh CAP=NN` — apaga o `_freeze/` só daquele capítulo e renderiza. Nunca `make clean`.
+
 **Não escreva `#| cache: true` num chunk.** Esse é o cache por-célula do motor **knitr** (R) e não existe para o motor **Jupyter**, que é o deste livro (`jupyter: python3`) — a opção é silenciosamente ignorada. O Jupyter tem um cache próprio, o *Jupyter Cache*, mas ele funciona por **notebook inteiro** (qualquer célula mudar reexecuta todas) e depende do pacote opcional `jupyter-cache`, que não está no `uv.lock` deste projeto. Na prática, o `freeze: auto` já resolve o que interessa aqui — por **arquivo** `.qmd`, sem depender de nenhum pacote extra — então é nele que os capítulos devem confiar, não em `cache:`.
 
 ## Arquitetura
@@ -163,7 +177,7 @@ A correção **não** é editar o pacote: é criar `im/` vazio, como o Grus tem 
 **2. `getting_data` e `working_with_data` nunca são importados — cada um por um motivo diferente, e nenhum se corrige editando o pacote:**
 
 - **`getting_data.py:90`** faz `requests.get` no corpo do módulo — importar dispara rede. Nenhum outro módulo o importa, então basta não importá-lo: o capítulo 6 (que *é* esse módulo) escreve os chunks direto, lendo o HTML vendorizado. O código do Grus continua visível e citável, sem ser executado por acidente.
-- **`working_with_data.py:148`** abre `stocks.csv` com um caminho relativo ao **cwd** no corpo do módulo — o upstream do Grus mantém esse arquivo na raiz do repositório dele; na nossa convenção, dado vive em `dados/`, então o `open()` estoura com `FileNotFoundError`. E as linhas 28–30 calculam `xs`, `ys1`, `ys2` com `random.random()` **sem semente**, enquanto as linhas 48–49 afirmam `0.89 < correlation(xs, ys1) < 0.91` — o valor real (~0,894) encosta na borda dessa janela, e o `assert` falha em **25% das execuções** (5.006 falhas em 20.000 rodadas medidas). Vendorizar `stocks.csv` na raiz não resolve nada disso: a asserção sem semente continua sendo cara ou coroa a cada import.
+- **`working_with_data.py:148`** abre `stocks.csv` com um caminho relativo ao **cwd** no corpo do módulo — o upstream do Grus mantém esse arquivo na raiz do repositório dele; na nossa convenção, dado vive em `dados/`, então o `open()` estoura com `FileNotFoundError`. E as linhas 28–30 calculam `xs`, `ys1`, `ys2` com `random.random()` **sem semente**, enquanto as linhas 48–49 afirmam `0.89 < correlation(xs, ys1) < 0.91` — o valor real (~0,894) encosta na borda dessa janela, e o `assert` falha em **cerca de 25% das execuções** — duas medições independentes de 20.000 rodadas deram 25,0% (5.006 falhas) e 24,6%. A diferença entre as duas é de pouco mais de um erro padrão (~0,3 pp), então o número honesto é "cerca de uma em quatro", não a terceira casa. Vendorizar `stocks.csv` na raiz não resolve nada disso: a asserção sem semente continua sendo cara ou coroa a cada import.
 
 > Uma versão anterior deste arquivo dizia "cerca de 1 vez em 3, medido em 5 rodadas", e citava as linhas erradas para a geração. Cinco rodadas não distinguem 25% de 33%. O número acima vem de 20.000 execuções, e foi confirmado de forma independente por dois agentes. Fica como lembrete: **amostra pequena demais é o mesmo que chute com aparência de medição** — que é, aliás, a lição do capítulo 8 deste livro.
 

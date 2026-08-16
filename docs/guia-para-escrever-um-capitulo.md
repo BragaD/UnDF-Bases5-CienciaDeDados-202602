@@ -86,6 +86,10 @@ make teste     # 21 testes, todos precisam passar
 
 O alvo é **serializado**: vários agentes escrevem este livro ao mesmo tempo, e dois `quarto render` simultâneos corrompem o `_freeze/` em silêncio. Se outro render estiver rodando, o seu imprime `aguardando a vez...` e espera. **Não interrompa nem contorne** — ele pega a vez sozinho.
 
+Ele também avisa, em caixa alta, se alguém editou algum `.qmd` **durante** o seu render. Esse aviso não é falha: o livro renderizou. Ele só diz quais páginas podem ter ficado com saída velha, e o remédio é `make refresh CAP=NN` quando ninguém mais estiver editando.
+
+**Se a página publicada não bater com o seu fonte** mesmo depois de um `render OK`, é o `_freeze` envenenado, não o seu texto: rode `make refresh CAP=NN`. Nunca `make clean`.
+
 Três coisas que você **não** deve fazer, e que já custaram caro:
 
 - **Não rode o render em segundo plano esperando notificação.** Um agente que fez isso ficou preso em laço por horas, encerrando o turno repetidamente para aguardar algo que nunca o notificava.

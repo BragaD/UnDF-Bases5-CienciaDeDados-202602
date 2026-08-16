@@ -38,30 +38,18 @@ render: ## Renderiza o livro para _book/ (retentativa automática, um render por
 #
 # Isto vive aqui, e não na cabeça de quem roda, porque a alternativa já custou
 # horas: um agente ficou preso em laço tentando entender um render que abortava.
-	@espera=0; \
-	while ! mkdir .render-lock 2>/dev/null; do \
-	  if [ $$espera -eq 0 ]; then \
-	    echo "outro render em andamento neste repositório; aguardando a vez..."; \
-	  fi; \
-	  espera=$$((espera + 1)); \
-	  if [ $$espera -gt 180 ]; then \
-	    echo "lock preso há mais de 30 min (agente morto?); removendo e seguindo."; \
-	    rm -rf .render-lock; \
-	  fi; \
-	  sleep 10; \
-	done; \
-	trap 'rm -rf .render-lock' EXIT INT TERM; \
-	for i in 1 2 3 4 5 6; do \
-	  find content -name '*_files' -type d -exec rm -rf {} + 2>/dev/null || true; \
-	  find content -name '*.html' -type f -delete 2>/dev/null || true; \
-	  if $(RUN) quarto render; then \
-	    echo "render OK (tentativa $$i)"; exit 0; \
-	  fi; \
-	  echo "--- tentativa $$i abortou (corrida do bind mount); limpando e repetindo ---"; \
-	done; \
-	echo "render falhou em 6 tentativas — isto provavelmente NÃO é a corrida do bind mount."; \
-	echo "Rode '$(RUN) quarto render' direto para ver o erro real."; \
-	exit 1
+	@bash scripts/render-seguro.sh
+
+refresh: ## Reexecuta UM capítulo do zero: make refresh CAP=10
+# Use quando desconfiar que a página publicada não corresponde ao fonte. Apaga
+# só o `_freeze/` daquele capítulo (não o do livro inteiro, que custa caro) e
+# renderiza. É o remédio para o cache envenenado descrito em scripts/render-seguro.sh
+# quando ele já aconteceu — o script previne dali em diante, este alvo limpa o
+# que ficou para trás.
+	@test -n "$(CAP)" || { echo "uso: make refresh CAP=10"; exit 1; }
+	@test -d "content/cap$(CAP)" || { echo "content/cap$(CAP) não existe"; exit 1; }
+	rm -rf "_freeze/content/cap$(CAP)"
+	@bash scripts/render-seguro.sh
 
 offline: ## Renderiza SEM REDE (limpa _freeze antes — veja o motivo abaixo)
 # `docker compose run` não tem flag --network (Compose v2), então esta é a
@@ -103,4 +91,4 @@ clean: ## Remove artefatos de render (inclusive o lixo que um render abortado de
 	find . -name '*_files' -type d -not -path './.git/*' -exec rm -rf {} + 2>/dev/null || true
 	find content -name '*.html' -type f -delete 2>/dev/null || true
 
-.PHONY: help build preview render offline teste shell check lock clean
+.PHONY: help build preview render refresh offline teste shell check lock clean
