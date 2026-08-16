@@ -77,7 +77,15 @@ def test_freeze_corresponde_ao_fonte():
         if not resultado.is_file():
             continue
 
-        dados = json.loads(resultado.read_text(encoding="utf-8"))
+        try:
+            dados = json.loads(resultado.read_text(encoding="utf-8"))
+        except (json.JSONDecodeError, UnicodeDecodeError):
+            # O arquivo está sendo ESCRITO agora, por um render em andamento.
+            # Um JSON pela metade não é evidência de envenenamento — é evidência
+            # de que alguém está trabalhando. Já derrubou uma rodada de `make
+            # teste` sem nenhum defeito real por trás.
+            continue
+
         fonte = qmd.read_text(encoding="utf-8")
 
         # Hash diferente => o Quarto vai reexecutar sozinho. Nada a checar.
