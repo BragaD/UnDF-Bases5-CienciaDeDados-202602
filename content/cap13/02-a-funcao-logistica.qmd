@@ -55,7 +55,7 @@ $$
 
 onde $f$ é a função logística. Repare no que **não** mudou: $\mathbf{x}_i \cdot \beta$ continua ali, com a coluna de 1 e tudo. A estrutura linear do [Capítulo 12](../cap12/index.qmd) sobreviveu inteira; ganhou uma função por cima.
 
-## Por que não dá para minimizar quadrados
+## Por que minimizar quadrados deixa de ser a mesma coisa
 
 Na regressão linear, ajustamos o modelo minimizando a soma dos erros ao quadrado, e a [seção 11.3](../cap11/03-maxima-verossimilhanca.qmd) mostrou que isso acabava escolhendo o $\beta$ que **maximiza a verossimilhança dos dados** — não por coincidência, mas como consequência de supor erros normais.
 
@@ -68,6 +68,8 @@ p(y_i \mid \mathbf{x}_i, \beta) = f(\mathbf{x}_i \cdot \beta)^{y_i} \, \bigl(1 -
 $$
 
 O truque é o expoente. Se $y_i$ é 0, o primeiro fator vira $f^0 = 1$ e sobra $1 - f(\mathbf{x}_i \cdot \beta)$; se $y_i$ é 1, o segundo fator vira 1 e sobra $f(\mathbf{x}_i \cdot \beta)$. Uma fórmula, os dois casos, sem `if`.
+
+Essa expressão tem nome: é a distribuição de **Bernoulli** de parâmetro $f(\mathbf{x}_i \cdot \beta)$ — a distribuição de uma única moeda viciada. É exatamente a troca que a [seção 11.3](../cap11/03-maxima-verossimilhanca.qmd) anunciou ao dizer que a máxima verossimilhança sobreviveria à mudança de alvo, mas a distribuição suposta para os dados não: lá era normal, aqui é Bernoulli. O método é o mesmo; a densidade que entra nele é outra, e é dela que vem tudo o que muda daqui para a frente.
 
 Como na [seção 11.3](../cap11/03-maxima-verossimilhanca.qmd), é mais simples trabalhar com o **logaritmo** da verossimilhança:
 
@@ -175,13 +177,19 @@ for x in [10, 20, 30, 35, 36, 37, 40]:
 ::: {.callout-warning}
 ## `logistic(37)` é `1.0`, e isso não é arredondamento de exibição
 
-A partir de $x \approx 36{,}74$, `logistic(x)` devolve **exatamente** `1.0` — o `repr` acima mostra que não há dígitos escondidos. A razão é aritmética de ponto flutuante: `math.exp(-37)` vale cerca de $8{,}5 \times 10^{-17}$, e somar isso a 1 em `float64` não muda nada. O menor incremento representável acima de 1 é $2^{-52} \approx 2{,}2 \times 10^{-16}$, e uma parcela menor que **metade** disso ($1{,}11 \times 10^{-16}$) desaparece no arredondamento. O denominador vira `1.0` exato, e `1/1.0` é `1.0`.
+A partir de $x \approx 36{,}74$, `logistic(x)` devolve **exatamente** `1.0` — o `repr` acima mostra que não há dígitos escondidos. A razão é aritmética de ponto flutuante: `math.exp(-37)` vale cerca de $8{,}5 \times 10^{-17}$, e somar isso a 1 em `float64` não muda nada. O menor incremento representável acima de 1 é $2^{-52} \approx 2{,}2 \times 10^{-16}$, e uma parcela que não passa da **metade** disso ($1{,}11 \times 10^{-16}$) desaparece no arredondamento. O denominador vira `1.0` exato, e `1/1.0` é `1.0`.
 
-Esse é, aliás, o limiar preciso: $\log(1{,}11 \times 10^{-16}) \approx -36{,}74$ — o mesmo 36,74 medido acima. Não é um valor mágico da função logística; é a mantissa do `float64` aparecendo.
+Dá para escrever o limiar exato. A saturação acontece quando `math.exp(-x)` fica menor ou igual a $2^{-53}$, e portanto quando
+
+$$
+x \;\geq\; -\log\bigl(2^{-53}\bigr) \;=\; 53 \ln 2 \;\approx\; 36{,}7368
+$$
+
+que é o 36,74 medido acima, agora até o último dígito — conferido por bissecção sobre a própria `logistic`. Não é um valor mágico da função logística; é a mantissa do `float64` aparecendo, com o sinal trocado por causa do `-x` no expoente.
 
 Consequência direta: `1 - logistic(37)` é `0.0`, e `math.log(0.0)` levanta `ValueError: math domain error`.
 
-Isso não é uma curiosidade sobre ponto flutuante. É uma bomba armada no código que acabamos de escrever, e ela **vai** explodir na próxima seção — não em algum caso patológico raro, mas na primeira conta do primeiro ponto do conjunto de dados, se um único passo preparatório for esquecido.
+Isso não é uma curiosidade sobre ponto flutuante. É uma bomba armada no código que acabamos de escrever, e ela **vai** explodir na próxima seção.
 
 O outro extremo tem um limite parecido e menos gentil: para $x$ muito negativo, `math.exp(-x)` estoura o alcance do `float64` e `logistic` levanta `OverflowError` em vez de devolver zero. O `logistic(-800)` deste código não devolve `0.0`; ele quebra.
 :::

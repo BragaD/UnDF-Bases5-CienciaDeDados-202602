@@ -32,7 +32,11 @@ len(xs), xs[0], ys[0]
 ```
 
 ::: {.callout-note}
+## A regra do kernel, valendo para o resto do capítulo
+
 Cada página deste livro roda num kernel próprio, então as funções escritas na [seção anterior](02-a-funcao-logistica.qmd) não existem aqui. `scratch/logistic_regression.py` traz exatamente o mesmo código — é o módulo do livro-texto, copiado literalmente —, junto com os dados. Importar dali não é atalho: é o mesmo `logistic`, o mesmo `negative_log_likelihood` e o mesmo `negative_log_gradient` que você acabou de ver serem construídos.
+
+A mesma regra explica a repetição que vem pela frente. Funções importam-se de um módulo; **valores calculados, não** — e `rescale`, `beta` e a divisão treino/teste são valores. Por isso as seções [13.4](04-qualidade-do-ajuste.qmd) e [13.5](05-maquinas-de-vetores-de-suporte.qmd) refazem, cada uma, o `rescale` e as 5.000 épocas deste ajuste, com a mesma semente e os mesmos hiperparâmetros, para chegarem ao mesmo `beta` que sai aqui. É repetição de encanamento, não de conteúdo: lá o código vem escondido, e as duas seções apontam de volta para este callout.
 :::
 
 ## O que acontece se você simplesmente ajustar
@@ -99,6 +103,12 @@ O ponto 1 tem `y = 0`. A perda dele é `-math.log(1 - logistic(...))`, e `1 - 1.
 
 A falha barulhenta é a sorte deste conjunto de dados — 148 dos 200 usuários têm `y = 0`, então o erro aparece no segundo ponto e é impossível de ignorar. A falha silenciosa é a que deveria assustar mais: ela não interrompe nada e produz um número que parece ótimo.
 :::
+
+Vale parar aqui, porque este é o ponto do capítulo que sobrevive depois que o assunto "regressão logística" for esquecido.
+
+`LogisticRegression().fit(X, y)` não teria produzido **nenhuma** das duas falhas. Nem o `ValueError`: a biblioteca calcula a perda por rotinas numericamente estáveis, que nunca chegam a formar `1 - 1.0`. Nem o `-0.0`: ela sequer expõe a perda de um ponto isolado — devolve coeficientes, previsões e um `score`, e mais nada. Os dois números que você acabou de ver **só são visíveis de dentro**. De fora, o mesmo ajuste teria rodado até o fim, sem uma linha de aviso, e devolvido um vetor de coeficientes com cara de resposta.
+
+Generalize, porque a lição não é sobre a função logística: **o número na sua tela pode ser mentira, e a tela não tem como avisar.** Uma perda de zero é o que você esperaria de um modelo perfeito e é também o que sai de um $\beta$ sorteado ao acaso quando a aritmética satura. Os dois casos produzem o mesmo `0.0`, indistinguíveis. Quem só chama a função não tem de onde tirar a diferença; quem sabe que a logística tem um teto em `float64` e que a perda vira `-log(1.0)` sabe onde olhar. É por isso que esta disciplina constrói o código do zero, e é o motivo de esta seção ser a mais importante do capítulo.
 
 ## O conserto
 
@@ -176,6 +186,7 @@ learning_rate = 0.01
 # ponto de partida aleatório, sorteado depois da divisão
 beta = [random.random() for _ in range(3)]
 perdas = []
+betas = []          # guardamos o caminho inteiro; ele reaparece mais abaixo
 
 with tqdm.trange(5000) as t:
     for epoch in t:
@@ -183,6 +194,7 @@ with tqdm.trange(5000) as t:
         beta = gradient_step(beta, gradient, -learning_rate)
         loss = negative_log_likelihood(x_train, y_train, beta)
         perdas.append(loss)
+        betas.append(beta)
         t.set_description(f"loss: {loss:.3f} beta: {beta}")
 
 [round(b, 4) for b in beta], round(perdas[-1], 4)
@@ -207,7 +219,7 @@ for e in [1, 10, 100, 1000, 5000]:
     print(f"época {e:>5}: perda = {perdas[e - 1]:.4f}")
 ```
 
-A queda é quase toda no começo. Depois da primeira época a perda está em 113,07; na décima já caiu para 61,76; na centésima, 41,22 — a menos de 4% do valor final. Na milésima o número já é 39,9635, e as 4.000 épocas restantes mexem na quarta casa decimal. É o padrão que a [seção 5.3](../cap05/03-usando-o-gradiente.qmd) descreveu — queda rápida no início, cada vez mais lenta perto do mínimo — e é por isso que 5.000 passos aqui são generosidade, não necessidade.
+A queda é quase toda no começo. Depois da primeira época a perda está em 113,07; na décima já caiu para 61,76; na centésima, 41,22 — a menos de 4% do valor final. Na milésima o número já é 39,9635, e as 4.000 épocas restantes movem a perda da sexta casa decimal para baixo: de 39,96350015 para 39,96349522, uma diferença de $4{,}9 \times 10^{-6}$. Quem ainda se mexe na terceira casa é o $\beta$, de 4,6903 para 4,6930 na segunda coordenada. É o padrão que a [seção 5.3](../cap05/03-usando-o-gradiente.qmd) descreveu — queda rápida no início, cada vez mais lenta perto do mínimo — e é por isso que 5.000 passos aqui são generosidade, não necessidade.
 
 ## Voltando às unidades originais
 
@@ -226,7 +238,7 @@ beta_unscaled = [(beta[0]
 beta_unscaled
 ```
 
-E dá para verificar que os dois vetores descrevem o **mesmo** modelo, comparando a verossimilhança que cada um atribui ao conjunto completo:
+E dá para verificar que os dois vetores descrevem o **mesmo** modelo, comparando a verossimilhança que cada um atribui ao conjunto completo. É o que @grus2019 faz, com um `assert`:
 
 ```{python}
 #| label: mesma-verossimilhanca
@@ -236,8 +248,46 @@ assert (negative_log_likelihood(xs, ys, beta_unscaled) ==
 negative_log_likelihood(xs, ys, beta_unscaled)
 ```
 
-::: {.callout-note}
-Repare que este `assert` compara `float` por **igualdade exata**, e passa. Não é sorte nem descuido: as duas expressões percorrem os mesmos 200 pontos, na mesma ordem, e para cada ponto o produto escalar reescalonado e o produto escalar desescalonado produzem o mesmo `float64` bit a bit — a conversão é linear, e o Grus a escreveu de modo que as operações se cancelem exatamente. É a exceção que confirma a regra: comparar floats por igualdade normalmente é erro (o [Capítulo 10](../cap10/03-implementacao.qmd) tem um exemplo em que isso quebra), e só se faz quando se sabe *por que* os bits têm de coincidir.
+O `assert` passa. Antes de concluir qualquer coisa disso, vale rodar a mesma comparação com outros $\beta$ — os do meio do treino, que ficaram guardados em `betas`:
+
+```{python}
+#| label: assert-por-sorte
+import math
+
+def desescalonar(b: Vector) -> Vector:
+    """a mesma conversão de cima, para um beta qualquer"""
+    return [b[0] - b[1] * means[1] / stdevs[1] - b[2] * means[2] / stdevs[2],
+            b[1] / stdevs[1],
+            b[2] / stdevs[2]]
+
+def as_duas_perdas(b: Vector) -> Tuple[float, float]:
+    """a perda no conjunto completo, calculada nas duas escalas"""
+    return (negative_log_likelihood(xs, ys, desescalonar(b)),
+            negative_log_likelihood(rescaled_xs, ys, b))
+
+for e in [100, 500, 1000, 2000, 3000, 4000, 5000]:
+    esquerda, direita = as_duas_perdas(betas[e - 1])
+    print(f"época {e:>5}: {esquerda!r:<19} {direita!r:<19} "
+          f"iguais? {esquerda == direita}")
+
+pares = [as_duas_perdas(b) for b in betas]
+print(f"\nnas 5.000 épocas deste treino, comparando as duas escalas:")
+print(f"   ==            vale em {sum(1 for a, c in pares if a == c)}")
+print(f"   math.isclose  vale em {sum(1 for a, c in pares if math.isclose(a, c))}")
+```
+
+::: {.callout-warning}
+## O `assert` passa, e passa por sorte
+
+Aquele `assert` compara dois `float` por **igualdade exata**, e passa — para este $\beta$. Com o $\beta$ da época 500 do mesmo treino, os mesmos 200 pontos e a mesma conversão de escala, ele estouraria: 57,67164046623943 de um lado contra 57,67164046623944 do outro. Ao longo das 5.000 épocas ele passaria em menos da metade delas. **É cara ou coroa**, e o $\beta$ final do Grus caiu do lado da cara.
+
+O motivo é que as duas contas **não** se cancelam ponto a ponto. Tome o $\beta$ final e compare `dot(x, beta_unscaled)` com o produto escalar na escala reescalonada, usuário por usuário: só **8** dos 200 pares saem bit a bit idênticos. Os outros 192 diferem na última casa — nada maior que $4{,}4 \times 10^{-15}$, mas diferem. A conversão é linear no papel; em `float64` ela é uma sequência **diferente** de multiplicações e subtrações, e duas sequências com o mesmo valor exato não têm por que produzir o mesmo valor arredondado.
+
+A igualdade que se vê aparece só **na soma final**, e por arredondamento: somados 200 termos com erros de última casa, o total às vezes cai no mesmo `float64` e às vezes cai no vizinho. Quando cai no vizinho, o `assert` quebra — sem nada de errado com o modelo, com a conversão ou com os dados.
+
+Este é exatamente o construto que a [seção 10.4](../cap10/04-testando-o-modelo.qmd) marcou como **erro instrutivo do próprio livro-texto** — e o `assert` daqui também é do livro-texto (`scratch/logistic_regression.py`, no bloco `__main__`). Lá o não determinismo vinha da ordem de iteração de um `set`; aqui vem da ordem das operações aritméticas. É a mesma lição com outra fachada: **`==` entre `float` é a pergunta errada.** A pergunta certa tem tolerância, e a linha de cima mostra o placar dela — `math.isclose` vale nas 5.000 épocas, sem exceção.
+
+Fica também um aviso sobre `assert` em geral. Este passou em toda renderização deste livro porque a semente é fixa e o $\beta$ final é sempre o mesmo; um `assert` que passa **sempre** e um `assert` que passa **por construção** são coisas diferentes, e só a segunda é um teste.
 :::
 
 ## Interpretando os coeficientes
@@ -256,7 +306,7 @@ for exp, sal in [(2.0, 60000), (5.0, 66700), (8.0, 60000), (8.0, 100000)]:
     print(f"{exp:4.1f} anos de experiência, salário {sal:>6} -> P(paga) = {p:.4f}")
 ```
 
-O que dá para afirmar com segurança é o sinal: mantendo tudo o mais constante, **mais experiência aumenta** a chance de pagar, e **salário maior diminui**. O segundo sinal parece estranho até você lembrar do gráfico da [seção 13.1](01-o-problema.qmd), em que os pagantes se concentravam embaixo à direita. Com 8 anos de experiência, um salário de 60.000 dá 99% de chance de conta paga; o mesmo profissional ganhando 100.000 cai para 0,1%.
+O que dá para afirmar com segurança é o sinal: mantendo tudo o mais constante, **mais experiência aumenta** a chance de pagar, e **salário maior diminui**. O segundo sinal parece estranho até você lembrar do gráfico da [seção 13.1](01-o-problema.qmd), em que os pagantes se concentravam embaixo à direita. Com 8 anos de experiência, um salário de 60.000 dá 99,22% de chance de conta paga; o mesmo profissional ganhando 100.000 cai para 0,13%.
 
 ::: {.callout-warning}
 Nada disso é uma afirmação causal. O modelo não diz que aumentar o salário de alguém faria a pessoa cancelar a assinatura. Ele diz que, **nestes 200 usuários**, quem ganha mais tende a não assinar — e a explicação plausível (quem tem experiência e ganha pouco está procurando emprego) é uma história que nós contamos, não algo que o ajuste tenha demonstrado. É a mesma advertência da [seção 12.4](../cap12/04-interpretando-o-modelo.qmd), e ela não fica mais fraca porque a saída agora é uma probabilidade.
@@ -276,7 +326,9 @@ modelo.intercept_, modelo.coef_
 
 Três coisas que vale saber, agora que você viu o código por dentro.
 
-**A biblioteca não quebra com os dados brutos.** Rodar o código acima nos `xs` sem reescalonar funciona: ela devolve intercepto 8,41 e coeficientes 1,51 e −0,00027, na mesma vizinhança do nosso `beta_unscaled` — `[8.93, 1.65, -0.000288]`. Isso não contradiz nada do que esta seção mostrou; é o resultado de um trabalho de engenharia que a implementação faz e a nossa não. O solucionador padrão (`lbfgs`) usa curvatura de segunda ordem, e por isso não sofre com colunas de escalas diferentes do jeito que um passo fixo sofre; e a perda é calculada por rotinas numericamente estáveis, que nunca formam `1 - 1.0`. A saturação em `float64` continua existindo — ela é uma propriedade do tipo, não do código —, mas nenhuma linha do seu programa a encontra. O `ValueError` que abriu esta seção é, literalmente, o que você paga para ver o mecanismo.
+**A biblioteca não quebra com os dados brutos — e também não teria mostrado a falha silenciosa.** Rodar o código acima nos `xs` sem reescalonar funciona: ela devolve intercepto 8,41 e coeficientes 1,51 e −0,00027, na mesma vizinhança do nosso `beta_unscaled` — `[8.93, 1.65, -0.000288]`. Isso não contradiz nada do que esta seção mostrou; é o resultado de um trabalho de engenharia que a implementação faz e a nossa não. O otimizador padrão (`lbfgs`) usa curvatura de segunda ordem, e por isso não sofre com colunas de escalas diferentes do jeito que um passo fixo sofre; e a perda é calculada por rotinas numericamente estáveis, que nunca formam `1 - 1.0`. A saturação em `float64` continua existindo — ela é uma propriedade do tipo, não do código —, mas nenhuma linha do seu programa a encontra.
+
+Repare que isso vale para as **duas** falhas, e não só para a barulhenta. O `ValueError` some porque a perda é calculada de outro jeito; o `-0.0` some porque a interface não tem onde exibi-lo — `LogisticRegression` devolve coeficientes, previsões e um `score`, nunca a perda de um ponto isolado. Nenhum dos dois números do começo desta seção existe do lado de fora. O `ValueError` é, literalmente, o que você paga para ver o mecanismo; e o `-0.0` é o que você **só** vê se pagar.
 
 **Ela regulariza por padrão, e você não pediu.** `LogisticRegression` aplica penalidade L2 com `C=1.0` a menos que você diga o contrário — a mesma regularização *ridge* da [seção 12.8](../cap12/08-regularizacao.qmd), aqui ligada de fábrica. É por isso que os coeficientes dela saem um pouco encolhidos em relação aos nossos. Aumentar `C` afrouxa a penalidade; com ela praticamente desligada e os dados reescalonados, a biblioteca devolve `[-2.11, 4.53, -4.40]` contra os nossos `[-2.02, 4.69, -4.47]`, e a diferença que sobra é a distância entre um otimizador que converge de verdade e 5.000 passos de tamanho fixo.
 

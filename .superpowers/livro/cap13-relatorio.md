@@ -22,3 +22,42 @@ Escritos os 5 arquivos de `content/cap13/`, substituindo os stubs. **`make rende
 
 - **Repetição de código.** As §§3, 4 e 5 refazem `scale`/`rescale` e o ajuste de 5.000 épocas, porque cada página tem kernel próprio e o β ajustado só existe dentro do `main()` de `scratch/logistic_regression.py`. Custo: ~1,5 s por página. É a única saída sem editar o pacote vendorizado, mas é visualmente repetitivo para quem lê as três seções em sequência.
 - A afirmação sobre `sklearn` rodando bem em dados não reescalonados foi **medida** (intercepto 8,41; coeficientes 1,51 e −0,00027), assim como a versão sem penalidade (`[-2.11, 4.53, -4.40]`). Como `penalty=None` está *deprecated* no sklearn 1.9, o callout fala só em `C`, sem mostrar API obsoleta.
+
+---
+
+# Adendo — rodada de correções (16/08, tarde)
+
+Aplicadas contra `.superpowers/livro/cap13-correcoes.md`: **C1, I1–I5, M1–M12**. Nada do capítulo foi reescrito; o texto elogiado pelas duas revisões está intacto. `make render` OK (tentativa 2, depois tentativa 1 num segundo passe) e `make teste` 24/24, duas vezes.
+
+## C1 — o `assert` de igualdade exata: o callout mentia, e mentia contra o cap. 10
+
+O callout antigo afirmava que "as operações se cancelam exatamente" e que "não é sorte". **É sorte, e agora o capítulo mostra isso rodando.** Medições feitas neste container, todas reproduzidas na página:
+
+- **`==` vale em 2.169 das 5.000 épocas** do próprio treino (43,4%). Cara ou coroa; o β final do Grus caiu do lado da cara.
+- **`math.isclose` vale em 5.000 de 5.000.**
+- Ponto a ponto **não** se cancela: com o β final, só **8 dos 200** produtos escalares saem bit a bit idênticos entre as duas escalas; diferença máxima $4{,}4\times10^{-15}$. A igualdade aparece só na soma, por arredondamento.
+- A época 500 é o contraexemplo exibido: 57,67164046623943 contra 57,67164046623944.
+
+O chunk `ajusta` ganhou uma linha (`betas.append(beta)`) para que o caminho inteiro fique disponível; o chunk novo `assert-por-sorte` imprime a tabela de sete épocas e o placar `==` × `math.isclose`. O callout virou `.callout-warning`, aponta para a **§10.4** (o link antigo ia para `cap10/03-implementacao.qmd`, seção errada) e registra que o `assert` é do próprio livro-texto (`scratch/logistic_regression.py`, bloco `__main__`) — mesma família do `set` não determinístico que o cap. 10 já marca. O capítulo agora **concorda** com o 10.
+
+## Os Importantes
+
+- **I1** — objetivo nº 5 do índice trocado pelo enunciado forte ("perda zero e completamente errado… nenhuma biblioteca teria mostrado isso"). A tese saiu de dentro do "Na prática" colapsado e virou três parágrafos de prosa corrida na §3, entre o callout das duas falhas e "O conserto". O callout de biblioteca da §3 passou a rebater as **duas** falhas (o `-0.0` some porque a interface não expõe perda de ponto isolado). E a §2 perdeu o trecho a partir de "não em algum caso patológico raro", que entregava o desfecho.
+- **I2** — `## O que este capítulo deixa` escrito antes do callout final da §5: retoma a escada 11 → 12 → 13 das fórmulas fechadas e entrega o cap. 14 pelo argumento da indiferença à escala (a árvore só olha ordem, e reescalonar preserva ordem). O capítulo 14 era citado zero vezes nos seis arquivos.
+- **I3** — a regra do kernel virou um callout único e titulado na §3, que também explica a repetição vindoura; §4 e §5 apontam de volta para ele e tiveram o bloco de refazimento marcado com `#| echo: false` (saída preservada: o `beta` e o `beta_unscaled`). Não usei `code-fold`.
+- **I4** — "espaço de parâmetros" → **espaço de atributos**, com `.callout-warning` marcando o deslize do Grus (p. 205), separando os dois espaços e explicando a simetria que provavelmente o gera ($\beta\cdot x=0$ é hiperplano nos dois, conforme qual vetor se segura fixo).
+- **I5** — Bernoulli nomeada na §2, logo depois de "Uma fórmula, os dois casos, sem `if`", com o link para a §11.3 que prometeu a troca.
+
+## Menores
+
+M1 título ("deixa de ser a mesma coisa"). M2 limiar reescrito como $-\log(2^{-53}) = 53\ln 2 \approx 36{,}7368$, conferido por bissecção (36.73680056967711). M3 sexta casa na perda (39,96350015 → 39,96349522) e terceira no β (4,6903 → 4,6930), os dois nomeados. M4 os três falsos negativos redescritos (0,457 limítrofe; 0,163 aposta errada com 84% de confiança) e os falsos positivos "da dúvida à convicção". M5 padronizado em 99,22% / 0,13%. M6 usa o número: 38 dos 200. M7 `print()` nos dois, com if/else honesto no `separavel`. M8 cláusula sobre `xs_sep`. M9 as quatro trocas de prosa. M10 callout do `warning: false` removido, link preservado na frase que introduz o chunk. M11 `SVC(probability=True)` depreciado na 1.9 e removido na 1.11 → `CalibratedClassifierCV(SVC(), ensemble=False)` (verificado: o `FutureWarning` real da 1.9.0); a ironia da calibração logística ficou melhor. M12 os dois títulos renomeados — `Na prática: scikit-learn` na §5, `Na prática: networkx` em `cap01/03`.
+
+## Não mexi
+
+"For Further Investigation" no `index.qmd` e os `[-2.11, 4.53, -4.40]` do callout de biblioteca, como manda a seção "Não mexa nisto".
+
+## Preocupações
+
+- **Um arquivo fora do cap. 13 foi tocado**: `content/cap01/03-hipotese-motivadora-datasciencester.qmd`, só o título do callout (M12).
+- O chunk novo da §3 avalia a perda 10.000 vezes (5.000 β × 2 escalas). Custo medido: **~3 s**, congelado pelo `freeze`. Se um dia pesar, dá para cortar para uma amostra de épocas sem perder o argumento.
+- Os números "8 de 200" e "$4{,}4\times10^{-15}$" estão em prosa, não em chunk. São reprodutíveis nesta imagem, mas não se autoverificam a cada render como os outros; se alguém trocar a semente ou os hiperparâmetros do ajuste, eles envelhecem em silêncio. O placar `==` / `isclose`, esse, é calculado na página.
