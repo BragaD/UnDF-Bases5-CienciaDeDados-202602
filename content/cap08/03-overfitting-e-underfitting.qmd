@@ -4,7 +4,197 @@
 Esta seção corresponde a *Overfitting and Underfitting*, do capítulo 11 de @grus2019.
 :::
 
-::: {.callout-warning}
-## Em construção
-O conteúdo desta seção ainda será escrito.
+Um perigo comum em aprendizado de máquina é o **overfitting** — produzir um modelo que se sai bem nos dados em que foi treinado, mas generaliza mal para dados novos. Isso pode envolver aprender *ruído* nos dados, ou aprender a identificar as entradas específicas em vez dos fatores que de fato predizem o resultado desejado.
+
+O outro lado da moeda é o **underfitting** — produzir um modelo que não vai bem nem nos dados de treino, embora nesse caso a reação usual seja concluir que o modelo não presta e continuar procurando outro.
+
+O gráfico abaixo ajusta três polinômios a uma amostra de dados. Não se preocupe com *como* eles foram ajustados; isso vem em capítulos posteriores.
+
+```{python}
+#| label: fig-overfitting
+#| fig-cap: "Overfitting e underfitting: polinômios de grau 0, 1 e 9 ajustados aos mesmos dez pontos"
+#| echo: false
+import random
+import math
+from matplotlib import pyplot as plt
+
+random.seed(12)
+
+# Dez pontos ao redor da reta y = 2x
+xs = [2.5 + 0.65 * i for i in range(10)]
+ys = [2 * x + random.gauss(0, 1.2) for x in xs]
+
+# --- grau 0: a média ---
+media = sum(ys) / len(ys)
+
+# --- grau 1: mínimos quadrados, em duas fórmulas ---
+x_bar = sum(xs) / len(xs)
+y_bar = sum(ys) / len(ys)
+slope = (sum((x - x_bar) * (y - y_bar) for x, y in zip(xs, ys))
+         / sum((x - x_bar) ** 2 for x in xs))
+intercept = y_bar - slope * x_bar
+
+# --- grau 9: o polinômio que passa exatamente pelos 10 pontos ---
+# Com n pontos distintos existe um único polinômio de grau n-1 que passa por
+# todos eles, e a forma de Lagrange o escreve diretamente — sem resolver sistema.
+def lagrange(x, xs, ys):
+    total = 0.0
+    for i, (xi, yi) in enumerate(zip(xs, ys)):
+        termo = yi
+        for j, xj in enumerate(xs):
+            if i != j:
+                termo *= (x - xj) / (xi - xj)
+        total += termo
+    return total
+
+grade = [xs[0] + (xs[-1] - xs[0]) * k / 400 for k in range(401)]
+
+fig, ax = plt.subplots(figsize=(7.5, 4.5))
+ax.plot(grade, [media] * len(grade), "--", label="grau 0", color="#4472c4")
+ax.plot(grade, [intercept + slope * x for x in grade], "-", label="grau 1", color="#2e7d32")
+ax.plot(grade, [lagrange(x, xs, ys) for x in grade], ":", label="grau 9", color="#c00000")
+ax.scatter(xs, ys, color="#1f3864", zorder=5)
+
+ax.set_ylim(min(ys) - 6, max(ys) + 6)
+ax.set_title("Melhores polinômios de vários graus")
+ax.legend()
+plt.tight_layout()
+plt.show()
+```
+
+A linha horizontal é o melhor polinômio de grau 0 — uma constante. Ela sofre de **underfitting** severo: não acompanha nada.
+
+O polinômio de grau 9, com dez parâmetros, passa **exatamente** por cada ponto de treino. E sofre de **overfitting** igualmente severo: se pegássemos alguns pontos a mais da mesma população, ele erraria por muito.
+
+Repare no formato dele. Entre os pontos, ele sobe e desce em ondas que não correspondem a nada — sobe até 7 antes do quarto ponto, mergulha depois do oitavo. Essas ondulações são o preço de ser obrigado a passar por todos os pontos: como o ruído de cada observação é diferente, a curva precisa se contorcer para alcançá-los um a um. **Ela está ajustando o ruído**, e ruído não se repete na próxima amostra.
+
+(Na [seção sobre viés e variância](05-vies-e-variancia.qmd) você vai ver o que acontece quando se repete este ajuste com dez amostras diferentes: aí a curva de grau 9 chega a disparar para fora da escala.)
+
+A reta de grau 1 acha um bom equilíbrio: fica razoavelmente perto de todos os pontos, e se estes dados forem representativos, ela provavelmente vai ficar perto de pontos novos também.
+
+::: {.conceito}
+O polinômio de grau 9 tem **erro zero** nos dados de treino. Ele é, por essa medida, o melhor dos três — e é o pior dos três.
+
+Guarde esta frase: **erro baixo nos dados de treino não é evidência de nada.** É por isso que a próxima parte desta seção existe.
 :::
+
+## Separar treino e teste
+
+Modelos complexos demais levam a overfitting e não generalizam além dos dados em que foram treinados. Como garantir que os nossos modelos não são complexos demais?
+
+A abordagem mais fundamental é **usar dados diferentes para treinar e para testar o modelo.**
+
+A forma mais simples de fazer isso é dividir o conjunto de dados, usando (por exemplo) dois terços para treinar e medindo o desempenho no terço restante:
+
+```{python}
+#| label: split-data
+import random
+from typing import TypeVar, List, Tuple
+
+X = TypeVar('X')  # tipo genérico para representar um ponto de dados
+
+def split_data(data: List[X], prob: float) -> Tuple[List[X], List[X]]:
+    """Divide os dados nas frações [prob, 1 - prob]"""
+    data = data[:]                    # Faz uma cópia rasa,
+    random.shuffle(data)              # porque shuffle modifica a lista.
+    cut = int(len(data) * prob)       # Usa prob para achar o ponto de corte
+    return data[:cut], data[cut:]     # e divide a lista embaralhada ali.
+
+data = [n for n in range(1000)]
+train, test = split_data(data, 0.75)
+
+# As proporções devem estar corretas
+assert len(train) == 750
+assert len(test) == 250
+
+# E os dados originais devem estar preservados (em alguma ordem)
+assert sorted(train + test) == data
+
+len(train), len(test)
+```
+
+::: {.callout-note}
+Repare no `data = data[:]` da primeira linha. Sem essa cópia, `random.shuffle` embaralharia a lista **do chamador**, não uma cópia dela.
+
+Esse é o tipo de efeito colateral que não gera erro e aparece muito depois, quando alguém descobre que a ordem original dos dados sumiu. O `assert sorted(train + test) == data` no fim é o que prova que nada foi perdido nem duplicado — e ele só passa porque a cópia existe.
+:::
+
+Muitas vezes teremos variáveis de entrada e de saída pareadas. Nesse caso é preciso garantir que os valores correspondentes fiquem juntos, seja no treino, seja no teste:
+
+```{python}
+#| label: train-test-split
+Y = TypeVar('Y')  # tipo genérico para representar variáveis de saída
+
+def train_test_split(xs: List[X],
+                     ys: List[Y],
+                     test_pct: float) -> Tuple[List[X], List[X], List[Y], List[Y]]:
+    # Gera os índices e os divide
+    idxs = [i for i in range(len(xs))]
+    train_idxs, test_idxs = split_data(idxs, 1 - test_pct)
+
+    return ([xs[i] for i in train_idxs],  # x_train
+            [xs[i] for i in test_idxs],   # x_test
+            [ys[i] for i in train_idxs],  # y_train
+            [ys[i] for i in test_idxs])   # y_test
+```
+
+::: {.exemplo}
+A função não embaralha `xs` e `ys` separadamente — ela embaralha os **índices** e usa os mesmos índices nas duas listas.
+
+Se embaralhasse cada uma por conta própria, cada entrada acabaria pareada com a saída de outra observação, e o modelo aprenderia a partir de pares aleatórios. Ele treinaria sem erro algum e produziria lixo.
+:::
+
+Como sempre, queremos garantir que o código funciona:
+
+```{python}
+#| label: verifica-split
+xs = [x for x in range(1000)]  # xs são 1 ... 1000
+ys = [2 * x for x in xs]       # cada y_i é o dobro de x_i
+x_train, x_test, y_train, y_test = train_test_split(xs, ys, 0.25)
+
+# Verifica que as proporções estão corretas
+assert len(x_train) == len(y_train) == 750
+assert len(x_test) == len(y_test) == 250
+
+# Verifica que os pontos correspondentes estão pareados corretamente
+assert all(y == 2 * x for x, y in zip(x_train, y_train))
+assert all(y == 2 * x for x, y in zip(x_test, y_test))
+
+len(x_train), len(x_test)
+```
+
+Depois disso, você pode fazer algo assim:
+
+```{python}
+#| eval: false
+model = SomeKindOfModel()
+x_train, x_test, y_train, y_test = train_test_split(xs, ys, 0.33)
+model.train(x_train, y_train)
+performance = model.test(x_test, y_test)
+```
+
+Se o modelo tiver sofrido overfitting nos dados de treino, ele vai — espera-se — se sair muito mal nos dados de teste, que são completamente separados. Dito de outro jeito: se ele vai bem no teste, você pode ter mais confiança de que está *ajustando* em vez de *superajustando*.
+
+## Dois jeitos de isso dar errado
+
+Há, no entanto, dois modos de essa estratégia falhar.
+
+**O primeiro** é haver padrões comuns entre treino e teste que não generalizariam para um conjunto maior.
+
+Por exemplo: imagine que seus dados são de atividade de usuários, com uma linha por usuário por semana. Nesse caso, a maioria dos usuários vai aparecer tanto no treino quanto no teste, e certos modelos podem aprender a **identificar usuários** em vez de descobrir relações entre atributos. O @grus2019 registra que isso já aconteceu com ele.
+
+**O segundo é maior**, e é o que mais aparece na prática: usar a divisão treino/teste não apenas para *julgar* um modelo, mas para *escolher* entre vários.
+
+::: {.callout-warning}
+## O conjunto de teste vira treino quando você o usa para escolher
+
+Suponha que você treine vinte modelos, meça todos no conjunto de teste e fique com o melhor.
+
+Cada modelo individualmente pode não estar superajustado. Mas "escolher o modelo que vai melhor no teste" é, ele próprio, um **meta-treinamento** — e o conjunto de teste acabou de virar um segundo conjunto de treino.
+
+O resultado é previsível: o modelo que foi melhor no teste vai ser bom no teste. Isso deixou de ser informação.
+
+A saída é dividir em **três** partes: um conjunto de **treino** para construir modelos, um de **validação** para escolher entre modelos treinados, e um de **teste** para julgar o modelo final — usado uma única vez, no fim.
+:::
+
+Essa armadilha é sutil porque cada passo isolado parece correto. Ninguém treinou no conjunto de teste; só olhou para ele algumas vezes. Mas olhar e decidir é uma forma de aprender — e a informação vaza pela decisão de quem olha, não pelo código.

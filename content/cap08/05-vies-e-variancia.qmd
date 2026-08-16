@@ -4,7 +4,118 @@
 Esta seção corresponde a *The Bias-Variance Tradeoff*, do capítulo 11 de @grus2019.
 :::
 
-::: {.callout-warning}
-## Em construção
-O conteúdo desta seção ainda será escrito.
+Outra forma de pensar no problema do overfitting é como um compromisso entre **viés** e **variância**.
+
+::: {.conceito}
+Os dois são medidas do que aconteceria se você **retreinasse o seu modelo muitas vezes**, sobre conjuntos de treino diferentes, tirados da mesma população.
+
+**Viés** é o quanto o modelo erra sistematicamente, em qualquer conjunto de treino.
+**Variância** é o quanto o modelo *muda* de um conjunto de treino para outro.
+
+Repare que nenhuma das duas definições fala de um único ajuste. Elas falam de uma população de ajustes — e é por isso que não dá para medir viés e variância olhando um modelo treinado uma vez só.
 :::
+
+Voltando ao gráfico da [seção anterior](03-overfitting-e-underfitting.qmd): o modelo de grau 0 vai errar bastante para praticamente qualquer conjunto de treino tirado daquela população, o que significa que ele tem **viés alto**. Em compensação, dois conjuntos de treino escolhidos ao acaso dariam modelos bem parecidos — a média de duas amostras da mesma população é parecida —, então ele tem **variância baixa**. Viés alto e variância baixa correspondem tipicamente a underfitting.
+
+Já o modelo de grau 9 ajustou o conjunto de treino perfeitamente. Ele tem **viés muito baixo** e **variância muito alta**, porque dois conjuntos de treino diferentes produziriam modelos completamente diferentes. Isso corresponde a overfitting.
+
+Dá para ver isso diretamente. O gráfico abaixo repete o experimento dez vezes, cada vez com dez pontos novos da mesma população, e desenha o modelo ajustado a cada uma:
+
+```{python}
+#| label: fig-variancia
+#| fig-cap: "Dez conjuntos de treino diferentes, da mesma população. À esquerda, grau 1; à direita, grau 9."
+#| echo: false
+import random
+from matplotlib import pyplot as plt
+
+random.seed(7)
+
+def amostra(n=10):
+    xs = [2.5 + 0.65 * i for i in range(n)]
+    ys = [2 * x + random.gauss(0, 1.2) for x in xs]
+    return xs, ys
+
+def reta(xs, ys):
+    x_bar = sum(xs) / len(xs)
+    y_bar = sum(ys) / len(ys)
+    slope = (sum((x - x_bar) * (y - y_bar) for x, y in zip(xs, ys))
+             / sum((x - x_bar) ** 2 for x in xs))
+    return y_bar - slope * x_bar, slope
+
+def lagrange(x, xs, ys):
+    total = 0.0
+    for i, (xi, yi) in enumerate(zip(xs, ys)):
+        termo = yi
+        for j, xj in enumerate(xs):
+            if i != j:
+                termo *= (x - xj) / (xi - xj)
+        total += termo
+    return total
+
+grade = [2.5 + (8.35 - 2.5) * k / 300 for k in range(301)]
+
+fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(10, 4), sharey=True)
+
+for _ in range(10):
+    xs, ys = amostra()
+    b, m = reta(xs, ys)
+    ax1.plot(grade, [b + m * x for x in grade], color="#2e7d32", alpha=0.6)
+    ax2.plot(grade, [lagrange(x, xs, ys) for x in grade], color="#c00000", alpha=0.6)
+
+ax1.set_title("grau 1 — variância baixa")
+ax2.set_title("grau 9 — variância alta")
+for ax in (ax1, ax2):
+    ax.plot(grade, [2 * x for x in grade], "k--", lw=1, label="relação verdadeira")
+    ax.set_ylim(0, 22)
+    ax.legend(fontsize=8)
+plt.tight_layout()
+plt.show()
+```
+
+À esquerda, as dez retas quase se sobrepõem: o modelo é estável, mesmo que nenhuma delas acerte a relação verdadeira em cheio. À direita, os dez polinômios de grau 9 vão para todo lado — cada conjunto de treino produz um modelo essencialmente diferente, embora cada um deles acerte os seus próprios dez pontos perfeitamente.
+
+## O que fazer com o diagnóstico
+
+Pensar nos problemas do modelo dessa forma ajuda a decidir o que tentar quando ele não funciona bem.
+
+**Se o seu modelo tem viés alto** — o que significa que ele vai mal até nos dados de treino —, uma coisa a tentar é **acrescentar atributos**. Sair do modelo de grau 0 para o de grau 1, na seção anterior, foi uma melhora grande.
+
+**Se o seu modelo tem variância alta**, você pode do mesmo modo **remover atributos**. Mas há outra saída: **obter mais dados**, quando isso é possível.
+
+O gráfico abaixo mostra o efeito de mais dados sobre a variância. É o mesmo experimento de antes, com dez amostras independentes, mas variando o tamanho de cada amostra:
+
+```{python}
+#| label: fig-mais-dados
+#| fig-cap: "Reduzindo a variância com mais dados: o mesmo modelo, ajustado a amostras de 10, 100 e 1000 pontos"
+#| echo: false
+random.seed(7)
+
+fig, axes = plt.subplots(1, 3, figsize=(11, 3.6), sharey=True)
+
+for ax, n in zip(axes, [10, 100, 1000]):
+    for _ in range(10):
+        xs = [2.5 + 5.85 * random.random() for _ in range(n)]
+        ys = [2 * x + random.gauss(0, 1.2) for x in xs]
+        b, m = reta(xs, ys)
+        ax.plot(grade, [b + m * x for x in grade], color="#4472c4", alpha=0.6)
+    ax.plot(grade, [2 * x for x in grade], "k--", lw=1)
+    ax.set_title(f"N = {n}")
+    ax.set_ylim(2, 20)
+
+plt.tight_layout()
+plt.show()
+```
+
+Com dez pontos, as retas ajustadas se espalham visivelmente. Com mil, elas praticamente coincidem com a relação verdadeira. **Mantendo a complexidade do modelo constante, quanto mais dados você tem, mais difícil é sofrer overfitting.**
+
+::: {.callout-warning}
+## Mais dados não conserta viés
+
+Por outro lado, mais dados **não** ajudam com viés. Se o seu modelo não usa atributos suficientes para capturar as regularidades dos dados, jogar mais dados nele não vai adiantar.
+
+Um modelo de grau 0 ajustado a um milhão de pontos continua sendo uma reta horizontal. Ele vai ser uma reta horizontal muito bem estimada, com a altura exata da média da população — e vai continuar sem descrever nada.
+
+Essa assimetria é útil na prática: "coletar mais dados" é uma resposta cara e frequentemente proposta. Ela resolve variância. Se o problema for viés, é dinheiro gasto sem efeito.
+:::
+
+@grus2019 ilustra esse ponto com um polinômio de grau 9 ajustado a amostras de tamanhos diferentes: com 10 pontos ele se descontrola, com 100 já melhora bastante, e com 1.000 fica muito parecido com o modelo de grau 1. Aqui a demonstração usa o modelo de grau 1 em vez do de grau 9, porque o efeito — variância encolhendo com o tamanho da amostra — aparece igual e o cálculo é exato.

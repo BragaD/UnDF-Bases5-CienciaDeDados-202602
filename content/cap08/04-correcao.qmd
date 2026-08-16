@@ -4,7 +4,150 @@
 Esta seção corresponde a *Correctness*, do capítulo 11 de @grus2019.
 :::
 
+@grus2019 abre esta seção com uma piada que vale reproduzir inteira, porque ela é o melhor argumento do capítulo.
+
+Nas horas vagas, conta ele, desenvolveu um teste barato e não invasivo, aplicável a recém-nascidos, que prevê — **com mais de 98% de acurácia** — se o bebê vai desenvolver leucemia. O advogado dele o convenceu de que o teste não é patenteável, então ele compartilha os detalhes:
+
+> Preveja leucemia se, e somente se, o bebê se chamar Luke.
+
+E o teste é, de fato, mais de 98% acurado. Também é um teste estupidamente ruim — e é uma boa ilustração de por que normalmente não se usa "acurácia" para medir a qualidade de um modelo de classificação binária.
+
+## As quatro caixas
+
+Imagine construir um modelo para tomar uma decisão **binária**. Este e-mail é spam? Devemos contratar esta candidata? Este passageiro é secretamente um terrorista?
+
+Dado um conjunto de dados rotulado e um modelo preditivo desses, cada observação cai em uma de quatro categorias:
+
+**Verdadeiro positivo** — "Esta mensagem é spam, e previmos corretamente que era spam."
+
+**Falso positivo (erro Tipo 1)** — "Esta mensagem não é spam, mas previmos que era."
+
+**Falso negativo (erro Tipo 2)** — "Esta mensagem é spam, mas previmos que não era."
+
+**Verdadeiro negativo** — "Esta mensagem não é spam, e previmos corretamente que não era."
+
+Frequentemente representamos essas contagens numa **matriz de confusão**:
+
+|  | É spam | Não é spam |
+|---|---|---|
+| **Previu "spam"** | Verdadeiro positivo | Falso positivo |
+| **Previu "não é spam"** | Falso negativo | Verdadeiro negativo |
+
+## O teste do Luke, em números
+
+Vamos ver como o teste da leucemia se encaixa nesse quadro. Hoje em dia, aproximadamente **5 bebês em cada 1.000 se chamam Luke**. E a prevalência da leucemia ao longo da vida é de cerca de 1,4%, ou **14 em cada 1.000 pessoas**.
+
+Se acreditarmos que esses dois fatores são independentes e aplicarmos o teste "Luke é sinal de leucemia" a um milhão de pessoas, esperaríamos uma matriz de confusão assim:
+
+|  | Leucemia | Sem leucemia | Total |
+|---|---|---|---|
+| **"Luke"** | 70 | 4.930 | 5.000 |
+| **Não "Luke"** | 13.930 | 981.070 | 995.000 |
+| **Total** | 14.000 | 986.000 | 1.000.000 |
+
+Com esses números dá para calcular várias estatísticas de desempenho. A **acurácia** é definida como a fração de previsões corretas:
+
+```{python}
+#| label: acuracia
+def accuracy(tp: int, fp: int, fn: int, tn: int) -> float:
+    correct = tp + tn
+    total = tp + fp + fn + tn
+    return correct / total
+
+assert accuracy(70, 4930, 13930, 981070) == 0.98114
+
+accuracy(70, 4930, 13930, 981070)
+```
+
+98,1%. Parece um número bastante impressionante.
+
 ::: {.callout-warning}
-## Em construção
-O conteúdo desta seção ainda será escrito.
+## De onde vem a acurácia de 98%
+
+O teste acerta em 98,1% dos casos porque **quase ninguém tem leucemia e quase ninguém se chama Luke**. Os 981.070 verdadeiros negativos — pessoas que não se chamam Luke e não têm leucemia — carregam sozinhos a métrica inteira.
+
+Um teste que simplesmente respondesse "não tem leucemia" para todo mundo teria acurácia de 98,6%, ainda melhor. E não olharia para dado nenhum.
+
+Sempre que a classe de interesse é rara, a acurácia mede principalmente o tamanho da classe majoritária. Fraude, doença rara, defeito de fabricação, evasão escolar — todos esses são problemas em que reportar acurácia é, na prática, esconder o resultado.
+:::
+
+## Precisão e revocação
+
+Por isso é comum olhar a combinação de **precisão** e **revocação** (*recall*).
+
+A precisão mede o quanto as nossas previsões *positivas* foram acertadas:
+
+```{python}
+#| label: precisao
+def precision(tp: int, fp: int, fn: int, tn: int) -> float:
+    return tp / (tp + fp)
+
+assert precision(70, 4930, 13930, 981070) == 0.014
+
+precision(70, 4930, 13930, 981070)
+```
+
+E a revocação mede que fração dos positivos o modelo conseguiu identificar:
+
+```{python}
+#| label: revocacao
+def recall(tp: int, fp: int, fn: int, tn: int) -> float:
+    return tp / (tp + fn)
+
+assert recall(70, 4930, 13930, 981070) == 0.005
+
+recall(70, 4930, 13930, 981070)
+```
+
+Os dois números são péssimos, o que reflete que este é um modelo péssimo.
+
+::: {.conceito}
+Compare as três medidas do mesmo modelo:
+
+- **Acurácia: 98,1%** — parece excelente
+- **Precisão: 1,4%** — de cada 100 pessoas que o teste aponta, 1 ou 2 realmente têm a doença
+- **Revocação: 0,5%** — de cada 200 pessoas que têm a doença, o teste encontra 1
+
+É o mesmo modelo, nos mesmos dados. A diferença é que acurácia conta os acertos fáceis, e precisão e revocação contam apenas o que acontece na classe que interessa.
+:::
+
+Às vezes precisão e revocação são combinadas no **F1**, definido como:
+
+```{python}
+#| label: f1
+def f1_score(tp: int, fp: int, fn: int, tn: int) -> float:
+    p = precision(tp, fp, fn, tn)
+    r = recall(tp, fp, fn, tn)
+
+    return 2 * p * r / (p + r)
+
+f1_score(70, 4930, 13930, 981070)
+```
+
+Este é a **média harmônica** de precisão e revocação, e necessariamente fica entre as duas.
+
+::: {.callout-note}
+Por que média harmônica e não média aritmética? Porque a harmônica é puxada para baixo pelo menor dos dois valores.
+
+Um modelo com precisão 1,0 e revocação 0,0 tem média aritmética 0,5 — parece mediano. A média harmônica dá 0. E 0 é a avaliação correta de um modelo que nunca encontra nada.
+:::
+
+## O compromisso entre precisão e revocação
+
+Normalmente, a escolha de um modelo envolve um compromisso entre precisão e revocação.
+
+Um modelo que responde "sim" mesmo quando está pouco confiante provavelmente terá **revocação alta e precisão baixa** — encontra quase todos os casos, mas acusa muita gente à toa. Um modelo que só responde "sim" quando está extremamente confiante terá **precisão alta e revocação baixa** — quase nunca erra ao acusar, mas deixa passar a maioria.
+
+Também dá para pensar nisso como um compromisso entre falsos positivos e falsos negativos: dizer "sim" com frequência demais produz muitos falsos positivos; dizer "não" com frequência demais produz muitos falsos negativos.
+
+Imagine que existissem 10 fatores de risco para leucemia, e que quanto mais deles alguém tivesse, maior a chance de desenvolver a doença. Nesse caso dá para imaginar um contínuo de testes: "preveja leucemia se houver ao menos um fator de risco", "se houver ao menos dois", e assim por diante. Conforme você aumenta o limiar, aumenta a precisão do teste — porque quem tem mais fatores de risco tem mais chance de adoecer — e diminui a revocação, porque cada vez menos dos futuros doentes atingem o limiar. Escolher o limiar certo é achar o equilíbrio certo.
+
+::: {.exemplo}
+E "o equilíbrio certo" **não é uma pergunta técnica**. Depende do custo de cada erro, e esse custo vem do domínio.
+
+Num teste de triagem para uma doença tratável, um falso negativo é uma pessoa que não recebe tratamento; um falso positivo é um exame a mais. Os dois custos não se parecem, e o limiar deve pender para a revocação.
+
+Num filtro de spam, um falso positivo é um e-mail importante que some na caixa de lixo; um falso negativo é um anúncio na caixa de entrada. Aqui o desequilíbrio aponta para o outro lado, e o limiar deve pender para a precisão.
+
+Mesmo algoritmo, mesmas métricas, decisões opostas. Quem escolhe o limiar está fazendo uma escolha sobre quem paga o preço do erro — e vale saber que está fazendo isso.
 :::
