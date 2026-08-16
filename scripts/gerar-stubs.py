@@ -20,6 +20,9 @@ CONTENT = RAIZ / "content"
 # fecha com "For Further Exploration"; o capítulo 16 do Grus (Regressão
 # Logística) fecha com "For Further Investigation"; o capítulo 1 do Grus
 # não tem seção de leituras adicionais — termina em "Onward" (p.12).
+# NÃO "UNIFORMIZE" O DE REGRESSÃO LOGÍSTICA. Uma revisão já apontou esse
+# "Investigation" como inconsistência a corrigir; ele está certo, e as duas
+# variantes foram conferidas no texto do PDF. É o único capítulo assim.
 # ATENÇÃO: preencher com o mapa completo da seção "Mapa completo de capítulos e
 # seções" do plano. Reproduzido aqui na íntegra — 17 capítulos, 88 seções.
 LIVRO = [
