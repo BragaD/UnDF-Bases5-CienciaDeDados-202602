@@ -121,3 +121,44 @@ Essa assimetria é útil na prática: "coletar mais dados" é uma resposta cara 
 :::
 
 @grus2019 ilustra esse ponto com um polinômio de grau 9 ajustado a amostras de tamanhos diferentes: com 10 pontos ele se descontrola, com 100 já melhora bastante, e com 1.000 fica muito parecido com o modelo de grau 1. Aqui a demonstração usa o modelo de grau 1 em vez do de grau 9, porque o efeito — variância encolhendo com o tamanho da amostra — aparece igual e o cálculo é exato.
+
+::: {.callout-tip collapse="true"}
+## Na prática: `learning_curve` e `validation_curve`
+
+Os dois gráficos desta seção têm, cada um, uma função correspondente em `sklearn.model_selection` — e a correspondência é exata, não aproximada.
+
+Os números nos comentários abaixo saem de uma árvore de decisão sobre o Iris — o mesmo conjunto do [Capítulo 9](../cap09/02-exemplo-o-dataset-iris.qmd) — e são as médias sobre as cinco dobras da validação cruzada.
+
+O segundo gráfico varia o **tamanho da amostra** com o modelo fixo. É o `learning_curve`:
+
+```python
+from sklearn.model_selection import learning_curve
+from sklearn.tree import DecisionTreeClassifier
+
+tamanhos, treino, teste = learning_curve(DecisionTreeClassifier(random_state=0),
+                                         X, y, shuffle=True, random_state=0)
+# tamanhos      [ 12  39  66  93 120]
+# treino.mean   [1.    1.    1.    1.    1.   ]
+# teste.mean    [0.787 0.933 0.953 0.94  0.96 ]
+```
+
+A comparação entre os modelos de grau 1 e grau 9 varia a **complexidade** com a amostra fixa. É o `validation_curve`, que percorre os valores de um hiperparâmetro:
+
+```python
+from sklearn.model_selection import validation_curve
+
+treino, teste = validation_curve(DecisionTreeClassifier(random_state=0), X, y,
+                                 param_name='max_depth',
+                                 param_range=[1, 2, 3, 5, 10])
+# treino.mean   [0.667 0.962 0.973 0.998 1.   ]
+# teste.mean    [0.667 0.933 0.96  0.96  0.96 ]
+```
+
+As duas devolvem as pontuações de treino e de teste em arrays de forma `(n_pontos, n_dobras)` — uma linha por ponto do eixo horizontal, uma coluna por dobra da validação cruzada; o `learning_curve` devolve ainda os tamanhos usados. E o que se lê nesses arrays é o vocabulário desta seção. Na saída do `validation_curve` acima, com `max_depth=1` treino e teste empatam em 0,667 — o modelo vai mal nos dois, que é **viés alto**. Conforme a profundidade cresce, o treino sobe até 1,0 e o teste estaciona em 0,96: a curva de treino continua subindo e a de teste não a acompanha, e essa **distância entre as duas curvas é a leitura visual da variância**. Na saída do `learning_curve`, o treino é 1,0 desde a primeira amostra de 12 pontos — uma árvore sem profundidade máxima ajusta perfeitamente qualquer conjunto de treino, que é a afirmação "erro baixo no treino não é evidência de nada" impressa como número.
+
+**O `shuffle=True` acima não é decoração.** O padrão de `learning_curve` é `shuffle=False`, e as amostras menores são então tomadas do **começo** da partição de treino de cada dobra. Sobre um arquivo ordenado por classe — o `dados/iris.data` do [Capítulo 9](../cap09/02-exemplo-o-dataset-iris.qmd) é exatamente assim —, os primeiros pontos do eixo enxergam uma classe só. Com `shuffle=False` a mesma curva começa em 0,333 e fica lá por dois pontos, antes de subir; com `shuffle=True`, começa em 0,787. É a mesma armadilha do `KFold` sem embaralhamento, descrita na [seção 8.3](03-overfitting-e-underfitting.qmd), e a curva enganosa não vem acompanhada de aviso nenhum.
+
+**E há o que a biblioteca não oferece.** Não existe, em lugar nenhum do `scikit-learn`, uma função que decomponha o erro em viés e variância. Não é um esquecimento: a definição desta seção exige **retreinar o modelo sobre muitas amostras independentes da mesma população**, e com dados reais você tem uma amostra só. Foi por isso que os gráficos daqui precisaram de dados simulados, em que a população é conhecida e dá para sortear dez amostras dela.
+
+O que o `learning_curve` e o `validation_curve` entregam é um **diagnóstico por procuração**: duas curvas cuja altura e cuja distância sugerem viés e variância sem medir nenhum dos dois. É informação útil, e é o que existe. Mas quando alguém diz que "o modelo tem variância alta" olhando uma dessas figuras, está lendo um sintoma — e vale saber que o número por trás dele não foi calculado.
+:::

@@ -58,6 +58,75 @@ E como escolhemos os atributos? É aí que entra a combinação de **experiênci
 
 Se você já recebeu muitos e-mails, provavelmente tem alguma intuição de que a presença de certas palavras pode ser um bom indicador de spam. E provavelmente também tem a intuição de que o número de letras *d* não é um bom indicador. Mas, em geral, você vai ter que testar coisas diferentes — o que faz parte da diversão.
 
+::: {.callout-tip collapse="true"}
+## Na prática: `sklearn.feature_selection`
+
+Existe um módulo inteiro dedicado à metade *seleção* desta seção. Ele se divide em duas famílias, e a diferença entre as duas é o assunto deste callout.
+
+**A primeira família pontua cada coluna sozinha**, por uma estatística univariada, e fica com as melhores. `SelectKBest(score_func=f_classif, k=10)` é a porta de entrada; `f_classif` é uma ANOVA de uma via, `chi2` serve a contagens não negativas, `mutual_info_classif` a relações não lineares.
+
+**A segunda família treina um modelo e pergunta a ele.** `SelectFromModel(estimator)` lê os coeficientes ou as importâncias do modelo ajustado; `RFE(estimator, n_features_to_select=k)` vai além e treina repetidamente, descartando a pior coluna a cada rodada.
+
+A diferença não é de sofisticação — é de **o que cada uma consegue enxergar**. Uma estatística univariada olha uma coluna de cada vez, então uma coluna que só significa alguma coisa *em combinação com outra* é invisível para ela. O caso mínimo tem três colunas: `a` e `b` sorteadas em $\{0, 1\}$, `ruído` uniforme, e o rótulo sendo `a XOR b`.
+
+```python
+import random
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.feature_selection import SelectKBest, SelectFromModel, f_classif
+
+random.seed(0)
+n = 400
+a     = [random.randint(0, 1) for _ in range(n)]
+b     = [random.randint(0, 1) for _ in range(n)]
+ruido = [random.random() for _ in range(n)]
+
+y = [ai ^ bi for ai, bi in zip(a, b)]   # y só existe na combinação de a e b
+X = [[float(ai), float(bi), r] for ai, bi, r in zip(a, b, ruido)]
+
+SelectKBest(f_classif, k=2).fit(X, y)
+# .scores_                            [0.170, 0.259, 0.258]   (a, b, ruído)
+# .get_support()                      [False,  True,  True]
+
+SelectFromModel(RandomForestClassifier(random_state=0), max_features=2).fit(X, y)
+# .estimator_.feature_importances_    [0.524, 0.415, 0.061]
+# .get_support()                      [ True,  True, False]
+```
+
+Olhe os `scores_`. As duas colunas que **determinam** o rótulo pontuam 0,170 e 0,259; a coluna de puro ruído pontua 0,258 — indistinguível delas. O `SelectKBest` então descarta `a`, uma das duas únicas colunas informativas, e mantém o ruído. O `SelectFromModel` com uma floresta acerta, porque a floresta usa `a` e `b` juntas dentro da mesma árvore e a importância registra isso.
+
+O XOR é o caso extremo, escolhido para deixar o efeito visível. Mas ele não é exótico: qualquer interação entre atributos — um limiar de renda que só vale para certa faixa etária, uma palavra que só indica spam quando o remetente é desconhecido — produz a mesma cegueira em grau menor.
+
+Três padrões que a biblioteca escolhe por você, e que vale conhecer:
+
+- `SelectKBest` vem com **`k=10`**, um número sem nenhuma relação com os seus dados. Se você tiver menos colunas que isso, ele não falha — emite `UserWarning: k=10 is greater than n_features=3. All the features will be returned.` e devolve tudo, ou seja, não seleciona nada.
+- `SelectFromModel` sem `threshold` corta pela **média das importâncias**. Quem decide quantas colunas sobram não é você: é a distribuição das importâncias. Passe `max_features` se quiser um número.
+- `chi2` recusa entrada negativa, com `ValueError: Input X must be non-negative.` — é uma estatística de contagem, e um atributo já padronizado não serve para ela.
+
+**E há uma armadilha maior, que é a [seção 8.3](03-overfitting-e-underfitting.qmd) de volta.** Selecionar atributos *é* treinar: a seleção lê os rótulos. Fazê-la sobre o conjunto inteiro, antes de dividir, vaza o teste para dentro da escolha. O tamanho do estrago é fácil de medir com dados que não têm sinal nenhum — 100 linhas, 2.000 colunas de ruído gaussiano, rótulo alternando 0 e 1:
+
+```python
+from sklearn.model_selection import cross_val_score
+from sklearn.neighbors import KNeighborsClassifier
+from sklearn.pipeline import Pipeline
+
+X = [[random.gauss(0, 1) for _ in range(2000)] for _ in range(100)]
+y = [0, 1] * 50
+
+# ERRADO: escolhe as 10 melhores olhando tudo, depois valida
+X_sel = SelectKBest(f_classif, k=10).fit_transform(X, y)
+cross_val_score(KNeighborsClassifier(5), X_sel, y).mean()   # 0.81
+
+# CERTO: a seleção é refeita dentro de cada dobra
+pipe = Pipeline([('sel', SelectKBest(f_classif, k=10)),
+                 ('knn', KNeighborsClassifier(5))])
+cross_val_score(pipe, X, y).mean()                          # 0.45
+```
+
+**81% de acurácia sobre dados onde não existe nada para aprender.** Com 2.000 colunas de ruído e 100 linhas, algumas colunas se correlacionam com o rótulo por acaso; escolhê-las olhando todas as linhas as leva para dentro do modelo, e a validação cruzada seguinte já não tem como desfazer isso. O `Pipeline` conserta porque refaz a seleção dentro de cada dobra, usando só os dados de treino daquela dobra — e aí o número volta para perto de 0,5, que é a verdade.
+
+Por fim, o limite honesto: **nada disso faz extração.** Este módulo ordena colunas que você já tem; ele nunca inventa a coluna "contém a palavra *Viagra*". Aquela coluna saiu de alguém que já leu muito spam, e continua sendo o trabalho que esta seção descreve como experiência e conhecimento do domínio. A seleção automática é a parte fácil, e é a única que a biblioteca faz.
+:::
+
 ::: {.callout-important}
 ## Onde este capítulo deságua
 

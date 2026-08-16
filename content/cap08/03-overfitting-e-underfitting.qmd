@@ -198,3 +198,44 @@ A saída é dividir em **três** partes: um conjunto de **treino** para construi
 :::
 
 Essa armadilha é sutil porque cada passo isolado parece correto. Ninguém treinou no conjunto de teste; só olhou para ele algumas vezes. Mas olhar e decidir é uma forma de aprender — e a informação vaza pela decisão de quem olha, não pelo código.
+
+::: {.callout-tip collapse="true"}
+## Na prática: `scikit-learn`
+
+A função que você acabou de escrever existe pronta, com o mesmo nome:
+
+```python
+from sklearn.model_selection import train_test_split
+
+X_treino, X_teste, y_treino, y_teste = train_test_split(
+    xs, ys, test_size=0.25, random_state=42
+)
+```
+
+A assinatura é `train_test_split(*arrays, test_size=None, train_size=None, random_state=None, shuffle=True, stratify=None)`. Ela aceita quantos arrays você quiser e divide todos pelos mesmos índices — é o mesmo cuidado do nosso `train_test_split`, generalizado. Sem `test_size` nem `train_size`, o padrão é 25% para teste.
+
+**A primeira coisa que ela esconde é a semente.** Este livro inteiro fixa `random.seed(N)`, e o nosso `split_data` obedece a isso porque usa `random.shuffle` da biblioteca padrão. O `scikit-learn` **não usa** o `random` da biblioteca padrão: ele tem o próprio gerador, controlado por `random_state`. Chamar `random.seed(42)` antes de `train_test_split` não torna a divisão reprodutível — duas chamadas seguidas devolvem conjuntos diferentes. Só `random_state=42` faz isso. E a regra vale para o pacote inteiro: todo objeto do `scikit-learn` que sorteia alguma coisa tem o seu próprio `random_state`, e nenhum deles escuta a semente que este livro fixa.
+
+**A segunda é o embaralhamento.** `shuffle=True` é o padrão, e é o que o nosso `split_data` também faz — mas a família de validação cruzada não segue essa regra. `KFold(n_splits=5)` tem `shuffle=False` por padrão: ele corta a lista em cinco pedaços contíguos, na ordem em que os dados chegaram. Sobre um arquivo ordenado por classe, isso é catastrófico. O `dados/iris.data` do [Capítulo 9](../cap09/02-exemplo-o-dataset-iris.qmd) é exatamente assim — as 50 *setosa* primeiro, depois as 50 *versicolor*, depois as 50 *virginica*:
+
+```python
+from sklearn.model_selection import cross_val_score, KFold
+from sklearn.neighbors import KNeighborsClassifier
+
+cross_val_score(KNeighborsClassifier(3), X, y, cv=KFold(3))  # [0.   0.   0.  ]
+cross_val_score(KNeighborsClassifier(3), X, y, cv=3)         # [0.98 0.96 0.98]
+```
+
+Zero acerto nas três dobras. Cada dobra de teste contém uma espécie inteira, e o treino não contém nenhum exemplar dela — o modelo é avaliado sobre uma classe que nunca viu. A segunda linha funciona porque `cv=3`, sem objeto explícito, faz o `scikit-learn` escolher `StratifiedKFold` sozinho quando o estimador é um classificador.
+
+**A terceira é a estratificação, e o padrão é inconsistente entre as duas funções.** `cross_val_score` estratifica por padrão; `train_test_split` **não** — `stratify=None`. Numa base com 8 positivos em 200 e 25% de teste, a contagem de positivos no conjunto de teste varia com a semente: em 200 sementes testadas, ela foi de 0 a 6, e **em 18 delas o conjunto de teste não tinha positivo nenhum**. Com `stratify=y`, foi exatamente 2 em todas. Um conjunto de teste sem positivos torna a revocação indefinida — é o assunto da [seção 8.4](04-correcao.qmd). Passar `stratify=y` junto com `shuffle=False` levanta `ValueError: Stratified train/test split is not implemented for shuffle=False`.
+
+**E a divisão em três partes, que esta seção defendeu, tem uma ferramenta própria** — que é também a armadilha do callout acima, automatizada. `GridSearchCV(estimator, param_grid, cv=None, refit=True)` treina um modelo para cada combinação de hiperparâmetros e guarda a melhor em `best_params_` e `best_score_`. Ele automatiza a etapa de **validação**: cada candidato é pontuado em dobras que não entraram no treino dele, então a nota de cada modelo, isolada, é honesta.
+
+O que ele **não** faz é o teste. E por duas razões distintas, que vale separar:
+
+- `best_score_` é a nota do **vencedor de uma competição**, não a nota de um modelo qualquer. Escolher o máximo entre vinte notas ruidosas devolve um número enviesado para cima — é exatamente o que o callout acima descreve, com o conjunto de validação no lugar do de teste.
+- `refit=True` é o padrão, e ele **retreina o vencedor sobre todos os dados que você passou ao `.fit()`** — inclusive os que serviram de validação. O `best_estimator_` que volta, portanto, já viu tudo o que você entregou.
+
+Nos dois casos o remédio é o mesmo, e é manual: separe o conjunto de teste com um `train_test_split` *antes* de o `GridSearchCV` existir, entregue a ele apenas a parte de treino, e não olhe para o teste até o fim.
+:::

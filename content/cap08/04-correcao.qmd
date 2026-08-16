@@ -151,3 +151,55 @@ Num filtro de spam, um falso positivo é um e-mail importante que some na caixa 
 
 Mesmo algoritmo, mesmas métricas, decisões opostas. Quem escolhe o limiar está fazendo uma escolha sobre quem paga o preço do erro — e vale saber que está fazendo isso.
 :::
+
+::: {.callout-tip collapse="true"}
+## Na prática: `scikit-learn`
+
+As métricas desta seção estão todas em `sklearn.metrics`, e recebem os rótulos em vez das quatro contagens:
+
+```python
+from sklearn.metrics import (accuracy_score, precision_score, recall_score,
+                             f1_score, confusion_matrix, classification_report)
+
+accuracy_score(y_teste, previsto)    # 0.98114
+precision_score(y_teste, previsto)   # 0.014
+recall_score(y_teste, previsto)      # 0.005
+f1_score(y_teste, previsto)          # 0.007368421052631579
+```
+
+Reconstruindo o milhão de pessoas do teste do Luke, os quatro números saem idênticos aos que você calculou acima. Não há truque nenhum nessas funções — elas contam as mesmas quatro caixas. O que muda é tudo o que fica implícito.
+
+**O primeiro implícito é a orientação da matriz.** A tabela desta seção põe as previsões nas **linhas**; o `confusion_matrix` do `scikit-learn` põe os valores **reais** nas linhas e as previsões nas colunas. É a transposta:
+
+```python
+confusion_matrix(y_teste, previsto)
+# [[981070   4930]        linha 0 = sem leucemia (real)
+#  [ 13930     70]]       linha 1 = com leucemia (real)
+
+confusion_matrix(y_teste, previsto).ravel()
+# [981070   4930  13930     70]   ->  tn, fp, fn, tp
+```
+
+Repare na ordem que o `.ravel()` produz: `tn, fp, fn, tp`. É exatamente o **inverso** da ordem em que as nossas funções recebem os argumentos — `precision(tp, fp, fn, tn)`. Desempacotar uma na outra sem olhar produz um número plausível e errado, sem erro nenhum: o código roda, o resultado é um float entre 0 e 1, e nada avisa. É a mesma família de armadilha que a [seção anterior](03-overfitting-e-underfitting.qmd) apontou ao embaralhar `xs` e `ys` separadamente — o programa não reclama, e o número que ele devolve não significa o que você acha que significa.
+
+**O segundo implícito é qual classe é a positiva.** As nossas funções não têm essa dúvida: `tp` é o primeiro argumento e você decidiu o que colocar ali. As da biblioteca têm `pos_label=1` e `average='binary'` por padrão, e daí saem dois comportamentos diferentes:
+
+- Se os rótulos forem texto, ela recusa: `ValueError: pos_label=1 is not a valid label. It should be one of ['ham' 'spam']`. Um erro barulhento, que se conserta passando `pos_label='spam'`.
+- Se os rótulos forem `0` e `1`, ela **não pergunta nada** e mede a classe `1`. Quando a classe rara é a `0` — "não pagou", "não converteu", "peça defeituosa" codificada como zero —, você recebe a precisão e a revocação da classe errada, com aparência perfeita de resposta certa. Nesse caso, o número que interessa vem de `precision_score(y_teste, previsto, pos_label=0)`.
+
+**O terceiro implícito é a divisão por zero, e ele é o mais interessante.** Um classificador que nunca prevê "positivo" tem `tp + fp == 0`, e a nossa `precision` estoura com `ZeroDivisionError` — o [Capítulo 10](../cap10/05-usando-o-modelo.qmd) mostra isso acontecendo com dados reais. A biblioteca não estoura:
+
+```python
+precision_score([1, 0, 1, 0], [0, 0, 0, 0])
+# UndefinedMetricWarning: Precision is ill-defined and being set to 0.0
+# due to no predicted samples. Use `zero_division` parameter to control
+# this behavior.
+# 0.0
+```
+
+O padrão é `zero_division="warn"`, que devolve `0.0` e emite um aviso — e aviso, ao contrário de exceção, não interrompe nada. Num laço que testa vinte modelos e imprime uma tabela no fim, essa `0.0` entra na tabela como se fosse uma medição, indistinguível de um modelo que aponta positivos e erra todos. **São duas situações diferentes**: um modelo com precisão 0,0 aponta e erra; um modelo com precisão indefinida não aponta nada. O `ZeroDivisionError` do nosso código distingue os dois casos ao preço de derrubar o programa; o `0.0` da biblioteca não os distingue, e não derruba nada.
+
+Os valores aceitos são `"warn"`, `0.0`, `1.0` e `np.nan`. O último é o mais honesto para uma tabela comparativa: `nan` propaga, aparece como buraco em vez de nota baixa, e é excluído das médias.
+
+Por fim, `classification_report(y_teste, previsto)` devolve precisão, revocação, F1 e o número de exemplos (*support*) **para cada classe**, mais as médias macro e ponderada. É a correção direta do hábito de olhar só um lado, e o formato em que essas métricas normalmente são reportadas.
+:::
