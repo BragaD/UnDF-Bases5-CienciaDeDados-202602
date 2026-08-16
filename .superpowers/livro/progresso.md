@@ -419,3 +419,58 @@ software que nenhuma renderização verifica** (os chunks são `eval: false`). �
   Suíte: 21 → **24 testes**.
 - Lixo de render na raiz (`index.html`) agora é limpo pela regra "apaga o `.html`
   que tem um `.qmd` de mesmo nome", que preserva o `spoiler.html` versionado.
+
+---
+
+## Rodada — capítulos 14 a 17, e duas falhas de infra que eu mesmo criei
+
+**FECHADOS:** 5, 6, 7, 9, 10, 11, 12, 13. **Em correção:** 14. **Escrito, à espera
+de verificação:** 15. **Em escrita:** 17. **Não escrito:** 16 (o último).
+
+### Ruling R — o lock precisa desistir antes do teto da ferramenta
+
+O lock que criei de manhã para o `_freeze` envenenado causou o problema da tarde:
+ele esperava indefinidamente, mas a ferramenta de shell dos agentes aborta em 10
+min. Com quatro agentes na fila, o `make render` estourava o teto e o agente
+recebia um **timeout opaco**. O escritor do cap. 15 encerrou o turno esperando —
+capítulo escrito, verificação nenhuma. (O `_freeze` mostra que as células *chegaram*
+a executar; o que se perdeu foi a conferência.)
+
+Agora: espera limitada a ~7 min, saída com **75 (EX_TEMPFAIL)** e mensagem dizendo
+"rode de novo, nada está errado". Detecção de lock órfão passou a olhar a **idade do
+diretório**, não a contagem de iterações — correta mesmo para quem entrou no meio.
+
+**A parte que é minha, não dos agentes:** não deixar mais de dois ou três agentes que
+precisem renderizar ao mesmo tempo. Está no CLAUDE.md.
+
+### Ruling S — arquivo sendo escrito não é defeito
+
+Uma rodada de `make teste` falhou sem nada de errado por trás: o `test_freeze` leu um
+`html.json` **enquanto o Quarto o escrevia**. Um JSON pela metade é evidência de que
+alguém está trabalhando, não de cache envenenado. Corrigido e provado truncando um
+arquivo real.
+
+### O achado da rodada — cap. 14, o braço que faltava
+
+A revisão de conteúdo mediu **a alternativa que o capítulo não testou**. O experimento
+da §14.6 compara floresta contra árvore **sem poda** e conclui que a floresta compra
+generalização ao preço da legibilidade. Mas a regra do conjunto sintético usa dois
+atributos, e uma árvore `max_depth=2` acerta **1,0000** contra 0,9284 da melhor
+floresta (medido duas vezes). O modelo mais legível é o mais preciso, e o fecho da
+seção afirma o contrário.
+
+**Nem os números nem o desenho estavam errados — faltava um braço, e a conclusão não
+sobrevive a ele.** É o tipo de erro que passa por rigoroso: quatro braços medidos com
+cuidado, tudo reprodutível, e ainda assim provando o que o autor já queria provar.
+
+Vale como padrão: **a revisão didática havia defendido o experimento** (com razão,
+sobre o desenho). Só quem mediu uma alternativa viu o problema. As duas faixas não são
+redundantes, e nenhuma das duas basta sozinha.
+
+### Terceira frente da revisão geral: as figuras
+
+43 figuras abertas, capítulos 1 a 13. Nenhum Crítico — nenhuma contradiz a própria
+legenda, e a correção de proporção de eixos do PCA funcionou. O achado que importa é
+uma ironia: **o cap. 3 gasta uma figura inteira ensinando que gráfico sem rótulo de
+eixo é defeito, e 15 figuras dos caps. 7, 8 e 9 não têm rótulo nenhum.** Mais: `epoch`
+virando `época` só no cap. 13, contra a convenção que o cap. 5 estabelece.
