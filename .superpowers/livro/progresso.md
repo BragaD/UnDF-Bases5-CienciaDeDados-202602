@@ -207,3 +207,57 @@ cap 10: 0 Crítico, 1 Importante, 2 Menores
   O capítulo o enquadra corretamente.
   dataclass: 0 usos no pacote do Grus contra 21 de NamedTuple, confirmado por grep
   independente. O Grus dedica seção inteira a algo que o código dele nunca usa.
+
+---
+
+## Rodada — capítulos 7, 10, 11 fechando; 12 em escrita
+
+**Estado:** 5 e 6 FECHADOS. 7 e 10 corrigidos e renderizados, em portão. 11 escrito,
+duas revisões feitas, em correção. 12 em escrita. 13–17 na fila.
+
+### Decisões desta rodada
+
+**Ruling L — `make render` passa a ser serializado por lock.** Dois `quarto render`
+simultâneos sobre o mesmo `_freeze/` corrompem o cache sem erro na tela, e este livro é
+escrito por vários agentes em paralelo. Lock por `mkdir` (atômico em POSIX; `flock` não
+existe no macOS de fábrica), `trap` devolvendo em abort/Ctrl-C, expiração de 30 min contra
+agente morto. Provado: espera sem disparar docker, não rouba lock alheio, avisa uma vez só,
+e devolve pelo trap após render real. Custo se errado: um render pode esperar à toa se o
+lock vazar — mitigado pela expiração.
+
+**Ruling M — terceiro falso positivo dos meus próprios testes, corrigido na raiz.**
+`test_nenhuma_secao_inventa_numero_de_secao_do_grus` acusava "seção 7.1" (NOSSA numeração)
+por estar a menos de 80 caracteres de `@grus2019`. O teste agora tira o número do capítulo
+do caminho: em `content/cap07/`, `7.x` é nosso, `10.x` seria do Grus. Provado contra 5
+vetores. **Padrão a vigiar:** meus testes estruturais têm sido escritos contra o exemplo do
+defeito, não contra o invariante — três falsos positivos até agora, todos por regex larga
+demais.
+
+**Ruling N — cap. 11 M1: não "consertar" o β.** Nosso texto diz 0,904; o Grus imprime
+0.903 (truncamento dele — 0,9038659… arredonda para 0,904). Nosso número está certo.
+Registrado no contrato de correção para que a próxima revisão não o reverta.
+
+### Medições desta rodada (todas conferidas, nenhuma assumida)
+
+- **Outlier do cap. 11/12:** o usuário removido pelo Grus tinha **100 amigos, 1 minuto/dia**.
+  Correlação **0,2474** com ele, **0,5737** sem — um ponto em 204 derruba a correlação para
+  **43%** do valor. Virou material de `callout-warning` (contrato I5).
+- **Convergência cap. 11:** fechada (22,947552413; 0,903865946) × gradiente
+  (22,947552155; 0,903865966) → diferença **2,58e-07** em α, **2,07e-08** em β.
+- **Cap. 12:** `inputs` = 203 pontos × 4 valores `[1.0, num_friends, work_hours, phd]`.
+  `least_squares_fit(..., 0.001, 5000, 25)` com `seed(0)` → **beta = [30.5148, 0.9748,
+  -1.8507, 0.9141]**, **R² = 0,679985**. Um ajuste custa **0,9 s** → o bootstrap de 100
+  amostras do Grus custa **~90 s** de render. **Não precisa cortar amostras.**
+  O Grus imprime `30.58, 0.972, -1.865, 0.923` nos asserts — difere no 3º dígito do nosso.
+- **Armadilha cap. 12:** `least_squares_fit` chama `tqdm.trange` por dentro → todo chunk que
+  a chamar precisa de `#| warning: false`. Conferido que a barra hoje só aparece em
+  `_book/content/cap07/07-um-parenteses-tqdm.html`, que é a seção que a ensina.
+
+### Revisões do cap. 11
+
+- **Conteúdo: limpa.** Zero Críticos, zero Importantes. Matemática, números, derivação de
+  máxima verossimilhança e a dívida do cap. 5 todos conferidos.
+- **Didática: a mais forte do projeto.** Dois Críticos que a de conteúdo não veria por estar
+  fora da faixa dela: (C1) o argumento de *por que* os dois métodos concordam está partido
+  entre duas seções e nunca é dito inteiro; (C2) o clímax do livro não tem figura, entrega
+  dois `tuple` sem rótulo. **Lição: as duas faixas de revisão não são redundantes.**

@@ -84,6 +84,8 @@ make teste     # 21 testes, todos precisam passar
 
 **Rode `make render` em primeiro plano e espere ele terminar.** Ele leva alguns minutos e imprime `render OK (tentativa N)` no fim.
 
+O alvo é **serializado**: vários agentes escrevem este livro ao mesmo tempo, e dois `quarto render` simultâneos corrompem o `_freeze/` em silêncio. Se outro render estiver rodando, o seu imprime `aguardando a vez...` e espera. **Não interrompa nem contorne** — ele pega a vez sozinho.
+
 Três coisas que você **não** deve fazer, e que já custaram caro:
 
 - **Não rode o render em segundo plano esperando notificação.** Um agente que fez isso ficou preso em laço por horas, encerrando o turno repetidamente para aguardar algo que nunca o notificava.
