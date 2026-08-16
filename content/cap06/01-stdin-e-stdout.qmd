@@ -4,7 +4,132 @@
 Esta seção corresponde a *stdin and stdout*, do capítulo 9 de @grus2019.
 :::
 
-::: {.callout-warning}
-## Em construção
-O conteúdo desta seção ainda será escrito.
+Se você roda um script Python na linha de comando, dá para conectá-lo a outros programas por meio de um **pipe**: a saída de um vira a entrada do próximo. Python enxerga as duas pontas desse cano por `sys.stdin` (entrada) e `sys.stdout` (saída).
+
+Um exemplo clássico é um `egrep` caseiro — um script que lê linhas de texto e devolve só as que casam com uma expressão regular:
+
+```python
+# egrep.py
+import sys, re
+
+# sys.argv é a lista de argumentos da linha de comando
+# sys.argv[0] é o nome do próprio programa
+# sys.argv[1] vai ser a regex passada na linha de comando
+regex = sys.argv[1]
+
+# para cada linha recebida pela entrada padrão
+for line in sys.stdin:
+    # se ela casar com a regex, escreve na saída padrão
+    if re.search(regex, line):
+        sys.stdout.write(line)
+```
+
+E um que conta quantas linhas recebeu:
+
+```python
+# line_count.py
+import sys
+
+count = 0
+for line in sys.stdin:
+    count += 1
+
+# print também escreve em sys.stdout
+print(count)
+```
+
+Encadeados com o caractere `|`, os dois formam um pipeline: `cat arquivo.txt | python egrep.py "[0-9]" | python line_count.py` conta quantas linhas de `arquivo.txt` contêm um dígito, sem que nenhum dos dois scripts precise saber de onde os dados vieram nem para onde vão.
+
+Vale rodar isso de verdade — é a única vez neste capítulo que compensa sair da página, e leva uns trinta segundos. Salve os dois scripts acima como `egrep.py` e `line_count.py` num mesmo diretório, abra um terminal nele, e rode:
+
+```bash
+cat egrep.py | python egrep.py 'sys' | python line_count.py
+```
+
+Isso conta quantas linhas do próprio `egrep.py` mencionam `sys` — um jeito barato de testar o pipeline sem precisar de nenhum outro arquivo.
+
+::: {.callout-important}
+## Por que estes chunks não são `{python}` executáveis
+
+Os dois scripts acima dependem de coisas que só existem num terminal de verdade: `sys.argv` e um `sys.stdin` alimentado por outro processo via pipe. Uma célula do Quarto não recebe argumentos de linha de comando, e ler de `sys.stdin` sem que nada o alimente trava o render esperando uma entrada que nunca chega.
+
+A ideia continua válida e é isso que importa aqui: `sys.stdin` é apenas mais um iterável de linhas, do mesmo jeito que qualquer coisa sobre a qual você já rodou um `for`. É a mesma noção de gerador do [Capítulo 2](../cap02/05-testes-classes-e-geradores.qmd) — as linhas chegam sob demanda, uma de cada vez, sem que o programa precise carregar a entrada inteira na memória antes de começar.
+:::
+
+Para provar que a lógica funciona sem depender de um pipe real, dá para escrever a mesma coisa como uma função que recebe **qualquer** iterável de linhas — `sys.stdin` é só um caso particular disso:
+
+```{python}
+#| label: egrep-generico
+import re
+
+def egrep_linhas(linhas, regex):
+    """A mesma lógica de egrep.py, mas recebendo o iterável de linhas
+    como parâmetro em vez de ler de sys.stdin."""
+    for linha in linhas:
+        if re.search(regex, linha):
+            yield linha
+
+texto = ["banana 42\n", "maçã\n", "uva 7\n"]
+list(egrep_linhas(texto, r"[0-9]"))
+```
+
+Rodar `python egrep.py "[0-9]"` na linha de comando é exatamente isto, só que `linhas` é `sys.stdin` em vez de uma lista.
+
+Um terceiro script, um pouco mais elaborado, conta as palavras mais comuns da entrada:
+
+```python
+# most_common_words.py
+import sys
+from collections import Counter
+
+# passe o número de palavras como primeiro argumento
+try:
+    num_words = int(sys.argv[1])
+except ValueError:
+    print("uso: most_common_words.py num_palavras")
+    sys.exit(1)  # código de saída diferente de zero indica erro
+
+counter = Counter(word.lower()
+                  for line in sys.stdin
+                  for word in line.strip().split()  # separa por espaço
+                  if word)                           # descarta 'palavras' vazias
+
+for word, count in counter.most_common(num_words):
+    sys.stdout.write(str(count))
+    sys.stdout.write("\t")
+    sys.stdout.write(word)
+    sys.stdout.write("\n")
+```
+
+O `try`/`except` em torno de `int(sys.argv[1])` é o mesmo idioma do [Capítulo 2](../cap02/02-funcoes-strings-excecoes.qmd): em vez de checar antes se o argumento é um número válido, tenta converter e trata o erro se a conversão falhar.
+
+De novo, a lógica que faz o trabalho de verdade não depende de `sys.stdin` nem de `sys.argv` — só de um iterável de linhas e de um número:
+
+```{python}
+#| label: most-common-words-generico
+from collections import Counter
+
+def most_common_words(linhas, num_words):
+    counter = Counter(word.lower()
+                      for line in linhas
+                      for word in line.strip().split()
+                      if word)
+    return counter.most_common(num_words)
+
+texto2 = ["the quick brown fox\n", "the lazy dog\n", "the fox ran\n"]
+most_common_words(texto2, 3)
+```
+
+Rodado de verdade na linha de comando, contra um arquivo de texto grande, o padrão do Grus seria:
+
+```bash
+cat the_bible.txt | python most_common_words.py 10
+```
+
+::: {.callout-tip collapse="true"}
+## Na prática: ferramentas de linha de comando
+
+Se você já usa um terminal Unix, boa parte do que os três scripts acima fazem já existe pronto: `grep` filtra linhas por regex, `wc -l` conta linhas, `sort | uniq -c | sort -rn` conta ocorrências. Vale conhecer essas ferramentas — elas são testadas há décadas e não exigem escrever nada.
+
+Quando o script precisa de mais lógica do que uma linha de shell comporta, a saída não é reinventar `sys.argv` na unha: as bibliotecas `argparse` (na biblioteca padrão) e `click` cuidam de nomear argumentos, gerar mensagens de `--help` e validar tipos, no lugar de indexar `sys.argv` manualmente como os scripts acima fazem. Nenhuma das duas muda a ideia central desta seção — programas que leem de `stdin` e escrevem em `stdout` continuam sendo o jeito de encadear ferramentas pequenas em pipelines maiores.
 :::

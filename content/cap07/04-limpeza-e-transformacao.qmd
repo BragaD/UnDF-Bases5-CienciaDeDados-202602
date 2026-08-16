@@ -4,7 +4,116 @@
 Esta seção corresponde a *Cleaning and Munging*, do capítulo 10 de @grus2019.
 :::
 
-::: {.callout-warning}
-## Em construção
-O conteúdo desta seção ainda será escrito.
+Dado do mundo real é **sujo**. Você geralmente vai ter que trabalhar nele antes de conseguir usá-lo: converter strings para `float` ou `int`, checar valores ausentes, tratar outliers e dado corrompido. O [Capítulo 6](../cap06/index.qmd) já mostrou exemplos disso, ao ler linhas de arquivo que vêm sempre como texto puro.
+
+Uma opção é fazer a conversão bem antes de usar o dado:
+
+```python
+closing_price = float(row[2])
+```
+
+Mas é provavelmente menos sujeito a erro fazer o *parsing* dentro de uma função que dá para testar isoladamente:
+
+```{python}
+#| label: parse-row
+import datetime
+from typing import List, NamedTuple
+from dateutil.parser import parse
+
+class StockPrice(NamedTuple):
+    symbol: str
+    date: datetime.date
+    closing_price: float
+
+def parse_row(row: List[str]) -> StockPrice:
+    symbol, date, closing_price = row
+    return StockPrice(symbol=symbol,
+                      date=parse(date).date(),
+                      closing_price=float(closing_price))
+
+# testa a função
+stock = parse_row(["MSFT", "2018-12-14", "106.03"])
+
+assert stock.symbol == "MSFT"
+assert stock.date == datetime.date(2018, 12, 14)
+assert stock.closing_price == 106.03
+```
+
+::: {.callout-note}
+`StockPrice` é redefinido aqui, e vai ser redefinido de novo nas próximas duas seções. É intencional — o callout do início deste capítulo explica por quê: `scratch.working_with_data` nunca é importado, e cada `.qmd` roda num kernel próprio, então não há como uma seção herdar o que a anterior definiu.
 :::
+
+## E se o dado for ruim?
+
+`parse_row` funciona, mas quebra ao primeiro valor inesperado — uma data mal formatada, um preço que não é número. Talvez você prefira receber `None` no lugar de um `ValueError` estourado no meio do programa:
+
+```{python}
+#| label: try-parse-row
+from typing import Optional
+import re
+
+def try_parse_row(row: List[str]) -> Optional[StockPrice]:
+    symbol, date_, closing_price_ = row
+
+    # o símbolo da ação deveria ser só letras maiúsculas
+    if not re.match(r"^[A-Z]+$", symbol):
+        return None
+
+    try:
+        date = parse(date_).date()
+    except ValueError:
+        return None
+
+    try:
+        closing_price = float(closing_price_)
+    except ValueError:
+        return None
+
+    return StockPrice(symbol, date, closing_price)
+
+# deveria devolver None para erros
+assert try_parse_row(["MSFT0", "2018-12-14", "106.03"]) is None  # símbolo ruim
+assert try_parse_row(["MSFT", "2018-12--14", "106.03"]) is None  # data ruim
+assert try_parse_row(["MSFT", "2018-12-14", "x"]) is None        # preço ruim
+
+# mas deveria devolver o mesmo de antes se o dado é bom
+assert try_parse_row(["MSFT", "2018-12-14", "106.03"]) == stock
+```
+
+Agora podemos ler um arquivo real com dado sujo — `dados/comma_delimited_stock_prices.csv`, que tem exatamente esse problema:
+
+```{python}
+#| label: mostra-csv-sujo
+with open("dados/comma_delimited_stock_prices.csv") as f:
+    print(f.read())
+```
+
+```{python}
+#| label: le-csv-sujo
+import csv
+
+data: List[StockPrice] = []
+
+with open("dados/comma_delimited_stock_prices.csv") as f:
+    reader = csv.reader(f)
+    for row in reader:
+        maybe_stock = try_parse_row(row)
+        if maybe_stock is None:
+            print(f"pulando linha inválida: {row}")
+        else:
+            data.append(maybe_stock)
+
+len(data), data
+```
+
+Só uma linha é rejeitada: `MSFT,6/19/2014,n/a`, porque `"n/a"` não converte para `float`. As outras cinco entram — inclusive a da FB com data `6/20/3014`.
+
+::: {.callout-warning}
+## O erro que passa pelo filtro
+
+Repare: `try_parse_row` não rejeitou a linha da FB, e o ano da data dela é **3014**. `"6/20/3014"` é uma string sintaticamente válida — `dateutil.parser.parse` converte sem reclamar, porque é um ano válido do ponto de vista do calendário, só que a mil anos de distância do resto do conjunto. O regex do símbolo não pega isso, e o `try/except ValueError` também não, porque não houve exceção nenhuma.
+
+É o mesmo tipo de outlier que a [seção 7.1](01-explorando-seus-dados.qmd) existe para achar — por inspeção visual ou checagem *ad hoc* —, não algo que uma função de *parsing* bem escrita consegue capturar sozinha. Dado do mundo real tem casas decimais faltando, zeros a mais, erros de digitação e outros problemas do tipo — capturá-los é trabalho seu (talvez não seja oficialmente seu trabalho, mas quem mais vai fazer?).
+:::
+
+E então é preciso decidir o que fazer com as linhas inválidas. Em geral, as três opções são: descartá-las, voltar à fonte e tentar corrigir o dado ausente ou ruim, ou não fazer nada e torcer. Se é uma linha ruim entre milhões, provavelmente está tudo bem ignorá-la. Mas se metade das suas linhas têm dado ruim, isso é algo que precisa ser corrigido.

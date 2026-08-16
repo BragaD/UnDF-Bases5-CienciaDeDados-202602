@@ -4,7 +4,199 @@
 Esta seção corresponde a *Manipulating Data*, do capítulo 10 de @grus2019.
 :::
 
-::: {.callout-warning}
-## Em construção
-O conteúdo desta seção ainda será escrito.
+Uma das habilidades mais importantes de quem trabalha com dado é **manipulá-lo**. É mais uma abordagem geral do que uma técnica específica — então esta seção percorre alguns exemplos, para dar a ideia.
+
+Imagine que temos uma pilha de preços de ações como esta:
+
+```python
+data = [
+    StockPrice(symbol='MSFT',
+              date=datetime.date(2018, 12, 24),
+              closing_price=106.03),
+    # ...
+]
+```
+
+e começamos a fazer perguntas sobre esse dado. Ao longo do caminho, vamos tentar notar padrões no que estamos fazendo e abstrair ferramentas que tornem a manipulação mais fácil.
+
+Desta vez, em vez de um conjunto de brinquedo, vamos usar `dados/stocks.csv` inteiro — as 23.105 linhas de preços diários de quatro ações (AAPL, FB, GOOG, MSFT) já usadas no restante deste livro:
+
+```{python}
+#| label: carrega-stocks-completo
+import csv, re, datetime
+from typing import Dict, List, NamedTuple, Optional
+from dateutil.parser import parse
+
+class StockPrice(NamedTuple):
+    symbol: str
+    date: datetime.date
+    closing_price: float
+
+def try_parse_row(row: List[str]) -> Optional[StockPrice]:
+    symbol, date_, closing_price_ = row
+    if not re.match(r"^[A-Z]+$", symbol):
+        return None
+    try:
+        date = parse(date_).date()
+    except ValueError:
+        return None
+    try:
+        closing_price = float(closing_price_)
+    except ValueError:
+        return None
+    return StockPrice(symbol, date, closing_price)
+
+with open("dados/stocks.csv", "r") as f:
+    reader = csv.DictReader(f)
+    rows = [[row['Symbol'], row['Date'], row['Close']]
+            for row in reader]
+
+# garante que todas carregaram com sucesso
+maybe_data = [try_parse_row(row) for row in rows]
+assert maybe_data
+assert all(sp is not None for sp in maybe_data)
+
+data = [sp for sp in maybe_data if sp is not None]
+len(data), sorted(set(sp.symbol for sp in data))
+```
+
+::: {.callout-note}
+Diferente do CSV de brinquedo da [seção anterior](04-limpeza-e-transformacao.qmd), aqui as 23.105 linhas passam **todas** por `try_parse_row` sem cair fora — este arquivo não tem o mesmo tipo de linha corrompida. O `assert all(...)` acima é o mesmo teste que o @grus2019 usa para confirmar isso no código-fonte.
 :::
+
+Suponha que queremos saber o maior preço de fechamento já registrado para a AAPL. Podemos dividir isso em passos concretos:
+
+1. Restringir às linhas da AAPL.
+2. Pegar o `closing_price` de cada linha.
+3. Tirar o `max` desses preços.
+
+Uma compreensão faz as três coisas de uma vez:
+
+```{python}
+#| label: max-aapl
+max_aapl_price = max(stock_price.closing_price
+                     for stock_price in data
+                     if stock_price.symbol == "AAPL")
+
+max_aapl_price
+```
+
+Mais geralmente, podemos querer saber o maior preço de fechamento de cada ação no conjunto. Uma forma de fazer isso:
+
+1. Criar um `dict` para guardar o maior preço de cada símbolo (usando um `defaultdict` que devolve menos infinito para símbolos ainda não vistos, já que qualquer preço será maior que isso).
+2. Percorrer os dados, atualizando esse `dict`.
+
+```{python}
+#| label: max-precos-por-simbolo
+from collections import defaultdict
+
+max_prices: Dict[str, float] = defaultdict(lambda: float('-inf'))
+
+for sp in data:
+    symbol, closing_price = sp.symbol, sp.closing_price
+    if closing_price > max_prices[symbol]:
+        max_prices[symbol] = closing_price
+
+dict(sorted(max_prices.items()))
+```
+
+Agora podemos começar a fazer perguntas mais complicadas, como quais foram as maiores e as menores variações percentuais em um único dia no conjunto de dados. A variação percentual é `preço_hoje / preço_ontem - 1`, o que significa que precisamos de alguma forma de associar o preço de hoje ao de ontem. Uma abordagem é agrupar os preços por símbolo e, dentro de cada grupo:
+
+1. Ordenar os preços por data.
+2. Usar `zip` para formar pares (anterior, atual).
+3. Transformar os pares em novas linhas de "variação percentual".
+
+Vamos começar agrupando os preços por símbolo:
+
+```{python}
+#| label: agrupa-por-simbolo
+prices: Dict[str, List[StockPrice]] = defaultdict(list)
+
+for sp in data:
+    prices[sp.symbol].append(sp)
+```
+
+Como os preços são tuplas, eles são ordenados pelos campos, na ordem: primeiro por símbolo, depois por data, depois por preço. Isso significa que, se temos preços todos com o mesmo símbolo, `sort` os ordena por data (e depois por preço, o que não muda nada, já que só há um preço por data) — que é o que queremos:
+
+```{python}
+#| label: ordena-por-data
+# ordena os preços por data
+prices = {symbol: sorted(symbol_prices)
+          for symbol, symbol_prices in prices.items()}
+```
+
+o que podemos usar para calcular uma sequência de variações dia a dia:
+
+```{python}
+#| label: variacoes-dia-a-dia
+def pct_change(yesterday: StockPrice, today: StockPrice) -> float:
+    return today.closing_price / yesterday.closing_price - 1
+
+class DailyChange(NamedTuple):
+    symbol: str
+    date: datetime.date
+    pct_change: float
+
+def day_over_day_changes(prices: List[StockPrice]) -> List[DailyChange]:
+    """Assume que os preços são de uma única ação e estão em ordem"""
+    return [DailyChange(symbol=today.symbol,
+                        date=today.date,
+                        pct_change=pct_change(yesterday, today))
+            for yesterday, today in zip(prices, prices[1:])]
+```
+
+e depois juntar todas:
+
+```{python}
+#| label: todas-as-variacoes
+all_changes = [change
+              for symbol_prices in prices.values()
+              for change in day_over_day_changes(symbol_prices)]
+
+len(all_changes)
+```
+
+A partir daqui é fácil achar a maior e a menor:
+
+```{python}
+#| label: maior-menor-variacao
+max_change = max(all_changes, key=lambda change: change.pct_change)
+min_change = min(all_changes, key=lambda change: change.pct_change)
+
+max_change, min_change
+```
+
+O maior salto de um dia para o outro foi a AAPL, em 6 de agosto de 1997 — mais de 33% em um único pregão. A maior queda foi também a AAPL, em 29 de setembro de 2000 — quase 52% em um dia. As duas datas batem com eventos reais e documentados: o investimento de US$ 150 milhões da Microsoft na Apple, anunciado naquele agosto de 1997, e o alerta de resultados abaixo do esperado que a Apple divulgou em setembro de 2000.
+
+Podemos agora usar esse conjunto `all_changes` para descobrir qual é o melhor mês para investir em ações de tecnologia. Basta olhar a variação diária média por mês:
+
+```{python}
+#| label: variacao-media-por-mes
+changes_by_month: Dict[int, List[DailyChange]] = {month: [] for month in range(1, 13)}
+
+for change in all_changes:
+    changes_by_month[change.date.month].append(change)
+
+avg_daily_change = {
+    month: sum(change.pct_change for change in changes) / len(changes)
+    for month, changes in changes_by_month.items()
+}
+
+{mes: round(v, 5) for mes, v in avg_daily_change.items()}
+```
+
+::: {.callout-note}
+No código-fonte do @grus2019, esta mesma linha está anotada como `changes_by_month: List[DailyChange] = {month: [] for month in range(1, 13)}` — uma `List` recebendo um `dict`. É outro exemplo do que o [Capítulo 2](../cap02/06-ferramentas-e-tipos.qmd) já avisou: **anotações de tipo não são verificadas em tempo de execução**. Um verificador como `mypy` acusaria o descompasso na hora; o interpretador Python, sozinho, deixa passar — o código roda exatamente igual, porque a anotação nunca influencia o que é executado. Aqui em cima a anotação já está corrigida para `Dict[int, List[DailyChange]]`, que é o tipo que o valor de fato tem.
+:::
+
+```{python}
+#| label: melhor-mes
+melhor_mes = max(avg_daily_change, key=lambda mes: avg_daily_change[mes])
+assert melhor_mes == 10   # outubro é o melhor mês
+
+melhor_mes, avg_daily_change[melhor_mes]
+```
+
+Outubro é o melhor mês para investir, com uma variação diária média de cerca de 0,29% — número que vale hesitar antes de levar a sério: são apenas quatro ações e quase quatro décadas de dado misturados numa única média por mês, sem nenhum teste de significância por trás. É o tipo de padrão fácil de achar e fácil demais de acreditar.
+
+Faremos esse tipo de manipulação o livro inteiro, em geral sem chamar muita atenção para ela.

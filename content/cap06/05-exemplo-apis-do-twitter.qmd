@@ -4,7 +4,159 @@
 Esta seção corresponde a *Example: Using the Twitter APIs*, do capítulo 9 de @grus2019.
 :::
 
-::: {.callout-warning}
-## Em construção
-O conteúdo desta seção ainda será escrito.
+::: {.callout-important}
+## Esta seção não roda
+
+O Grus ensina a acessar a API do Twitter com a biblioteca `twython` e credenciais gratuitas de desenvolvedor — nenhuma das duas existe mais do jeito que o livro descreve. Diferente da raspagem do Congresso ou da API do GitHub, não há aqui uma URL para trocar: o serviço que a seção ensina a acessar não é mais o mesmo serviço. Nenhum código desta seção é executado; tudo aparece como ilustração.
 :::
+
+Redes sociais como o Twitter são uma fonte valiosa de dado: notícias em tempo real, reação a eventos correntes, links sobre um assunto específico. E, como boa parte do dado interessante do mundo, o acesso a ele é controlado por uma API.
+
+## Obtendo credenciais
+
+Para usar a API de uma rede social, tipicamente é preciso criar uma conta de desenvolvedor, abrir um aplicativo dentro dela, e receber um par de chaves — uma **chave de consumidor** (*consumer key*) e um **segredo de consumidor** (*consumer secret*), às vezes chamados de *API key* e *API secret key*. Essas chaves identificam a **aplicação**, não o usuário final — é o aplicativo que está pedindo acesso à API, agindo em nome de alguém.
+
+::: {.callout-warning}
+## Chave não é coisa para deixar no código
+
+As chaves de aplicação são, na prática, uma senha: quem as tiver pode fazer chamadas em nome do seu aplicativo, até o limite que a API permitir. Duas práticas comuns para não deixá-las expostas:
+
+- Guardá-las num arquivo separado (por exemplo `credentials.json`) que **não é** versionado no controle de código, lendo-o com `json.loads` quando o programa inicia.
+- Guardá-las em variáveis de ambiente e lê-las com `os.environ.get`, o padrão que o próprio código do Grus usa abaixo.
+
+Nunca as escreva direto no código-fonte, e muito menos em um repositório público — mesmo privado, um commit antigo com a chave continua lá no histórico depois de "removida" de um commit novo.
+:::
+
+## Usando o Twython
+
+A parte mais delicada de usar a API do Twitter, escreve o Grus, é a autenticação — e isso vale para a maioria das APIs. Provedores de API querem garantir que você está autorizado a acessar os dados e que não está estourando os limites de uso deles; também querem saber quem está acessando.
+
+Existem, tipicamente, dois níveis de autenticação: um mais simples (**OAuth 2**), que basta para operações de leitura como buscas; e um mais elaborado (**OAuth 1**), necessário para ações que agem em nome de um usuário — postar, ou (o caso que interessa aqui) conectar-se ao fluxo contínuo de dados.
+
+Com as chaves em mãos, a biblioteca `Twython` automatizava boa parte do fluxo OAuth 1:
+
+```python
+import os
+
+# Sinta-se à vontade para colocar sua chave e segredo diretamente
+CONSUMER_KEY = os.environ.get("TWITTER_CONSUMER_KEY")
+CONSUMER_SECRET = os.environ.get("TWITTER_CONSUMER_SECRET")
+
+import webbrowser
+from twython import Twython
+
+# Obtém um cliente temporário para buscar uma URL de autenticação
+temp_client = Twython(CONSUMER_KEY, CONSUMER_SECRET)
+temp_creds = temp_client.get_authentication_tokens()
+url = temp_creds['auth_url']
+
+# Agora visite essa URL para autorizar a aplicação e obter um PIN
+print(f"visite {url} e pegue o código PIN, colando-o abaixo")
+webbrowser.open(url)
+PIN_CODE = input("digite o código PIN: ")
+
+# Agora usamos o PIN_CODE para obter os tokens de verdade
+auth_client = Twython(CONSUMER_KEY,
+                      CONSUMER_SECRET,
+                      temp_creds['oauth_token'],
+                      temp_creds['oauth_token_secret'])
+final_step = auth_client.get_authorized_tokens(PIN_CODE)
+ACCESS_TOKEN = final_step['oauth_token']
+ACCESS_TOKEN_SECRET = final_step['oauth_token_secret']
+
+# E obtemos uma nova instância de Twython usando-os.
+twitter = Twython(CONSUMER_KEY, CONSUMER_SECRET, ACCESS_TOKEN, ACCESS_TOKEN_SECRET)
+```
+
+Vale reconhecer a forma desse fluxo, mesmo sem a `twython`: um cliente **temporário** troca a chave da aplicação por uma URL; um humano visita essa URL, autoriza a aplicação de dentro da própria conta, e recebe um PIN de volta; esse PIN é trocado por um **token de acesso** de verdade, que passa a autenticar as chamadas seguintes. É o mesmo desenho geral do OAuth que aparece atrás de "Entrar com o Google" ou "Entrar com o GitHub" em incontáveis sites — a aplicação nunca vê a senha do usuário, só um token que ele concedeu explicitamente e pode revogar depois.
+
+Autenticado, o próximo passo seria fazer buscas:
+
+```python
+# Busca tweets contendo a frase "data science"
+for status in twitter.search(q='"data science"')["statuses"]:
+    user = status["user"]["screen_name"]
+    text = status["text"]
+    print(f"{user}: {text}\n")
+```
+
+## Busca contra fluxo contínuo
+
+A API de busca devolve só um punhado de resultados recentes — útil para uma consulta pontual, pouco útil quando o que se quer é **muito** dado. Para isso existia a **API de streaming**, que conectava a uma amostra do fluxo contínuo de mensagens públicas do Twitter, exigindo o nível mais elaborado de autenticação (OAuth 1, o mesmo obtido acima).
+
+Para acessá-la com `Twython`, era preciso definir uma classe que herdasse de `TwythonStreamer` e sobrescrevesse o método `on_success` — chamado toda vez que um novo dado chegava — e, possivelmente, `on_error`:
+
+```python
+from twython import TwythonStreamer
+
+# Acumular dado numa variável global é uma prática pobre,
+# mas torna o exemplo bem mais simples
+tweets = []
+
+class MyStreamer(TwythonStreamer):
+    def on_success(self, data):
+        """
+        O que fazer quando o Twitter nos manda dado?
+        Aqui, data será um dict do Python representando um tweet.
+        """
+        # Só queremos coletar tweets em inglês
+        if data.get('lang') == 'en':
+            tweets.append(data)
+            print(f"tweet recebido #{len(tweets)}")
+
+        # Para quando já tivermos coletado o suficiente
+        if len(tweets) >= 100:
+            self.disconnect()
+
+    def on_error(self, status_code, data):
+        print(status_code, data)
+        self.disconnect()
+
+stream = MyStreamer(CONSUMER_KEY, CONSUMER_SECRET,
+                    ACCESS_TOKEN, ACCESS_TOKEN_SECRET)
+
+# começa a consumir mensagens públicas que contenham a palavra-chave 'data'
+stream.statuses.filter(track='data')
+
+# se em vez disso quiséssemos consumir uma amostra de *todas* as mensagens públicas
+# stream.statuses.sample()
+```
+
+`MyStreamer` se conectaria ao fluxo do Twitter e esperaria por dados. A cada mensagem recebida (aqui, um tweet representado como um objeto Python), o Twitter chamaria `on_success`, que a acumularia na lista `tweets` se o idioma fosse inglês, e desconectaria depois de coletar 100.
+
+A partir daí, seria possível analisar o resultado — por exemplo, achando as hashtags mais comuns:
+
+```python
+from collections import Counter
+
+top_hashtags = Counter(hashtag['text'].lower()
+                       for tweet in tweets
+                       for hashtag in tweet["entities"]["hashtags"])
+
+print(top_hashtags.most_common(5))
+```
+
+::: {.callout-note}
+Cada tweet carrega bastante dado estruturado além do texto — o idioma, as hashtags, menções, geolocalização quando disponível. Num projeto de verdade, você não ia querer depender de uma `list` em memória para guardar os tweets coletados; ia querer salvá-los num arquivo ou banco de dados, para tê-los de forma permanente — a `list tweets` acima desaparece assim que o processo termina.
+:::
+
+::: {.callout-tip collapse="true"}
+## Na prática: o que sobrevive desta seção
+
+**Uma dependência externa que morre é o destino normal de todo código que depende de terceiros** — não uma falha de projeto do Grus: o acesso gratuito à API do Twitter que o livro usa foi descontinuado depois da publicação, o produto trocou de nome, e a própria `twython` está sem manutenção.
+
+O que sobrevive não é "copie isto e funcione" — é entender **autenticação de API** como problema geral. Toda API atual que exige login segue alguma variação do mesmo roteiro:
+
+- **Uma chave de aplicação**, obtida uma vez, num painel de desenvolvedor.
+- **Um fluxo de autorização** — hoje quase sempre OAuth 2 com algum tipo de token de curta duração e um *refresh token* para renová-lo, em vez do PIN manual do OAuth 1 usado aqui.
+- **Um limite de taxa** (*rate limit*), que toda aplicação séria respeita e cujo estouro é a causa mais comum de "minha integração parou de funcionar do nada".
+- **Uma distinção entre busca pontual e fluxo contínuo** — a maioria das APIs modernas de redes sociais, quando ainda oferece acesso de terceiros, mantém essa mesma divisão entre "peça um punhado de resultados agora" e "assine um canal e receba dado conforme ele acontece".
+
+O que este livro não pode fazer é lhe dar um exemplo que continue funcionando: qualquer nome de API específico citado aqui corre o risco de ficar desatualizado antes mesmo deste material ser publicado. O que fica é saber reconhecer essas quatro peças — chave, fluxo de autorização, limite de taxa, busca versus fluxo — na documentação de qualquer API nova que você precisar aprender. Os nomes específicos deste capítulo (`Twython`, `CONSUMER_KEY`) morreram junto com o produto que descreviam; a forma do problema, não.
+:::
+
+## Adiante
+
+O que você tem, ao final deste capítulo, não é mais um pipe, um arquivo, uma árvore de tags ou uma resposta de API — é o mesmo material com que o livro trabalha desde o Capítulo 1: listas e `dict`s do Python, na memória. É para lá que qualquer uma das cinco seções converge, não importa quão frágil ou robusta tenha sido a fonte.
+
+O [Capítulo 7](../cap07/index.qmd) assume que esse trabalho já foi feito, e começa exatamente onde este termina: explorando, limpando e transformando o dado que agora está em suas mãos.

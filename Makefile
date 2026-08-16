@@ -13,8 +13,31 @@ build: ## Constrói a imagem Docker
 preview: ## Preview com hot-reload em http://localhost:4201
 	$(COMPOSE) up
 
-render: ## Renderiza o livro para _book/
-	$(RUN) quarto render
+render: ## Renderiza o livro para _book/ (com retentativa automática)
+# No macOS, o bind mount do Docker às vezes falha ao remover os diretórios
+# `*_files` temporários que o Quarto cria e apaga no fim do render — eles ficam
+# com `figure-html/` e `mediabag/` vazios dentro, e o `rmdir` estoura com
+# "Directory not empty". NÃO é erro de conteúdo: as células todas executaram.
+#
+# A falha é aleatória (aborta num arquivo diferente a cada vez) e fica mais
+# provável quanto mais figuras o livro tem. O remédio, medido: apagar o lixo da
+# tentativa anterior e renderizar de novo COM o `_freeze` quente — aí poucos
+# chunks reexecutam, a janela da corrida encolhe, e converge em duas ou três
+# tentativas. Por isso este alvo NUNCA apaga o `_freeze`.
+#
+# Isto vive aqui, e não na cabeça de quem roda, porque a alternativa já custou
+# horas: um agente ficou preso em laço tentando entender um render que abortava.
+	@for i in 1 2 3 4 5 6; do \
+	  find content -name '*_files' -type d -exec rm -rf {} + 2>/dev/null || true; \
+	  find content -name '*.html' -type f -delete 2>/dev/null || true; \
+	  if $(RUN) quarto render; then \
+	    echo "render OK (tentativa $$i)"; exit 0; \
+	  fi; \
+	  echo "--- tentativa $$i abortou (corrida do bind mount); limpando e repetindo ---"; \
+	done; \
+	echo "render falhou em 6 tentativas — isto provavelmente NÃO é a corrida do bind mount."; \
+	echo "Rode '$(RUN) quarto render' direto para ver o erro real."; \
+	exit 1
 
 offline: ## Renderiza SEM REDE (limpa _freeze antes — veja o motivo abaixo)
 # `docker compose run` não tem flag --network (Compose v2), então esta é a

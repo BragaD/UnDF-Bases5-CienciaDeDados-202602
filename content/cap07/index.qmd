@@ -4,10 +4,34 @@
 Este capítulo corresponde ao capítulo 10 de @grus2019.
 :::
 
-::: {.callout-warning}
-## Em construção
-A visão geral deste capítulo ainda será escrita.
+> Especialistas costumam ter mais dados do que juízo.
+>
+> — Colin Powell
+
+O [Capítulo 5](../cap05/index.qmd) construiu a máquina que ajusta parâmetros. O [Capítulo 6](../cap06/index.qmd) construiu os canos pelos quais o dado chega até um programa Python. Nenhum dos dois te prepara para o que acontece entre uma coisa e outra: o dado que chegou pelos canos do Capítulo 6 quase nunca está pronto para alimentar a máquina do Capítulo 5. Ele vem torto, incompleto, em unidades incompatíveis, com colunas demais ou de menos. Este capítulo é sobre essa distância.
+
+É um capítulo mais de artesanato do que de teoria. Não há um modelo novo para treinar nem uma prova para seguir — em vez disso, um punhado de técnicas pequenas e recorrentes: como olhar para um conjunto de dados antes de fazer qualquer coisa com ele, como representar uma linha de dados heterogênea sem reescrever a mesma lógica de conversão de tipo em cada função, como filtrar o que está sujo sem descartar o que só *parece* sujo, como agregar e comparar, como colocar dimensões em pé de igualdade antes de medir distância entre elas — e, por fim, como reduzir um conjunto de muitas dimensões a poucas, sem perder o que importa.
+
+::: {.callout-important}
+## Este capítulo é o módulo que ele descreve — e por isso o código vive nos blocos, não num `import`
+
+Assim como o [Capítulo 6](../cap06/index.qmd) *é* `scratch/getting_data.py`, este capítulo *é* `scratch/working_with_data.py` — e esse módulo nunca é importado neste livro. Duas razões, as duas no próprio código-fonte do @grus2019:
+
+1. **Um caminho relativo ao diretório de trabalho.** O módulo abre `open("stocks.csv", "r")` direto no corpo do arquivo. No repositório do Grus, `stocks.csv` mora na raiz; aqui, dado vive em `dados/`, e o `open()` sem esse prefixo estouraria com `FileNotFoundError` assim que o módulo fosse importado.
+2. **Uma afirmação sobre dado aleatório sem semente.** Perto do topo do módulo, `xs`, `ys1` e `ys2` nascem de `random.random()` sem `random.seed(...)`, e a linha seguinte afirma `0.89 < correlation(xs, ys1) < 0.91`. O valor real gira em torno de 0,894 — perto o bastante da borda inferior dessa janela para que o `assert` falhe cerca de uma vez em cada três execuções. Você vai encontrar essa mesma afirmação, com semente, na [primeira seção](01-explorando-seus-dados.qmd) — com um callout explicando por quê.
+
+A consequência prática: todo código deste capítulo é escrito **direto nos blocos**, não importado do pacote `scratch`. Você vai ver funções redefinidas de uma seção para a outra — é intencional, não repetição por descuido: cada `.qmd` roda num kernel próprio, e sem o `import` este é o único jeito de garantir que o código de uma seção não dependa silenciosamente do que rodou numa página diferente.
 :::
+
+Ao final deste capítulo, você será capaz de:
+
+- Resumir e visualizar um conjunto de dados de uma, duas e muitas dimensões antes de tentar modelá-lo
+- Representar uma linha de dados heterogênea com `NamedTuple`, e explicar por que isso resolve os dois problemas que um `dict` tem para essa tarefa
+- Escrever o equivalente mutável com `dataclass`, e reconhecer o compromisso que a mutabilidade reintroduz
+- Escrever uma função de *parsing* que devolve `None` diante de dado ruim em vez de estourar, e decidir o que fazer com as linhas rejeitadas
+- Agrupar, ordenar e agregar dados tabulares com `defaultdict` e compreensões, no mesmo estilo do [Capítulo 2](../cap02/index.qmd)
+- Reescalonar dados para que a unidade de cada dimensão pare de dominar o cálculo de distância
+- Reduzir a dimensionalidade de um conjunto de dados com PCA, construído do zero sobre o gradiente descendente do [Capítulo 5](../cap05/index.qmd)
 
 ## Seções
 
@@ -22,6 +46,11 @@ A visão geral deste capítulo ainda será escrita.
 | [7.7](07-um-parenteses-tqdm.qmd) | Um Parêntese: tqdm |
 | [7.8](08-reducao-de-dimensionalidade.qmd) | Redução de Dimensionalidade |
 
+A última seção também cumpre uma promessa: o [Capítulo 8](../cap08/index.qmd), ao discutir seleção de atributos, cita a redução de dimensionalidade "no Capítulo 7" como uma das formas de lidar com dados que têm atributos demais. É esta seção.
+
 ## Leituras adicionais
 
-*A seção “For Further Exploration” do capítulo 10 de @grus2019 entra aqui.*
+A seção "For Further Exploration" do capítulo 10 de @grus2019 sugere:
+
+- [pandas](https://pandas.pydata.org/) é, de novo, a resposta de fora deste livro. Já foi mencionado no [Capítulo 6](../cap06/index.qmd) para importar dado; aqui a recomendação é mais específica — tudo que este capítulo fez à mão (explorar, limpar, filtrar, agrupar, agregar, reescalonar) tem um método de `pandas.DataFrame` correspondente, geralmente em uma linha. *Python for Data Analysis* (O'Reilly), de Wes McKinney — o criador do `pandas` —, é a referência que o próprio autor recomenda para aprendê-lo a sério.
+- O `scikit-learn` tem uma [família inteira de funções de decomposição de matriz](https://scikit-learn.org/stable/modules/decomposition.html), incluindo PCA — mas resolvida por decomposição em valores singulares, não pelo gradiente descendente que você usou na [seção 7.8](08-reducao-de-dimensionalidade.qmd). Para o tratamento formal de por que isso funciona, veja @geron2022.

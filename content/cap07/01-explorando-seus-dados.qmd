@@ -4,7 +4,227 @@
 Esta seção corresponde a *Exploring Your Data*, do capítulo 10 de @grus2019.
 :::
 
+Depois de identificar as perguntas que você quer responder e conseguir dado nas mãos — o assunto do [Capítulo 6](../cap06/index.qmd) —, a tentação é pular direto para os modelos. Resista. O primeiro passo deveria ser sempre **explorar** os dados.
+
+## Dados unidimensionais
+
+O caso mais simples é um conjunto de dados unidimensional: só uma coleção de números — o tempo médio diário que cada usuário passa no seu site, por exemplo. Um primeiro passo óbvio é calcular estatísticas resumo: quantos pontos você tem, o menor, o maior, a média, o desvio padrão.
+
+Mas mesmo essas estatísticas não necessariamente dão uma boa noção do que está acontecendo. Um passo melhor é construir um **histograma**, agrupando os dados em faixas discretas — *buckets* — e contando quantos pontos caem em cada uma:
+
+```{python}
+#| label: funcoes-histograma
+from typing import List, Dict
+from collections import Counter
+import math
+
+def bucketize(point: float, bucket_size: float) -> float:
+    """Arredonda o ponto para baixo até o múltiplo mais próximo de bucket_size"""
+    return bucket_size * math.floor(point / bucket_size)
+
+def make_histogram(points: List[float], bucket_size: float) -> Dict[float, int]:
+    """Distribui os pontos nos buckets e conta quantos caem em cada um"""
+    return Counter(bucketize(point, bucket_size) for point in points)
+```
+
+::: {.exemplo}
+Repare que `make_histogram` é a mesma ideia do histograma de notas do [Capítulo 3](../cap03/02-graficos-de-barras.qmd): um `Counter` sobre valores arredondados para o piso do bucket. A única diferença é que aqui o arredondamento vira uma função nomeada, `bucketize`, em vez de uma expressão solta como `grade // 10 * 10` — o que compensa quando o tamanho do bucket muda de um gráfico para o outro, como acontece logo abaixo.
+:::
+
+Para desenhar, basta um gráfico de barras — o mesmo `plt.bar` do Capítulo 3:
+
+```{python}
+#| label: funcao-plot-histograma
+from matplotlib import pyplot as plt
+
+def plot_histogram(points: List[float], bucket_size: float, title: str = ""):
+    histogram = make_histogram(points, bucket_size)
+    plt.bar(histogram.keys(), histogram.values(), width=bucket_size)
+    plt.title(title)
+```
+
+Considere dois conjuntos de dados fictícios: um uniforme entre -100 e 100, e um normal com média 0 e desvio padrão 57. Para o segundo, precisamos da função inversa da normal acumulada, que veio do [Capítulo 6](../cap06/index.qmd)... não — ela na verdade nunca apareceu em nenhum capítulo deste livro até aqui, porque vive em `scratch/probability.py`, um módulo fora do escopo desta disciplina (o tratamento de probabilidade do Grus não entrou na ementa), mas que o próprio pacote do livro-texto usa como dependência. Importamos só a função:
+
+```{python}
+#| label: import-probability
+#| include: false
+from scratch.probability import inverse_normal_cdf
+import matplotlib.pyplot as plt
+plt.close('all')
+```
+
+::: {.callout-note}
+O `import` acima roda o módulo `scratch/probability.py` inteiro, que tem 18 chamadas `plt.*` e vários `assert` no corpo do arquivo (documentado no `CLAUDE.md` deste repositório). Os `assert` são sobre dado fixo e sempre passam; os gráficos, ninguém pediu para ver — por isso o chunk é `#| include: false`, e `plt.close('all')` limpa qualquer figura que o import tenha deixado pendurada, para que ela não vaze para a próxima célula.
+:::
+
+```{python}
+#| label: distribuicoes-fake
+import random
+
+def random_normal() -> float:
+    """Uma amostra da normal padrão"""
+    return inverse_normal_cdf(random.random())
+
+random.seed(0)
+
+# uniforme entre -100 e 100
+uniform = [200 * random.random() - 100 for _ in range(10000)]
+
+# normal com média 0, desvio padrão 57
+normal = [57 * random_normal() for _ in range(10000)]
+
+f"médias: {sum(uniform)/len(uniform):.2f} e {sum(normal)/len(normal):.2f}"
+```
+
+Ambos têm média perto de 0. Os dois histogramas mostram o quanto isso esconde:
+
+```{python}
+#| label: fig-histograma-uniforme
+#| fig-cap: "Histograma da distribuição uniforme"
+plot_histogram(uniform, 10, "Histograma — Uniforme")
+plt.show()
+```
+
+```{python}
+#| label: fig-histograma-normal
+#| fig-cap: "Histograma da distribuição normal"
+plot_histogram(normal, 10, "Histograma — Normal")
+plt.show()
+```
+
+Os dois têm média próxima de zero e desvio padrão próximo de 57. Ainda assim, um é achatado e limitado; o outro tem pico ao centro e caudas compridas. Nenhuma estatística resumo diz isso — só olhar para a forma diz.
+
+## Duas dimensões
+
+Com duas dimensões, você quer entender cada uma individualmente, mas também como elas se relacionam. Considere mais um conjunto fictício:
+
+```{python}
+#| label: xs-ys1-ys2
+random.seed(4)
+xs = [random_normal() for _ in range(1000)]
+ys1 = [ x + random_normal() / 2 for x in xs]
+ys2 = [-x + random_normal() / 2 for x in xs]
+```
+
+Se você rodasse `plot_histogram` em `ys1` e `ys2` separadamente, teria dois histogramas parecidos — de fato, os dois têm distribuição normal, com a mesma média e o mesmo desvio padrão. Mas cada um tem uma relação muito diferente com `xs`, e isso só aparece quando você olha as duas dimensões juntas:
+
+```{python}
+#| label: fig-dispersao-conjunta
+#| fig-cap: "Duas distribuições conjuntas muito diferentes"
+plt.scatter(xs, ys1, marker='.', color='black', label='ys1')
+plt.scatter(xs, ys2, marker='.', color='gray',  label='ys2')
+plt.xlabel('xs')
+plt.ylabel('ys')
+plt.legend(loc=9)
+plt.title("Distribuições Conjuntas Muito Diferentes")
+plt.show()
+```
+
+`ys1` cresce com `xs`; `ys2` decresce. A diferença fica evidente também na correlação:
+
+```{python}
+#| label: import-statistics
+#| include: false
+from scratch.statistics import correlation
+import matplotlib.pyplot as plt
+plt.close('all')
+```
+
+```{python}
+#| label: correlacoes
+correlation(xs, ys1), correlation(xs, ys2)
+```
+
 ::: {.callout-warning}
-## Em construção
-O conteúdo desta seção ainda será escrito.
+## Um erro instrutivo do livro-texto
+
+O código-fonte de `working_with_data.py` (linhas 44 a 49 do @grus2019) gera `xs`, `ys1` e `ys2` exatamente como acima, mas **sem fixar semente** — e na sequência afirma:
+
+```python
+assert 0.89 < correlation(xs, ys1) < 0.91
+assert -0.91 < correlation(xs, ys2) < -0.89
+```
+
+O problema é que o valor real de `correlation(xs, ys1)` gira em torno de 0,894 — perto o bastante da borda inferior da janela `(0.89, 0.91)` para que, sem semente, esse `assert` falhe cerca de uma vez em cada três execuções. Não é um bug no cálculo da correlação: é uma afirmação de igualdade sobre uma amostra aleatória, escrita como se fosse determinística.
+
+É exatamente o tipo de erro que este livro pede para você notar: uma afirmação sobre dado aleatório só é reprodutível se a semente estiver fixada, e uma janela de tolerância só é segura se for larga o bastante para a variação real da amostra, não só para o valor que o autor obteve numa execução específica. Por isso, aqui em cima usamos `random.seed(4)` antes de `xs`, e a correlação sai sempre a mesma nesta página — cerca de 0,906 e -0,907 — seja lá quantas vezes o livro for renderizado.
+:::
+
+## Muitas dimensões
+
+Com muitas dimensões, você quer saber como todas elas se relacionam entre si. Uma abordagem simples é a **matriz de correlação**, cuja entrada na linha $i$, coluna $j$ é a correlação entre a dimensão $i$ e a dimensão $j$ dos dados:
+
+```{python}
+#| label: matriz-de-correlacao
+from scratch.linear_algebra import Matrix, Vector, make_matrix
+
+def correlation_matrix(data: List[Vector]) -> Matrix:
+    """
+    Devolve a matriz len(data) x len(data) cuja entrada (i, j)
+    é a correlação entre data[i] e data[j]
+    """
+    def correlation_ij(i: int, j: int) -> float:
+        return correlation(data[i], data[j])
+
+    return make_matrix(len(data), len(data), correlation_ij)
+```
+
+Uma abordagem mais visual — quando o número de dimensões não é grande demais — é a **matriz de dispersão**, mostrando todos os gráficos de dispersão dois a dois. Para gerar um exemplo com correlações interessantes, construímos quatro séries relacionadas entre si de propósito:
+
+```{python}
+#| label: fig-dispersao-matriz
+#| fig-cap: "Matriz de dispersão de quatro séries correlacionadas"
+def random_row() -> List[float]:
+    row = [0.0, 0, 0, 0]
+    row[0] = random_normal()
+    row[1] = -5 * row[0] + random_normal()
+    row[2] = row[0] + row[1] + 5 * random_normal()
+    row[3] = 6 if row[2] > -2 else 0
+    return row
+
+random.seed(0)
+num_points = 100
+corr_rows = [random_row() for _ in range(num_points)]
+
+# cada linha tem 4 pontos, mas queremos as colunas
+corr_data = [list(col) for col in zip(*corr_rows)]
+
+num_vectors = len(corr_data)
+fig, ax = plt.subplots(num_vectors, num_vectors, figsize=(8, 8))
+
+for i in range(num_vectors):
+    for j in range(num_vectors):
+        if i != j:
+            ax[i][j].scatter(corr_data[j], corr_data[i], s=8)
+        else:
+            ax[i][j].annotate("série " + str(i), (0.5, 0.5),
+                              xycoords='axes fraction',
+                              ha="center", va="center")
+        if i < num_vectors - 1: ax[i][j].xaxis.set_visible(False)
+        if j > 0: ax[i][j].yaxis.set_visible(False)
+
+ax[-1][-1].set_xlim(ax[0][-1].get_xlim())
+ax[0][0].set_ylim(ax[0][1].get_ylim())
+plt.show()
+```
+
+```{python}
+#| label: matriz-de-correlacao-valores
+matriz = correlation_matrix(corr_data)
+for linha in matriz:
+    print([round(v, 2) for v in linha])
+```
+
+A matriz confirma o que os gráficos sugerem: a série 1 é fortemente **anticorrelacionada** com a série 0 (a própria fórmula de `row[1]` inverte o sinal de `row[0]`); a série 2 é positivamente correlacionada com a série 1; e a série 3 só assume os valores 0 e 6 — 6 quando a série 2 é grande, 0 quando é pequena —, o que explica as colunas de pontos verticais nos gráficos que envolvem ela.
+
+::: {.conceito}
+A matriz de dispersão é uma ferramenta de **triagem**, não de conclusão. Ela mostra rápido quais pares de dimensões merecem uma olhada mais de perto — o que é valioso justamente porque examinar cada par manualmente não escala além de um punhado de dimensões. A [seção 7.8](08-reducao-de-dimensionalidade.qmd) lida com o problema oposto: dimensões demais para sequer desenhar uma matriz dessas.
+:::
+
+::: {.callout-tip collapse="true"}
+## Na prática: `pandas` e `seaborn`
+
+Você acabou de escrever, à mão, o que `pandas.DataFrame.describe()`, `.hist()` e `.corr()` fazem em uma linha cada — e o que `pd.plotting.scatter_matrix(df)` ou `seaborn.pairplot(df)` fazem no lugar da dupla de laços `for i in range(num_vectors): for j in range(num_vectors):` acima.
+
+O que essas funções escondem, e vale saber que está sendo escondido: `.corr()` por padrão calcula a correlação de Pearson — a mesma que você implementou —, mas aceita trocar para Spearman ou Kendall com um parâmetro, que medem relação *monotônica* em vez de linear, e lidam melhor com outliers. `.describe()` decide sozinho quais estatísticas mostrar dependendo do tipo da coluna. E tanto `.hist()` quanto `scatter_matrix` decidem o número de buckets ou o tamanho dos pontos por uma heurística — a mesma heurística que, se você tivesse implementado `bucketize` com um `bucket_size` ruim, teria escondido de você exatamente o tipo de diferença que a seção "Dados unidimensionais" acima existe para revelar.
 :::

@@ -4,7 +4,105 @@
 Esta seção corresponde a *Choosing the Right Step Size*, do capítulo 8 de @grus2019.
 :::
 
+A lógica de andar contra o gradiente é clara. Quão longe andar não é. Na verdade, escolher o tamanho certo do passo é mais arte do que ciência. As opções populares incluem:
+
+- Usar um tamanho de passo fixo.
+- Encolher o tamanho do passo gradualmente, ao longo do tempo.
+- A cada passo, escolher o tamanho de passo que minimiza o valor da função objetivo.
+
+A última opção parece ótima, mas é, na prática, um cálculo caro — a cada passo, seria preciso resolver um novo problema de otimização só para decidir o tamanho do próximo passo. Para manter as coisas simples, este livro vai quase sempre usar um tamanho de passo fixo. E o tamanho de passo que "funciona" depende do problema: pequeno demais, e o gradiente descendente demora uma eternidade; grande demais, e você dá passos gigantescos que podem levar a função para fora do domínio — um overflow, ou um logaritmo de número negativo. Então, no fim, é preciso experimentar.
+
+`gradient_step` e `sum_of_squares_gradient` já foram escritas na [seção anterior](03-usando-o-gradiente.qmd). Em vez de reescrevê-las, importamos:
+
+```{python}
+#| label: importa-gradiente
+from scratch.gradient_descent import gradient_step, sum_of_squares_gradient
+```
+
+::: {.callout-note}
+## Por que importar, e não reescrever
+
+Cada `.qmd` deste livro renderiza com seu próprio kernel Python — nomes definidos numa página não existem em outra. A seção 5.3 escreveu `gradient_step` e `sum_of_squares_gradient`; esta seção precisa das duas de novo, e importa em vez de reescrever. (Nem tudo em `scratch/gradient_descent.py` é seguro de importar assim — a seção 5.2 mostrou um caso em que não é.)
+:::
+
+Vamos ver o que acontece minimizando `sum_of_squares` a partir do mesmo ponto de partida, com três tamanhos de passo diferentes:
+
+```{python}
+#| label: fig-tamanho-passo
+#| fig-cap: "Efeito do tamanho do passo: distância à origem para três valores de step_size, ao longo de 15 epochs (escala log)"
+import random
+from scratch.linear_algebra import distance
+
+def trajetoria_distancias(step_size: float, n_epochs: int):
+    random.seed(0)
+    v = [random.uniform(-10, 10) for i in range(3)]
+    distancias = [distance(v, [0, 0, 0])]
+    for epoch in range(n_epochs):
+        grad = sum_of_squares_gradient(v)
+        v = gradient_step(v, grad, step_size)
+        distancias.append(distance(v, [0, 0, 0]))
+    return distancias
+
+certo = trajetoria_distancias(-0.01, 15)
+grande = trajetoria_distancias(-1.5, 15)
+pequeno = trajetoria_distancias(-0.00001, 15)
+
+from matplotlib import pyplot as plt
+
+epochs = range(16)
+plt.plot(epochs, certo, label="step_size = -0.01 (certo)")
+plt.plot(epochs, grande, label="step_size = -1.5 (grande demais)")
+plt.plot(epochs, pequeno, label="step_size = -0.00001 (pequeno demais)")
+plt.yscale("log")
+plt.xlabel("epoch")
+plt.ylabel("distância de v até a origem")
+plt.legend()
+plt.show()
+```
+
+```{python}
+#| label: numeros-tamanho-passo
+certo[0], certo[-1], grande[-1], pequeno[-1]
+```
+
+Os três partem exatamente do mesmo ponto, a `8.75` unidades da origem. Com `step_size = -0.01`, a distância cai para menos de `6.5` em 15 epochs — a mesma curva suave da seção anterior. Com `step_size = -0.00001`, ela mal se move: depois de 15 epochs ainda está acima de `8.74`.
+
+Quanto tempo levaria esse passo pequeno demais para de fato chegar perto de zero? Dá para contar, em vez de estimar de cabeça:
+
+```{python}
+#| label: epochs-para-convergir
+random.seed(0)
+v_lento = [random.uniform(-10, 10) for i in range(3)]
+
+n_epochs = 0
+while distance(v_lento, [0, 0, 0]) >= 0.001:
+    grad = sum_of_squares_gradient(v_lento)
+    v_lento = gradient_step(v_lento, grad, -0.00001)
+    n_epochs += 1
+
+n_epochs
+```
+
+**453.845 epochs** — não "dezenas de milhares", *centenas* de milhares. Num capítulo cuja lição é sobre grandeza de passo e convergência, vale conferir a ordem de grandeza direito: essa distância, que o passo certo cruzou em 1.000 epochs, levaria mais de 450 vezes isso com o passo pequeno demais.
+
 ::: {.callout-warning}
-## Em construção
-O conteúdo desta seção ainda será escrito.
+## Passo grande demais diverge — e não devagar
+
+Com `step_size = -1.5`, a distância **dobra a cada epoch**: `8.75`, `17.5`, `35`, `70`... e depois de 15 epochs já passa de `280.000`. Isso não é um valor extremo escolhido a dedo — é a mesma conta da caixa acima, só que com o sinal trocado.
+
+`gradient_step` multiplica `v` por `1 + 2 · step_size` a cada passo, porque `sum_of_squares_gradient(v)` é `2v`. Com `step_size = -0.01`, esse fator é `0.98`: encolhe. Com `step_size = -1.5`, o fator é `1 - 3 = -2`: cada passo não só deixa de se aproximar do mínimo, como **supercorrige para o lado oposto** e ainda cresce em magnitude. Um passo grande demais em relação à curvatura da função não converge devagar — ele diverge, e geometricamente.
+:::
+
+A moral: o tamanho do passo certo depende de quão curva é a função que você está minimizando, e você raramente sabe isso de antemão. Por isso @grus2019 aponta a segunda opção da lista — encolher o passo ao longo do tempo — como uma saída de compromisso: comece com um passo razoavelmente grande (convergência rápida no início) e vá encolhendo (evita a divergência quando já estiver perto do mínimo, onde a curvatura relativa importa mais).
+
+::: {.conceito}
+Não existe um `step_size` certo, universal — existe um certo *para uma curvatura*. Pequeno demais desperdiça iterações inteiras sem necessidade (a caixa de `453.845` epochs, acima); grande demais transforma cada passo numa supercorreção que cresce sem parar (a caixa de divergência geométrica). Os otimizadores que reaparecem no resto deste livro — e os que você vai encontrar em qualquer biblioteca — existem, em boa parte, para não deixar essa escolha inteiramente a cargo de quem treina o modelo.
+:::
+
+::: {.callout-tip collapse="true"}
+## Na prática: o que se faz com isso
+
+Nenhuma biblioteca séria de aprendizado de máquina usa um `step_size` fixo do jeito que este capítulo usa. O que existe, em vez disso, é uma família de **otimizadores adaptativos** — SGD com momentum, RMSProp, Adam — que ajustam o tamanho efetivo do passo automaticamente, com base no histórico dos gradientes recentes. A ideia comum a todos eles: acelerar quando os gradientes apontam consistentemente na mesma direção, e frear quando eles oscilam de sinal a cada passo — o mecanismo por trás da divergência geométrica da caixa acima (o fator `1 - 3 = -2` troca o sinal de `v` a cada epoch), ainda que o gráfico, que plota só a distância — sempre positiva —, não deixe essa troca de sinal visível, apenas o crescimento que ela produz.
+
+Frameworks de redes neurais também usam **cronogramas de taxa de aprendizado** (*learning rate schedules*): começar com um passo maior e reduzi-lo — em degraus, ou suavemente — conforme o treino avança, exatamente a segunda opção da lista desta seção. Você vai ver essas ideias de novo, com nome e implementação, nos capítulos sobre [redes neurais](../cap15/index.qmd) e [deep learning](../cap16/index.qmd). O que muda ali não é o princípio — ainda é "ande contra o gradiente, em passos pequenos" — é só o quanto de trabalho extra o otimizador faz para escolher, a cada passo, o quão pequeno "pequeno" deveria ser.
 :::

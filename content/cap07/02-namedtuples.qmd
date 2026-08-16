@@ -4,7 +4,107 @@
 Esta seção corresponde a *Using NamedTuples*, do capítulo 10 de @grus2019.
 :::
 
-::: {.callout-warning}
-## Em construção
-O conteúdo desta seção ainda será escrito.
+Uma forma comum de representar um registro de dados é um `dict`:
+
+```{python}
+#| label: dict-stock-price
+import datetime
+
+stock_price = {'closing_price': 102.06,
+               'date': datetime.date(2014, 8, 29),
+               'symbol': 'AAPL'}
+```
+
+Existem boas razões para isso ser menos ideal do que parece.
+
+A primeira é desempenho: um `dict` tem overhead — cada instância carrega sua própria tabela hash —, então se você tem muitos preços de ações, eles vão ocupar mais memória do que precisariam. Na maioria dos casos isso é secundário.
+
+A segunda razão é mais séria: acessar campos por chave de `dict` é propenso a erro. O código abaixo roda **sem** erro nenhum, e faz a coisa errada silenciosamente:
+
+```{python}
+#| label: dict-typo
+# opa, erro de digitação
+stock_price['cosing_price'] = 103.06
+'closing_price' in stock_price, 'cosing_price' in stock_price
+```
+
+`stock_price` agora tem duas chaves parecidas, `closing_price` e `cosing_price`, e nada avisou. Qualquer código que dependa de `stock_price['closing_price']` continua lendo o valor antigo (102.06), enquanto o valor novo (103.06) fica escondido atrás de uma chave com erro de digitação.
+
+Por fim, embora seja possível anotar o tipo de um `dict` uniforme —
+
+```{python}
+#| label: dict-anotado
+from typing import Dict
+prices: Dict[datetime.date, float] = {}
+```
+
+— não existe um jeito útil de anotar um `dict` que representa dado heterogêneo, como o `stock_price` acima, que mistura `str`, `datetime.date` e `float` num único registro. A anotação de tipo perde exatamente o poder que o [Capítulo 2](../cap02/06-ferramentas-e-tipos.qmd) apresentou: dizer, antes de ler o corpo do código, o que cada campo é.
+
+## `namedtuple`
+
+Python tem uma classe embutida para isso: `namedtuple`, que é como uma tupla, mas com posições nomeadas.
+
+```{python}
+#| label: namedtuple-simples
+from collections import namedtuple
+
+StockPrice = namedtuple('StockPrice', ['symbol', 'date', 'closing_price'])
+price = StockPrice('MSFT', datetime.date(2018, 12, 14), 106.03)
+
+assert price.symbol == 'MSFT'
+assert price.closing_price == 106.03
+```
+
+Como tuplas comuns, `namedtuple`s são **imutáveis** — não dá para modificar um valor depois de criado. Isso às vezes atrapalha, mas na maior parte das vezes é uma vantagem: um registro que não muda por baixo dos seus pés é mais fácil de raciocinar sobre.
+
+O que `namedtuple` ainda não resolve é a anotação de tipo — `StockPrice` acima não diz, em lugar nenhum, que `closing_price` é `float`. É para isso que existe a variante tipada, `NamedTuple`, do módulo `typing`:
+
+```{python}
+#| label: namedtuple-tipado
+from typing import NamedTuple
+
+class StockPrice(NamedTuple):
+    symbol: str
+    date: datetime.date
+    closing_price: float
+
+    def is_high_tech(self) -> bool:
+        """É uma classe — então também dá para acrescentar métodos"""
+        return self.symbol in ['MSFT', 'GOOG', 'FB', 'AMZN', 'AAPL']
+
+price = StockPrice('MSFT', datetime.date(2018, 12, 14), 106.03)
+
+assert price.symbol == 'MSFT'
+assert price.closing_price == 106.03
+assert price.is_high_tech()
+```
+
+Agora `price.clo` faria seu editor sugerir `closing_price` — porque o editor sabe, pela anotação, que esse campo existe e o que ele é. Um `dict` nunca dá essa pista: `stock_price['clo` não tem como o editor completar, porque chaves de `dict` não são parte da assinatura do tipo.
+
+::: {.callout-important}
+`price.cosing_price = 103.06` — o mesmo erro de digitação de antes — agora levanta `AttributeError` na hora, em vez de criar silenciosamente um segundo campo. É a mesma classe de proteção que o [Capítulo 2](../cap02/06-ferramentas-e-tipos.qmd) atribuiu às anotações de tipo em geral: elas não impedem todo erro, mas tornam alguns deles impossíveis de passar despercebidos.
+:::
+
+::: {.exemplo}
+Você vai ver este exato padrão de novo no [Capítulo 9](../cap09/01-o-modelo.qmd), sobre k-vizinhos mais próximos:
+
+```python
+class LabeledPoint(NamedTuple):
+    point: Vector
+    label: str
+```
+
+`LabeledPoint` empacota um ponto e o rótulo dele exatamente como `StockPrice` empacota um símbolo, uma data e um preço — um registro pequeno, imutável, com nomes de campo que o editor entende. É o uso mais comum de `NamedTuple` neste livro: 21 ocorrências no código do @grus2019, quase sempre para dar nome e tipo a algo que, de outra forma, seria uma tupla anônima de posições que só quem escreveu a função lembra o que significam.
+:::
+
+::: {.callout-tip collapse="true"}
+## Na prática: o que se faz com isso
+
+`NamedTuple` resolve o problema do registro heterogêneo tipado, mas continua imutável — o que é uma escolha, não uma limitação a se contornar. Duas direções que o ecossistema Python tomou a partir daqui, cada uma resolvendo uma parte diferente do que falta:
+
+**Mutabilidade**, sem abrir mão da anotação de tipo, é o assunto da [próxima seção](03-dataclasses.qmd): `dataclass`.
+
+**Validação em tempo de execução** é o que bibliotecas como `pydantic` acrescentam por cima da mesma ideia: uma classe com campos tipados que, ao ser construída, *verifica* os tipos de verdade — ao contrário da anotação pura de Python, que é só documentação (o [Capítulo 2](../cap02/06-ferramentas-e-tipos.qmd) mostrou isso: `add(10, "cinco")` com `a: int, b: int` não impede nada). `pydantic` é o que sustenta boa parte das APIs web modernas em Python — frameworks como FastAPI o usam para transformar um JSON de entrada em um objeto tipado, rejeitando a requisição se um campo vier com o tipo errado.
+
+Nenhuma das duas é o que este livro usa daqui para frente — `StockPrice` como `NamedTuple` já é o suficiente para o que resta do capítulo.
 :::

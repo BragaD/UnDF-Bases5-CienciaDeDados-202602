@@ -4,7 +4,138 @@
 Esta seção corresponde a *Using APIs*, do capítulo 9 de @grus2019.
 :::
 
-::: {.callout-warning}
-## Em construção
-O conteúdo desta seção ainda será escrito.
+Muitos sites e serviços web oferecem **interfaces de programação de aplicações** (APIs), que permitem pedir dado explicitamente, num formato estruturado. Isso poupa o trabalho de raspar — a página pode mudar de layout a qualquer momento, mas uma API bem versionada não muda o formato da resposta sem aviso.
+
+## JSON e XML
+
+Como HTTP é um protocolo para transferir *texto*, o dado que se pede por uma API web precisa ser **serializado** em alguma forma de string. Frequentemente essa serialização usa **JSON** (*JavaScript Object Notation*). Objetos JavaScript se parecem bastante com `dict`s do Python, o que torna sua representação em string fácil de interpretar:
+
+```json
+{ "title" : "Data Science Book",
+  "author" : "Joel Grus",
+  "publicationYear" : 2019,
+  "topics" : [ "data", "science", "data science"] }
+```
+
+Dá para interpretar JSON usando o módulo `json` do Python. Em particular, vamos usar sua função `loads`, que desserializa uma string representando um objeto JSON, transformando-a num objeto Python:
+
+```{python}
+#| label: parse-json
+import json
+
+serialized = """{ "title" : "Data Science Book",
+                  "author" : "Joel Grus",
+                  "publicationYear" : 2019,
+                  "topics" : [ "data", "science", "data science"] }"""
+
+# interpreta o JSON para criar um dict Python
+deserialized = json.loads(serialized)
+assert deserialized["publicationYear"] == 2019
+assert "data science" in deserialized["topics"]
+
+deserialized
+```
+
+Às vezes um provedor de API só entrega respostas em **XML**:
+
+```xml
+<Book>
+  <Title>Data Science Book</Title>
+  <Author>Joel Grus</Author>
+  <PublicationYear>2014</PublicationYear>
+  <Topics>
+    <Topic>data</Topic>
+    <Topic>science</Topic>
+    <Topic>data science</Topic>
+  </Topics>
+</Book>
+```
+
+Dá para usar o Beautiful Soup — o mesmo da [seção anterior](03-raspando-a-web.qmd) — para extrair dado de XML de forma parecida com o que fizemos com HTML; consulte a documentação para os detalhes.
+
+## Usando uma API sem autenticação
+
+A maioria das APIs hoje em dia exige que você se autentique antes de poder usá-las. Não é capricho dos provedores, mas cobra um bom tanto de código repetitivo que atrapalha a exposição do que interessa. Por isso vamos primeiro olhar a **API do GitHub**, com a qual dá para fazer algumas coisas simples sem autenticação — o bastante, por exemplo, para o VP de Engenharia da DataSciencester descobrir em que dias a equipe mais costuma criar repositórios novos.
+
+A busca em si é uma requisição HTTP:
+
+```{python}
+#| eval: false
+#| label: api-github-busca
+import requests, json
+
+github_user = "joelgrus"
+endpoint = f"https://api.github.com/users/{github_user}/repos"
+
+repos = json.loads(requests.get(endpoint).text)
+```
+
+::: {.callout-important}
+## Por que a busca no GitHub não roda aqui
+
+`requests.get(endpoint)` é uma requisição de verdade, e diferente da seção anterior não há aqui um arquivo vendorizado para substituí-la: a resposta é a lista de repositórios da conta `joelgrus` **no momento em que a requisição roda**. Fixar uma cópia antiga do resultado seria fingir uma resposta que a API já não dá mais.
+:::
+
+O que vem depois de `repos` existir, porém, é Python puro sobre uma lista de `dict`s — nenhuma linha daqui para baixo toca rede. As datas na resposta chegam como strings, por exemplo `"created_at": "2013-07-05T02:02:28Z"`, e Python não vem com um bom parser de datas embutido; por isso este projeto instala o `python-dateutil`, do qual você provavelmente só vai precisar da função `dateutil.parser.parse`.
+
+Para ver esse processamento rodando de verdade, eis um `repos` inventado, no mesmo formato que a API devolveria — os cinco repositórios (fictícios) do time de engenharia da DataSciencester:
+
+```{python}
+#| label: api-github-analise
+from collections import Counter
+from dateutil.parser import parse
+
+repos = [
+    {"name": "grafo-de-amizades", "language": "Python",
+     "created_at": "2024-03-14T09:12:00Z", "pushed_at": "2024-11-02T17:40:00Z"},
+    {"name": "painel-de-metricas", "language": "JavaScript",
+     "created_at": "2024-03-21T14:05:00Z", "pushed_at": "2024-10-15T08:22:00Z"},
+    {"name": "modelo-de-recomendacao", "language": "Python",
+     "created_at": "2024-06-02T11:47:00Z", "pushed_at": "2024-11-20T13:10:00Z"},
+    {"name": "relatorios-mensais", "language": "R",
+     "created_at": "2024-07-19T16:30:00Z", "pushed_at": "2024-09-05T10:00:00Z"},
+    {"name": "api-interna", "language": "Python",
+     "created_at": "2024-09-08T08:55:00Z", "pushed_at": "2024-11-25T19:03:00Z"},
+]
+
+# Em que meses e dias da semana a equipe mais costuma criar repositórios?
+dates = [parse(repo["created_at"]) for repo in repos]
+month_counts = Counter(date.month for date in dates)
+weekday_counts = Counter(date.weekday() for date in dates)
+
+# E em que linguagem estão os repositórios modificados mais recentemente?
+last_5_repositories = sorted(repos,
+                             key=lambda r: r["pushed_at"],
+                             reverse=True)[:5]
+
+last_5_languages = [repo["language"] for repo in last_5_repositories]
+
+month_counts, weekday_counts, last_5_languages
+```
+
+Contra a API de verdade `repos` teria dezenas ou centenas de entradas em vez de cinco, mas a lógica que extrai mês, dia da semana e linguagem é exatamente esta — rodando sobre um `dict` Python comum, o mesmo tipo de dado que você manipulou o livro inteiro, só que aqui veio de uma API em vez de estar escrito à mão no código.
+
+O formato em que o dado chega já é uma decisão que ecoa adiante: JSON quebrado em campos como `language` e `created_at` deixa pronto exatamente o tipo de [atributo](../cap08/06-extracao-e-selecao-de-atributos.qmd) que um modelo consegue usar — uma API que devolvesse só um parágrafo de texto livre sobre cada repositório teria deixado bem menos pronto.
+
+Normalmente, você não vai trabalhar com APIs neste nível baixo de "montar a requisição e interpretar a resposta na mão". Um dos benefícios de usar Python é que alguém provavelmente já escreveu uma biblioteca para praticamente qualquer API que interesse. Quando essas bibliotecas são bem feitas, elas poupam bastante trabalho de descobrir os detalhes mais espinhosos do acesso à API. (Quando não são bem feitas, ou quando ficam desatualizadas em relação à versão real da API que envolvem, elas podem causar dores de cabeça enormes.)
+
+Mesmo assim, eventualmente você vai precisar escrever sua própria biblioteca de acesso a alguma API (ou, mais provavelmente, depurar por que a de outra pessoa não está funcionando) — então vale conhecer alguns desses detalhes.
+
+## Encontrando APIs
+
+Para uma API específica, vale checar se já existe uma biblioteca Python pronta antes de montar as chamadas na mão: sites como Yelp, Instagram e Spotify têm as suas próprias, e o [Real Python](https://realpython.com/), um site de tutoriais Python, mantém uma lista de *wrappers* conhecidos. Quando não existe nenhuma, sempre resta a raspagem — o último recurso do cientista de dados, coberto na [seção anterior](03-raspando-a-web.qmd).
+
+::: {.callout-tip collapse="true"}
+## Na prática: bibliotecas de acesso a APIs
+
+O padrão `requests.get` + `json.loads` que você acabou de escrever é exatamente o que uma biblioteca de acesso a API encapsula. `PyGithub`, por exemplo, faz para a API do GitHub o que você faria à mão acima, só que devolvendo objetos Python tipados (`repo.created_at` já vem como `datetime`, não como string) em vez de `dict`s crus:
+
+```python
+from github import Github
+
+g = Github()
+repos = g.get_user("joelgrus").get_repos()
+```
+
+O que essas bibliotecas escondem é justamente a parte chata: paginação (a maioria das APIs devolve resultados em páginas de 20 ou 100 itens, e alguém precisa pedir a próxima), limite de taxa (a maioria impõe um número máximo de requisições por hora, e passar do limite derruba sua aplicação até o limite resetar) e nova tentativa em caso de falha de rede transitória. Nenhuma dessas preocupações aparece nos exemplos deste capítulo — eles fazem uma chamada só —, mas qualquer coisa que colete dado de uma API em produção precisa lidar com as três. A [próxima seção](05-exemplo-apis-do-twitter.qmd) mostra outra peça desse quebra-cabeça: autenticação.
 :::

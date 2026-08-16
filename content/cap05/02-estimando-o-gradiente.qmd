@@ -4,7 +4,138 @@
 Esta seção corresponde a *Estimating the Gradient*, do capítulo 8 de @grus2019.
 :::
 
+Se $f$ é uma função de uma variável, sua derivada num ponto $x$ mede o quanto $f(x)$ muda quando fazemos uma variação muito pequena em $x$. Ela é definida como o limite dos quocientes de diferença:
+
+$$f'(x) = \lim_{h \to 0} \frac{f(x + h) - f(x)}{h}$$
+
+Em código:
+
+```{python}
+#| label: difference-quotient
+from typing import Callable
+
+def difference_quotient(f: Callable[[float], float],
+                        x: float,
+                        h: float) -> float:
+    return (f(x + h) - f(x)) / h
+```
+
+Não vamos precisar da definição formal de limite: aqui, "limite" é o valor do qual a expressão se aproxima conforme `h` encolhe.
+
+A derivada é a inclinação da reta tangente em $(x, f(x))$, enquanto o quociente de diferença é a inclinação da reta secante que passa por $(x, f(x))$ e $(x+h, f(x+h))$ — a reta "quase tangente". Conforme `h` fica menor, a reta secante se aproxima cada vez mais da tangente.
+
+Para muitas funções é fácil calcular a derivada exatamente. Por exemplo, a função `square`:
+
+```{python}
+#| label: square-derivative
+def square(x: float) -> float:
+    return x * x
+
+def derivative(x: float) -> float:
+    return 2 * x
+```
+
+tem derivada `2 * x`, o que é fácil de conferir calculando explicitamente o quociente de diferença e tomando o limite.
+
+## Quando calcular a derivada não é uma opção
+
+E se você não pudesse (ou não quisesse) achar a derivada? Embora não dê para tomar limites em Python, dá para *estimar* derivadas avaliando o quociente de diferença para um `h` bem pequeno:
+
+```{python}
+#| label: checa-estimativa
+difference_quotient(square, 3, h=0.001), derivative(3)
+```
+
+A estimativa fica bem perto do valor exato. Mas "perto" depende inteiramente da escolha de `h` — e existe um jeito errado de escolher `h`, que vale a pena ver antes de seguir em frente.
+
+Para `square`, $\frac{(x+h)^2 - x^2}{h} = 2x + h$: matematicamente, a estimativa erra por exatamente `h`, não importa o `x`. Quanto menor o `h`, menor o erro — em teoria, sem limite. Na prática, `h` é um número de ponto flutuante, e ponto flutuante tem precisão finita. Se `h` for pequeno demais *em relação a* `x`, a soma `x + h` perde dígitos ao ser arredondada para o `float` mais próximo — no limite, `x + h` arredonda de volta para o próprio `x`, `f(x+h) - f(x)` vira exatamente `0`, e a estimativa desaba para `0`, não importa quão perto do zero `h` esteja.
+
+```{python}
+#| label: fig-erro-vs-h
+#| fig-cap: "Erro da estimativa por diferença finita em função de h, para square(x) = x² em x = 3 (escala log-log)"
+x0 = 3.0
+exato = derivative(x0)
+
+hs = [10 ** (-k / 4) for k in range(65)]  # h de 1 a 1e-16, log-espaçado
+erros = [abs(difference_quotient(square, x0, h) - exato) for h in hs]
+
+from matplotlib import pyplot as plt
+
+plt.plot(hs, erros, 'o-', markersize=3)
+plt.xscale('log')
+plt.yscale('log')
+plt.xlabel('h')
+plt.ylabel('erro |estimativa − derivada exata|')
+plt.show()
+```
+
+O gráfico tem forma de U. Do lado direito (`h` grande), o erro cai junto com `h` numa reta limpa — é o erro de truncamento que acabamos de derivar, `erro ≈ h`, e a inclinação 1 em escala log-log é exatamente essa relação. Isso continua até `h` chegar perto de `10⁻⁸`, onde o erro atinge um vale. Do lado esquerdo desse vale, encolher `h` **piora** a estimativa — mas não numa curva lisa: o erro sobe aos trancos, com picos e quedas, porque só existe um punhado de valores de `float` distintos entre `x` e `x + h` nessa faixa, e qual deles a soma arredonda para depende de detalhes de bit que mudam de `h` para `h`. O que é liso é a tendência: o piso do serrilhado sobe, até bater no teto — um erro de `6`, ou seja, uma estimativa de `0` — quando `h` fica menor do que a precisão de `double` consegue distinguir de `x`.
+
 ::: {.callout-warning}
-## Em construção
-O conteúdo desta seção ainda será escrito.
+## `h` pequeno demais não é mais preciso — é ruído
+
+O ponto mais baixo do U não é `h → 0`. Fica por volta de `10⁻⁸`, perto de $\sqrt{\epsilon_{\text{máquina}}}$ (a raiz quadrada do épsilon de máquina de um `double`, cerca de `2,2 × 10⁻¹⁶`) — um resultado clássico de análise numérica, não uma peculiaridade deste exemplo. Antes desse ponto, quem domina é o erro de truncamento (`h` grande demais para a aproximação linear valer); depois dele, quem domina é o cancelamento catastrófico (`h` pequeno demais para `x + h` ser representado sem perder informação).
+
+Os valores de `h` usados neste capítulo — `0.001` na comparação acima, `0.0001` como padrão de `estimate_gradient`, logo adiante — não foram escolhidos por acaso: estão bem à direita do fundo do U, longe o bastante do cancelamento para sobrar margem, e ainda assim pequenos o bastante para o erro de truncamento ser desprezível.
+:::
+
+## Derivadas parciais, em várias dimensões
+
+Quando $f$ é uma função de muitas variáveis, ela tem múltiplas **derivadas parciais**, cada uma indicando como $f$ muda quando fazemos uma pequena mudança numa única variável de entrada.
+
+Calculamos a $i$-ésima derivada parcial tratando $f$ como uma função de apenas sua $i$-ésima variável, mantendo as outras fixas:
+
+```{python}
+#| label: partial-difference-quotient
+from scratch.linear_algebra import Vector
+
+def partial_difference_quotient(f: Callable[[Vector], float],
+                                v: Vector,
+                                i: int,
+                                h: float) -> float:
+    """Retorna o i-ésimo quociente de diferença parcial de f em v"""
+    w = [v_j + (h if j == i else 0)    # soma h só ao i-ésimo elemento de v
+         for j, v_j in enumerate(v)]
+
+    return (f(w) - f(v)) / h
+```
+
+depois do que podemos estimar o gradiente da mesma forma:
+
+```{python}
+#| label: estimate-gradient
+def estimate_gradient(f: Callable[[Vector], float],
+                      v: Vector,
+                      h: float = 0.0001):
+    return [partial_difference_quotient(f, v, i, h)
+            for i in range(len(v))]
+
+from scratch.linear_algebra import dot
+
+def sum_of_squares(v: Vector) -> float:
+    return dot(v, v)
+
+estimate_gradient(sum_of_squares, [3.0, 4.0, 5.0])  # exato seria [6, 8, 10]
+```
+
+Uma cópia do código do livro-texto que mora dentro deste repositório (`scratch/gradient_descent.py`) também define `estimate_gradient`, mas lá `partial_difference_quotient` vive dentro de uma função de demonstração e não é visível fora dela — importar funciona, chamar estoura com `NameError`. Por isso escrevemos as duas por conta própria aqui; a [seção 5.4](04-escolhendo-o-tamanho-do-passo.qmd) explica como o resto do capítulo reaproveita código entre seções.
+
+Um problema sério dessa abordagem de "estimar usando quocientes de diferença" é que ela é computacionalmente cara. Se `v` tem tamanho `n`, `estimate_gradient` precisa avaliar `f` em `2n` entradas diferentes. Se você está estimando gradientes repetidamente, está fazendo bastante trabalho extra. Em tudo o que fizermos daqui para frente, vamos usar matemática para calcular nossas funções de gradiente explicitamente, em vez de estimá-las.
+
+::: {.callout-tip collapse="true"}
+## Na prática: diferenciação automática
+
+O `estimate_gradient` que você acabou de escrever tem um equivalente pronto:
+
+```python
+from scipy.optimize import approx_fprime
+
+approx_fprime(v, f, epsilon=1e-4)
+```
+
+Mesma ideia, mesma conta — quociente de diferença, uma dimensão de cada vez, com o mesmo compromisso do U que você acabou de ver: `epsilon` grande demais trunca, pequeno demais cancela.
+
+Mas sistemas de aprendizado de máquina reais quase nunca estimam gradientes assim. Eles usam **diferenciação automática** (*autodiff*): em vez de perturbar cada entrada e reavaliar a função do zero, o framework registra cada operação aritmética feita e aplica a regra da cadeia de trás para frente, obtendo o gradiente **exato** — não uma estimativa, e portanto sem o compromisso truncamento/cancelamento acima — a um custo próximo ao de uma única avaliação da função, não `2n` delas. É o que `torch.autograd` (PyTorch) e `jax.grad` (JAX) fazem, e é o mecanismo por trás da palavra *backpropagation*, que reaparece nos capítulos sobre [redes neurais](../cap15/index.qmd) e [deep learning](../cap16/index.qmd).
+
+A diferença importa em escala: uma rede com um milhão de parâmetros levaria `estimate_gradient` a avaliar a função dois milhões de vezes a cada passo. Autodiff faz isso em uma passada.
 :::

@@ -4,7 +4,255 @@
 Esta seção corresponde a *Reading Files*, do capítulo 9 de @grus2019.
 :::
 
+A seção anterior encadeava programas pelo terminal, algo tão efêmero quanto o pipe que os liga. Menos efêmero é o disco: dá para ler e escrever arquivos diretamente no código, e Python torna isso simples.
+
+::: {.callout-note}
+## Onde os arquivos de exemplo desta seção vivem
+
+Os arquivos que aparecem abaixo (`email_addresses.txt`, `tab_delimited_stock_prices.txt` etc.) são inventados para ilustrar, e criamos e apagamos todos num diretório temporário:
+
+```{python}
+#| label: prepara-diretorio-temporario
+import tempfile
+from pathlib import Path
+
+pasta = Path(tempfile.mkdtemp(prefix="cap06-"))
+pasta
+```
+:::
+
+## Fundamentos de arquivos de texto
+
+O primeiro passo para trabalhar com um arquivo de texto é obter um *objeto arquivo* com `open`:
+
+```python
+# 'r' significa somente leitura; é o padrão se você não especificar nada
+file_for_reading = open('reading_file.txt', 'r')
+file_for_reading2 = open('reading_file.txt')
+
+# 'w' é escrita -- destrói o arquivo se ele já existir!
+file_for_writing = open('writing_file.txt', 'w')
+
+# 'a' é anexação -- para adicionar ao final do arquivo
+file_for_appending = open('appending_file.txt', 'a')
+
+# não esqueça de fechar os arquivos quando terminar
+file_for_writing.close()
+```
+
+Como é fácil esquecer de fechar um arquivo, o jeito certo é sempre abri-lo dentro de um bloco `with`, que fecha automaticamente ao final:
+
+```{python}
+#| label: with-basico
+with open(pasta / 'exemplo.txt', 'w') as f:
+    f.write("primeira linha\nsegunda linha\n")
+
+with open(pasta / 'exemplo.txt') as f:
+    conteudo = f.read()
+
+conteudo
+```
+
+`with` é um **gerenciador de contexto**: garante que `f.close()` roda ao sair do bloco, mesmo que uma exceção interrompa o processamento no meio do caminho. Não há mágica nova aqui além do que o [Capítulo 2](../cap02/02-funcoes-strings-excecoes.qmd) já ensinou sobre exceções — o `with` só garante a limpeza independentemente de o bloco terminar bem ou terminar por um `except`.
+
+Se você precisa ler um arquivo de texto inteiro, basta iterar sobre as linhas com `for`:
+
+```{python}
+#| label: le-linha-a-linha
+import re
+
+with open(pasta / 'exemplo2.txt', 'w') as f:
+    f.write("# título\nlinha normal\n# outro comentário\nmais uma linha\n")
+
+starts_with_hash = 0
+with open(pasta / 'exemplo2.txt') as f:
+    for line in f:                    # olha cada linha do arquivo
+        if re.match("^#", line):      # usa uma regex para ver se começa com '#'
+            starts_with_hash += 1     # se começa, soma 1 à contagem
+
+starts_with_hash
+```
+
+O `re.match` ancora no começo da string — a mesma distinção entre `match` e `search` que o [Capítulo 2](../cap02/06-ferramentas-e-tipos.qmd) já cobriu. E iterar assim sobre `f` é o mesmo padrão de gerador da seção anterior: cada `for line in f` produz uma linha por vez, sem carregar o arquivo inteiro na memória de uma vez — o que importa quando o arquivo tem gigabytes.
+
+Toda linha lida desse jeito termina com um caractere de nova linha, então normalmente você vai querer aplicar `.strip()` nela antes de fazer qualquer coisa. Um exemplo: imagine um arquivo com um endereço de e-mail por linha, e você quer montar um histograma dos domínios. A regra para extrair um domínio corretamente é sutil — ela erra em endereços como `joel@m.datasciencester.com` —, mas uma primeira aproximação razoável é pegar tudo depois do `@`:
+
+```{python}
+#| label: dominios-email
+from collections import Counter
+
+with open(pasta / 'email_addresses.txt', 'w') as f:
+    f.write("joelgrus@gmail.com\n")
+    f.write("joel@m.datasciencester.com\n")
+    f.write("joelgrus@m.datasciencester.com\n")
+
+def get_domain(email_address: str) -> str:
+    """Separa por '@' e devolve o último pedaço"""
+    return email_address.lower().split("@")[-1]
+
+# alguns testes
+assert get_domain('joelgrus@gmail.com') == 'gmail.com'
+assert get_domain('joel@m.datasciencester.com') == 'm.datasciencester.com'
+
+with open(pasta / 'email_addresses.txt', 'r') as f:
+    domain_counts = Counter(get_domain(line.strip())
+                            for line in f
+                            if "@" in line)
+
+domain_counts
+```
+
+## Arquivos delimitados
+
+O arquivo de e-mails tinha um endereço por linha. Mais frequentemente você vai lidar com arquivos que têm vários campos por linha, quase sempre separados por vírgula ou por tabulação — o formato em que o VP de Receita da DataSciencester manda a cotação diária de ações de outro time, por exemplo, sempre que precisa que alguém cruze aquilo com os números da casa.
+
+Em princípio dá para processar esses arquivos lendo linha a linha e cortando pelo separador, mas isso complica rápido quando algum campo contém o próprio caractere separador, ou uma quebra de linha. **Por essa razão, nunca faça o parsing na mão** — use o módulo `csv` da biblioteca padrão (ou o `pandas`, coberto no callout de fechamento desta seção).
+
+Se o arquivo não tem cabeçalho, `csv.reader` itera sobre as linhas já divididas em listas:
+
+```{python}
+#| label: le-tsv
+import csv
+
+with open(pasta / 'tab_delimited_stock_prices.txt', 'w') as f:
+    f.write("6/20/2014\tAAPL\t90.91\n")
+    f.write("6/20/2014\tMSFT\t41.68\n")
+    f.write("6/20/2014\tFB\t64.5\n")
+    f.write("6/19/2014\tAAPL\t91.86\n")
+    f.write("6/19/2014\tMSFT\t41.51\n")
+    f.write("6/19/2014\tFB\t64.34\n")
+
+def process(date: str, symbol: str, closing_price: float) -> None:
+    # imagine que esta função faz alguma coisa de verdade
+    assert closing_price > 0.0
+
+with open(pasta / 'tab_delimited_stock_prices.txt') as f:
+    tab_reader = csv.reader(f, delimiter='\t')
+    for row in tab_reader:
+        date = row[0]
+        symbol = row[1]
+        closing_price = float(row[2])
+        process(date, symbol, closing_price)
+
+"processado sem erro"
+```
+
+É exatamente este `csv.reader`, com a mesma assinatura, que reaparece no [Capítulo 9](../cap09/02-exemplo-o-dataset-iris.qmd) lendo `dados/iris.data` linha a linha — o mesmo padrão, só que os campos são medidas de flor em vez de preços de ação.
+
 ::: {.callout-warning}
-## Em construção
-O conteúdo desta seção ainda será escrito.
+## Linhas malformadas não avisam sozinhas
+
+`float(row[2])` confia que o terceiro campo é sempre um número. Dados reais quebram essa promessa o tempo todo — um valor ausente, um "N/D", um campo cortado pela metade. Sem tratamento, uma única linha ruim derruba o processamento do arquivo inteiro.
+
+O [Capítulo 2](../cap02/02-funcoes-strings-excecoes.qmd) já apresentou o padrão: capture a exceção específica que sabe tratar, não um `except:` pelado. Aplicado aqui, isso significa pular a linha malformada e seguir para a próxima, em vez de estourar:
+
+```{python}
+#| label: pula-linhas-malformadas
+with open(pasta / 'precos_com_erro.txt', 'w') as f:
+    f.write("6/20/2014\tAAPL\t90.91\n")
+    f.write("6/20/2014\tMSFT\tN/D\n")   # preço malformado
+    f.write("6/20/2014\tFB\t64.5\n")
+
+precos_validos = []
+linhas_puladas = 0
+
+with open(pasta / 'precos_com_erro.txt') as f:
+    tab_reader = csv.reader(f, delimiter='\t')
+    for row in tab_reader:
+        date, symbol, raw_price = row
+        try:
+            closing_price = float(raw_price)
+        except ValueError:
+            linhas_puladas += 1
+            continue
+        precos_validos.append((date, symbol, closing_price))
+
+precos_validos, linhas_puladas
+```
+
+Duas linhas processadas, uma pulada — e o programa não precisou saber de antemão que a linha do MSFT estava quebrada.
+:::
+
+Se o arquivo tem cabeçalho, dá para pular a primeira linha manualmente ou, melhor, usar `csv.DictReader`, que devolve cada linha como um `dict` com o cabeçalho como chaves:
+
+```{python}
+#| label: le-dictreader
+with open(pasta / 'colon_delimited_stock_prices.txt', 'w') as f:
+    f.write("date:symbol:closing_price\n")
+    f.write("6/20/2014:AAPL:90.91\n")
+    f.write("6/20/2014:MSFT:41.68\n")
+    f.write("6/20/2014:FB:64.5\n")
+
+with open(pasta / 'colon_delimited_stock_prices.txt') as f:
+    colon_reader = csv.DictReader(f, delimiter=':')
+    for dict_row in colon_reader:
+        date = dict_row["date"]
+        symbol = dict_row["symbol"]
+        closing_price = float(dict_row["closing_price"])
+        process(date, symbol, closing_price)
+
+"processado sem erro"
+```
+
+Mesmo que o arquivo não tenha cabeçalho, dá para usar `DictReader` passando as chaves como parâmetro `fieldnames`.
+
+Para escrever dados delimitados, use `csv.writer`:
+
+```{python}
+#| label: escreve-csv
+todays_prices = {'AAPL': 90.91, 'MSFT': 41.68, 'FB': 64.5}
+
+with open(pasta / 'comma_delimited_stock_prices.txt', 'w') as f:
+    csv_writer = csv.writer(f, delimiter=',')
+    for stock, price in todays_prices.items():
+        csv_writer.writerow([stock, price])
+
+(pasta / 'comma_delimited_stock_prices.txt').read_text()
+```
+
+`csv.writer` faz a coisa certa se os campos em si contiverem vírgulas. Um escritor feito à mão provavelmente não faria:
+
+```{python}
+#| label: bad-csv-nao-faca-isso
+resultados = [["test1", "success", "Monday"],
+              ["test2", "success, kind of", "Tuesday"],
+              ["test3", "failure, kind of", "Wednesday"],
+              ["test4", "failure, utter", "Thursday"]]
+
+# não faça isto!
+with open(pasta / 'bad_csv.txt', 'w') as f:
+    for row in resultados:
+        f.write(",".join(map(str, row)))  # pode ter vírgulas demais aqui dentro!
+        f.write("\n")                     # a linha também pode ter quebras de linha!
+
+print((pasta / 'bad_csv.txt').read_text())
+```
+
+::: {.callout-warning}
+Repare no que aconteceu: `"success, kind of"` tinha uma vírgula própria, e o arquivo resultante não tem como distinguir essa vírgula das que separam campos. Abrindo `bad_csv.txt` com qualquer leitor de CSV de verdade, a segunda linha vira **quatro** campos em vez de três — e não há mensagem de erro nenhuma avisando disso. É exatamente o tipo de bug silencioso que `csv.writer` existe para evitar.
+:::
+
+```{python}
+#| label: limpeza-arquivos-temporarios
+#| include: false
+import shutil
+shutil.rmtree(pasta, ignore_errors=True)
+```
+
+::: {.callout-tip collapse="true"}
+## Na prática: `pandas`
+
+O `pandas` é a biblioteca que a maioria de quem trabalha com dados usa para ler arquivos delimitados:
+
+```python
+import pandas as pd
+
+precos = pd.read_csv('tab_delimited_stock_prices.txt',
+                     sep='\t', header=None,
+                     names=['date', 'symbol', 'closing_price'])
+```
+
+Uma linha faz o que o `csv.reader` e o laço `for` acima fizeram juntos, e por padrão o `pandas` já tenta inferir o tipo de cada coluna — `closing_price` já sai como número, sem o `float(row[2])` manual.
+
+O que essa conveniência esconde: a inferência de tipos é uma heurística, não uma garantia. Uma coluna de códigos postais que por acaso são todos numéricos vira `int` silenciosamente, perdendo os zeros à esquerda; uma coluna majoritariamente numérica com um punhado de valores ausentes ou "N/D" pode virar `float` com `NaN` no lugar do texto, sem avisar. O `csv.reader` que você acabou de usar é mais verboso, mas cada conversão de tipo é uma linha que você escreveu e pode inspecionar — o preço da transparência de que fala o restante deste livro.
 :::

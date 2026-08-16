@@ -4,7 +4,75 @@
 Esta seção corresponde a *An Aside: tqdm*, do capítulo 10 de @grus2019.
 :::
 
-::: {.callout-warning}
-## Em construção
-O conteúdo desta seção ainda será escrito.
+Boa parte do que vem daqui para frente neste livro envolve cálculos que demoram — laços com dezenas de milhares de iterações, gradiente descendente rodando por centenas de passos. Quando um cálculo desses está em andamento, é bom saber que ele está de fato progredindo, e ter alguma ideia de quanto falta.
+
+Uma forma de fazer isso é a biblioteca `tqdm`, que gera barras de progresso configuráveis. Ela já está no ambiente deste livro — listada entre as dependências do `pyproject.toml`, junto com `matplotlib` e `scikit-learn` —, então não é preciso instalar nada.
+
+Há só duas coisas que você realmente precisa saber sobre ela. A primeira é que embrulhar um iterável em `tqdm.tqdm` produz uma barra de progresso:
+
+```{python}
+#| label: tqdm-basico
+#| warning: false
+import tqdm
+import random
+
+for i in tqdm.tqdm(range(100)):
+    # faz algo lento
+    _ = [random.random() for _ in range(1_000_000)]
+```
+
+O que aparece no terminal, ao vivo, é uma linha que se atualiza a cada iteração — algo como:
+
+```
+ 56%|███████████████                     | 56/100 [00:08<00:06,  6.49it/s]
+```
+
+Em particular, ela mostra que fração do laço já terminou, há quanto tempo está rodando, e quanto tempo ainda deve levar (a não ser que você esteja envolvendo um gerador, caso em que `tqdm` não tem como saber o tamanho total). Como este chunk usa `range`, `tqdm.tqdm` sabe o total de antemão e consegue estimar o tempo restante.
+
+::: {.callout-note}
+O chunk acima roda com `#| warning: false`. `tqdm` escreve a barra de progresso no fluxo de erro padrão (`stderr`), atualizando a mesma linha repetidamente — útil ao acompanhar ao vivo num terminal, mas repetitivo quando um notebook captura esse fluxo inteiro como saída de célula. A mesma opção já apareceu no [Capítulo 9](../cap09/03-a-maldicao-da-dimensionalidade.qmd), pela mesma razão.
+:::
+
+A segunda coisa é que dá para configurar a descrição da barra enquanto ela roda. Para isso, você precisa capturar o iterador do `tqdm` com um `with`. No caso de estarmos apenas envolvendo `range`, dá para usar diretamente `tqdm.trange`:
+
+```{python}
+#| label: primes-up-to
+#| warning: false
+from typing import List
+
+def primes_up_to(n: int) -> List[int]:
+    primes = [2]
+
+    with tqdm.trange(3, n) as t:
+        for i in t:
+            # i é primo se nenhum primo menor o divide
+            i_is_prime = not any(i % p == 0 for p in primes)
+            if i_is_prime:
+                primes.append(i)
+
+            t.set_description(f"{len(primes)} primos")
+
+    return primes
+
+my_primes = primes_up_to(100_000)
+
+len(my_primes)
+```
+
+Isso acrescenta uma descrição como a seguinte, com um contador que se atualiza conforme novos primos são encontrados:
+
+```
+5116 primos:  50%|████████               | 49529/99997 [00:03<00:03, 15905.90it/s]
+```
+
+::: {.exemplo}
+`primes_up_to` não é o algoritmo mais rápido possível para achar primos — para cada `i`, ele testa divisibilidade contra **todos** os primos já encontrados, não só os menores que $\sqrt{i}$. Isso é proposital: o ponto aqui não é otimizar a busca por primos, é ter um laço genuinamente lento para demonstrar `tqdm` em cima de algo real, em vez de um `time.sleep` artificial.
+:::
+
+Usar `tqdm` vai eventualmente deixar seu código um pouco instável — às vezes a tela redesenha mal, às vezes o laço trava de verdade. E se você acidentalmente aninhar um laço `tqdm` dentro de outro laço `tqdm`, coisas estranhas podem acontecer. Ainda assim, os benefícios costumam superar essas desvantagens, então vamos usá-lo sempre que tivermos cálculos que demoram — a começar pela próxima seção, onde `tqdm.trange` acompanha os passos do gradiente descendente ajustando a primeira componente principal.
+
+::: {.callout-tip collapse="true"}
+## Na prática: o que se faz com isso
+
+`tqdm` não é algo que uma biblioteca de modelagem substitui — ele é ferramenta de operação, não de cálculo, e continua sendo a escolha usada em produção para acompanhar laços Python comuns. O que muda fora deste livro é a integração: `tqdm.pandas()` registra uma barra de progresso para `DataFrame.progress_apply`, e frameworks de treinamento de rede neural (o assunto dos capítulos [15](../cap15/index.qmd) e [16](../cap16/index.qmd) deste livro) costumam ter uma barra de progresso embutida, no mesmo espírito, para acompanhar época por época de treino.
 :::

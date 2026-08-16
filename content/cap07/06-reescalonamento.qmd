@@ -4,7 +4,135 @@
 Esta seção corresponde a *Rescaling*, do capítulo 10 de @grus2019.
 :::
 
+Muitas técnicas são sensíveis à **escala** dos dados. Imagine um conjunto com altura e peso de centenas de cientistas de dados, e que você está tentando identificar agrupamentos de porte físico.
+
+Intuitivamente, gostaríamos que agrupamentos representassem pontos próximos entre si, o que significa que precisamos de alguma noção de distância entre pontos. Já temos uma função de distância euclidiana — do [Capítulo 4](../cap04/index.qmd) —, então uma abordagem natural é tratar pares (altura, peso) como pontos num espaço bidimensional. Considere as pessoas listadas abaixo:
+
+| Pessoa | Altura (polegadas) | Altura (centímetros) | Peso (libras) |
+|---|---|---|---|
+| A | 63 | 160 | 150 |
+| B | 67 | 170,2 | 160 |
+| C | 70 | 177,8 | 171 |
+
+Se medirmos altura em polegadas, o vizinho mais próximo de B é A:
+
+```{python}
+#| label: distancia-polegadas
+from scratch.linear_algebra import distance
+
+a_to_b = distance([63, 150], [67, 160])
+a_to_c = distance([63, 150], [70, 171])
+b_to_c = distance([67, 160], [70, 171])
+
+round(a_to_b, 2), round(a_to_c, 2), round(b_to_c, 2)
+```
+
+Só que, se medirmos altura em centímetros, o vizinho mais próximo de B passa a ser C:
+
+```{python}
+#| label: distancia-centimetros
+a_to_b = distance([160, 150], [170.2, 160])
+a_to_c = distance([160, 150], [177.8, 171])
+b_to_c = distance([170.2, 160], [177.8, 171])
+
+round(a_to_b, 2), round(a_to_c, 2), round(b_to_c, 2)
+```
+
 ::: {.callout-warning}
-## Em construção
-O conteúdo desta seção ainda será escrito.
+Nada mudou nos dados — A, B e C continuam as mesmas três pessoas. Só a **unidade** de uma das duas dimensões mudou, e isso bastou para inverter qual ponto é "mais próximo" de qual. Qualquer técnica baseada em distância — vizinhos mais próximos, incluído — está exposta a esse problema sempre que as dimensões não são comparáveis entre si.
+:::
+
+Obviamente é um problema se trocar a unidade pode mudar resultados desse jeito. Por essa razão, quando as dimensões não são comparáveis entre si, às vezes vamos **reescalonar** nossos dados, de modo que cada dimensão tenha média 0 e desvio padrão 1. Isso efetivamente elimina as unidades, convertendo cada dimensão em "desvios padrão a partir da média".
+
+Para começar, precisamos calcular a média e o desvio padrão de cada posição:
+
+```{python}
+#| label: import-statistics
+#| include: false
+from scratch.statistics import standard_deviation
+import matplotlib.pyplot as plt
+plt.close('all')
+```
+
+```{python}
+#| label: funcao-scale
+from typing import List, Tuple
+from scratch.linear_algebra import Vector, vector_mean
+
+def scale(data: List[Vector]) -> Tuple[Vector, Vector]:
+    """devolve a média e o desvio padrão de cada posição"""
+    dim = len(data[0])
+
+    means = vector_mean(data)
+    stdevs = [standard_deviation([vector[i] for vector in data])
+              for i in range(dim)]
+
+    return means, stdevs
+
+vectors = [[-3, -1, 1], [-1, 0, 1], [1, 1, 1]]
+means, stdevs = scale(vectors)
+
+assert means == [-1, 0, 1]
+assert stdevs == [2, 1, 0]
+means, stdevs
+```
+
+Repare na terceira posição: todo vetor tem 1 ali, então o desvio padrão é 0 — não há variação nenhuma para reescalonar.
+
+Com `means` e `stdevs`, podemos criar um novo conjunto de dados:
+
+```{python}
+#| label: funcao-rescale
+def rescale(data: List[Vector]) -> List[Vector]:
+    """
+    Reescalona os dados de entrada para que cada posição tenha
+    média 0 e desvio padrão 1. (Deixa uma posição como está se
+    o desvio padrão dela é 0.)
+    """
+    dim = len(data[0])
+    means, stdevs = scale(data)
+
+    # copia cada vetor
+    rescaled = [v[:] for v in data]
+
+    for v in rescaled:
+        for i in range(dim):
+            if stdevs[i] > 0:
+                v[i] = (v[i] - means[i]) / stdevs[i]
+
+    return rescaled
+
+rescale(vectors)
+```
+
+E, claro, vale testar que `rescale` faz o que achamos que faz:
+
+```{python}
+#| label: testa-rescale
+means, stdevs = scale(rescale(vectors))
+assert means == [0, 0, 1]
+assert stdevs == [1, 1, 0]
+```
+
+A terceira posição continua com desvio padrão 0 — `rescale` deliberadamente deixa em paz qualquer dimensão sem variação, em vez de dividir por zero.
+
+::: {.callout-important}
+Como sempre, é preciso usar julgamento. Se você pegasse um conjunto de dados grande e o filtrasse para conter só pessoas com altura entre 69,5 e 70,5 polegadas, é bem provável que a variação restante naquela dimensão seja só ruído — e talvez você não quisesse colocar o desvio padrão dela em pé de igualdade com o das outras dimensões. Reescalonar não é neutro: é uma decisão sobre o que conta como sinal.
+:::
+
+::: {.callout-tip collapse="true"}
+## Na prática: `scikit-learn`
+
+`scale` e `rescale` juntos são exatamente o `StandardScaler` do `scikit-learn`:
+
+```python
+from sklearn.preprocessing import StandardScaler
+
+escalonador = StandardScaler()
+dados_reescalonados = escalonador.fit_transform(dados)
+```
+
+`fit` calcula média e desvio padrão de cada coluna (o que você fez em `scale`); `transform` aplica a fórmula `(x - média) / desvio` (o que você fez em `rescale`); `fit_transform` faz as duas coisas em sequência. A separação entre `fit` e `transform` importa na prática: você ajusta o escalonador **só** nos dados de treino, e aplica a mesma transformação — as mesmas médias e desvios, calculados no treino — aos dados de teste. Se você recalculasse média e desvio em cima do conjunto de teste, estaria vazando informação dele para dentro do seu pipeline antes mesmo de avaliar o modelo.
+
+O `scikit-learn` também tem `MinMaxScaler`, que reescalona para um intervalo fixo (geralmente `[0, 1]`) em vez de média 0 e desvio padrão 1 — útil quando a distribuição dos dados está longe de normal e desvio padrão não é uma unidade natural para eles.
 :::

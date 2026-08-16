@@ -101,18 +101,13 @@ No macOS, o `make render` às vezes aborta com `ERROR: Directory not empty (os e
 
 A probabilidade cresce com o número de `*_files` criados numa rodada, ou seja, **piora conforme mais capítulos ganham figuras**. Ela é aleatória: cada tentativa aborta num arquivo diferente.
 
-O remédio, em ordem:
+**O `make render` já lida com isso sozinho.** O alvo apaga o lixo da tentativa anterior e repete, até seis vezes, e imprime `render OK (tentativa N)` quando converge. Você não precisa fazer nada — e **não deve** tentar contornar a corrida manualmente.
 
-```bash
-# 1. remova o lixo da tentativa anterior — ESTE é o passo que importa
-find content -name '*_files' -type d -exec rm -rf {} + 2>/dev/null
-find content -name '*.html' -type f -delete 2>/dev/null
+Isso não é conselho de estilo: um agente já ficou preso em laço por horas tentando entender um render que abortava, e a tentativa de contorná-lo à mão foi o que produziu o laço.
 
-# 2. renderize de novo, SEM limpar o _freeze
-make render
-```
+Se o `make render` falhar nas seis tentativas, aí **não** é a corrida do bind mount. Rode `docker compose run --rm --no-deps livro quarto render` direto para ver o erro real.
 
-**Não use `make clean` para isto.** Ele apaga o `_freeze/` junto, e aí todos os chunks reexecutam — o que aumenta a janela da corrida e torna a falha *mais* provável, não menos. Com o `_freeze` quente, poucos chunks rodam e o render converge, em geral na primeira retentativa. Medido: falhou três vezes seguidas com `_freeze` frio e passou de primeira com ele aquecido.
+**Nunca use `make clean` para tratar esse sintoma.** Ele apaga o `_freeze/` junto, e aí todos os chunks reexecutam — o que aumenta a janela da corrida e torna a falha *mais* provável, não menos. Medido: falhou três vezes seguidas com `_freeze` frio e passou de primeira com ele aquecido. É por isso que o alvo `render` nunca toca no `_freeze`.
 
 O CI **não** é afetado: lá o checkout é limpo e o sistema de arquivos é nativo do Linux, sem bind mount.
 

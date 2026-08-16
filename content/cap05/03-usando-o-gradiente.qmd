@@ -4,7 +4,91 @@
 Esta seção corresponde a *Using the Gradient*, do capítulo 8 de @grus2019.
 :::
 
-::: {.callout-warning}
-## Em construção
-O conteúdo desta seção ainda será escrito.
+Derivando à mão, a derivada parcial de $\sum_j v_j^2$ em relação a $v_i$ é $2v_i$ — a soma dos quadrados só depende de $v_i$ através do termo $v_i^2$, e a derivada de $x^2$ é $2x$. Confira contra a seção anterior: `estimate_gradient(sum_of_squares, [3.0, 4.0, 5.0])` devolveu `[6.0001, 8.0001, 10.0001]` — o exato `[6, 8, 10]`, que é $[2 \cdot 3, 2 \cdot 4, 2 \cdot 5]$, mais o `h` que a seção 5.2 previu. Daqui em diante calculamos gradientes assim, com a fórmula fechada — a estimativa numérica da seção anterior passa a ser o instrumento de **conferência**, não o de produção.
+
+É fácil ver, então, que a função `sum_of_squares` é mínima quando sua entrada `v` é um vetor de zeros. Mas imagine que não soubéssemos disso. Vamos usar gradientes para achar o mínimo entre todos os vetores tridimensionais. Vamos simplesmente escolher um ponto de partida aleatório e então dar passos pequenos na direção oposta ao gradiente, até chegar a um ponto em que o gradiente é muito pequeno:
+
+```{python}
+#| label: gradient-step
+import random
+from scratch.linear_algebra import Vector, distance, add, scalar_multiply
+
+def gradient_step(v: Vector, gradient: Vector, step_size: float) -> Vector:
+    """Anda `step_size` na direção do `gradient`, a partir de `v`"""
+    assert len(v) == len(gradient)
+    step = scalar_multiply(step_size, gradient)
+    return add(v, step)
+
+def sum_of_squares_gradient(v: Vector) -> Vector:
+    return [2 * v_i for v_i in v]
+```
+
+`gradient_step` é a peça inteira do capítulo — as duas linhas de código que fazem o trabalho. Dado um ponto `v`, um gradiente naquele ponto e um `step_size` — positivo para andar *com* o gradiente, negativo para andar *contra* ele —, ela devolve o próximo ponto.
+
+Repare que o sinal fica por conta de quem chama a função: é você que passa `-0.01` para descer. As bibliotecas de verdade (PyTorch, scikit-learn) escondem esse sinal — recebem um `learning_rate` **positivo** e embutem o `-1` por dentro. Se mais adiante você vir `lr=0.001` em código de produção, é o mesmo `step_size=-0.001` que vamos passar aqui, só que com o sinal de descida já aplicado por quem escreveu a biblioteca.
+
+Agora usamos as duas funções para minimizar `sum_of_squares`, partindo de um ponto aleatório e dando 1.000 passos pequenos na direção oposta ao gradiente:
+
+```{python}
+#| label: minimiza-sum-of-squares
+random.seed(0)
+
+# escolhe um ponto de partida aleatório
+v = [random.uniform(-10, 10) for i in range(3)]
+v
+```
+
+Aqui, *epoch* é só o nome que damos a cada iteração do laço — cada tentativa de melhorar `v` um pouco. A partir da [seção 5.5](05-ajustando-modelos.qmd), quando houver um conjunto de dados de verdade para percorrer, a palavra ganha um sentido mais específico: uma passagem completa por ele.
+
+```{python}
+#| label: fig-distancia-epoch
+#| fig-cap: "Distância de v à origem ao longo de 1000 epochs (escala log)"
+distancias = [distance(v, [0, 0, 0])]
+
+for epoch in range(1000):
+    grad = sum_of_squares_gradient(v)    # calcula o gradiente em v
+    v = gradient_step(v, grad, -0.01)    # dá um passo negativo na direção do gradiente
+    distancias.append(distance(v, [0, 0, 0]))
+
+assert distance(v, [0, 0, 0]) < 0.001    # v deve estar perto de 0
+
+from matplotlib import pyplot as plt
+
+plt.plot(range(len(distancias)), distancias)
+plt.yscale("log")
+plt.xlabel("epoch")
+plt.ylabel("distância de v até a origem")
+plt.show()
+```
+
+```{python}
+#| label: v-final
+v, distance(v, [0, 0, 0])
+```
+
+A semente fixa esconde o que importa: troque-a e o ponto de partida muda, mas o destino não — `v` termina praticamente na origem em qualquer partida.
+
+::: {.conceito}
+A curva acima é (quase) uma reta porque o eixo vertical está em escala logarítmica — e isso não é acidente.
+
+Cada componente de `v` é multiplicado pelo mesmo fator a cada passo: `gradient_step` calcula `v + step_size * gradient`, e como `sum_of_squares_gradient(v)` é `2 * v`, isso é `v + (-0.01) * (2 * v)`, ou seja, `v * 0.98`. A distância à origem, portanto, decai geometricamente com razão `0.98` por epoch — depois de 1.000 epochs, `0.98 ** 1000`, um número na casa de `10⁻⁹`, multiplicado pela distância inicial. Uma reta em escala log **é** decaimento geométrico.
+
+Essa é uma propriedade de `sum_of_squares` em particular — a maioria das funções que vamos minimizar neste livro não tem uma forma fechada tão simples assim para a taxa de convergência. Mas o padrão qualitativo (queda rápida no início, cada vez mais lenta perto do mínimo) é típico do gradiente descendente com passo fixo, e vai reaparecer.
+:::
+
+::: {.callout-tip collapse="true"}
+## Na prática: otimizadores prontos
+
+O que você acabou de escrever — calcule o gradiente, ande na direção oposta, repita — é, no fundo, o que qualquer otimizador de propósito geral faz. A versão de biblioteca:
+
+```python
+from scipy.optimize import minimize
+
+resultado = minimize(lambda v: sum(x**2 for x in v), x0=[6.9, 5.2, -1.6])
+resultado.x
+```
+
+A diferença não é a ideia — é a sofisticação da escolha de passo e de direção. `scipy.optimize.minimize`, por padrão, usa BFGS: além do gradiente, ele mantém uma aproximação da curvatura da função (uma aproximação da matriz Hessiana) para decidir não só a direção, mas um tamanho de passo razoável a cada iteração, com busca em linha para não passar do ponto. `gradient_step`, com passo fixo, não sabe nada sobre curvatura — funciona porque `sum_of_squares` é uma tigela bem-comportada.
+
+A versão simples que você escreveu reaparece, praticamente sem alteração, dentro de todo otimizador que você vai encontrar nos capítulos [11](../cap11/index.qmd), [12](../cap12/index.qmd), [13](../cap13/index.qmd), [15](../cap15/index.qmd) e [16](../cap16/index.qmd) deste livro. `gradient_step` não é uma versão de brinquedo de um otimizador de verdade — é o núcleo de um.
 :::
