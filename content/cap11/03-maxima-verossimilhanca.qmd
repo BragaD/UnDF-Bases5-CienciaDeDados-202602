@@ -10,7 +10,9 @@ Esta seção dá a justificativa que faltava: **estimação por máxima verossim
 
 ## O que é verossimilhança
 
-Comece de um jeito mais geral, sem regressão ainda. Imagine uma amostra de dados $v_1, \ldots, v_n$ vinda de uma distribuição que depende de um parâmetro desconhecido $\theta$ (theta). A probabilidade de observar exatamente essa amostra, dado $\theta$, é:
+Comece de um jeito mais geral, sem regressão ainda. Imagine uma amostra de dados $v_1, \ldots, v_n$ vinda de uma distribuição que depende de um parâmetro desconhecido $\theta$ (theta). Atenção ao nome: nas seções 11.2 e 5.5, `theta` era o vetor de parâmetros **do modelo** — inclinação e intercepto juntos; aqui, por seguir a notação usual de estatística, $\theta$ é o parâmetro desconhecido **da distribuição** de onde os dados vieram. É o mesmo papel — "aquilo que não se sabe e se quer estimar" — em dois contextos diferentes, e daqui a duas subseções os dois se encontram: o $\theta$ desta seção vai ser exatamente o par $(\alpha, \beta)$.
+
+A probabilidade de observar exatamente essa amostra, dado $\theta$, é:
 
 $$
 p(v_1, \ldots, v_n \mid \theta)
@@ -30,7 +32,7 @@ Isso vale tanto para distribuições discretas (onde $p$ é uma massa de probabi
 
 ## Aplicando à regressão
 
-Uma suposição comum sobre o modelo de regressão — e é uma suposição, feita de fora, não algo que os dados provem sozinhos — é que os erros $\varepsilon_i$ são normalmente distribuídos, com média 0 e algum desvio padrão $\sigma$ (conhecido). Não é uma suposição arbitrária: quando o erro é, de fato, a soma de muitos fatores pequenos e independentes — o humor do usuário naquele dia, o que mais estava competindo por atenção dele, um problema de rede — esse tipo de soma tende a se comportar como uma normal, mesmo sem nenhum dos fatores individuais ser normal. Mas continua sendo uma suposição, não uma consequência automática dos dados, e vale checá-la quando o modelo importa de verdade.
+Uma suposição comum sobre o modelo de regressão — e é uma suposição, feita de fora, não algo que os dados provem sozinhos — é que os erros $\varepsilon_i$ são normalmente distribuídos, com média 0 e um desvio padrão $\sigma$ **fixo, o mesmo para todos os pontos** — a dispersão em torno da reta não pode crescer conforme `x` cresce. (Essa segunda exigência tem nome: **homocedasticidade**. O [Capítulo 12](../cap12/index.qmd) volta a ela, porque é uma das suposições que se checa antes de confiar num erro padrão de coeficiente.) Não é uma suposição arbitrária: quando o erro é, de fato, a soma de muitos fatores pequenos e independentes — o humor do usuário naquele dia, o que mais estava competindo por atenção dele, um problema de rede — esse tipo de soma tende a se comportar como uma normal, mesmo sem nenhum dos fatores individuais ser normal. Mas continua sendo uma suposição, não uma consequência automática dos dados, e vale checá-la quando o modelo importa de verdade.
 
 Sob essa suposição, a verossimilhança de ver um único par $(x_i, y_i)$, dados candidatos $\alpha$ e $\beta$, é a densidade normal avaliada no erro daquele ponto:
 
@@ -74,16 +76,17 @@ Sob a suposição de que os erros são normais, o $(\alpha, \beta)$ que **maximi
 
 ## Vendo isso nos dados
 
-O argumento acima é sobre a forma da função, não sobre nenhum $\sigma$ específico — o resultado vale para qualquer $\sigma$ fixo, porque $\sigma$ nunca aparece na comparação entre candidatos. Ainda assim, ajuda ver a diferença de escala em números concretos. A [seção 11.1](01-o-modelo.qmd) já comparou o modelo de mínimos quadrados com o pior modelo linear razoável — sempre prever a média de `y`, ignorando `x` — para calcular R². Vamos reaproveitar essa comparação aqui:
+O argumento acima é sobre a forma da função, não sobre nenhum $\sigma$ específico — o resultado vale para qualquer $\sigma$ fixo, porque $\sigma$ nunca aparece na comparação entre candidatos. Ainda assim, ajuda ver a diferença de escala em números concretos. A [seção 11.1](01-o-modelo.qmd) já comparou o modelo de mínimos quadrados com o modelo de referência mais simples possível — sempre prever a média de `y`, ignorando `x` — para calcular R². Vamos reaproveitar essa comparação aqui:
 
 ```{python}
 #| label: importa-mle
 #| include: false
 from scratch.simple_linear_regression import (
-    sum_of_sqerrors, num_friends_good, daily_minutes_good,
+    error, sum_of_sqerrors, num_friends_good, daily_minutes_good,
     alpha, beta,
 )
 from scratch.statistics import mean
+import math
 import matplotlib.pyplot as plt
 plt.close('all')
 ```
@@ -100,6 +103,70 @@ S_minimos_quadrados, S_sempre_a_media
 
 O modelo de mínimos quadrados soma cerca de 13.197 de erro ao quadrado; sempre prever a média soma cerca de 19.670 — a mesma variação total que a seção 11.1 chamou de `total_sum_of_squares`. Qualquer que seja $\sigma$, o fator $\exp(-S/2\sigma^2)$ do modelo de mínimos quadrados é maior do que o do modelo "sempre a média", porque seu expoente é menos negativo: $S$ é bem menor. Sob a suposição de erros normais, os dados observados são muito mais prováveis com o $(\alpha, \beta)$ que a seção 11.1 encontrou do que com qualquer alternativa que ignore `x` — inclusive a mais simples de todas.
 
+## Por que ninguém calcula a verossimilhança direto
+
+A álgebra acima passou do produto para a exponencial da soma em uma linha, como se as duas expressões fossem intercambiáveis. Elas são — no papel. Num computador, não.
+
+Escreva as duas versões e compare. A primeira multiplica as 203 densidades normais, uma por ponto, exatamente como a fórmula do produto manda. A segunda usa $\log(ab) = \log a + \log b$ para trocar o produto por uma soma de logaritmos, e é a **log-verossimilhança**. Repare que ela não calcula a densidade para depois tirar o log: como o log de uma exponencial é o próprio expoente, o termo de cada ponto sai direto como $-e_i^2/2\sigma^2 - \log(\sqrt{2\pi}\,\sigma)$. O número minúsculo nunca chega a existir na memória.
+
+```{python}
+#| label: verossimilhanca-inline
+def verossimilhanca(alpha: float, beta: float, x, y, sigma: float) -> float:
+    """L(alpha, beta | dados, sigma): o produto das densidades normais."""
+    produto = 1.0
+    for x_i, y_i in zip(x, y):
+        e = error(alpha, beta, x_i, y_i)
+        produto *= (math.exp(-e ** 2 / (2 * sigma ** 2))
+                    / (math.sqrt(2 * math.pi) * sigma))
+    return produto
+
+def log_verossimilhanca(alpha: float, beta: float, x, y, sigma: float) -> float:
+    """log L: a mesma conta, com a soma dos logs no lugar do produto."""
+    return sum(-error(alpha, beta, x_i, y_i) ** 2 / (2 * sigma ** 2)
+               - math.log(math.sqrt(2 * math.pi) * sigma)
+               for x_i, y_i in zip(x, y))
+```
+
+Agora avalie as duas nos mesmos dois modelos que acabamos de comparar. Qualquer $\sigma$ fixo serve para o argumento; usamos 8, que é aproximadamente o tamanho do resíduo típico deste ajuste:
+
+```{python}
+#| label: verossimilhanca-underflow
+sigma = 8.0
+media = mean(daily_minutes_good)
+
+L_ajustado = verossimilhanca(alpha, beta,
+                             num_friends_good, daily_minutes_good, sigma)
+L_media = verossimilhanca(media, 0,
+                          num_friends_good, daily_minutes_good, sigma)
+
+print(f"L  (mínimos quadrados) = {L_ajustado!r}")
+print(f"L  (sempre a média)    = {L_media!r}")
+```
+
+```{python}
+#| label: log-verossimilhanca-valores
+logL_ajustado = log_verossimilhanca(alpha, beta,
+                                    num_friends_good, daily_minutes_good, sigma)
+logL_media = log_verossimilhanca(media, 0,
+                                 num_friends_good, daily_minutes_good, sigma)
+
+print(f"log L (mínimos quadrados) = {logL_ajustado:.4f}")
+print(f"log L (sempre a média)    = {logL_media:.4f}")
+print(f"diferença                 = {logL_ajustado - logL_media:.4f}")
+```
+
+::: {.callout-warning}
+## O produto certo é o número errado
+
+Olhe o que o produto direto devolveu. A verossimilhança do modelo de mínimos quadrados saiu na casa de $10^{-310}$ — abaixo de $2{,}2 \times 10^{-308}$, o menor `float64` **normal**. Ela ainda é representável, mas só como *subnormal*: uma faixa em que o ponto flutuante compra alcance vendendo precisão, e cada divisão por dois custa um bit de mantissa que não volta.
+
+E a verossimilhança do modelo "sempre a média" saiu **exatamente `0.0`**. Não é que ela seja zero — a fórmula é um produto de densidades, todas positivas, e a log-verossimilhança logo abaixo dá o valor: $e^{-762{,}345}$, isto é, algo perto de $10^{-331}$. Simplesmente não há expoente em `float64` que guarde isso, e o produto despencou para zero levando junto toda a informação. Com esse zero na mão, a comparação entre os dois modelos se degrada: `L_ajustado > L_media` ainda é verdade, mas só porque o outro escapou do zero por pouco; `L_media / L_ajustado` dá 0, e qualquer terceiro candidato pior também zeraria e ficaria empatado com este.
+
+A log-verossimilhança não tem esse problema. Os mesmos dois modelos dão −711,77 e −762,35: números perfeitamente confortáveis, com a diferença de 50,58 intacta e legível. Como `exp` é crescente, comparar log-verossimilhanças ordena os modelos exatamente como comparar verossimilhanças ordenaria — só que a conta existe.
+
+É a mesma armadilha, e a mesma saída, da [seção sobre *underflow* do Capítulo 10](../cap10/02-um-filtro-mais-sofisticado.qmd): lá eram milhares de probabilidades por palavra, aqui são 203 densidades normais. É por isso que a literatura fala em **maximizar a log-verossimilhança**, praticamente nunca em maximizar a verossimilhança: não é preferência de notação, é a única das duas que um computador consegue calcular.
+:::
+
 ## O que isso amarra
 
 Este capítulo montou o mesmo resultado três vezes, cada vez respondendo a uma pergunta diferente:
@@ -108,7 +175,9 @@ Este capítulo montou o mesmo resultado três vezes, cada vez respondendo a uma 
 - A [seção 11.2](02-usando-gradiente-descendente.qmd) respondeu **como** ajustar os mesmos parâmetros iterando, pelo caminho geral do [Capítulo 5](../cap05/index.qmd) — o caminho que continua funcionando mesmo quando a fórmula fechada desaparece.
 - Esta seção respondeu **por que** minimizar a soma dos erros ao quadrado, para começo de conversa, era a coisa certa a fazer.
 
-A suposição de erros normais é o que amarra as três. Quando ela deixa de valer — porque `y` não é mais uma quantidade contínua, mas sim uma decisão binária (sim ou não, comprou ou não comprou) —, o mesmo raciocínio de máxima verossimilhança continua de pé, mas a distribuição assumida para os dados muda, de normal para Bernoulli. É exatamente o que o [Capítulo 13](../cap13/index.qmd), sobre regressão logística, faz: a verossimilhança vira outra função, a perda deixa de ser soma de quadrados e passa a ser log-verossimilhança negativa, e — porque essa nova função não tem uma álgebra tão gentil quanto esta — a fórmula fechada desaparece de vez. O caminho da seção 11.2 é o único que sobra.
+A suposição de erros normais é o que amarra as três. O próximo capítulo mantém a suposição inteira e mexe em outro lugar: o [Capítulo 12](../cap12/index.qmd), sobre regressão múltipla, continua supondo erros normais de média zero e $\sigma$ fixo, e continua minimizando soma de quadrados — só troca uma variável explicativa por várias, e com isso ganha um problema novo, o de decidir quais variáveis merecem estar no modelo. Tudo o que esta seção justificou continua valendo lá, palavra por palavra.
+
+A suposição só cai um capítulo depois. Quando `y` deixa de ser uma quantidade contínua e vira uma decisão binária (sim ou não, comprou ou não comprou), o raciocínio de máxima verossimilhança continua de pé, mas a distribuição assumida para os dados muda, de normal para Bernoulli. É exatamente o que o [Capítulo 13](../cap13/index.qmd), sobre regressão logística, faz: a verossimilhança vira outra função, a perda deixa de ser soma de quadrados e passa a ser log-verossimilhança negativa — o mesmo espaço de log que acabamos de usar para escapar do *underflow* —, e, porque essa nova função não tem uma álgebra tão gentil quanto esta, a fórmula fechada desaparece de vez. O caminho da seção 11.2 é o único que sobra.
 
 ::: {.callout-tip collapse="true"}
 ## Na prática: o que se faz com isso

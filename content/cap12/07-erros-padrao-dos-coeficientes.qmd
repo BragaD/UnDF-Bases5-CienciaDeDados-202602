@@ -4,7 +4,200 @@
 Esta seção corresponde a *Standard Errors of Regression Coefficients*, do capítulo 15 de @grus2019.
 :::
 
+A [seção 12.5](05-qualidade-do-ajuste.qmd) precisava saber quanto confiar em cada coeficiente, e a via clássica exigia álgebra linear que este livro não construiu. A [seção 12.6](06-digressao-o-bootstrap.qmd) trouxe uma alternativa que não exige teoria nenhuma. Agora é só apontar uma para a outra.
+
+A ideia é literalmente a mesma da seção anterior, com `beta` no lugar da mediana: reamostramos os dados com reposição, reajustamos o modelo em cada reamostra e olhamos como cada coeficiente varia. Se o coeficiente de `num_amigos` mal se move entre as reamostras, temos boa razão para confiar nele. Se ele oscila muito, não temos.
+
+## Reamostrando pares
+
+Há uma única sutileza técnica. Não podemos reamostrar `inputs` e `daily_minutes_good` separadamente — isso embaralharia quais minutos pertencem a qual usuário. Precisamos reamostrar **pares** $(x_i, y_i)$ e desmontá-los depois:
+
+```{python}
+#| label: importa
+#| include: false
+import random
+random.seed(0)
+from scratch.multiple_regression import (
+    inputs, least_squares_fit, bootstrap_statistic,
+)
+from scratch.statistics import daily_minutes_good, standard_deviation
+import matplotlib.pyplot as plt
+plt.close('all')
+```
+
+```{python}
+#| label: estimate-sample-beta
+from typing import List, Tuple
+from scratch.linear_algebra import Vector
+
+learning_rate = 0.001
+
+def estimate_sample_beta(pairs: List[Tuple[Vector, float]]) -> Vector:
+    x_sample = [x for x, _ in pairs]
+    y_sample = [y for _, y in pairs]
+    return least_squares_fit(x_sample, y_sample, learning_rate, 5000, 25)
+```
+
+E então é uma chamada só:
+
+```{python}
+#| label: bootstrap-betas
+#| warning: false
+random.seed(0)   # para você obter os mesmos resultados
+
+# Isto leva mais de um minuto!
+bootstrap_betas = bootstrap_statistic(list(zip(inputs, daily_minutes_good)),
+                                      estimate_sample_beta,
+                                      100)
+
+len(bootstrap_betas), bootstrap_betas[0]
+```
+
+::: {.callout-note}
+Cem ajustes completos, cada um com 5.000 passos de gradiente descendente sobre 203 pontos, em Python puro. Isso leva cerca de **90 segundos** nesta renderização, e é o chunk mais caro deste capítulo.
+
+O custo é o preço do método, não um defeito da nossa implementação: o bootstrap **é** repetir a estimativa cem vezes. O próprio @grus2019 observa que estimativas melhores viriam de mais amostras e mais iterações por amostra, "mas não temos o dia inteiro".
+
+Vale ver o custo como informação, não como incômodo. Quando a estatística é barata — a mediana da seção anterior —, o bootstrap é praticamente gratuito e não há razão para não usá-lo. Quando ela é cara, o bootstrap multiplica esse custo por cem, e aí a fórmula fechada da abordagem clássica deixa de ser um luxo teórico e passa a ser a diferença entre um segundo e uma tarde.
+:::
+
+Com os 100 vetores em mãos, o erro padrão de cada coeficiente é o desvio padrão daquela coordenada:
+
+```{python}
+#| label: erros-padrao
+bootstrap_standard_errors = [
+    standard_deviation([beta[i] for beta in bootstrap_betas])
+    for i in range(4)]
+
+bootstrap_standard_errors
+```
+
+```{python}
+#| label: reajusta
+#| warning: false
+random.seed(0)
+beta = least_squares_fit(inputs, daily_minutes_good, learning_rate, 5000, 25)
+
+nomes = ["constante", "amigos", "horas de trabalho", "doutorado"]
+for nome, b, s in zip(nomes, beta, bootstrap_standard_errors):
+    print(f"{nome:20s} {b:8.4f}   ± {s:.4f}")
+```
+
+Os números já dizem a história antes de qualquer teste. O coeficiente de `amigos` é 0,975 com erro padrão de 0,103 — quase dez vezes maior que a própria incerteza. O de `doutorado` é 0,914 com erro padrão de 1,249: **a incerteza é maior que a estimativa**.
+
+```{python}
+#| label: fig-bootstrap-coeficientes
+#| fig-cap: "Distribuição dos 100 coeficientes bootstrap. A linha tracejada marca o zero."
+#| echo: false
+fig, axes = plt.subplots(1, 3, figsize=(11, 3.4))
+
+for ax, i, titulo in zip(axes, [1, 2, 3],
+                         ["amigos", "horas de trabalho", "doutorado"]):
+    coluna = [b[i] for b in bootstrap_betas]
+    ax.hist(coluna, bins=20, color='tab:blue', edgecolor='white')
+    ax.axvline(0, color='black', linestyle='--', linewidth=1.2)
+    ax.set_title(titulo, fontsize=10)
+    ax.set_xlabel("coeficiente")
+
+axes[0].set_ylabel("frequência")
+plt.tight_layout()
+plt.show()
+```
+
+O gráfico mostra o que a tabela resume. As distribuições de `amigos` e de `horas de trabalho` estão inteiramente de um lado do zero — nenhuma das 100 reamostras produziu um coeficiente de sinal trocado. A de `doutorado` atravessa o zero: uma boa parte das reamostras produziu um coeficiente **negativo**.
+
+```{python}
+#| label: cruza-zero
+for i, nome in zip([1, 2, 3], ["amigos", "horas de trabalho", "doutorado"]):
+    coluna = [b[i] for b in bootstrap_betas]
+    negativos = sum(1 for v in coluna if v < 0)
+    print(f"{nome:20s} de {min(coluna):7.3f} a {max(coluna):6.3f}   "
+          f"negativos: {negativos:3d} de 100")
+```
+
+## De erro padrão a valor-p
+
+O erro padrão permite testar a hipótese "$\beta_j$ é igual a 0". Sob essa hipótese nula — e sob as suposições sobre a distribuição de $\varepsilon_i$ —, a estatística
+
+$$
+t_j = \frac{\hat{\beta_j}}{\hat{\sigma_j}}
+$$
+
+(a estimativa do coeficiente dividida pela estimativa do erro padrão dele) segue uma distribuição *t* de Student com $n - k$ graus de liberdade.
+
+Não temos uma função `students_t_cdf`, e escrevê-la do zero seria uma digressão maior que este capítulo comporta. Mas conforme os graus de liberdade crescem, a *t* se aproxima cada vez mais de uma normal padrão — e com $n = 203$ e $k = 4$, essa aproximação é boa o bastante. Usamos a `normal_cdf` que já temos:
+
+```{python}
+#| label: valor-p
+from scratch.probability import normal_cdf
+
+def p_value(beta_hat_j: float, sigma_hat_j: float) -> float:
+    if beta_hat_j > 0:
+        # se o coeficiente é positivo, precisamos calcular o dobro da
+        # probabilidade de ver um valor ainda *maior*
+        return 2 * (1 - normal_cdf(beta_hat_j / sigma_hat_j))
+    else:
+        # caso contrário, o dobro da probabilidade de ver um valor *menor*
+        return 2 * normal_cdf(beta_hat_j / sigma_hat_j)
+
+assert p_value(30.58, 1.27)   < 0.001  # termo constante
+assert p_value(0.972, 0.103)  < 0.001  # amigos
+assert p_value(-1.865, 0.155) < 0.001  # horas de trabalho
+assert p_value(0.923, 1.249)  > 0.4    # doutorado
+```
+
+```{python}
+#| label: tabela-final
+print(f"{'variável':<20}{'coef.':>9}{'erro padrão':>14}{'t':>9}{'valor-p':>10}")
+for nome, b, s in zip(nomes, beta, bootstrap_standard_errors):
+    print(f"{nome:<20}{b:9.4f}{s:14.4f}{b/s:9.3f}{p_value(b, s):10.4f}")
+```
+
+::: {.conceito}
+O valor-p responde a: *se o coeficiente verdadeiro fosse exatamente zero, com que frequência o acaso da amostragem produziria uma estimativa tão distante de zero quanto a que eu obtive?*
+
+Para `amigos` e `horas de trabalho`, a resposta é "praticamente nunca" — esses efeitos são reais. Para `doutorado`, a resposta é "quase metade das vezes". Um coeficiente de 0,914 com erro padrão de 1,249 é perfeitamente compatível com um efeito verdadeiro de zero, e também com um efeito de $-1$ ou de $+3$. Não sabemos.
+:::
+
+## Por que justamente o doutorado
+
+Este resultado não deveria surpreender quem leu a [seção 12.2](02-hipoteses-do-minimos-quadrados.qmd). Lá medimos que `tem_doutorado` é quase determinado por `num_amigos`: abaixo de 6 amigos, o usuário tem doutorado; acima de 6, não tem. A única faixa em que os dois grupos coexistem é a de exatamente 6 amigos — 22 usuários dos 203.
+
+Isso é multicolinearidade quase perfeita, e o erro padrão de 1,249 é exatamente a forma como ela se manifesta. O modelo precisaria comparar pessoas com o mesmo número de amigos e formação diferente para separar os dois efeitos, e essa comparação só existe naqueles 22 usuários. Cada reamostra bootstrap sorteia um punhado diferente deles, e o coeficiente balança junto.
+
+::: {.callout-important}
+Repare no arco que se fechou aqui. A [seção 12.2](02-hipoteses-do-minimos-quadrados.qmd) apontou uma propriedade estrutural dos dados. A [seção 12.4](04-interpretando-o-modelo.qmd) explicou por que ela torna a frase "mantendo tudo o mais constante" vazia para aquele coeficiente. A [seção 12.5](05-qualidade-do-ajuste.qmd) mostrou que o R² é cego para esse tipo de problema. E o bootstrap, sem saber nada de nada disso — sem teoria, sem álgebra, sem sequer olhar para a matriz de correlações —, mediu o efeito no número que interessa.
+:::
+
 ::: {.callout-warning}
-## Em construção
-O conteúdo desta seção ainda será escrito.
+## O que um valor-p não é
+
+Três leituras erradas, todas comuns:
+
+- **"p = 0,46 prova que o doutorado não tem efeito."** Não prova. Prova que estes dados não conseguem distinguir o efeito de zero, o que é diferente. Ausência de evidência não é evidência de ausência — e neste caso sabemos até *por que* os dados não conseguem: eles quase não contêm a comparação necessária.
+- **"p < 0,05, então o efeito é importante."** Significância estatística é sobre distinguir de zero, não sobre tamanho. Com dados suficientes, um efeito de 0,001 minuto por amigo sairia com p < 0,001 e não teria a menor relevância prática.
+- **"testei vinte variáveis e uma deu p < 0,05."** Esperado: testando vinte variáveis inúteis a 5%, sai em média uma "significativa" por puro acaso. É o mesmo mecanismo que a [seção 12.5](05-qualidade-do-ajuste.qmd) mostrou com as vinte colunas de ruído, agora vestido de teste de hipótese.
+
+Testes mais elaborados — "pelo menos um dos $\beta_j$ é diferente de zero", ou "$\beta_1$ é igual a $\beta_2$" — existem, e o instrumento se chama teste *F*. Ele está fora do escopo deste livro, mas fica o nome para quando você precisar procurá-lo.
+:::
+
+::: {.callout-tip collapse="true"}
+## Na prática: `statsmodels`
+
+Esta é a única seção deste capítulo cujo fecho **não** é o `scikit-learn` — porque o `scikit-learn` simplesmente não faz isto. `LinearRegression` devolve `coef_` e nada mais: nem erro padrão, nem valor-p, nem intervalo de confiança. Não é uma omissão; é uma decisão de projeto. A biblioteca é feita para prever, e para prever esses números não servem.
+
+Quem faz é o `statsmodels`:
+
+```python
+import statsmodels.api as sm
+
+modelo = sm.OLS(daily_minutes_good, inputs).fit()   # inputs JÁ tem a coluna de 1
+print(modelo.summary())
+```
+
+`summary()` imprime, de uma vez, a tabela que nós montamos à mão: coeficiente, erro padrão, estatística *t*, valor-p e intervalo de confiança de 95% para cada variável — mais R², R² ajustado, estatística *F* e uma lista de avisos de diagnóstico. Repare que `sm.OLS` **espera** a coluna de 1 explícita, exatamente como o nosso código (há `sm.add_constant` para quem não a tem), e resolve por álgebra linear em vez de gradiente descendente.
+
+A diferença de fundo: os erros padrão do `statsmodels` vêm da **fórmula fechada**, sob a hipótese de erros normais independentes com variância constante. Os nossos vieram do bootstrap, que não assume nada disso. Nestes dados os dois caminhos chegam perto: @grus2019 registra, ao lado dos valores bootstrap, os erros exatos calculados pela fórmula — 1,19 / 0,080 / 0,127 / 0,998, contra os nossos 1,272 / 0,103 / 0,155 / 1,249. O bootstrap com apenas 100 reamostras superestima um pouco, e mais reamostras aproximariam os dois.
+
+O que interessa é o **padrão**, e ele é idêntico pelos dois caminhos: o erro do `doutorado` é uma ordem de grandeza maior que o de `amigos`, e maior que o próprio coeficiente. Quando os dois caminhos **não** concordam, geralmente é sinal de que alguma hipótese da fórmula não vale para aqueles dados — e aí é o bootstrap que merece mais crédito, porque ele nunca dependeu dela.
 :::

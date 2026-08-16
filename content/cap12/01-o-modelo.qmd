@@ -4,7 +4,130 @@
 Esta seção corresponde a *The Model*, do capítulo 15 de @grus2019.
 :::
 
-::: {.callout-warning}
-## Em construção
-O conteúdo desta seção ainda será escrito.
+A vice-presidente da DataSciencester ficou impressionada com o modelo do [Capítulo 11](../cap11/index.qmd), mas acha que dá para fazer melhor. E coletou mais dados para provar: agora sabemos, para cada usuário, **quantas horas por dia ele trabalha** e **se ele tem doutorado**.
+
+O modelo do capítulo anterior tinha uma variável explicativa:
+
+$$
+y_i = \alpha + \beta x_i + \varepsilon_i
+$$
+
+A generalização é imediata. Em vez de um único número $x_i$, cada entrada passa a ser um vetor de $k$ números, $x_{i1}, \ldots, x_{ik}$, e cada um deles ganha o próprio coeficiente:
+
+$$
+y_i = \alpha + \beta_1 x_{i1} + \cdots + \beta_k x_{ik} + \varepsilon_i
+$$
+
+No nosso caso concreto:
+
+$$
+\text{minutos} = \alpha + \beta_1 \,\text{amigos} + \beta_2 \,\text{horas de trabalho} + \beta_3 \,\text{doutorado} + \varepsilon
+$$
+
+## Uma variável que não é um número
+
+"Tem doutorado" não é uma quantidade — é sim ou não. Isso não é obstáculo: representamos a resposta como uma **variável indicadora** (o termo em inglês, *dummy variable*, é o que você vai encontrar na literatura), que vale 1 para quem tem doutorado e 0 para quem não tem. A partir daí ela é tão numérica quanto as outras, e o modelo não sabe nem precisa saber que aquela coluna representa uma categoria.
+
+::: {.callout-note}
+Duas armadilhas que essa codificação abre, e que vão importar mais adiante neste capítulo:
+
+- O coeficiente $\beta_3$ passa a ter uma leitura bem específica: é o efeito de **mudar de 0 para 1**, ou seja, a diferença média entre quem tem e quem não tem doutorado. Não faz sentido falar em "meio doutorado".
+- Se a categoria tivesse **três** valores em vez de dois — digamos, graduação, mestrado e doutorado —, uma única coluna com os códigos 0, 1 e 2 seria errada: ela imporia que a diferença entre graduação e mestrado é exatamente igual à diferença entre mestrado e doutorado, o que não há razão para supor. O caminho correto é uma coluna indicadora para cada categoria, **menos uma**. O porquê desse "menos uma" é o assunto da [seção 12.2](02-hipoteses-do-minimos-quadrados.qmd).
+:::
+
+## O truque da coluna de 1
+
+Em regressão múltipla, o conjunto de parâmetros é tratado como um vetor único, chamado $\beta$. Queremos que ele inclua também o termo constante — o que no capítulo anterior se chamava $\alpha$ —, e o jeito de conseguir isso é acrescentar aos dados uma coluna cheia de 1:
+
+```python
+beta = [alpha, beta_1, ..., beta_k]
+x_i  = [1, x_i1, ..., x_ik]
+```
+
+Com essa convenção, $\alpha \cdot 1$ é só mais um termo da soma, e o modelo inteiro vira um **produto escalar** — a função `dot` que o [Capítulo 4](../cap04/index.qmd) construiu, e que continua sendo `sum(v_i * w_i for v_i, w_i in zip(v, w))`, sem numpy nenhum:
+
+```{python}
+#| label: predict
+from scratch.linear_algebra import dot, Vector
+
+def predict(x: Vector, beta: Vector) -> float:
+    """assume que o primeiro elemento de x é 1"""
+    return dot(x, beta)
+```
+
+Duas linhas. O modelo de regressão múltipla inteiro é um produto escalar entre a linha de dados e o vetor de parâmetros — e todo o resto deste capítulo é sobre como escolher esse vetor e o quanto confiar nele depois de escolhido.
+
+::: {.conceito}
+A coluna de 1 não é um detalhe de implementação: é o que torna o intercepto **um coeficiente como qualquer outro**. Sem ela, `predict` teria que somar `alpha` separadamente, o gradiente teria um caso especial, e cada função escrita a partir daqui carregaria essa exceção. Com ela, existe só uma regra — produto escalar — e ela vale para o vetor inteiro.
+
+O preço é lembrar da convenção. Passar a `predict` uma linha de dados sem o 1 na frente não gera erro nenhum: gera uma previsão silenciosamente errada, com o intercepto multiplicando a primeira variável de verdade.
+:::
+
+## Os dados
+
+Cada entrada, então, é uma lista de quatro números:
+
+```{python}
+#| label: exemplo-linha
+[1,    # termo constante
+ 49,   # número de amigos
+ 4,    # horas de trabalho por dia
+ 0]    # não tem doutorado
+```
+
+O pacote vendorizado do livro-texto já traz as 203 linhas prontas, no mesmo formato:
+
+```{python}
+#| label: importa-inputs
+#| include: false
+import random
+random.seed(0)
+from scratch.multiple_regression import inputs
+from scratch.statistics import daily_minutes_good
+import matplotlib.pyplot as plt
+plt.close('all')
+```
+
+```{python}
+#| label: mostra-inputs
+len(inputs), len(inputs[0]), inputs[0]
+```
+
+```{python}
+#| label: mostra-y
+len(daily_minutes_good), daily_minutes_good[0]
+```
+
+São os **mesmos 203 usuários** do Capítulo 11 — `daily_minutes_good` é exatamente a mesma lista de minutos por dia que aquele capítulo tentou prever, e a segunda coluna de `inputs` é exatamente `num_friends_good`. O que mudou não foi o dado a ser previsto; foi a quantidade de informação disponível para prevê-lo.
+
+::: {.callout-important}
+## Por que o `import` está escondido, e por que ele leva uma semente
+
+O chunk que importa `scratch.multiple_regression` está marcado com `#| include: false`, por dois motivos que valem para vários capítulos deste livro.
+
+O primeiro já apareceu no [Capítulo 11](../cap11/01-o-modelo.qmd): `scratch/statistics.py` e `scratch/probability.py` têm chamadas `plt.*` soltas no nível do módulo — cinco e dezoito, respectivamente — e `multiple_regression` importa os dois. Sem o `include: false` e o `plt.close('all')`, figuras que ninguém pediu apareceriam no meio da página.
+
+O segundo é específico deste módulo: ele também executa, no nível do módulo, um trecho de reamostragem aleatória **sem semente**, com asserções sobre o resultado. É o código que a [seção 12.6](06-digressao-o-bootstrap.qmd) vai estudar. Rodar `random.seed(0)` **antes** do `import` torna esse trecho determinístico e o `import` reprodutível. A regra "toda aleatoriedade leva semente explícita" vale aqui exatamente como vale dentro de um chunk — a diferença é que aqui a aleatoriedade está escondida numa importação, que é o último lugar onde se pensa em procurá-la.
+
+A correção fica no `.qmd`, nunca em `scratch/`: o pacote é uma cópia literal do repositório do livro-texto, e não se edita.
+:::
+
+::: {.callout-tip collapse="true"}
+## Na prática: `scikit-learn`
+
+A coluna de 1 é uma convenção do livro, não uma exigência da matemática, e a maior parte das bibliotecas prefere escondê-la:
+
+```python
+from sklearn.linear_model import LinearRegression
+
+X = [x[1:] for x in inputs]     # SEM a coluna de 1
+y = daily_minutes_good
+
+modelo = LinearRegression().fit(X, y)   # fit_intercept=True é o padrão
+modelo.intercept_, modelo.coef_
+```
+
+`LinearRegression` mantém `fit_intercept=True` por padrão e cuida do termo constante internamente, o que separa `intercept_` (um escalar) de `coef_` (o vetor dos demais). Passar a ela uma matriz que **já** tem a coluna de 1 é um erro comum e silencioso: o modelo acaba com duas colunas constantes, e a [seção 12.2](02-hipoteses-do-minimos-quadrados.qmd) explica exatamente o que isso quebra.
+
+Para a variável indicadora, o equivalente industrial é `pandas.get_dummies` ou o `OneHotEncoder` do `scikit-learn`, que recebem uma coluna de categorias e devolvem as colunas de 0 e 1. Ambos aceitam `drop_first=True` / `drop='first'` — o "menos uma" mencionado acima, que não é opcional quando o modelo tem intercepto.
 :::

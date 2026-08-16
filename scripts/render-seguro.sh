@@ -73,6 +73,16 @@ for rodada in $(seq 1 "$MAX_RODADAS"); do
     find content -name '*_files' -type d -exec rm -rf {} + 2>/dev/null || true
     find content -name '*.html' -type f -delete 2>/dev/null || true
 
+    # A raiz também recebe lixo: `index.qmd` é a capa do livro, então um render
+    # abortado deixa `index.html` aqui. Mas a raiz também abriga `spoiler.html`,
+    # que é VERSIONADO e não pode ser apagado — por isso a regra não é "apague
+    # *.html", e sim "apague o .html que tem um .qmd de mesmo nome". `index.html`
+    # tem `index.qmd`; `spoiler.html` não tem `spoiler.qmd`, e sobrevive.
+    for html in ./*.html; do
+      [ -e "$html" ] || continue
+      [ -f "${html%.html}.qmd" ] && rm -f "$html"
+    done
+
     if "${RUN[@]}" quarto render; then
       echo "render OK (tentativa $i)"
       ok=sim

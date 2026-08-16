@@ -4,7 +4,163 @@
 Esta seção corresponde a *Digression: The Bootstrap*, do capítulo 15 de @grus2019.
 :::
 
+A [seção anterior](05-qualidade-do-ajuste.qmd) terminou precisando de uma coisa que não tínhamos como calcular: uma medida de quanto confiar em cada coeficiente. Esta seção é uma digressão — ela sai da regressão por completo — e é, provavelmente, a ideia mais reaproveitável do capítulo inteiro.
+
+O problema, no geral: você tem uma amostra de $n$ pontos, vinda de alguma distribuição que você desconhece.
+
+```python
+data = get_sample(num_points=n)
+```
+
+Você calcula uma estatística sobre ela — a mediana, digamos — e a usa como estimativa da mediana da distribuição verdadeira. A pergunta é: **quanta confiança essa estimativa merece?**
+
+## Duas amostras com a mesma mediana
+
+Se todos os pontos da amostra estiverem muito perto de 100, é razoável acreditar que a mediana verdadeira está perto de 100. Mas se metade dos pontos estiver perto de 0 e a outra metade perto de 200, a mediana da amostra também dá perto de 100 — e agora a confiança deveria ser bem menor.
+
+```{python}
+#| label: importa
+#| include: false
+import random
+from scratch.statistics import median, standard_deviation
+import matplotlib.pyplot as plt
+plt.close('all')
+```
+
+```{python}
+#| label: dois-conjuntos
+random.seed(0)
+
+# 101 pontos, todos bem perto de 100
+close_to_100 = [99.5 + random.random() for _ in range(101)]
+
+# 101 pontos, 50 deles perto de 0 e 50 deles perto de 200
+far_from_100 = ([99.5 + random.random()] +
+                [random.random() for _ in range(50)] +
+                [200 + random.random() for _ in range(50)])
+
+median(close_to_100), median(far_from_100)
+```
+
+As duas medianas dão praticamente 100. Nenhuma estatística calculada sobre a amostra, sozinha, distingue os dois casos — e no entanto os dois casos são radicalmente diferentes.
+
+## A ideia
+
+Se pudéssemos coletar amostras novas repetidamente, o problema estaria resolvido: bastaria calcular a mediana de cada uma e olhar a dispersão dessas medianas. Uma dispersão pequena significaria uma estimativa confiável.
+
+Quase nunca podemos. Coletar dados custa caro, e frequentemente a amostra que temos é toda a que vamos ter.
+
+::: {.conceito}
+O **bootstrap** faz o seguinte salto: em vez de coletar amostras novas da população, sorteia amostras novas **da própria amostra**, com reposição, cada uma do mesmo tamanho do original. Calcula a estatística em cada uma delas, e olha a dispersão dos resultados.
+
+A justificativa intuitiva é que a amostra que você tem é a melhor estimativa disponível da população de onde ela veio. Reamostrar dela imita, de forma barata, o processo de coletar dados novos.
+
+O que torna a ideia poderosa é o que ela **não** exige: nenhuma suposição sobre a forma da distribuição, nenhuma fórmula específica para a estatística, nenhuma teoria. A estatística pode ser a mediana, a correlação, o coeficiente de uma regressão, o percentil 90 ou qualquer coisa que você consiga escrever como função de uma lista. O bootstrap trata a estatística como caixa-preta — o que é irônico, num livro dedicado a abri-las, e é exatamente por isso que ele funciona em tantos lugares.
+:::
+
+O código todo tem quatro linhas de corpo:
+
+```{python}
+#| label: bootstrap
+from typing import TypeVar, Callable, List
+
+X = TypeVar('X')        # tipo genérico para os dados
+Stat = TypeVar('Stat')  # tipo genérico para a "estatística"
+
+def bootstrap_sample(data: List[X]) -> List[X]:
+    """sorteia len(data) elementos com reposição"""
+    return [random.choice(data) for _ in data]
+
+def bootstrap_statistic(data: List[X],
+                        stats_fn: Callable[[List[X]], Stat],
+                        num_samples: int) -> List[Stat]:
+    """avalia stats_fn sobre num_samples amostras bootstrap de data"""
+    return [stats_fn(bootstrap_sample(data)) for _ in range(num_samples)]
+```
+
+Note que `stats_fn` é um parâmetro. `bootstrap_statistic` não sabe nem se importa com o que está sendo calculado — e é por isso que a mesma função vai servir, sem uma linha de mudança, para estimar erros padrão de regressão na [seção 12.7](07-erros-padrao-dos-coeficientes.qmd).
+
+## Aplicando aos dois conjuntos
+
+```{python}
+#| label: medianas
+random.seed(0)
+
+medians_close = bootstrap_statistic(close_to_100, median, 100)
+medians_far   = bootstrap_statistic(far_from_100, median, 100)
+
+assert standard_deviation(medians_close) < 1
+assert standard_deviation(medians_far)   > 90
+
+standard_deviation(medians_close), standard_deviation(medians_far)
+```
+
+O desvio padrão das 100 medianas do primeiro conjunto é de cerca de **0,038**. O do segundo é de cerca de **97**. A diferença é de mais de três ordens de grandeza — e nenhuma delas apareceria olhando apenas para as duas medianas originais, que davam as duas perto de 100.
+
+```{python}
+#| label: fig-bootstrap-medianas
+#| fig-cap: "As 100 medianas bootstrap de cada conjunto. Mesma escala nos dois painéis."
+#| echo: false
+fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(10, 3.5), sharey=True)
+
+ax1.hist(medians_close, bins=20, range=(-10, 210), color='tab:blue')
+ax1.set_title("close_to_100")
+ax1.set_xlabel("mediana da amostra bootstrap")
+ax1.set_ylabel("frequência")
+
+ax2.hist(medians_far, bins=20, range=(-10, 210), color='tab:red')
+ax2.set_title("far_from_100")
+ax2.set_xlabel("mediana da amostra bootstrap")
+
+for ax in (ax1, ax2):
+    ax.axvline(100, color='black', linestyle='--', linewidth=1)
+
+plt.tight_layout()
+plt.show()
+```
+
+À esquerda, as 100 medianas caem todas numa única barra em torno de 100 — a estimativa é estável. À direita, elas se espalham em três grupos: um perto de 0, um perto de 200 e um punhado no meio. Contando:
+
+```{python}
+#| label: contagem
+perto_de_zero = sum(1 for m in medians_far if m < 50)
+perto_de_200  = sum(1 for m in medians_far if m > 150)
+
+print(f"medianas perto de 0:   {perto_de_zero}")
+print(f"medianas perto de 200: {perto_de_200}")
+print(f"medianas no meio:      {100 - perto_de_zero - perto_de_200}")
+```
+
+Isso é o bootstrap dizendo, alto e claro, que a mediana daquele segundo conjunto não significa nada. O valor 100 que ela devolveu é um artefato de haver exatamente um ponto no meio: mude um único elemento da amostra e a mediana pula para 0 ou para 200.
+
 ::: {.callout-warning}
-## Em construção
-O conteúdo desta seção ainda será escrito.
+Este exemplo é extremo de propósito, e nele daria para perceber o problema simplesmente olhando os dados. Em geral não dá — e o valor do bootstrap é justamente funcionar quando a inspeção visual não funciona: em muitas dimensões, com estatísticas complicadas, sobre dados que ninguém consegue desenhar.
+
+Duas ressalvas honestas, porque o bootstrap não é mágica:
+
+- Ele mede a incerteza **devida à amostragem**, e só ela. Se a sua amostra for enviesada — coletada de um jeito que não representa a população —, o bootstrap vai reamostrar esse viés com toda a fidelidade e devolver uma estimativa de incerteza pequena e confiante em torno da resposta errada.
+- Ele custa `num_samples` vezes o custo de calcular a estatística. Para uma mediana isso não é nada. Para um ajuste de regressão que leva quase um segundo, cem amostras levam mais de um minuto — e é exatamente o que a próxima seção vai pagar.
+:::
+
+::: {.callout-tip collapse="true"}
+## Na prática: `scipy`
+
+```python
+from scipy.stats import bootstrap
+import numpy as np
+
+resultado = bootstrap((np.array(far_from_100),), np.median,
+                      n_resamples=10_000, random_state=0)
+
+resultado.standard_error
+resultado.confidence_interval
+```
+
+`scipy.stats.bootstrap` faz o que `bootstrap_statistic` faz, com três diferenças que valem entender agora que você viu o miolo:
+
+- Ela devolve **intervalos de confiança** já corrigidos (o método `BCa`, padrão, ajusta viés e assimetria da distribuição bootstrap). Nós devolvemos a lista crua de estatísticas e calculamos o desvio padrão à mão.
+- Ela reamostra de forma vetorizada, o que torna 10.000 reamostragens viável onde as nossas 100 já custam.
+- Ela aceita várias amostras de uma vez, para estatísticas de dois grupos (diferença de médias, por exemplo).
+
+O `scikit-learn` também tem `sklearn.utils.resample`, que é essencialmente o nosso `bootstrap_sample` — reamostragem com reposição, sem nada em volta. E o mesmo mecanismo de reamostrar-com-reposição reaparece, com outro objetivo, no **bagging** que sustenta as florestas aleatórias do [Capítulo 14](../cap14/06-florestas-aleatorias.qmd): lá não se mede incerteza, se treina uma árvore em cada reamostra e se combinam as previsões.
 :::

@@ -4,7 +4,172 @@
 Esta seção corresponde a *Fitting the Model*, do capítulo 15 de @grus2019.
 :::
 
-::: {.callout-warning}
-## Em construção
-O conteúdo desta seção ainda será escrito.
+Como no modelo linear simples, vamos escolher `beta` para minimizar a soma dos erros ao quadrado. A diferença é que agora não há fórmula fechada que caiba num chunk: o [Capítulo 11](../cap11/01-o-modelo.qmd) resolveu o caso de uma variável com duas médias, uma correlação e dois desvios padrão, e aquele truque não se estende. Vamos de gradiente descendente — o caminho construído no [Capítulo 5](../cap05/index.qmd), que a [seção 11.2](../cap11/02-usando-gradiente-descendente.qmd) já usou para chegar ao mesmo lugar que a fórmula fechada.
+
+## O erro e o seu gradiente
+
+A função de erro é quase idêntica à do capítulo anterior. A única mudança é que, em vez de esperar dois parâmetros `[alpha, beta]`, ela recebe um vetor de tamanho arbitrário:
+
+```{python}
+#| label: erro
+from typing import List
+from scratch.linear_algebra import dot, Vector
+
+def predict(x: Vector, beta: Vector) -> float:
+    """assume que o primeiro elemento de x é 1"""
+    return dot(x, beta)
+
+def error(x: Vector, y: float, beta: Vector) -> float:
+    return predict(x, beta) - y
+
+def squared_error(x: Vector, y: float, beta: Vector) -> float:
+    return error(x, y, beta) ** 2
+
+x = [1, 2, 3]
+y = 30
+beta = [4, 4, 4]  # previsão = 4 + 8 + 12 = 24
+
+assert error(x, y, beta) == -6
+assert squared_error(x, y, beta) == 36
+```
+
+O gradiente é onde a generalização compensa. No capítulo anterior, as duas derivadas parciais foram escritas à mão, uma de cada vez. Aqui elas viram uma única compreensão de lista:
+
+```{python}
+#| label: gradiente
+def sqerror_gradient(x: Vector, y: float, beta: Vector) -> Vector:
+    err = error(x, y, beta)
+    return [2 * err * x_i for x_i in x]
+
+assert sqerror_gradient(x, y, beta) == [-12, -24, -36]
+```
+
+::: {.exemplo}
+Vale conferir a conta. A perda de um ponto é $(\,\mathbf{x} \cdot \beta - y\,)^2$. Derivando em relação a $\beta_j$ pela regra da cadeia: a derivada externa dá $2(\mathbf{x} \cdot \beta - y)$, e a derivada interna de $\mathbf{x} \cdot \beta$ em relação a $\beta_j$ é simplesmente $x_j$ — porque $\beta_j$ aparece uma única vez naquela soma, multiplicando $x_j$.
+
+$$
+\frac{\partial}{\partial \beta_j} \left( \mathbf{x} \cdot \beta - y \right)^2 = 2 \left( \mathbf{x} \cdot \beta - y \right) x_j
+$$
+
+Ou seja: `2 * err * x_j`, para cada `j`. É exatamente o que a compreensão de lista escreve — e repare que ela vale para o termo constante também, porque ali $x_0 = 1$ e a derivada dá `2 * err`, sem caso especial nenhum. É a coluna de 1 da [seção 12.1](01-o-modelo.qmd) pagando dividendo.
+:::
+
+## O ajustador
+
+Com o gradiente pronto, `least_squares_fit` é o gradiente descendente em minilotes da [seção 5.6](../cap05/06-minibatch-e-estocastico.qmd), aplicado a qualquer conjunto de dados:
+
+```{python}
+#| label: least-squares-fit
+import random
+import tqdm
+from scratch.linear_algebra import vector_mean
+from scratch.gradient_descent import gradient_step
+
+def least_squares_fit(xs: List[Vector],
+                      ys: List[float],
+                      learning_rate: float = 0.001,
+                      num_steps: int = 1000,
+                      batch_size: int = 1) -> Vector:
+    """
+    Encontra o beta que minimiza a soma dos erros ao quadrado,
+    supondo o modelo y = dot(x, beta).
+    """
+    # Começa com um chute aleatório
+    guess = [random.random() for _ in xs[0]]
+
+    for _ in tqdm.trange(num_steps, desc="least squares fit"):
+        for start in range(0, len(xs), batch_size):
+            batch_xs = xs[start:start+batch_size]
+            batch_ys = ys[start:start+batch_size]
+
+            gradient = vector_mean([sqerror_gradient(x, y, guess)
+                                    for x, y in zip(batch_xs, batch_ys)])
+            guess = gradient_step(guess, gradient, -learning_rate)
+
+    return guess
+```
+
+Não há nada de novo aqui, e esse é o ponto. `gradient_step` é a mesma função de cinco linhas do [Capítulo 5](../cap05/03-usando-o-gradiente.qmd); `vector_mean` é do [Capítulo 4](../cap04/01-vetores.qmd); a estrutura de laço externo sobre passos e laço interno sobre lotes é a da [seção 5.6](../cap05/06-minibatch-e-estocastico.qmd). Passar de uma variável explicativa para três não exigiu **nenhuma** mudança no otimizador — só que o gradiente devolvesse uma lista mais comprida.
+
+::: {.callout-note}
+## O `tqdm` de novo, agora por dentro
+
+`tqdm.trange(num_steps, desc="least squares fit")` é a barra de progresso que a [seção 7.7](../cap07/07-um-parenteses-tqdm.qmd) apresentou. Esta é a primeira vez, neste livro, que você a encontra **dentro** de uma função que alguém escreveu para você usar, e não num laço seu.
+
+Isso tem uma consequência prática: qualquer chunk que chame `least_squares_fit` vai gerar saída de barra de progresso, quer você queira ou não. O `tqdm` escreve em `stderr`, e o Quarto captura `stderr` como aviso — então, num livro renderizado, dezenas de linhas de barra de progresso apareceriam no meio do texto. Por isso todo chunk deste capítulo que ajusta um modelo leva `#| warning: false`.
+
+Repare no julgamento embutido: numa sessão interativa, a barra é útil (um ajuste destes leva quase um segundo, e o bootstrap da [seção 12.7](07-erros-padrao-dos-coeficientes.qmd) leva mais de um minuto). Num documento congelado, ela é lixo. Mesma ferramenta, valor oposto, dependendo de onde a saída vai parar.
+:::
+
+## Ajustando aos dados
+
+```{python}
+#| label: importa-dados
+#| include: false
+import random
+random.seed(0)
+from scratch.multiple_regression import inputs
+from scratch.statistics import daily_minutes_good
+import matplotlib.pyplot as plt
+plt.close('all')
+```
+
+```{python}
+#| label: ajusta
+#| warning: false
+random.seed(0)
+learning_rate = 0.001
+
+beta = least_squares_fit(inputs, daily_minutes_good, learning_rate, 5000, 25)
+
+assert 30.50 < beta[0] < 30.70  # constante
+assert  0.96 < beta[1] <  1.00  # número de amigos
+assert -1.89 < beta[2] < -1.85  # horas de trabalho por dia
+assert  0.91 < beta[3] <  0.94  # tem doutorado
+
+beta
+```
+
+Ou seja, o modelo ajustado é:
+
+$$
+\text{minutos} = 30{,}51 + 0{,}975 \,\text{amigos} - 1{,}851 \,\text{horas de trabalho} + 0{,}914 \,\text{doutorado}
+$$
+
+Os hiperparâmetros — taxa de aprendizado 0,001, 5.000 passos, lotes de 25 — foram escolhidos por tentativa e erro, e o próprio Grus diz isso no livro. Não há fórmula para eles; há o diagnóstico da [seção 5.4](../cap05/04-escolhendo-o-tamanho-do-passo.qmd) para quando o passo é grande demais e a paciência para quando é pequeno demais.
+
+::: {.callout-important}
+## Os números do livro impresso são outros — e por quê
+
+@grus2019 imprime, para este mesmo ajuste:
+
+$$
+\text{minutos} = 30{,}58 + 0{,}972 \,\text{amigos} - 1{,}87 \,\text{horas de trabalho} + 0{,}923 \,\text{doutorado}
+$$
+
+Nós encontramos 30,51, 0,975, −1,851 e 0,914. As diferenças aparecem na terceira casa e não precisam de explicação elaborada: gradiente descendente **estocástico**, partindo de um chute aleatório e com taxa de aprendizado fixa, não pousa no mínimo — ele orbita em torno dele. Rodar com outra semente move a resposta um pouco, e é isso que separa os dois conjuntos de números.
+
+Mas há uma segunda camada, e essa é mais interessante. Os valores que o Grus imprime **não** são a saída do gradiente descendente dele: são os coeficientes exatos, que ele diz que "você obteria usando técnicas de álgebra linear que estão fora do escopo deste livro". Ou seja, **a regressão múltipla tem, sim, solução fechada.** Ela não desapareceu quando saímos de uma variável para três; o que aconteceu é que ela deixou de caber em duas médias e um desvio padrão, e passou a exigir resolver um sistema linear — o que, por sua vez, exigiria construir do zero maquinaria de álgebra linear que este livro não construiu. É uma decisão de escopo, não uma impossibilidade matemática.
+
+Vale corrigir, então, uma leitura fácil de fazer no fim da [seção 11.2](../cap11/02-usando-gradiente-descendente.qmd): quando aquele texto diz que aqui "a álgebra ainda fecha, mas fica pesada", ele está sendo literal. Fecha mesmo. Os modelos que **não** têm fórmula fechada nenhuma começam no [Capítulo 13](../cap13/index.qmd), com a regressão logística.
+:::
+
+::: {.callout-tip collapse="true"}
+## Na prática: `scikit-learn`
+
+```python
+from sklearn.linear_model import LinearRegression
+
+X = [x[1:] for x in inputs]     # sem a coluna de 1
+modelo = LinearRegression().fit(X, daily_minutes_good)
+
+modelo.intercept_, modelo.coef_
+```
+
+Isso devolve, direto, os coeficientes exatos — os mesmos 30,58 / 0,972 / −1,87 / 0,923 do livro impresso, sem semente, sem taxa de aprendizado e sem barra de progresso. `LinearRegression` não itera: ela resolve o sistema de mínimos quadrados por decomposição em valores singulares, que é a "álgebra linear fora do escopo" mencionada acima, implementada em LAPACK.
+
+Duas coisas que vale saber, agora que você viu o código por dentro:
+
+- **A biblioteca é exata e o nosso código é aproximado**, e isso não é um detalhe de qualidade — é a diferença entre resolver um sistema e descer uma encosta. Para regressão linear, resolver o sistema é sempre melhor. Escrevemos o gradiente descendente aqui porque ele é o método que **continua funcionando** quando a fórmula fechada desaparece, o que acontece já no próximo capítulo.
+- **Quando os dados são grandes demais para caber na memória**, a decomposição deixa de ser viável e o gradiente descendente volta a ser a opção prática. O `scikit-learn` tem `SGDRegressor` para exatamente isso — e ele pede `learning_rate`, `max_iter` e `random_state`, os mesmos três hiperparâmetros que o nosso `least_squares_fit` pede.
 :::

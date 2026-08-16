@@ -90,5 +90,11 @@ clean: ## Remove artefatos de render (inclusive o lixo que um render abortado de
 # ser apagado).
 	find . -name '*_files' -type d -not -path './.git/*' -exec rm -rf {} + 2>/dev/null || true
 	find content -name '*.html' -type f -delete 2>/dev/null || true
+# Na raiz, apaga só o .html que tem um .qmd de mesmo nome: `index.html` é lixo de
+# render (a capa vem de `index.qmd`), enquanto `spoiler.html` é versionado.
+	@for html in ./*.html; do \
+	  [ -e "$$html" ] || continue; \
+	  [ -f "$${html%.html}.qmd" ] && rm -f "$$html"; \
+	done; true
 
 .PHONY: help build preview render refresh offline teste shell check lock clean

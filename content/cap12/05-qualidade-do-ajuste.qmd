@@ -4,7 +4,118 @@
 Esta seção corresponde a *Goodness of Fit*, do capítulo 15 de @grus2019.
 :::
 
+O [Capítulo 11](../cap11/01-o-modelo.qmd) mediu a qualidade do ajuste com o **coeficiente de determinação**, o R²: a fração da variação total em `y` que o modelo captura. A generalização para várias variáveis não muda nada na ideia; só troca a assinatura da função:
+
+```{python}
+#| label: importa
+#| include: false
+import random
+random.seed(0)
+from scratch.multiple_regression import inputs, least_squares_fit
+from scratch.statistics import daily_minutes_good
+import matplotlib.pyplot as plt
+plt.close('all')
+```
+
+```{python}
+#| label: r-quadrado
+from typing import List
+from scratch.linear_algebra import Vector, dot
+from scratch.simple_linear_regression import total_sum_of_squares
+
+def error(x: Vector, y: float, beta: Vector) -> float:
+    return dot(x, beta) - y
+
+def multiple_r_squared(xs: List[Vector], ys: Vector, beta: Vector) -> float:
+    sum_of_squared_errors = sum(error(x, y, beta) ** 2
+                                for x, y in zip(xs, ys))
+    return 1.0 - sum_of_squared_errors / total_sum_of_squares(ys)
+```
+
+`total_sum_of_squares` é a mesma função do capítulo anterior: a variação quadrática total dos `y` em torno da própria média, que é o erro do modelo mais burro possível — aquele que ignora as variáveis explicativas e sempre chuta a média.
+
+```{python}
+#| label: mede
+#| warning: false
+random.seed(0)
+beta = least_squares_fit(inputs, daily_minutes_good, 0.001, 5000, 25)
+
+multiple_r_squared(inputs, daily_minutes_good, beta)
+```
+
+O R² subiu de **0,329**, no modelo de uma variável do Capítulo 11, para **0,680**. Duas variáveis a mais, e a fração da variação explicada praticamente dobrou. Esse é o resultado que se leva para a reunião.
+
+E é exatamente onde este capítulo precisa parar e desconfiar.
+
+## O R² nunca desce
+
+::: {.callout-important}
+Acrescentar uma variável a uma regressão **necessariamente** não diminui o R². Nunca. Não importa qual seja a variável.
+
+O argumento é curto e não tem brecha. O modelo de uma variável é um **caso particular** do modelo de três: basta que os coeficientes de `horas de trabalho` e `doutorado` valham zero. Ou seja, aquele modelo estava entre os candidatos que o ajuste de três variáveis considerou — e foi rejeitado em favor de outro. O melhor modelo de três variáveis tem, portanto, soma de erros ao quadrado **no máximo** igual à do melhor modelo de uma. Como o R² é 1 menos essa soma dividida por uma constante, ele só pode ter subido, ou ficado igual.
+:::
+
+O mesmo argumento vale para qualquer coluna acrescentada, e é aí que ele incomoda: ele vale também para uma coluna de números aleatórios sem relação nenhuma com o que estamos tentando prever. Zero é um coeficiente possível para ela, então o ajuste com a coluna de ruído nunca fica pior que o ajuste sem. Se o ajuste consegue tirar até um fiapo de vantagem daquele ruído — e com dados finitos ele quase sempre consegue —, o R² sobe.
+
+Isso não é um argumento de papel. Dá para rodar:
+
+```{python}
+#| label: ruido
+#| warning: false
+random.seed(1)
+# vinte colunas de puro ruído, na mesma faixa das horas de trabalho
+ruido = [[random.uniform(0, 10) for _ in range(20)] for _ in inputs]
+
+for k in [0, 5, 10, 15, 20]:
+    xs = [x + r[:k] for x, r in zip(inputs, ruido)]
+    random.seed(0)
+    beta_k = least_squares_fit(xs, daily_minutes_good, 0.001, 15000, 25)
+    r2 = multiple_r_squared(xs, daily_minutes_good, beta_k)
+    print(f"{k:2d} colunas de puro ruído → R² = {r2:.4f}")
+```
+
 ::: {.callout-warning}
-## Em construção
-O conteúdo desta seção ainda será escrito.
+## O que acabou de acontecer
+
+Vinte colunas de `random.uniform(0, 10)`. Nenhuma delas sabe coisa alguma sobre quantos minutos por dia um usuário passa no site — são números sorteados, gerados sem olhar para `daily_minutes_good` uma única vez. Ainda assim, o R² subiu de 0,68 para 0,71.
+
+Um analista que acrescentasse essas vinte colunas ao modelo e relatasse "o R² subiu, o modelo melhorou" estaria enganando a si mesmo e a quem o ouvisse. O modelo não melhorou em nada: ele apenas ganhou vinte botões a mais para girar, e usou-os para se ajustar ao ruído específico destes 203 usuários. Aplicado a usuários novos, esse modelo prevê **pior** que o de três variáveis, não melhor.
+
+Este é o sobreajuste do [Capítulo 8](../cap08/03-overfitting-e-underfitting.qmd) visto de um ângulo novo, e é a razão pela qual aquele capítulo insistiu em medir desempenho em dados que o modelo não viu. Aqui estamos medindo tudo no conjunto de treino, e o resultado é uma métrica que só sabe aplaudir.
+:::
+
+::: {.exemplo}
+Um detalhe honesto sobre o experimento acima, que vale mais do que parece.
+
+O argumento da caixa anterior é sobre o **mínimo exato** da soma dos erros ao quadrado, e o nosso `least_squares_fit` não encontra o mínimo exato — ele dá 15.000 passos e para perto dele.
+
+Isso importa para o desenho do experimento. Uma única coluna de ruído acrescenta ao R², em média, cerca de $(1 - R^2) / (n - k)$, ou seja, uns poucos milésimos com 203 pontos — e a imprecisão do próprio otimizador é da mesma ordem de grandeza. Com uma coluna só, portanto, o R² tanto pode subir quanto descer um fio, e a descida seria culpa do gradiente descendente, não uma refutação do argumento. O experimento usa vinte colunas justamente por isso: o efeito acumulado (mais de 0,027) fica uma ordem de grandeza acima do ruído do otimizador, e o resultado deixa de ser ambíguo.
+
+Vale generalizar a lição, porque ela reaparece toda vez que se mede alguma coisa: **um efeito só é demonstrável quando ele é maior que a imprecisão do instrumento que o mede.** Quando os dois têm o mesmo tamanho, a medição não distingue "o efeito não existe" de "o efeito existe e eu não consigo vê-lo" — e concluir a primeira coisa é um erro. É a mesma disciplina que o [Capítulo 8](../cap08/index.qmd) pediu ao separar treino de teste, e é exatamente o que a [seção 12.7](07-erros-padrao-dos-coeficientes.qmd) vai fazer com cada coeficiente do modelo.
+:::
+
+## O buraco que isso abre
+
+O R² é uma métrica útil e continuará sendo. O que ele **não** consegue fazer é responder à pergunta que a [seção 12.4](04-interpretando-o-modelo.qmd) deixou em aberto: dado que podemos inventar quantas colunas quisermos — produtos, quadrados, logaritmos —, quais delas merecem estar no modelo?
+
+Ele não consegue porque a resposta dele é sempre a mesma: acrescente. Uma métrica que nunca piora não pode servir de critério para deixar algo de fora.
+
+Precisamos de outra coisa. Precisamos, para cada coeficiente, de uma medida de **quanto confiar nele** — se aquele 0,914 do `doutorado` é um efeito real ou um número que teria saído completamente diferente se tivéssemos coletado outros 203 usuários. Essa medida se chama **erro padrão** do coeficiente.
+
+::: {.callout-important}
+A abordagem clássica para calcular erros padrão parte de uma hipótese adicional: a de que os erros $\varepsilon_i$ são variáveis normais independentes, com média 0 e um desvio padrão $\sigma$ comum e desconhecido — a mesma hipótese que a [seção 11.3](../cap11/03-maxima-verossimilhanca.qmd) usou para justificar mínimos quadrados. Sob ela, existe uma fórmula, e ela sai da mesma álgebra linear que a [seção 12.3](03-ajustando-o-modelo.qmd) disse estar fora do escopo deste livro.
+
+Ficaríamos, então, sem erros padrão — a não ser que exista um caminho que não passe por álgebra linear nenhuma. Existe, e ele não passa nem por teoria estatística. Ele passa por reamostrar os próprios dados, e é o assunto da [próxima seção](06-digressao-o-bootstrap.qmd).
+:::
+
+::: {.callout-tip collapse="true"}
+## Na prática: `scikit-learn`
+
+`modelo.score(X, y)` devolve exatamente este R², e `sklearn.metrics.r2_score(y_verdadeiro, y_previsto)` faz a mesma conta a partir de duas listas. Nenhum dos dois protege você do que esta seção mostrou: os dois sobem quando você acrescenta ruído.
+
+O que se usa de verdade para escolher variáveis:
+
+- **R² ajustado**, que penaliza o número de parâmetros — ele *pode* descer quando você acrescenta uma variável inútil. O `scikit-learn` não o oferece; o `statsmodels` traz na tabela de resumo. É uma correção de fórmula, barata e limitada.
+- **Validação cruzada** (`sklearn.model_selection.cross_val_score`), que mede o R² em dados que o modelo não viu no ajuste. É a resposta certa para a pergunta "este modelo prevê melhor?", e é a generalização direta da divisão treino/teste do [Capítulo 8](../cap08/04-correcao.qmd). Se você levar só uma ferramenta desta seção, leve esta.
+- **Erros padrão e valores-p**, que respondem a uma pergunta diferente e complementar: não "este modelo prevê melhor?", mas "este coeficiente específico é distinguível de zero?". São o assunto das seções [12.6](06-digressao-o-bootstrap.qmd) e [12.7](07-erros-padrao-dos-coeficientes.qmd), e o `scikit-learn` **não os calcula** — para eles, o `statsmodels` é a ferramenta.
 :::

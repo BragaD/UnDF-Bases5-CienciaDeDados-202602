@@ -4,7 +4,175 @@
 Esta seção corresponde a *Regularization*, do capítulo 15 de @grus2019.
 :::
 
+Junte o que as três seções anteriores estabeleceram.
+
+A [seção 12.5](05-qualidade-do-ajuste.qmd) mostrou que acrescentar variáveis **nunca** piora o R² — nem quando elas são ruído puro. A [seção 12.7](07-erros-padrao-dos-coeficientes.qmd) mostrou como descobrir que um coeficiente específico é indistinguível de zero. Falta o passo que junta os dois: se o procedimento de ajuste não tem incentivo nenhum para deixar um coeficiente em zero, precisamos **dar** esse incentivo a ele.
+
+É isso que a regularização faz.
+
+::: {.conceito}
+Minimizar a soma dos erros ao quadrado é uma instrução com um único objetivo: **errar pouco no conjunto de treino**. Um coeficiente de 0,914 no `doutorado` reduz o erro de treino um fio a mais do que um coeficiente de 0, então o ajuste o adota — mesmo sabendo (como a seção anterior mostrou) que aquele 0,914 é essencialmente ruído.
+
+Regularização muda o objetivo. Em vez de minimizar só o erro, minimizamos **erro mais uma penalidade que cresce com o tamanho dos coeficientes**. Agora um coeficiente só se sustenta se o que ele reduz de erro compensar o que ele custa de penalidade. Um coeficiente que só existe para acomodar ruído não compensa, e encolhe.
+
+O ganho é duplo, e o segundo é fácil de subestimar: quanto menos coeficientes não nulos, mais fácil **entender** o modelo. Se o objetivo é explicar um fenômeno, um modelo esparso com três fatores costuma ser mais útil que um modelo ligeiramente melhor com trezentos.
+:::
+
+## A penalidade *ridge*
+
+Na regressão *ridge*, a penalidade é proporcional à soma dos quadrados dos coeficientes — com uma exceção importante, o termo constante:
+
+```{python}
+#| label: importa
+#| include: false
+import random
+random.seed(0)
+from scratch.multiple_regression import (
+    inputs, error, sqerror_gradient, least_squares_fit_ridge, multiple_r_squared,
+)
+from scratch.statistics import daily_minutes_good
+import matplotlib.pyplot as plt
+plt.close('all')
+```
+
+```{python}
+#| label: ridge-penalty
+from scratch.linear_algebra import dot, Vector, add
+
+# alpha é um *hiperparâmetro* que controla a dureza da penalidade.
+# Às vezes ele é chamado de "lambda", mas isso já significa algo em Python.
+def ridge_penalty(beta: Vector, alpha: float) -> float:
+    return alpha * dot(beta[1:], beta[1:])
+
+def squared_error_ridge(x: Vector,
+                        y: float,
+                        beta: Vector,
+                        alpha: float) -> float:
+    """erro estimado mais a penalidade ridge sobre beta"""
+    return error(x, y, beta) ** 2 + ridge_penalty(beta, alpha)
+```
+
+::: {.callout-important}
+## O `beta[1:]` não é um detalhe
+
+`beta[0]` fica de fora da penalidade, e o motivo é conceitual, não técnico.
+
+O termo constante não descreve **relação** nenhuma entre variáveis: ele só posiciona o modelo na altura certa. No nosso caso ele vale cerca de 30,5 porque as pessoas passam dezenas de minutos por dia no site — se a variável resposta fosse medida em segundos, ele passaria a valer 1.830, e uma penalidade sobre ele castigaria pesadamente um modelo que não mudou em nada.
+
+Pior: encolher o intercepto em direção a zero significa empurrar todas as previsões em direção a zero, o que é uma afirmação absurda sobre o mundo. Encolher os **outros** coeficientes em direção a zero significa "na dúvida, suponha que esta variável não importa" — uma postura conservadora e defensável. São coisas completamente diferentes, e é por isso que a fatia começa em 1.
+:::
+
+O gradiente da penalidade sai direto da derivada de $\alpha \beta_j^2$, com o mesmo zero na primeira posição:
+
+```{python}
+#| label: ridge-gradient
+def ridge_penalty_gradient(beta: Vector, alpha: float) -> Vector:
+    """gradiente apenas da penalidade ridge"""
+    return [0.] + [2 * alpha * beta_j for beta_j in beta[1:]]
+
+def sqerror_ridge_gradient(x: Vector,
+                           y: float,
+                           beta: Vector,
+                           alpha: float) -> Vector:
+    """
+    o gradiente correspondente ao i-ésimo termo de erro quadrático,
+    incluindo a penalidade ridge
+    """
+    return add(sqerror_gradient(x, y, beta),
+               ridge_penalty_gradient(beta, alpha))
+```
+
+Como a perda é uma soma de duas parcelas, o gradiente é a soma dos dois gradientes — e é literalmente isso que `add` faz.
+
+`error` e `sqerror_gradient`, usados acima, são exatamente as funções da [seção 12.3](03-ajustando-o-modelo.qmd); como cada página deste livro roda num kernel próprio, elas vêm importadas de `scratch.multiple_regression`, que é o mesmo código. A partir daí, basta trocar `sqerror_gradient` por `sqerror_ridge_gradient` dentro do `least_squares_fit` daquela seção; o resto do otimizador não muda uma linha. O pacote vendorizado já traz essa versão pronta, como `least_squares_fit_ridge`.
+
+## O efeito de apertar a penalidade
+
+Com `alpha = 0` não há penalidade nenhuma, e devemos recuperar o ajuste da seção 12.3. Conforme `alpha` cresce, o ajuste piora e os coeficientes encolhem:
+
+```{python}
+#| label: ridge-varredura
+#| warning: false
+print(f"{'alpha':>6}  {'constante':>10}{'amigos':>9}{'horas':>9}{'doutorado':>11}"
+      f"{'|beta|²':>10}{'R²':>8}")
+
+resultados = {}
+for alpha in [0.0, 0.1, 1.0, 10.0]:
+    random.seed(0)
+    b = least_squares_fit_ridge(inputs, daily_minutes_good, alpha,
+                                0.001, 5000, 25)
+    resultados[alpha] = b
+    print(f"{alpha:6.1f}  {b[0]:10.3f}{b[1]:9.3f}{b[2]:9.3f}{b[3]:11.3f}"
+          f"{dot(b[1:], b[1:]):10.3f}"
+          f"{multiple_r_squared(inputs, daily_minutes_good, b):8.4f}")
+```
+
+Leia a coluna do `doutorado` de cima para baixo: **0,914 → 0,538 → 0,104 → −0,005**.
+
+::: {.callout-important}
+## O arco se fecha aqui
+
+O coeficiente que evapora primeiro é exatamente o que a [seção 12.7](07-erros-padrao-dos-coeficientes.qmd) identificou como indistinguível de ruído — o mesmo que a [seção 12.2](02-hipoteses-do-minimos-quadrados.qmd) já havia flagrado como quase redundante em relação a `num_amigos`.
+
+E o mecanismo é justamente o que se esperava. Um coeficiente com erro padrão grande é um coeficiente que os dados quase não sustentam: mexer nele muda pouquíssimo o erro de treino. Quando a penalidade entra, esse "pouquíssimo" perde para o custo de mantê-lo grande, e ele desce. Já os coeficientes de `amigos` e `horas`, que os dados sustentam com firmeza, resistem: com `alpha = 1` eles ainda estão em 0,897 e −1,677, perto dos valores originais.
+
+Regularização é, nesse sentido, uma **seleção automática de variáveis por sobrevivência**: quem não se sustenta, cai. Ela chega à mesma conclusão que os erros padrão e os valores-p da seção anterior, sem calcular nenhum dos dois — e sem que ninguém precise olhar uma tabela e decidir o que remover.
+:::
+
+Repare também no que o R² faz nessa tabela. Ele **desce** conforme `alpha` sobe: 0,680 → 0,680 → 0,675 → 0,560. Isso é a contrapartida obrigatória do que a [seção 12.5](05-qualidade-do-ajuste.qmd) demonstrou. O modelo sem penalidade é, por definição, o que minimiza o erro de treino; qualquer coisa que o afaste dali piora o erro de treino. A aposta da regularização é que essa piora no treino compra uma melhora nos dados que o modelo ainda não viu — que é a única melhora que importa. Repare que `alpha = 0,1` custou 0,0003 de R² e derrubou o coeficiente do `doutorado` pela metade: barato.
+
 ::: {.callout-warning}
-## Em construção
-O conteúdo desta seção ainda será escrito.
+## Reescale antes de regularizar
+
+A penalidade *ridge* soma os quadrados dos coeficientes, e o tamanho de um coeficiente depende da **unidade** da variável dele.
+
+@grus2019 dá o exemplo: se você trocasse "anos de experiência" por "séculos de experiência", os valores da coluna ficariam 100 vezes menores, o coeficiente de mínimos quadrados ficaria 100 vezes maior — e passaria a ser penalizado 10.000 vezes mais, sendo exatamente o mesmo modelo.
+
+A consequência prática é que regularização só faz sentido depois de colocar as variáveis numa escala comum. A ferramenta é o `rescale` da [seção 7.6](../cap07/06-reescalonamento.qmd), que subtrai a média e divide pelo desvio padrão de cada coluna. Note que os nossos dados **não** passaram por isso: `amigos` vai de 1 a 49 e `doutorado` é 0 ou 1, escalas bem diferentes. A tabela acima serve para mostrar o mecanismo, e o resultado é interpretável porque nós sabemos o que cada variável significa — mas não é assim que se faz de verdade.
+:::
+
+## O outro caminho: *lasso*
+
+A penalidade *ridge* usa a soma dos **quadrados**. Uma alternativa é usar a soma dos **valores absolutos**:
+
+```{python}
+#| label: lasso
+def lasso_penalty(beta, alpha):
+    return alpha * sum(abs(beta_i) for beta_i in beta[1:])
+```
+
+A diferença de comportamento é maior do que a diferença de código sugere. Enquanto a *ridge* encolhe todos os coeficientes proporcionalmente — deixando-os pequenos, mas raramente exatamente zero (repare que nem mesmo com `alpha = 10` o `doutorado` chegou a zero: parou em −0,005) —, a *lasso* tende a **zerar** coeficientes de vez. Isso a torna a ferramenta certa para aprender modelos esparsos, em que boa parte das variáveis some do modelo e as sobreviventes são todas legíveis.
+
+E aqui o livro esbarra num limite honesto: **a *lasso* não é tratável por gradiente descendente**, então não conseguimos resolvê-la do zero. O motivo é visível na definição: $|\beta_j|$ não tem derivada em $\beta_j = 0$ — a função tem um bico ali. E o bico está exatamente no ponto para o qual a *lasso* quer empurrar os coeficientes, ou seja, não é uma patologia que dê para ignorar. Resolvê-la exige métodos de otimização (descida por coordenadas, operadores proximais) que estão fora do escopo daqui.
+
+::: {.exemplo}
+Vale reparar que este é o segundo limite de escopo deste capítulo, e que os dois são de naturezas diferentes.
+
+A fórmula fechada da [seção 12.3](03-ajustando-o-modelo.qmd) ficou de fora porque exigiria construir álgebra linear que o livro não construiu — uma decisão de orçamento de páginas. A *lasso* fica de fora porque a ferramenta de otimização que o livro construiu **não serve** para ela: não é questão de páginas, é questão de o gradiente descendente ser a ferramenta errada para uma função com bico.
+
+Reconhecer qual dos dois casos você está enfrentando é uma habilidade prática. No primeiro, insistir eventualmente funciona. No segundo, insistir nunca funciona.
+:::
+
+::: {.callout-tip collapse="true"}
+## Na prática: `scikit-learn`
+
+```python
+from sklearn.linear_model import Ridge, Lasso, ElasticNet, RidgeCV
+from sklearn.preprocessing import StandardScaler
+from sklearn.pipeline import make_pipeline
+
+modelo = make_pipeline(StandardScaler(), Ridge(alpha=1.0))
+modelo.fit(X, y)
+```
+
+Quatro coisas que este código traz e o nosso não:
+
+- **`StandardScaler` dentro de um `Pipeline`.** É o `rescale` do Capítulo 7, e o `Pipeline` garante que ele seja ajustado só no treino — sem isso, informação do conjunto de teste vaza para o pré-processamento. Regularização sem reescalonamento é o erro mais comum desta família de modelos, e é por isso que ele aparece primeiro aqui.
+- **`Lasso`**, que o `scikit-learn` resolve por descida por coordenadas — o método que contorna o bico em zero e que nós não temos. É a peça que faltava.
+- **`ElasticNet`**, que combina as duas penalidades e é o que se usa na dúvida.
+- **`RidgeCV`** (e `LassoCV`), que escolhem o `alpha` por validação cruzada em vez de por tentativa e erro. Note que `alpha` é um **hiperparâmetro**: não sai do ajuste, tem que ser escolhido de fora, e a maneira honesta de escolhê-lo é medir desempenho em dados que o modelo não viu — o [Capítulo 8](../cap08/04-correcao.qmd) de novo.
+
+Um aviso de nomenclatura: o `alpha` do `Ridge` do `scikit-learn` tem o mesmo papel do nosso, mas o `LogisticRegression` usa `C`, que é o **inverso** da força da penalidade — ali, `C` pequeno significa penalidade forte. Confundir os dois inverte o modelo por completo, e é um erro que não gera exceção nenhuma.
+
+O `LogisticRegression` aparece já no [Capítulo 13](../cap13/index.qmd), e vale registrar como este capítulo se conecta com ele: o próximo modelo troca a soma dos erros ao quadrado por outra função de perda, perde a fórmula fechada de vez e passa a depender inteiramente do gradiente descendente. A regularização desta seção o acompanha sem alteração conceitual — uma penalidade somada à perda, um gradiente somado ao gradiente —, e por isso o `scikit-learn` a mantém **ligada por padrão** naquele modelo.
 :::

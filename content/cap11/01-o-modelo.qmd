@@ -11,16 +11,14 @@ O primeiro passo, que você provavelmente já viu antes de chegar a este livro, 
 ```{python}
 #| label: importa-dados
 #| include: false
-from scratch.statistics import num_friends_good, daily_minutes_good, mean, correlation
+from scratch.statistics import (num_friends, daily_minutes,
+                                num_friends_good, daily_minutes_good,
+                                mean, correlation)
 import matplotlib.pyplot as plt
 plt.close('all')
 ```
 
-::: {.callout-note}
-`scratch/statistics.py` tem cinco chamadas `plt.*` soltas no nível do módulo — o `import` acima dispara todas elas. O chunk é `#| include: false` para que essas figuras não pedidas não apareçam na página, e `plt.close('all')` limpa o que sobrou antes que vaze para a próxima célula. O módulo também roda uma bateria de `assert` no próprio nível do módulo (`assert 7.3333 < mean(num_friends) < 7.3334`, e outros), mas são todos sobre dado fixo, sem aleatoriedade — sempre passam, e importar o módulo é, na prática, rodar a suíte de testes dele.
-
-`num_friends_good` e `daily_minutes_good` já vêm **sem** um usuário-outlier removido pelo próprio livro-texto: alguém com 100 amigos "declarados", quase certamente uma conta de teste ou um erro de captura, que distorceria qualquer estatística calculada sobre a lista inteira.
-:::
+São duas listas paralelas, uma entrada por usuário: `num_friends_good` guarda quantos amigos cada um tem, `daily_minutes_good` guarda quantos minutos por dia ele passa no site. O sufixo `_good` marca a versão **limpa** dos dados — o livro-texto descartou um usuário antes de calcular qualquer coisa, e daqui a pouco vamos ver qual e por quê.
 
 ```{python}
 #| label: descreve-dados
@@ -34,13 +32,36 @@ correlation(num_friends_good, daily_minutes_good)
 
 São 203 usuários. Em média, cada um tem quase 7 amigos e passa cerca de 29 minutos por dia no site. E a correlação — pouco mais de 0,57 — diz que existe uma tendência real: mais amigos, mais tempo. Mas repare no que esse número **não** diz. Ele não diz se um amigo a mais vale, em média, 10 segundos ou 10 minutos a mais de uso. Ele não dá uma equação. Para isso, precisamos de outra coisa: um modelo.
 
+::: {.callout-warning}
+## Um ponto em 204 derruba a correlação a 43%
+
+As listas cruas — `num_friends` e `daily_minutes`, sem o sufixo — têm 204 usuários. O livro-texto descartou um deles: alguém que declarava **100 amigos** e passava **1 minuto por dia** no site. Cem amigos é mais que o dobro do segundo colocado (49), e um minuto por dia é o piso da amostra; a combinação das duas coisas é quase certamente uma conta de teste ou um erro de captura, não um usuário. Veja o que esse único ponto faz com a correlação:
+
+```{python}
+#| label: correlacao-com-outlier
+len(num_friends), correlation(num_friends, daily_minutes)
+```
+
+Com ele dentro, 0,2474. Sem ele, 0,5737. **Um ponto em 204 derruba a correlação para 43% do valor** — porque ele fica no extremo direito do eixo `x`, onde cada ponto tem alavanca desproporcional, e aponta para baixo enquanto todo o resto aponta para cima.
+
+Isso é um aviso permanente, não uma curiosidade deste conjunto: a correlação — e, como o resto desta seção vai mostrar, a regressão que se calcula a partir dela — não tem defesa nenhuma contra um valor extremo. Nenhuma mensagem de erro avisa; o número simplesmente sai outro. E nenhum resumo numérico denuncia o problema: os 0,2474 são um número perfeitamente plausível de se publicar. Quem viu o ponto foi quem olhou a nuvem de pontos — que é para o que serve o gráfico de dispersão logo adiante nesta seção.
+:::
+
+::: {.callout-note collapse="true"}
+## Por que o chunk do `import` está escondido
+
+`scratch/statistics.py` tem cinco chamadas `plt.*` soltas no nível do módulo — o `import` acima dispara todas elas. O chunk é `#| include: false` para que essas figuras não pedidas não apareçam na página, e `plt.close('all')` limpa o que sobrou antes que vaze para a próxima célula.
+
+O módulo também roda uma bateria de `assert` no próprio nível do módulo (`assert 7.3333 < mean(num_friends) < 7.3334`, e outros), mas são todos sobre dado fixo, sem aleatoriedade — sempre passam, e importar o módulo é, na prática, rodar a suíte de testes dele.
+:::
+
 ## O modelo
 
 ::: {.callout-important}
 Vamos supor que você já se convenceu de que ter mais amigos **causa** mais tempo no site — e não o contrário (quem já passa mais tempo no site tende a fazer mais amigos ali), nem um terceiro fator que produz os dois efeitos ao mesmo tempo (por exemplo, ter mais tempo livre em geral). Correlação sozinha nunca prova isso; é uma suposição que se traz de fora dos dados, não uma conclusão que se tira deles. O capítulo segue com essa suposição porque o objetivo aqui é regressão, não inferência causal — mas vale lembrar que ela está sendo feita.
 :::
 
-Com essa suposição em mãos, hipotetizamos que existem constantes $\alpha$ (alfa) e $\beta$ (beta) tais que:
+Com essa suposição em mãos, supomos que existam constantes $\alpha$ (alfa) e $\beta$ (beta) tais que:
 
 $$
 y_i = \beta x_i + \alpha + \varepsilon_i
@@ -67,7 +88,7 @@ def error(alpha: float, beta: float, x_i: float, y_i: float) -> float:
     return predict(alpha, beta, x_i) - y_i
 ```
 
-Como escolher $\alpha$ e $\beta$? Qualquer escolha das duas nos dá uma previsão para cada `x_i`. Como conhecemos o valor real `y_i`, podemos calcular o erro de cada par. O que gostaríamos de saber é o erro **total** sobre o conjunto de dados inteiro — mas somar os erros direto não presta: se a previsão para `x_1` está alta demais e a previsão para `x_2` está baixa demais na mesma proporção, os erros se cancelam e escondem um modelo ruim. A saída é somar os erros **ao quadrado**:
+Como escolher $\alpha$ e $\beta$? Qualquer escolha das duas nos dá uma previsão para cada `x_i`. Como conhecemos o valor real `y_i`, podemos calcular o erro de cada par. O que gostaríamos de saber é o erro **total** sobre o conjunto de dados inteiro — mas somar os erros direto não serve: se a previsão para `x_1` está alta demais e a previsão para `x_2` está baixa demais na mesma proporção, os erros se cancelam e escondem um modelo ruim. A saída é somar os erros **ao quadrado**:
 
 ```{python}
 #| label: sum-of-sqerrors
@@ -102,13 +123,13 @@ def least_squares_fit(x: Vector, y: Vector) -> Tuple[float, float]:
     return alpha, beta
 ```
 
-::: {.exemplo}
+::: {.conceito}
 Nada de laço, nada de `theta` inicial aleatório, nada de taxa de aprendizado. `least_squares_fit` calcula duas médias, uma correlação (que por baixo é uma covariância dividida por dois desvios padrão) e dois desvios padrão — e devolve a resposta exata. É exatamente o que a [seção 5.5](../cap05/05-ajustando-modelos.qmd) prometeu: **duas médias, uma covariância, uma variância, sem laço nenhum**.
 
 Essa fórmula existe porque o problema é simples o bastante para ter solução fechada: derive `sum_of_sqerrors` em relação a $\alpha$ e a $\beta$, iguale as duas derivadas a zero, resolva o sistema — e o que sobra são só médias, variância e covariância. A [seção 11.2](02-usando-gradiente-descendente.qmd) resolve exatamente o mesmo problema pelo caminho do Capítulo 5, iterando em vez de calculando direto, e as duas respostas vão bater.
 :::
 
-Sem passar pela conta exata, vale pensar no porquê disso fazer sentido. A escolha de $\alpha$ diz que, ao ver o valor **médio** da variável independente `x`, prevemos o valor **médio** da variável dependente `y` — é por isso que `alpha = mean(y) - beta * mean(x)`. A escolha de $\beta$ diz que, a cada aumento de um desvio padrão em `x`, a previsão aumenta `correlation(x, y)` desvios padrão de `y`. Quando `x` e `y` são perfeitamente correlacionados, um aumento de um desvio padrão em `x` produz um aumento de exatamente um desvio padrão na previsão de `y`. Quando são perfeitamente anticorrelacionados, o aumento em `x` produz uma **queda** na previsão. E quando a correlação é zero, `beta` é zero — variar `x` não muda a previsão em nada.
+Sem passar pela conta exata, vale pensar no porquê disso fazer sentido. A escolha de $\alpha$ diz que, ao ver o valor **médio** da variável independente `x`, prevemos o valor **médio** da variável dependente `y` — é por isso que `alpha = mean(y) - beta * mean(x)`. A escolha de $\beta$ diz que, a cada aumento de um desvio padrão em `x`, a previsão aumenta `correlation(x, y)` desvios padrão de `y` — de modo que correlação 1 devolve o aumento inteiro, correlação -1 devolve uma queda de mesmo tamanho, e correlação 0 zera `beta`, deixando a previsão insensível a `x`.
 
 Como sempre, escrevemos um teste rápido:
 
@@ -136,7 +157,7 @@ Isso dá $\alpha \approx 22{,}95$ e $\beta \approx 0{,}904$. O modelo diz que es
 
 ## Olhando o ajuste
 
-Como o [Capítulo 3](../cap03/04-graficos-de-dispersao.qmd) mostrou, um gráfico de dispersão é a ferramenta certa para duas variáveis pareadas. Vamos usar o mesmo `plt.scatter`, agora com os 203 pontos reais, e desenhar a reta ajustada por cima:
+Como o [Capítulo 3](../cap03/04-graficos-de-dispersao.qmd) mostrou, um gráfico de dispersão é a ferramenta certa para duas variáveis pareadas. Aquele capítulo já desenhou "amigos × minutos", mas com nove pontos inventados para ilustrar o tipo de gráfico, numa escala completamente outra (60 a 72 amigos, 105 a 220 minutos); aqui são os 203 usuários reais da DataSciencester. Vamos usar o mesmo `plt.scatter`, agora com esses pontos, e desenhar a reta ajustada por cima:
 
 ```{python}
 #| label: fig-regressao-amigos-minutos
@@ -181,7 +202,7 @@ assert 0.328 < rsq < 0.330
 rsq
 ```
 
-O R² dá cerca de 0,329. Para entender de onde vêm os limites dessa métrica, vale comparar com o pior modelo linear razoável: sempre prever a média de `y`, ignorando `x` completamente — o que corresponde a `alpha = mean(y)` e `beta = 0`. A soma dos erros ao quadrado desse modelo "vazio" é, por construção, exatamente igual a `total_sum_of_squares(y)`: sem informação nenhuma sobre `x`, o melhor palpite constante para cada ponto é a própria média. Isso dá R² = 0.
+O R² dá cerca de 0,329. Para entender de onde vêm os limites dessa métrica, vale comparar com o modelo de referência mais simples possível: sempre prever a média de `y`, ignorando `x` completamente — o que corresponde a `alpha = mean(y)` e `beta = 0`. A soma dos erros ao quadrado desse modelo "vazio" é, por construção, exatamente igual a `total_sum_of_squares(y)`: sem informação nenhuma sobre `x`, o melhor palpite constante para cada ponto é a própria média. Isso dá R² = 0.
 
 O modelo de mínimos quadrados precisa ser **pelo menos** tão bom quanto esse, porque ele é, por definição, a escolha de $\alpha$ e $\beta$ que minimiza a soma dos erros ao quadrado — e "sempre prever a média" é só mais uma escolha possível de $\alpha$ e $\beta$ entre todas as que ele considerou. Logo a soma dos erros ao quadrado do modelo ajustado é **no máximo** a soma dos erros ao quadrado do modelo vazio, o que trava o R² entre 0 e 1: quanto mais alto, melhor o ajuste.
 
@@ -208,5 +229,17 @@ modelo.intercept_, modelo.coef_[0]   # alpha, beta
 modelo.score(X, y)                    # R²
 ```
 
+Vale rodar e comparar com o que as três funções desta seção devolveram, valor a valor:
+
+|  | à mão, nesta seção | `scikit-learn` 1.9 |
+|---|---|---|
+| $\alpha$ | `22.947552413468976` | `22.947552413468976` |
+| $\beta$ | `0.9038659456058725` | `0.9038659456058724` |
+| R² | `0.32910783778362984` | `0.32910783778362984` |
+
+$\alpha$ e o R² saem **idênticos**, bit a bit. O $\beta$ difere no último dígito da representação — um único bit de mantissa, a menor diferença que um `float64` sabe expressar, e nem sequer erro de método: é a ordem em que as somas de ponto flutuante foram feitas. As trinta e poucas linhas desta seção e a biblioteca que roda em produção no mundo inteiro estão calculando **a mesma coisa**.
+
 `LinearRegression` não itera e não pede taxa de aprendizado: ela resolve o sistema de mínimos quadrados por álgebra linear direta (decomposição em valores singulares), o equivalente industrial da fórmula fechada que você acabou de escrever à mão. `.score()` devolve o R² sem que você precise escrever `total_sum_of_squares` nem `r_squared` — mas é a mesma conta, e agora você sabe o que ela faz por dentro: soma de quadrados do modelo dividida pela soma de quadrados do modelo vazio, subtraída de 1.
+
+O chunk acima não é executado nesta página — o `scikit-learn` nunca entra na implementação de uma seção deste livro, só neste callout. Os números da tabela foram medidos rodando o código, não estimados.
 :::

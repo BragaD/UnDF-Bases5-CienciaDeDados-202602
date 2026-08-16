@@ -4,7 +4,132 @@
 Esta seção corresponde a *Further Assumptions of the Least Squares Model*, do capítulo 15 de @grus2019.
 :::
 
+Passar de uma variável explicativa para várias exige duas hipóteses adicionais para que o modelo — e a nossa solução para ele — façam sentido. Listá-las é fácil e inútil; o que interessa é **o que quebra quando cada uma é violada**, e as duas quebram de maneiras bem diferentes. A primeira torna a resposta indeterminada. A segunda dá uma resposta errada com toda a aparência de estar certa.
+
+```{python}
+#| label: importa
+#| include: false
+import random
+random.seed(0)
+from scratch.multiple_regression import inputs, least_squares_fit, multiple_r_squared
+from scratch.statistics import daily_minutes_good, correlation
+import matplotlib.pyplot as plt
+plt.close('all')
+```
+
+## Hipótese 1: as colunas de `x` são linearmente independentes
+
+Nenhuma coluna pode ser escrita como soma ponderada das outras. Quando essa hipótese falha, **é impossível estimar `beta`** — e o motivo não é numérico, é lógico: não existe *uma* resposta a ser encontrada.
+
+O caso extremo torna isso visível. Imagine que os dados tivessem um campo extra, `num_conhecidos`, que por um acidente de coleta fosse **exatamente igual** a `num_amigos` para todo usuário. Vamos construir esse campo e ajustar o modelo três vezes, cada uma partindo de um chute inicial diferente:
+
+```{python}
+#| label: colinear
+#| warning: false
+inputs_colineares = [x + [x[1]] for x in inputs]   # num_conhecidos == num_amigos
+
+for semente in [0, 1, 2]:
+    random.seed(semente)
+    b = least_squares_fit(inputs_colineares, daily_minutes_good, 0.001, 5000, 25)
+    r2 = multiple_r_squared(inputs_colineares, daily_minutes_good, b)
+    print(f"semente {semente}: amigos = {b[1]:.4f}   conhecidos = {b[4]:.4f}   "
+          f"soma = {b[1] + b[4]:.4f}   R² = {r2:.6f}")
+```
+
+Três ajustes, três respostas **diferentes** para o coeficiente de `num_amigos` — e todas igualmente boas. Repare no que é idêntico nas três linhas: a **soma** dos dois coeficientes e o R². O modelo determina perfeitamente quanto vale `amigos + conhecidos`; ele não tem como decidir onde termina a parte de um e começa a do outro, porque nenhum dado distingue as duas hipóteses.
+
+::: {.conceito}
+Partindo de qualquer `beta`, some um valor qualquer ao coeficiente de `num_amigos` e subtraia o mesmo valor do coeficiente de `num_conhecidos`. Como as duas colunas são idênticas, as previsões do modelo não mudam **nem um pouco** — e portanto o erro não muda. Existe uma infinidade de vetores `beta` empatados no primeiro lugar, e "o" coeficiente de `num_amigos` simplesmente não existe.
+
+Note que o modelo continua **prevendo** bem: o R² é o mesmo nos três ajustes. O que se perde é a capacidade de **interpretar** os coeficientes, que é justamente o que a [seção 12.4](04-interpretando-o-modelo.qmd) vai querer fazer. Um modelo pode ser útil para prever e inútil para explicar.
+:::
+
+Esse é também o motivo do "menos uma" que a [seção 12.1](01-o-modelo.qmd) mencionou ao codificar categorias. Se uma variável de três categorias virasse três colunas indicadoras, elas somariam 1 em toda linha — ou seja, reproduziriam exatamente a coluna constante do intercepto. Uma coluna seria combinação linear das outras, e cairíamos nesse mesmo poço. O nome do erro é *dummy variable trap*, e ele é frequente o bastante para ter nome próprio.
+
+Violações **exatas** como essa são raras na prática (e, quando acontecem, quase sempre por descuido: uma coluna duplicada, um total que é a soma das partes, um conjunto completo de indicadoras). O que é comum é a versão aproximada — duas colunas quase redundantes, a chamada **multicolinearidade**. Aí o ajuste é tecnicamente único, mas quase indeterminado: o coeficiente fica extremamente sensível a pequenas mudanças nos dados. Guarde essa frase; a [seção 12.7](07-erros-padrao-dos-coeficientes.qmd) vai medir exatamente essa sensibilidade, e nossos próprios dados têm um caso:
+
+```{python}
+#| label: correlacoes
+amigos = [x[1] for x in inputs]
+horas  = [x[2] for x in inputs]
+phd    = [x[3] for x in inputs]
+
+print(f"corr(amigos, horas) = {correlation(amigos, horas):.4f}")
+print(f"corr(amigos, phd)   = {correlation(amigos, phd):.4f}")
+print(f"corr(horas,  phd)   = {correlation(horas, phd):.4f}")
+```
+
+`num_amigos` e `tem_doutorado` têm correlação de $-0{,}61$. Olhando mais de perto, a redundância é ainda maior do que esse número sugere:
+
+```{python}
+#| label: sobreposicao
+faixa_phd    = [a for a, p in zip(amigos, phd) if p == 1]
+faixa_sem    = [a for a, p in zip(amigos, phd) if p == 0]
+
+print(f"com doutorado ({len(faixa_phd):3d} usuários): amigos de {min(faixa_phd)} a {max(faixa_phd)}")
+print(f"sem doutorado ({len(faixa_sem):3d} usuários): amigos de {min(faixa_sem)} a {max(faixa_sem)}")
+print(f"única sobreposição: usuários com exatamente 6 amigos "
+      f"({sum(1 for a, p in zip(amigos, phd) if a == 6 and p == 1)} com doutorado, "
+      f"{sum(1 for a, p in zip(amigos, phd) if a == 6 and p == 0)} sem)")
+```
+
+Neste conjunto de dados, saber o número de amigos de um usuário quase determina se ele tem doutorado: abaixo de 6 amigos, tem; acima de 6, não tem. A **única** faixa em que os dois grupos coexistem é a de exatamente 6 amigos — 22 usuários dos 203. `tem_doutorado` não é uma coluna redundante, mas falta pouco. As seções 12.7 e 12.8 vão colher a consequência disso.
+
+## Hipótese 2: as colunas de `x` não são correlacionadas com os erros
+
+Se essa hipótese falha, as estimativas de `beta` ficam **sistematicamente erradas** — e essa é a palavra que assusta. Não é ruído, que some ao coletar mais dados; é viés, que permanece.
+
+O mecanismo é este: quando uma variável que afeta `y` fica **de fora** do modelo, o efeito dela não desaparece — ele vai parar no termo de erro. Se alguma variável que **está** no modelo for correlacionada com a que ficou de fora, o coeficiente dela absorve parte de um efeito que não é seu.
+
+::: {.exemplo}
+O exemplo de @grus2019 é hipotético, mas vale seguir o raciocínio. Suponha que:
+
+- Pessoas que trabalham mais horas passam menos tempo no site.
+- Pessoas com mais amigos tendem a trabalhar mais horas.
+
+Isto é, o modelo "real" incluiria `horas de trabalho` com coeficiente **negativo**, e `horas` seria positivamente correlacionada com `amigos`. Ajuste então o modelo só com `amigos`. As previsões desse modelo, usando o coeficiente "real" de `amigos`, ficariam **altas demais** para quem trabalha muito — porque o desconto das horas de trabalho foi esquecido. E como quem tem muitos amigos trabalha muito, as previsões ficariam altas demais justamente para quem tem muitos amigos.
+
+O ajuste de mínimos quadrados corrige isso do único jeito que pode: **diminuindo** o coeficiente de `amigos`. O resultado é uma estimativa enviesada para baixo — não por erro de conta, mas porque o modelo está fazendo o melhor possível com uma variável faltando.
+:::
+
+Nos nossos dados, a correlação entre amigos e horas de trabalho é praticamente nula ($0{,}025$), então essa história específica não se realiza. Mas o **fenômeno** se realiza, por outro caminho — via `tem_doutorado`, que é fortemente correlacionado com `num_amigos`. Dá para ver o coeficiente de `amigos` se mexer conforme mudamos o que mais está no modelo:
+
+```{python}
+#| label: modelos-aninhados
+#| warning: false
+variantes = {
+    "amigos":                   [[1.0, x[1]] for x in inputs],
+    "amigos + horas":           [[1.0, x[1], x[2]] for x in inputs],
+    "amigos + phd":             [[1.0, x[1], x[3]] for x in inputs],
+    "amigos + horas + phd":     inputs,
+}
+
+for nome, xs in variantes.items():
+    random.seed(0)
+    b = least_squares_fit(xs, daily_minutes_good, 0.001, 5000, 25)
+    print(f"{nome:24s} coeficiente de amigos = {b[1]:.4f}")
+```
+
+O coeficiente de `num_amigos` vai de cerca de 0,84 no modelo de uma variável só a cerca de 0,97 no modelo completo — uma diferença de mais de 15%. Não é que um deles esteja "errado" e o outro "certo": cada um responde a uma pergunta diferente, e a [seção 12.4](04-interpretando-o-modelo.qmd) é sobre qual pergunta é essa.
+
 ::: {.callout-warning}
-## Em construção
-O conteúdo desta seção ainda será escrito.
+## O número de 0,84 e o número de 0,904
+
+O [Capítulo 11](../cap11/01-o-modelo.qmd) ajustou exatamente este primeiro modelo — só `amigos` — pela fórmula fechada, e encontrou $\beta \approx 0{,}9039$. Aqui o mesmo modelo, ajustado por gradiente descendente com estes hiperparâmetros, dá cerca de 0,84.
+
+A diferença é do **otimizador**, não do modelo. O `least_squares_fit` usado aqui dá 5.000 passos com lotes de 25 pontos e taxa de aprendizado fixa; ele chega perto do mínimo e fica orbitando em torno dele, sem nunca pousar. Para o modelo de quatro variáveis, que é o deste capítulo, essa imprecisão é pequena (a [seção 12.3](03-ajustando-o-modelo.qmd) compara com a solução exata); para o modelo de duas, com estes mesmos hiperparâmetros, ela é maior.
+
+Vale registrar isso em vez de esconder, por dois motivos. Primeiro, porque o **padrão** — o coeficiente de `amigos` subir quando as outras variáveis entram — é robusto e aparece igual na solução exata (0,904 → 0,972). Segundo, porque é um lembrete de que todo número deste capítulo tem duas fontes de incerteza empilhadas: a dos dados e a do otimizador. As seções 12.6 e 12.7 medem a primeira. A segunda se combate com mais passos, e é por isso que os chunks deste capítulo pedem 5.000 deles.
+:::
+
+::: {.callout-tip collapse="true"}
+## Na prática: o que se faz com isso
+
+Nenhuma biblioteca "resolve" essas duas hipóteses, porque elas não são sobre código — são sobre quais dados você tem. Mas há ferramentas para *detectar* problemas:
+
+Para colinearidade **exata**, o `scikit-learn` não reclama: `LinearRegression` resolve o sistema por decomposição em valores singulares, que devolve a solução de norma mínima em vez de estourar. Você recebe um `beta` bonito, sem aviso nenhum, e ele é apenas um representante arbitrário da infinidade de empatados — exatamente as três respostas diferentes que vimos acima.
+
+Para colinearidade **aproximada**, o diagnóstico usual é o *variance inflation factor* (VIF), disponível no `statsmodels` como `variance_inflation_factor`. Ele mede, para cada coluna, o quanto ela é previsível a partir das outras — que é a versão quantitativa da sobreposição que medimos à mão acima.
+
+Para a segunda hipótese — variáveis correlacionadas com o erro — não existe teste, e não pode existir: o erro é justamente o que você não observou. Detectá-la exige conhecimento do domínio, não estatística. Áreas que dependem disso para valer (econometria, epidemiologia) desenvolveram um arsenal inteiro — variáveis instrumentais, experimentos naturais, desenhos quase-experimentais — e todo esse arsenal existe porque o problema **não** se resolve com mais dados nem com um modelo melhor.
 :::
