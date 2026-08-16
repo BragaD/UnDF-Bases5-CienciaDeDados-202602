@@ -1,10 +1,254 @@
 # Ferramentas e Anotações de Tipo
 
 ::: {.callout-note}
-Esta seção corresponde a *Randomness; Regular Expressions; Functional Programming; zip and Argument Unpacking; args and kwargs; Type Annotations; Welcome to DataSciencester!*, do capítulo 2 de @grus2019.
+Esta seção corresponde a *Randomness*, *Regular Expressions*, *Functional Programming*, *zip and Argument Unpacking*, *args and kwargs*, *Type Annotations* e *Welcome to DataSciencester!*, do capítulo 2 de @grus2019.
 :::
 
-::: {.callout-warning}
-## Em construção
-O conteúdo desta seção ainda será escrito.
+::: {.callout-tip}
+## O que esta seção assume
+
+Que você conhece aleatoriedade pseudoaleatória, expressões regulares e funções de alta ordem. **O que vale desacelerar: `zip` e, sobretudo, anotações de tipo** — que atravessam dois terços das funções do livro e são a contribuição mais distintiva do @grus2019.
 :::
+
+## Aleatoriedade e sementes
+
+O módulo `random` produz números pseudoaleatórios:
+
+```{python}
+#| label: random
+import random
+
+random.seed(10)   # fixa a semente
+
+quatro_uniformes = [random.random() for _ in range(4)]
+quatro_uniformes
+```
+
+Outras funções úteis: `randrange` para inteiros, `shuffle` para embaralhar no lugar, `choice` para sortear um elemento, e `sample` para sortear vários **sem** reposição.
+
+```{python}
+#| label: random-funcoes
+random.seed(10)
+
+print("randrange(10):", random.randrange(10))
+print("sample de 6 em 60:", random.sample(range(60), 6))
+
+up_to_ten = list(range(1, 11))
+random.shuffle(up_to_ten)
+print("shuffle:", up_to_ten)
+
+# com reposição: o mesmo elemento pode sair duas vezes
+print("com reposição:", [random.choice(range(10)) for _ in range(4)])
+```
+
+::: {.callout-important}
+## A semente não é opcional neste livro
+
+`random.seed(10)` faz o gerador produzir sempre a mesma sequência. Sem ela, cada execução dá números diferentes.
+
+Neste material isso é **obrigatório em todo chunk que usa aleatoriedade**, e por uma razão prática: o livro é renderizado a cada mudança, e sem semente cada renderização produziria números e gráficos diferentes. O texto pararia de bater com a saída, e o diff do site publicado viraria ruído.
+
+Você vai ver `random.seed(...)` em todos os capítulos que amostram, embaralham ou inicializam pesos ao acaso. Repare que é o `random` da biblioteca padrão, não o `numpy.random` — este livro é Python puro.
+:::
+
+## Expressões regulares, rapidamente
+
+```{python}
+#| label: regex
+import re
+
+re_examples = [
+    not re.match("a", "cat"),              # 'cat' não COMEÇA com 'a'
+    re.search("a", "cat"),                 # mas 'cat' CONTÉM 'a'
+    not re.search("c", "dog"),             # 'dog' não contém 'c'
+    3 == len(re.split("[ab]", "carbs")),   # divide em a ou b: ['c','r','s']
+    "R-D-" == re.sub("[0-9]", "-", "R2D2") # troca dígitos por hífens
+]
+
+assert all(re_examples), "todos os exemplos de regex deveriam ser True"
+all(re_examples)
+```
+
+A distinção que mais confunde é `match` contra `search`: o primeiro ancora no início da string, o segundo procura em qualquer posição.
+
+## `zip` e desempacotamento — 60 usos no livro
+
+Aqui vale desacelerar. `zip` combina iteráveis, elemento a elemento:
+
+```{python}
+#| label: zip
+list1 = ['a', 'b', 'c']
+list2 = [1, 2, 3]
+
+list(zip(list1, list2))
+```
+
+`zip` é **preguiçoso**: ele não produz nada até alguém iterar. É por isso que a linha acima precisa do `list()`.
+
+E dá para desfazer o zip com o operador `*`, que desempacota uma lista em argumentos posicionais:
+
+```{python}
+#| label: unzip
+pairs = [('a', 1), ('b', 2), ('c', 3)]
+letters, numbers = zip(*pairs)
+
+letters, numbers
+```
+
+::: {.exemplo}
+`zip` é o motor da aritmética de vetores do [Capítulo 4](../cap04/index.qmd):
+
+```python
+def add(v: Vector, w: Vector) -> Vector:
+    return [v_i + w_i for v_i, w_i in zip(v, w)]
+
+def dot(v: Vector, w: Vector) -> float:
+    return sum(v_i * w_i for v_i, w_i in zip(v, w))
+```
+
+"Percorrer duas sequências em paralelo" é a operação mais frequente em código numérico, e `zip` é como se escreve isso em Python. Sem ele, seria um laço por índice com `range(len(v))` — e aí você teria que lembrar de verificar se os comprimentos batem, coisa que o `assert` na primeira linha da função faz de propósito.
+:::
+
+O `*` funciona em qualquer chamada de função, e `**` faz o mesmo com dicionários e argumentos nomeados:
+
+```{python}
+#| label: args-kwargs
+def other_way_magic(x, y, z):
+    return x + y + z
+
+x_y_list = [1, 2]
+z_dict = {"z": 3}
+
+assert other_way_magic(*x_y_list, **z_dict) == 6, "1 + 2 + 3 deveria dar 6"
+other_way_magic(*x_y_list, **z_dict)
+```
+
+::: {.callout-note}
+Na definição de uma função, `*args` recolhe os argumentos posicionais numa tupla e `**kwargs` recolhe os nomeados num dicionário. É útil para escrever funções de alta ordem que aceitam qualquer assinatura.
+
+O livro usa isso com parcimônia, e o autor explica por quê: **o código fica mais correto e mais legível quando você é explícito sobre que argumentos a função exige.** `*args` e `**kwargs` só quando não há alternativa.
+:::
+
+## Anotações de tipo
+
+Esta é a parte mais importante da seção, e a mais distintiva do livro.
+
+Python é **dinamicamente tipado**: em geral, ele não se importa com os tipos dos objetos, desde que sejam usados de forma válida.
+
+```{python}
+#| label: dinamico
+def add(a, b):
+    return a + b
+
+assert add(10, 5) == 15,              "+ é válido para números"
+assert add([1, 2], [3]) == [1, 2, 3], "+ é válido para listas"
+assert add("oi ", "lá") == "oi lá",   "+ é válido para strings"
+
+try:
+    add(10, "cinco")
+except TypeError:
+    print("não dá para somar um int com uma string")
+```
+
+Numa linguagem estaticamente tipada, funções e objetos teriam tipos específicos. Python permite escrever isso:
+
+```{python}
+#| label: anotado
+def add(a: int, b: int) -> int:
+    return a + b
+
+add(10, 5)
+```
+
+::: {.callout-warning}
+## As anotações não fazem nada
+
+Este é o ponto que mais confunde quem chega de uma linguagem estática.
+
+A função anotada acima **continua** somando strings sem reclamar, e `add(10, "cinco")` levanta exatamente o mesmo `TypeError` de antes. O interpretador não verifica coisa alguma.
+
+```{python}
+#| label: anotacao-nao-verifica
+def add(a: int, b: int) -> int:
+    return a + b
+
+add("mesmo ", "assim")   # a anotação diz int; o Python não se importa
+```
+:::
+
+Então por que usá-las? O @grus2019 dá quatro razões, e a primeira é a que mais importa aqui:
+
+**1. Tipos são documentação.** Isso vale em dobro num livro que usa código para ensinar conceitos matemáticos. Compare:
+
+```python
+def dot_product(x, y): ...
+
+def dot_product(x: Vector, y: Vector) -> float: ...
+```
+
+A segunda versão diz o que a função faz antes de você ler o corpo dela. Duas listas de números entram; um número sai. O autor escreve que se acostumou tanto com isso que hoje acha Python sem anotação difícil de ler.
+
+**2. Ferramentas externas verificam.** O `mypy` lê o código, inspeciona as anotações e acusa erros de tipo **antes de você executar**. Como o `assert`, é uma forma de achar erro cedo. O autor conta que roda o mypy sobre o livro inteiro nos bastidores — é parte do que garante que o código publicado esteja correto.
+
+**3. Pensar nos tipos força um projeto melhor.** Uma função cujo parâmetro precisa ser anotado como `Union[str, int, float, bool]` está dizendo alguma coisa sobre si mesma: provavelmente é frágil e difícil de usar. A anotação torna o problema visível.
+
+**4. O editor ajuda.** Com os tipos declarados, o editor autocompleta corretamente e reclama de erros na hora.
+
+## Como escrever anotações
+
+Para tipos embutidos, use o próprio tipo. Para coleções, o módulo `typing` traz versões parametrizadas — e é isso que dá a informação útil:
+
+```{python}
+#| label: typing
+from typing import List, Dict, Optional, Tuple, Callable
+
+def total(xs: List[float]) -> float:      # lista de floats, não lista qualquer
+    return sum(xs)
+
+# quando o tipo não é óbvio pela atribuição, anote a variável
+values: List[int] = []
+best_so_far: Optional[float] = None       # pode ser float ou None
+
+counts: Dict[str, int] = {'data': 1, 'science': 2}
+triple: Tuple[int, float, int] = (10, 2.3, 5)
+
+total([1.0, 2.0, 3.0])
+```
+
+Como Python tem funções de primeira classe, existe um tipo para representá-las:
+
+```{python}
+#| label: callable
+def twice(repeater: Callable[[str, int], str], s: str) -> str:
+    """repeater é uma função que recebe (str, int) e devolve str"""
+    return repeater(s, 2)
+
+def comma_repeater(s: str, n: int) -> str:
+    return ', '.join([s for _ in range(n)])
+
+assert twice(comma_repeater, "dicas de tipo") == "dicas de tipo, dicas de tipo"
+twice(comma_repeater, "dicas de tipo")
+```
+
+E, como anotações são apenas objetos Python, dá para dar nome a elas:
+
+```{python}
+#| label: alias-tipo
+Number = int
+Numbers = List[Number]
+
+def total(xs: Numbers) -> Number:
+    return sum(xs)
+
+total([1, 2, 3])
+```
+
+::: {.conceito}
+Esse último recurso é o que produz o `Vector = List[float]` do [Capítulo 4](../cap04/index.qmd) — o apelido que dá nome à ideia sem criar tipo novo.
+
+É um bom resumo do que as anotações fazem neste livro: elas não mudam o que o código executa. Mudam o que ele **diz**.
+:::
+
+## Bem-vindo à DataSciencester!
+
+Isto conclui a integração de novos funcionários. Ah, e mais uma coisa: tente não desviar dinheiro.

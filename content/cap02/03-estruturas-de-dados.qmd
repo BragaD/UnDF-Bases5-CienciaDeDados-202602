@@ -1,10 +1,192 @@
 # Estruturas de Dados
 
 ::: {.callout-note}
-Esta seção corresponde a *Lists; Tuples; Dictionaries; defaultdict; Counters; Sets*, do capítulo 2 de @grus2019.
+Esta seção corresponde a *Lists*, *Tuples*, *Dictionaries*, *defaultdict*, *Counters* e *Sets*, do capítulo 2 de @grus2019.
 :::
 
-::: {.callout-warning}
-## Em construção
-O conteúdo desta seção ainda será escrito.
+::: {.callout-tip}
+## O que esta seção assume
+
+Que você conhece arranjos, listas, tabelas hash e conjuntos como estruturas. O que muda: a sintaxe de fatiamento e desempacotamento. **O que vale desacelerar: `defaultdict` e `Counter`** — juntos aparecem 85 vezes no código do livro, e substituem laços de contagem que você provavelmente escreveria à mão.
 :::
+
+## Listas e tuplas, rapidamente
+
+Lista é a estrutura ordenada e mutável de Python. O que difere do que você já conhece é o **fatiamento**, que é mais expressivo que o usual:
+
+```{python}
+#| label: fatiamento
+x = list(range(10))
+
+primeiros_tres  = x[:3]      # [0, 1, 2]
+ultimos_tres    = x[-3:]     # [7, 8, 9]
+sem_primeiro_e_ultimo = x[1:-1]
+cada_terceiro   = x[::3]     # [0, 3, 6, 9]
+de_cinco_a_tres = x[5:2:-1]  # [5, 4, 3]  — passo negativo inverte
+
+primeiros_tres, ultimos_tres, cada_terceiro, de_cinco_a_tres
+```
+
+O operador `in` verifica pertinência — e é **linear** numa lista, o que importa quando a lista é grande:
+
+```{python}
+#| label: pertinencia
+1 in [1, 2, 3], 0 in [1, 2, 3]
+```
+
+**Tuplas** são listas imutáveis: quase tudo que se faz com lista se faz com tupla, menos modificar. Elas servem para retornar múltiplos valores e para desempacotamento:
+
+```{python}
+#| label: desempacotamento
+def sum_and_product(x, y):
+    return (x + y), (x * y)
+
+sp = sum_and_product(2, 3)
+s, p = sum_and_product(5, 10)
+
+# desempacotamento também troca valores sem variável temporária
+x, y = 1, 2
+x, y = y, x
+
+sp, s, p, (x, y)
+```
+
+::: {.callout-note}
+`x, y = y, x` não é truque: o lado direito é avaliado por inteiro antes da atribuição, então a troca é atômica do ponto de vista de quem lê. Aparece bastante em código numérico.
+:::
+
+## Dicionários
+
+Dicionário associa chaves a valores, com busca rápida. A parte que vale atenção é o que acontece quando a chave **não** existe:
+
+```{python}
+#| label: dicionarios
+grades = {"Joel": 80, "Tim": 95}
+
+# [] levanta KeyError se a chave não existe
+tem_joel = "Joel" in grades
+tem_kate = "Kate" in grades
+
+# .get() devolve um padrão em vez de estourar
+nota_joel = grades.get("Joel", 0)
+nota_kate = grades.get("Kate", 0)     # 0, o padrão
+sem_nota  = grades.get("Ninguém")     # None, o padrão do padrão
+
+tem_joel, tem_kate, nota_joel, nota_kate, sem_nota
+```
+
+Dicionários têm `keys()`, `values()` e `items()`, e este último é o que você vai ver o tempo todo:
+
+```{python}
+#| label: items
+for nome, nota in grades.items():
+    print(f"{nome}: {nota}")
+```
+
+## `defaultdict` — 38 usos no livro
+
+Aqui vale desacelerar.
+
+Imagine contar palavras de um documento. A versão sem `defaultdict` exige tratar o caso "chave ainda não existe" toda vez:
+
+```{python}
+#| label: contagem-manual
+document = ["o", "rato", "roeu", "a", "roupa", "do", "rei", "de", "roma",
+            "o", "rei", "de", "roma", "roeu", "o", "rato"]
+
+# versão 1: checar antes
+word_counts = {}
+for word in document:
+    if word in word_counts:
+        word_counts[word] += 1
+    else:
+        word_counts[word] = 1
+
+word_counts
+```
+
+Um `defaultdict` faz isso sozinho: quando você acessa uma chave que não existe, ele a cria usando a função que você deu na construção.
+
+```{python}
+#| label: defaultdict
+from collections import defaultdict
+
+word_counts = defaultdict(int)   # int() devolve 0
+for word in document:
+    word_counts[word] += 1       # sem checagem: a chave nasce com 0
+
+dict(word_counts)
+```
+
+O argumento pode ser qualquer função sem parâmetros — e é aí que ele fica realmente útil:
+
+```{python}
+#| label: defaultdict-list
+dd_list = defaultdict(list)      # list() devolve []
+dd_list[2].append(1)             # dd_list agora tem {2: [1]}
+
+dd_dict = defaultdict(dict)      # dict() devolve {}
+dd_dict["Joel"]["City"] = "Seattle"
+
+dict(dd_list), dict(dd_dict)
+```
+
+::: {.exemplo}
+`defaultdict(list)` é o padrão de **agrupar** — para cada chave, acumular uma lista de coisas.
+
+Você já viu esse padrão duas vezes neste livro sem que ele fosse nomeado: no [Capítulo 1](../cap01/index.qmd), montando o índice de interesses por usuário e o de usuários por interesse; e no [Capítulo 8](../cap08/index.qmd), agrupando salários por faixa de tempo de casa.
+
+Sempre que você for escrever "para cada X, junte os Y correspondentes", é `defaultdict(list)`.
+:::
+
+## `Counter` — 47 usos no livro
+
+`Counter` transforma uma sequência em um dicionário de chave para contagem. É o caso de contar palavras, resolvido numa linha:
+
+```{python}
+#| label: counter
+from collections import Counter
+
+word_counts = Counter(document)
+word_counts
+```
+
+O método que faz `Counter` valer a pena é o `most_common`:
+
+```{python}
+#| label: most-common
+for word, count in word_counts.most_common(3):
+    print(word, count)
+```
+
+::: {.conceito}
+`Counter` é um `defaultdict(int)` com contagem automática e ordenação embutida. As três versões da contagem de palavras acima produzem o mesmo resultado — a diferença é quantas decisões você precisou tomar para chegar lá.
+
+No [Capítulo 9](../cap09/index.qmd), o `Counter` é o que faz a votação dos k-vizinhos: `Counter(labels).most_common(1)` devolve o rótulo mais votado.
+:::
+
+## Conjuntos
+
+`set` guarda elementos distintos, e a razão de usá-lo raramente é a distinção — é a **velocidade**:
+
+```{python}
+#| label: conjuntos
+import time
+
+lista_grande = list(range(100_000))
+conjunto_grande = set(lista_grande)
+
+alvo = 99_999
+
+t0 = time.perf_counter(); alvo in lista_grande;      t_lista = time.perf_counter() - t0
+t0 = time.perf_counter(); alvo in conjunto_grande;   t_conj  = time.perf_counter() - t0
+
+print(f"lista:    {t_lista*1e6:8.1f} µs")
+print(f"conjunto: {t_conj*1e6:8.1f} µs")
+```
+
+`in` numa lista **percorre** os elementos até achar o que procura; num conjunto é uma consulta direta, que não depende do tamanho.
+
+Os tempos exatos acima variam a cada execução — é uma medição de relógio, não um cálculo determinístico. O que não varia é a forma: dobre o tamanho da lista e o tempo dela dobra junto; dobre o do conjunto e o tempo fica o mesmo. Com cem mil elementos a diferença já é grande o bastante para aparecer; com dez milhões, a busca linear deixa de ser viável.
+
+É exatamente por isso que, no [Capítulo 1](../cap01/index.qmd), o índice de amizades virou um dicionário em vez de continuar sendo uma lista de pares.

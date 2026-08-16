@@ -95,6 +95,27 @@ Ao adicionar dependência: edite `pyproject.toml` → `make lock` → `make buil
 
 `execute: freeze: auto` está ativo. Cache em `_freeze/` (gitignorado). Chunk preso com saída velha → `make clean`.
 
+### `ERROR: Directory not empty` no fim do render — o que fazer
+
+No macOS, o `make render` às vezes aborta com `ERROR: Directory not empty (os error 39): remove '/livro/content/capNN/xxx_files'`. **Não é erro de conteúdo.** Todas as células executaram; o que falha é a faxina que o Quarto faz no fim, ao remover os diretórios `*_files` temporários — eles ficam com `figure-html/` e `mediabag/` vazios dentro, e o bind mount do Docker no macOS não sincroniza a remoção a tempo.
+
+A probabilidade cresce com o número de `*_files` criados numa rodada, ou seja, **piora conforme mais capítulos ganham figuras**. Ela é aleatória: cada tentativa aborta num arquivo diferente.
+
+O remédio, em ordem:
+
+```bash
+# 1. remova o lixo da tentativa anterior — ESTE é o passo que importa
+find content -name '*_files' -type d -exec rm -rf {} + 2>/dev/null
+find content -name '*.html' -type f -delete 2>/dev/null
+
+# 2. renderize de novo, SEM limpar o _freeze
+make render
+```
+
+**Não use `make clean` para isto.** Ele apaga o `_freeze/` junto, e aí todos os chunks reexecutam — o que aumenta a janela da corrida e torna a falha *mais* provável, não menos. Com o `_freeze` quente, poucos chunks rodam e o render converge, em geral na primeira retentativa. Medido: falhou três vezes seguidas com `_freeze` frio e passou de primeira com ele aquecido.
+
+O CI **não** é afetado: lá o checkout é limpo e o sistema de arquivos é nativo do Linux, sem bind mount.
+
 **Não escreva `#| cache: true` num chunk.** Esse é o cache por-célula do motor **knitr** (R) e não existe para o motor **Jupyter**, que é o deste livro (`jupyter: python3`) — a opção é silenciosamente ignorada. O Jupyter tem um cache próprio, o *Jupyter Cache*, mas ele funciona por **notebook inteiro** (qualquer célula mudar reexecuta todas) e depende do pacote opcional `jupyter-cache`, que não está no `uv.lock` deste projeto. Na prática, o `freeze: auto` já resolve o que interessa aqui — por **arquivo** `.qmd`, sem depender de nenhum pacote extra — então é nele que os capítulos devem confiar, não em `cache:`.
 
 ## Arquitetura

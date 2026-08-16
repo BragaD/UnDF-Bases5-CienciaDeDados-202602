@@ -1,10 +1,166 @@
 # Controle de Fluxo
 
 ::: {.callout-note}
-Esta seção corresponde a *Control Flow; Truthiness; Sorting; List Comprehensions*, do capítulo 2 de @grus2019.
+Esta seção corresponde a *Control Flow*, *Truthiness*, *Sorting* e *List Comprehensions*, do capítulo 2 de @grus2019.
 :::
 
+::: {.callout-tip}
+## O que esta seção assume
+
+Que você conhece `if`, `while` e `for`. **O que vale desacelerar: compreensões de lista e ordenação com `key`** — as duas construções que mais mudam a aparência do código do livro em relação ao que você escreveria numa linguagem sem elas.
+:::
+
+## Controle de fluxo, rapidamente
+
+`if`, `elif`, `else` funcionam como esperado, e existe uma forma ternária de uma linha:
+
+```{python}
+#| label: ternario
+x = 7
+paridade = "par" if x % 2 == 0 else "ímpar"
+paridade
+```
+
+`for` percorre iteráveis diretamente, sem índice:
+
+```{python}
+#| label: for-continue-break
+for x in range(10):
+    if x == 3:
+        continue    # vai direto para a próxima iteração
+    if x == 5:
+        break       # sai do laço
+    print(x, end=" ")
+```
+
+## Veracidade
+
+Python tem regras de conversão para booleano que valem conhecer, porque o código do livro se apoia nelas.
+
+São falsos: `False`, `None`, `[]`, `{}`, `""`, `set()`, `0`, `0.0`. Praticamente tudo mais é verdadeiro — o que permite escrever `if lista:` no lugar de `if len(lista) > 0:`.
+
 ::: {.callout-warning}
-## Em construção
-O conteúdo desta seção ainda será escrito.
+## `is None`, não `== None`
+
+```{python}
+#| label: is-none
+x = None
+
+assert x == None, "esta NÃO é a forma pythônica de checar None"
+assert x is None, "esta É a forma pythônica de checar None"
+
+x is None
+```
+
+A diferença importa quando o objeto define o próprio `__eq__` — arrays e DataFrames, por exemplo, comparam elemento a elemento e devolvem um array, não um booleano. `is` compara identidade e nunca é sequestrado.
+:::
+
+Duas funções que aparecem bastante:
+
+```{python}
+#| label: all-any
+all([True, 1, {3}]),   all([True, 1, {}]),   all([]),   any([]), any([True, 1, {}])
+```
+
+Repare no caso vazio: `all([])` é `True` e `any([])` é `False`. É consequência da definição — "todos os elementos satisfazem" é vacuamente verdadeiro quando não há elementos.
+
+## Ordenação com `key`
+
+Toda lista tem `sort()`, que ordena no lugar, e existe `sorted()`, que devolve uma lista nova. Mas a parte que importa é o parâmetro `key`:
+
+```{python}
+#| label: sort-key
+x = [4, 1, 2, 3]
+
+crescente = sorted(x)
+decrescente = sorted(x, reverse=True)
+
+# ordena por valor absoluto, do maior para o menor
+por_modulo = sorted([-4, 1, -2, 3], key=abs, reverse=True)
+
+crescente, decrescente, por_modulo
+```
+
+`key` recebe uma função que, dado um elemento, devolve o valor pelo qual comparar. É onde os `lambda` do livro moram:
+
+```{python}
+#| label: sort-lambda
+from collections import Counter
+
+document = ["o", "rato", "roeu", "a", "roupa", "do", "rei", "de", "roma",
+            "o", "rei", "de", "roma", "roeu", "o", "rato"]
+word_counts = Counter(document)
+
+# ordena as palavras da mais frequente para a menos frequente
+wc = sorted(word_counts.items(),
+            key=lambda word_and_count: word_and_count[1],
+            reverse=True)
+
+wc[:4]
+```
+
+::: {.exemplo}
+Esse é exatamente o padrão do [Capítulo 1](../cap01/index.qmd), quando ordenamos os usuários da DataSciencester por número de amigos para achar os "conectores".
+
+Ordenar por um critério derivado — em vez de ordenar o próprio valor — é a operação que mais aparece em análise de dados. Vale internalizar a forma.
+:::
+
+## Compreensões
+
+Aqui vale desacelerar de verdade. Compreensões são a construção que mais muda a aparência do código.
+
+A ideia: transformar ou filtrar uma coleção em uma expressão só.
+
+```{python}
+#| label: compreensoes
+even_numbers = [x for x in range(5) if x % 2 == 0]   # filtrar
+squares      = [x * x for x in range(5)]             # transformar
+even_squares = [x * x for x in even_numbers]         # as duas coisas
+
+even_numbers, squares, even_squares
+```
+
+Funciona também para dicionários e conjuntos:
+
+```{python}
+#| label: compreensoes-dict-set
+square_dict = {x: x * x for x in range(5)}
+square_set  = {x * x for x in [1, -1]}
+
+square_dict, square_set
+```
+
+Quando não se usa o valor do laço, a convenção é chamá-lo de `_`:
+
+```{python}
+#| label: underscore
+zeros = [0 for _ in even_numbers]   # mesmo comprimento, conteúdo novo
+zeros
+```
+
+Uma compreensão pode ter vários `for`, e os posteriores podem usar o resultado dos anteriores:
+
+```{python}
+#| label: compreensoes-aninhadas
+pairs = [(x, y)
+         for x in range(10)
+         for y in range(10)]
+
+increasing_pairs = [(x, y)
+                    for x in range(10)
+                    for y in range(x + 1, 10)]   # y depende de x
+
+assert len(pairs) == 100
+assert len(increasing_pairs) == 9 + 8 + 7 + 6 + 5 + 4 + 3 + 2 + 1
+assert all(x < y for x, y in increasing_pairs)
+
+len(pairs), len(increasing_pairs)
+```
+
+::: {.conceito}
+Compreensão não é açúcar sintático para deixar o código curto — é uma forma de **dizer o que você quer em vez de como obter**.
+
+Compare: um laço com `append` descreve um procedimento de construção. `[x * x for x in xs if x > 0]` descreve o conjunto resultante. Quando a operação é uma transformação ou um filtro, a segunda forma é mais fácil de ler e mais difícil de errar — não há índice, não há acumulador, não há estado.
+
+Quando a operação **não** é uma transformação simples, o laço continua sendo a escolha certa. Compreensão aninhada de três níveis com condição é ilegível, e o Zen do Python não recomenda isso.
 :::

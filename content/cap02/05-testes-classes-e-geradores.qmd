@@ -1,10 +1,195 @@
 # Testes, Classes e Geradores
 
 ::: {.callout-note}
-Esta seção corresponde a *Automated Testing and assert; Object-Oriented Programming; Iterables and Generators*, do capítulo 2 de @grus2019.
+Esta seção corresponde a *Automated Testing and assert*, *Object-Oriented Programming* e *Iterables and Generators*, do capítulo 2 de @grus2019.
+:::
+
+::: {.callout-tip}
+## O que esta seção assume
+
+Que você conhece classes, herança e testes automatizados como conceitos. **O que vale desacelerar: o `assert` como documentação — o idioma mais frequente do livro inteiro** — e geradores, que mudam o custo de um cálculo sem mudar o que ele calcula.
+:::
+
+## `assert` — o idioma central deste livro
+
+Se você levar uma coisa só desta seção, que seja esta.
+
+`assert` verifica uma condição e levanta `AssertionError` se ela for falsa:
+
+```{python}
+#| label: assert-basico
+assert 1 + 1 == 2
+assert 1 + 1 == 2, "1 + 1 deveria dar 2, mas não deu"
+```
+
+A mensagem opcional depois da vírgula aparece quando a asserção falha. Até aqui, nada de especial.
+
+O que é especial é **como o livro-texto usa isso**. Veja uma função típica do pacote `scratch`:
+
+```{python}
+#| label: assert-como-doc
+from typing import List
+
+def smallest_item(xs: List[float]) -> float:
+    return min(xs)
+
+assert smallest_item([10, 20, 5, 40]) == 5
+assert smallest_item([1, 0, -1, 2]) == -1
+
+smallest_item([10, 20, 5, 40])
+```
+
+Aquelas duas linhas de `assert` não estão num arquivo de testes. Estão **logo abaixo da função**, no mesmo módulo, e rodam toda vez que o módulo é importado.
+
+::: {.callout-important}
+## Dois papéis diferentes, mesma palavra
+
+O código do livro usa `assert` de duas maneiras, e vale saber distinguir:
+
+**Como exemplo executável**, depois da função — o caso acima. Ele mostra o que a função faz melhor do que uma frase em prosa, e não pode envelhecer: se alguém quebrar a função, a linha falha na hora do import.
+
+**Como verificação de contrato**, dentro da função:
+
+```python
+def add(v: Vector, w: Vector) -> Vector:
+    assert len(v) == len(w), "vectors must be the same length"
+    return [v_i + w_i for v_i, w_i in zip(v, w)]
+```
+
+Aqui o `assert` roda a cada chamada e falha alto quando alguém viola a hipótese da função. Sem ele, o `zip` truncaria em silêncio no menor dos dois vetores e devolveria um resultado mais curto sem aviso — que é pior que um erro.
+
+**São 417 `assert` no código do livro.** Não são testes espalhados por descuido: é o formato em que o autor afirma o que cada função faz.
 :::
 
 ::: {.callout-warning}
-## Em construção
-O conteúdo desta seção ainda será escrito.
+Uma ressalva de engenharia que o livro não faz: `assert` é **desligado** quando o Python roda com a flag `-O`. Isso é ótimo para documentação e para pegar erro durante o desenvolvimento, e é ruim para validar entrada de usuário em produção.
+
+Num livro didático, `assert` é a escolha certa. Num servidor que recebe dado de fora, use `if ... raise`.
 :::
+
+## Classes, rapidamente
+
+Você já sabe o que é uma classe. O que muda em Python:
+
+```{python}
+#| label: classe
+class CountingClicker:
+    """Uma classe pode ter docstring, como uma função"""
+
+    def __init__(self, count=0):
+        self.count = count
+
+    def __repr__(self):
+        return f"CountingClicker(count={self.count})"
+
+    def click(self, num_times=1):
+        """Clica o contador algumas vezes"""
+        self.count += num_times
+
+    def read(self):
+        return self.count
+
+    def reset(self):
+        self.count = 0
+
+clicker = CountingClicker()
+assert clicker.read() == 0, "clicker deveria começar em 0"
+clicker.click()
+clicker.click()
+assert clicker.read() == 2, "após dois cliques, deveria estar em 2"
+
+clicker
+```
+
+Três pontos específicos de Python: `self` é explícito no primeiro parâmetro de todo método; `__init__` é o construtor; e os métodos com underscores duplos — os *dunder* — implementam comportamento da linguagem, como `__repr__` para a representação em texto.
+
+Herança é direta:
+
+```{python}
+#| label: heranca
+class NoResetClicker(CountingClicker):
+    # Esta classe tem os mesmos métodos de CountingClicker,
+    # exceto que o reset não faz nada.
+    def reset(self):
+        pass
+
+clicker2 = NoResetClicker()
+clicker2.click()
+clicker2.reset()
+assert clicker2.read() == 1, "reset não deveria fazer nada"
+
+clicker2.read()
+```
+
+::: {.callout-note}
+Este livro usa pouca orientação a objetos. Quase tudo são funções sobre estruturas simples — listas, tuplas, dicionários.
+
+Isso é uma escolha do autor, e ela combina com o propósito: uma função com anotação de tipo mostra o que entra e o que sai numa linha. Um método esconde metade disso no estado do objeto.
+:::
+
+## Iteráveis e geradores
+
+Aqui vale desacelerar de novo.
+
+Uma lista de um milhão de elementos ocupa memória para um milhão de elementos, mesmo que você vá usar só os três primeiros. Um **gerador** produz os valores sob demanda.
+
+Cria-se um com `yield`:
+
+```{python}
+#| label: gerador-yield
+def generate_range(n):
+    i = 0
+    while i < n:
+        yield i     # cada chamada a yield produz um valor
+        i += 1
+
+for i in generate_range(10):
+    print(i, end=" ")
+```
+
+A diferença aparece quando a sequência é infinita:
+
+```{python}
+#| label: gerador-infinito
+def natural_numbers():
+    """Devolve 1, 2, 3, ..."""
+    n = 1
+    while True:
+        yield n
+        n += 1
+```
+
+Essa função nunca termina — e ainda assim é útil, porque nada é calculado até alguém pedir.
+
+O segundo jeito de criar geradores é uma compreensão com parênteses em vez de colchetes:
+
+```{python}
+#| label: gerador-compreensao
+data = natural_numbers()
+evens = (x for x in data if x % 2 == 0)
+even_squares = (x ** 2 for x in evens)
+even_squares_ending_in_six = (x for x in even_squares if x % 10 == 6)
+
+# nada foi calculado ainda. Agora sim:
+[next(even_squares_ending_in_six) for _ in range(3)]
+```
+
+::: {.conceito}
+Repare no que acabou de acontecer. Encadeamos quatro transformações sobre uma sequência **infinita** e pedimos três valores. Só os cálculos necessários para produzir esses três aconteceram.
+
+Se `natural_numbers()` fosse uma lista, o programa teria travado na primeira linha.
+
+O preço: um gerador só pode ser percorrido **uma vez**. Se você precisa passar duas vezes pelos mesmos dados, precisa de uma lista — ou de um gerador novo.
+:::
+
+Por fim, quando você precisa do índice junto do valor, `enumerate` evita o contador manual:
+
+```{python}
+#| label: enumerate
+names = ["Alice", "Bob", "Charlie", "Debbie"]
+
+for i, name in enumerate(names):
+    print(f"nome {i} é {name}")
+```
+
+`enumerate` aparece 23 vezes no código do livro. Sempre no lugar de um `i = 0` seguido de `i += 1`.

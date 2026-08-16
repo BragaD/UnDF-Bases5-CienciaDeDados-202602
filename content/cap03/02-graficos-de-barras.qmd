@@ -4,7 +4,125 @@
 Esta seção corresponde a *Bar Charts*, do capítulo 3 de @grus2019.
 :::
 
+Um gráfico de barras é a boa escolha quando se quer mostrar como alguma quantidade varia entre um **conjunto discreto** de itens.
+
+Por exemplo, quantos Oscars cada um destes filmes ganhou:
+
+```{python}
+#| label: fig-oscars
+#| fig-cap: "Meus filmes favoritos"
+from matplotlib import pyplot as plt
+
+movies = ["Annie Hall", "Ben-Hur", "Casablanca", "Gandhi", "West Side Story"]
+num_oscars = [5, 11, 3, 8, 10]
+
+plt.bar(range(len(movies)), num_oscars)
+
+plt.title("Meus Filmes Favoritos")
+plt.ylabel("# de Oscars")
+
+# rotula o eixo x com os nomes dos filmes, no centro de cada barra
+plt.xticks(range(len(movies)), movies, rotation=20)
+plt.tight_layout()
+plt.show()
+```
+
+A chamada `plt.bar(x, altura)` desenha barras de largura padrão, centradas nas coordenadas `x`. Como os nomes dos filmes não são números, usamos `range(len(movies))` para posicioná-las e depois `plt.xticks` para trocar os números pelos nomes.
+
+## Histogramas
+
+Um gráfico de barras também serve para desenhar **histogramas** de valores numéricos agrupados em faixas, para ver como os valores se distribuem:
+
+```{python}
+#| label: fig-histograma
+#| fig-cap: "Distribuição das notas da Prova 1"
+from collections import Counter
+
+grades = [83, 95, 91, 87, 70, 0, 85, 82, 100, 67, 73, 77, 0]
+
+# agrupa as notas por decil, colocando o 100 junto com os 90
+histogram = Counter(min(grade // 10 * 10, 90) for grade in grades)
+
+plt.bar([x + 5 for x in histogram.keys()],   # desloca a barra 5 para a direita
+        histogram.values(),                  # dá a cada barra a altura correta
+        10,                                  # e largura 10
+        edgecolor=(0, 0, 0))                 # com borda preta
+
+plt.axis([-5, 105, 0, 5])                    # eixo x de -5 a 105,
+                                             # eixo y de 0 a 5
+
+plt.xticks([10 * i for i in range(11)])      # rótulos de 0, 10, ..., 100
+plt.xlabel("Decil")
+plt.ylabel("# de Alunos")
+plt.title("Distribuição das Notas da Prova 1")
+plt.show()
+```
+
+::: {.exemplo}
+A expressão `min(grade // 10 * 10, 90)` merece um segundo de atenção.
+
+`grade // 10 * 10` arredonda para baixo até o múltiplo de 10 — a nota 87 vira 80. O `min(..., 90)` existe porque a nota 100 viraria um decil próprio, com uma barra sozinha na ponta; ele a joga na faixa dos 90.
+
+É uma decisão de apresentação, não de cálculo. E é o tipo de decisão que muda o gráfico sem mudar o dado — vale saber que ela foi tomada.
+:::
+
+O terceiro argumento de `plt.bar` é a largura das barras. Como as faixas têm 10 de largura e queremos que elas se toquem, usamos largura 10 e deslocamos cada barra 5 unidades para a direita, para que fique centrada na faixa.
+
+## Mentindo com o eixo vertical
+
+Aqui está a parte que interessa.
+
+Usar `plt.axis` sem critério é péssima ideia quando se constrói um gráfico para alguém ler, porque é fácil enganar. Veja:
+
+```{python}
+#| label: fig-eixo-enganoso
+#| fig-cap: "O mesmo dado, com o eixo y começando em 499"
+mentions = [500, 505]
+years = [2017, 2018]
+
+plt.bar(years, mentions, 0.8)
+plt.xticks(years)
+plt.ylabel("# de vezes que ouvi alguém dizer 'ciência de dados'")
+
+# se você não fizer isto, o matplotlib rotula o eixo x como 0, 1
+# e acrescenta um "+2.013e3" no canto — feio, e nosso
+plt.ticklabel_format(useOffset=False)
+
+# o eixo y enganoso mostra apenas a parte de cima
+plt.axis([2016.5, 2018.5, 499, 506])
+plt.title("Olhe o aumento GIGANTE!")
+plt.show()
+```
+
+Impressionante, não? Agora o mesmo dado, com o eixo começando em zero:
+
+```{python}
+#| label: fig-eixo-honesto
+#| fig-cap: "O mesmo dado, com o eixo y começando em 0"
+plt.bar(years, mentions, 0.8)
+plt.xticks(years)
+plt.ylabel("# de vezes que ouvi alguém dizer 'ciência de dados'")
+plt.ticklabel_format(useOffset=False)
+
+plt.axis([2016.5, 2018.5, 0, 550])
+plt.title("Não tão gigante assim")
+plt.show()
+```
+
 ::: {.callout-warning}
-## Em construção
-O conteúdo desta seção ainda será escrito.
+## Nenhum número está errado nos dois gráficos
+
+Repare no que aconteceu. As barras são as mesmas, os dados são os mesmos, os rótulos são os mesmos, e não há uma única informação falsa em nenhum dos dois.
+
+O que mudou foi **onde o eixo vertical começa**. No primeiro, 500 e 505 viram uma barra pequena e uma enorme — um crescimento aparente de várias vezes. No segundo, elas são praticamente indistinguíveis, que é o que 1% de diferença de fato é.
+
+Essa é a distorção mais comum em gráfico publicado, e ela é difícil de acusar porque tecnicamente não há mentira alguma. A defesa é olhar sempre onde o eixo começa, antes de olhar o formato das barras.
+:::
+
+::: {.conceito}
+A regra prática: **num gráfico de barras, o eixo vertical deve começar em zero.**
+
+A barra comunica magnitude pelo comprimento, e um comprimento só é comparável se todos partirem da mesma origem. Truncar o eixo quebra a relação entre o que se vê e o que se mede.
+
+Em gráficos de linha a regra é mais frouxa — ali o que comunica é a inclinação, não o comprimento —, mas a honestidade continua exigindo que a escala seja declarada.
 :::
