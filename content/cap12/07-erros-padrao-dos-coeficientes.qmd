@@ -87,14 +87,17 @@ Os números já dizem a história antes de qualquer teste. O coeficiente de `ami
 
 ```{python}
 #| label: fig-bootstrap-coeficientes
-#| fig-cap: "Distribuição dos 100 coeficientes bootstrap. A linha tracejada marca o zero."
+#| fig-cap: "Distribuição dos 100 coeficientes bootstrap. Mesma escala horizontal nos três painéis; a linha tracejada marca o zero."
 #| echo: false
-fig, axes = plt.subplots(1, 3, figsize=(11, 3.4))
+fig, axes = plt.subplots(1, 3, figsize=(11, 3.4), sharex=True, sharey=True)
+
+todos = [b[i] for b in bootstrap_betas for i in (1, 2, 3)]
+faixa = (min(todos) - 0.3, max(todos) + 0.3)
 
 for ax, i, titulo in zip(axes, [1, 2, 3],
                          ["amigos", "horas de trabalho", "doutorado"]):
     coluna = [b[i] for b in bootstrap_betas]
-    ax.hist(coluna, bins=20, color='tab:blue', edgecolor='white')
+    ax.hist(coluna, bins=30, range=faixa, color='tab:blue', edgecolor='white')
     ax.axvline(0, color='black', linestyle='--', linewidth=1.2)
     ax.set_title(titulo, fontsize=10)
     ax.set_xlabel("coeficiente")
@@ -104,7 +107,7 @@ plt.tight_layout()
 plt.show()
 ```
 
-O gráfico mostra o que a tabela resume. As distribuições de `amigos` e de `horas de trabalho` estão inteiramente de um lado do zero — nenhuma das 100 reamostras produziu um coeficiente de sinal trocado. A de `doutorado` atravessa o zero: uma boa parte das reamostras produziu um coeficiente **negativo**.
+O gráfico mostra o que a tabela resume, e a escala compartilhada é o que torna a comparação legítima: com um eixo por painel, três distribuições de larguras completamente diferentes pareceriam igualmente espalhadas. Na mesma régua, `amigos` e `horas de trabalho` se apertam em faixas estreitas, inteiramente de um lado do zero — nenhuma das 100 reamostras produziu um coeficiente de sinal trocado. A de `doutorado` ocupa quase toda a largura do gráfico e atravessa o zero: uma boa parte das reamostras produziu um coeficiente **negativo**.
 
 ```{python}
 #| label: cruza-zero
@@ -125,6 +128,8 @@ $$
 
 (a estimativa do coeficiente dividida pela estimativa do erro padrão dele) segue uma distribuição *t* de Student com $n - k$ graus de liberdade.
 
+Se você nunca encontrou a *t*: ela é uma parente da normal padrão, com o mesmo formato de sino, um pouco mais achatada e com caudas mais gordas — é o que sobra quando você divide por um desvio padrão que também foi **estimado** dos dados, em vez de conhecido. O quanto ela engorda depende dos **graus de liberdade**, que são o número de observações menos o número de parâmetros que você já gastou estimando ($n - k$): quanto mais pontos sobram por parâmetro, mais confiável é o desvio padrão estimado e menos a *t* se afasta da normal.
+
 Não temos uma função `students_t_cdf`, e escrevê-la do zero seria uma digressão maior que este capítulo comporta. Mas conforme os graus de liberdade crescem, a *t* se aproxima cada vez mais de uma normal padrão — e com $n = 203$ e $k = 4$, essa aproximação é boa o bastante. Usamos a `normal_cdf` que já temos:
 
 ```{python}
@@ -140,6 +145,9 @@ def p_value(beta_hat_j: float, sigma_hat_j: float) -> float:
         # caso contrário, o dobro da probabilidade de ver um valor *menor*
         return 2 * normal_cdf(beta_hat_j / sigma_hat_j)
 
+# os coeficientes abaixo são os do livro impresso, que são a solução exata;
+# os nossos, na tabela acima, vêm do gradiente descendente e diferem na
+# segunda ou terceira casa. Os erros padrão são os nossos, do bootstrap.
 assert p_value(30.58, 1.27)   < 0.001  # termo constante
 assert p_value(0.972, 0.103)  < 0.001  # amigos
 assert p_value(-1.865, 0.155) < 0.001  # horas de trabalho
@@ -159,14 +167,26 @@ O valor-p responde a: *se o coeficiente verdadeiro fosse exatamente zero, com qu
 Para `amigos` e `horas de trabalho`, a resposta é "praticamente nunca" — esses efeitos são reais. Para `doutorado`, a resposta é "quase metade das vezes". Um coeficiente de 0,914 com erro padrão de 1,249 é perfeitamente compatível com um efeito verdadeiro de zero, e também com um efeito de $-1$ ou de $+3$. Não sabemos.
 :::
 
+::: {.callout-note}
+## A hipótese que o bootstrap não precisou fazer
+
+Repare no que **não** foi preciso supor para chegar até aqui. A via clássica — a fórmula fechada que a [seção 12.5](05-qualidade-do-ajuste.qmd) mencionou e que o callout no fim desta seção mostra em uso — parte de erros normais, independentes e com **variância constante**: a dispersão em torno do modelo tem que ser a mesma para quem passa 10 minutos por dia no site e para quem passa 90. Essa última exigência tem nome — **homocedasticidade** — e a [seção 11.3](../cap11/03-maxima-verossimilhanca.qmd) prometeu que voltaríamos a ela. É aqui.
+
+Quando ela não vale, o caso comum é o erro crescer junto com o valor previsto: o modelo acerta na faixa baixa e erra feio na alta. Nesse cenário, o ajuste de mínimos quadrados continua devolvendo coeficientes utilizáveis, mas os **erros padrão** da fórmula fechada saem errados — e não erram todos para o mesmo lado, o que impediria até de corrigir a leitura de cabeça. O que quebra, então, é exatamente a camada que esta seção construiu: o erro padrão, o *t* e o valor-p. Nada na tabela de saída avisa; um coeficiente pode aparecer com p < 0,001 só porque a fórmula supôs uma variância que os dados não têm.
+
+O bootstrap de pares não faz essa suposição. Ele reamostra $(x_i, y_i)$ juntos, então cada reamostra herda a estrutura de dispersão do conjunto original, seja ela qual for — a dispersão dos 100 `beta` reflete a variabilidade que os dados de fato têm, não a que um modelo de erros supôs que eles teriam. É o que se compra com os 90 segundos de CPU: hipóteses a menos.
+:::
+
 ## Por que justamente o doutorado
 
-Este resultado não deveria surpreender quem leu a [seção 12.2](02-hipoteses-do-minimos-quadrados.qmd). Lá medimos que `tem_doutorado` é quase determinado por `num_amigos`: abaixo de 6 amigos, o usuário tem doutorado; acima de 6, não tem. A única faixa em que os dois grupos coexistem é a de exatamente 6 amigos — 22 usuários dos 203.
+Este resultado não deveria surpreender quem leu a [seção 12.2](02-hipoteses-do-minimos-quadrados.qmd): `tem_doutorado` é quase determinado por `num_amigos`, e a comparação capaz de separar os dois efeitos — mesmo número de amigos, formação diferente — só existe nos 22 usuários daquela seção.
 
-Isso é multicolinearidade quase perfeita, e o erro padrão de 1,249 é exatamente a forma como ela se manifesta. O modelo precisaria comparar pessoas com o mesmo número de amigos e formação diferente para separar os dois efeitos, e essa comparação só existe naqueles 22 usuários. Cada reamostra bootstrap sorteia um punhado diferente deles, e o coeficiente balança junto.
+Isso é multicolinearidade quase perfeita, e o erro padrão de 1,249 é exatamente a forma como ela se manifesta. Cada reamostra bootstrap sorteia um punhado diferente daqueles 22 usuários, e o coeficiente balança junto.
 
 ::: {.callout-important}
-Repare no arco que se fechou aqui. A [seção 12.2](02-hipoteses-do-minimos-quadrados.qmd) apontou uma propriedade estrutural dos dados. A [seção 12.4](04-interpretando-o-modelo.qmd) explicou por que ela torna a frase "mantendo tudo o mais constante" vazia para aquele coeficiente. A [seção 12.5](05-qualidade-do-ajuste.qmd) mostrou que o R² é cego para esse tipo de problema. E o bootstrap, sem saber nada de nada disso — sem teoria, sem álgebra, sem sequer olhar para a matriz de correlações —, mediu o efeito no número que interessa.
+Repare no arco que se fechou até aqui. A [seção 12.2](02-hipoteses-do-minimos-quadrados.qmd) apontou uma propriedade estrutural dos dados. A [seção 12.4](04-interpretando-o-modelo.qmd) explicou por que ela torna a frase "mantendo tudo o mais constante" vazia para aquele coeficiente. A [seção 12.5](05-qualidade-do-ajuste.qmd) mostrou que o R² é cego para esse tipo de problema. E o bootstrap, sem saber nada de nada disso — sem teoria, sem álgebra, sem sequer olhar para a matriz de correlações —, mediu o efeito no número que interessa.
+
+Falta o passo que **age** sobre esse diagnóstico. Até agora, tudo o que sabemos fazer com o coeficiente do `doutorado` é olhar a tabela, ver o 1,249 e decidir à mão remover a variável — o que exige um humano, um critério e uma rodada a mais de ajuste. A [seção 12.8](08-regularizacao.qmd) muda o objetivo que o ajuste persegue, de modo que um coeficiente que os dados não sustentam encolha sozinho, sem que ninguém precise olhar tabela nenhuma.
 :::
 
 ::: {.callout-warning}
@@ -197,7 +217,11 @@ print(modelo.summary())
 
 `summary()` imprime, de uma vez, a tabela que nós montamos à mão: coeficiente, erro padrão, estatística *t*, valor-p e intervalo de confiança de 95% para cada variável — mais R², R² ajustado, estatística *F* e uma lista de avisos de diagnóstico. Repare que `sm.OLS` **espera** a coluna de 1 explícita, exatamente como o nosso código (há `sm.add_constant` para quem não a tem), e resolve por álgebra linear em vez de gradiente descendente.
 
-A diferença de fundo: os erros padrão do `statsmodels` vêm da **fórmula fechada**, sob a hipótese de erros normais independentes com variância constante. Os nossos vieram do bootstrap, que não assume nada disso. Nestes dados os dois caminhos chegam perto: @grus2019 registra, ao lado dos valores bootstrap, os erros exatos calculados pela fórmula — 1,19 / 0,080 / 0,127 / 0,998, contra os nossos 1,272 / 0,103 / 0,155 / 1,249. O bootstrap com apenas 100 reamostras superestima um pouco, e mais reamostras aproximariam os dois.
+A diferença de fundo: os erros padrão do `statsmodels` vêm da **fórmula fechada**, sob a hipótese de erros normais independentes com variância constante. Os nossos vieram do bootstrap, que não assume nada disso. Nestes dados os dois caminhos chegam perto: @grus2019 registra, ao lado dos valores bootstrap, os erros exatos calculados pela fórmula — 1,19 / 0,080 / 0,127 / 0,998, contra os nossos 1,272 / 0,103 / 0,155 / 1,249.
 
-O que interessa é o **padrão**, e ele é idêntico pelos dois caminhos: o erro do `doutorado` é uma ordem de grandeza maior que o de `amigos`, e maior que o próprio coeficiente. Quando os dois caminhos **não** concordam, geralmente é sinal de que alguma hipótese da fórmula não vale para aqueles dados — e aí é o bootstrap que merece mais crédito, porque ele nunca dependeu dela.
+É tentador ler essa folga como imprecisão do bootstrap e supor que mais reamostras fechariam a diferença. **Não fecham.** Com 400 reamostras em vez de 100, estes dados dão 1,302 / 0,102 / 0,154 / 1,236: os dois do meio mal se mexem e o do termo constante *sobe*, andando para longe de 1,19. Nem poderia ser diferente — o desvio padrão de $B$ réplicas bootstrap não tem viés para cima que se dissolva com $B$ maior. Aumentar $B$ deixa a estimativa mais **estável**, e é só isso: ela converge, mas converge para o número do bootstrap, não para o número da fórmula.
+
+Os dois não convergem um para o outro porque **medem alvos diferentes**. A fórmula responde: *qual seria a dispersão de $\beta$ se os erros fossem normais, independentes e de variância constante?* O bootstrap responde: *qual é a dispersão de $\beta$ quando eu reamostro estes pares?* Só sob as hipóteses da fórmula as duas perguntas têm a mesma resposta. Que elas discordem um pouco é **informação sobre os dados** — o sinal de que alguma hipótese da fórmula não descreve bem este conjunto —, não imprecisão de nenhum dos dois.
+
+O que interessa é o **padrão**, e ele é idêntico pelos dois caminhos: o erro do `doutorado` é uma ordem de grandeza maior que o de `amigos`, e maior que o próprio coeficiente. Quando os dois discordam de verdade, é o bootstrap que merece mais crédito, porque ele nunca dependeu da hipótese que provavelmente é a que caiu.
 :::

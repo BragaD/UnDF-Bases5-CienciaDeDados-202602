@@ -110,16 +110,41 @@ for nome, xs in variantes.items():
     print(f"{nome:24s} coeficiente de amigos = {b[1]:.4f}")
 ```
 
-O coeficiente de `num_amigos` vai de cerca de 0,84 no modelo de uma variável só a cerca de 0,97 no modelo completo — uma diferença de mais de 15%. Não é que um deles esteja "errado" e o outro "certo": cada um responde a uma pergunta diferente, e a [seção 12.4](04-interpretando-o-modelo.qmd) é sobre qual pergunta é essa.
+O coeficiente de `num_amigos` se move conforme o resto do modelo muda, que é o fenômeno desta seção. Mas os números acima saíram do **nosso** gradiente descendente, e para o modelo de uma variável só ele erra o alvo de forma visível — o callout logo abaixo mostra por quê. Como o argumento aqui é estatístico e não de otimização, vale olhá-lo nos coeficientes **exatos**, os que se obtêm resolvendo a equação normal — o cálculo que a [seção 12.3](03-ajustando-o-modelo.qmd) discute e que este livro não constrói:
+
+| modelo | coeficiente exato de `amigos` |
+|---|---|
+| `amigos` | 0,903866 |
+| `amigos` + `horas` | 0,927439 |
+| `amigos` + `doutorado` | 0,963918 |
+| `amigos` + `horas` + `doutorado` | 0,972505 |
+
+Duas coisas nessa tabela. A primeira linha é **exatamente** o $\beta \approx 0{,}9039$ que o [Capítulo 11](../cap11/01-o-modelo.qmd) obteve pela fórmula fechada — é o mesmo modelo, resolvido de forma exata as duas vezes, então tinha mesmo que bater. E o coeficiente sobe **7,6%** da primeira linha para a última — subindo por qualquer caminho que se tome: acrescentando `horas`, acrescentando `doutorado`, ou os dois. Não é que um deles esteja "errado" e o outro "certo": cada um responde a uma pergunta diferente, e a [seção 12.4](04-interpretando-o-modelo.qmd) é sobre qual pergunta é essa.
 
 ::: {.callout-warning}
-## O número de 0,84 e o número de 0,904
+## Por que este 0,84 não bate com o 0,904 do Capítulo 11
 
-O [Capítulo 11](../cap11/01-o-modelo.qmd) ajustou exatamente este primeiro modelo — só `amigos` — pela fórmula fechada, e encontrou $\beta \approx 0{,}9039$. Aqui o mesmo modelo, ajustado por gradiente descendente com estes hiperparâmetros, dá cerca de 0,84.
+O primeiro modelo — só `amigos` — é o mesmo do [Capítulo 11](../cap11/01-o-modelo.qmd), e a solução exata dele é 0,903866. O nosso gradiente descendente imprimiu 0,8415. A diferença é do **otimizador**, não do modelo.
 
-A diferença é do **otimizador**, não do modelo. O `least_squares_fit` usado aqui dá 5.000 passos com lotes de 25 pontos e taxa de aprendizado fixa; ele chega perto do mínimo e fica orbitando em torno dele, sem nunca pousar. Para o modelo de quatro variáveis, que é o deste capítulo, essa imprecisão é pequena (a [seção 12.3](03-ajustando-o-modelo.qmd) compara com a solução exata); para o modelo de duas, com estes mesmos hiperparâmetros, ela é maior.
+A tentação é dizer que faltaram passos, ou que a semente foi infeliz. Nenhuma das duas coisas se sustenta, e dá para conferir:
 
-Vale registrar isso em vez de esconder, por dois motivos. Primeiro, porque o **padrão** — o coeficiente de `amigos` subir quando as outras variáveis entram — é robusto e aparece igual na solução exata (0,904 → 0,972). Segundo, porque é um lembrete de que todo número deste capítulo tem duas fontes de incerteza empilhadas: a dos dados e a do otimizador. As seções 12.6 e 12.7 medem a primeira. A segunda se combate com mais passos, e é por isso que os chunks deste capítulo pedem 5.000 deles.
+```{python}
+#| label: ciclo-limite
+#| warning: false
+xs_amigos = [[1.0, x[1]] for x in inputs]
+
+for semente in [0, 1]:
+    for passos in [5000, 20000]:
+        random.seed(semente)
+        b = least_squares_fit(xs_amigos, daily_minutes_good, 0.001, passos, 25)
+        print(f"semente {semente}, {passos:5d} passos: {b[1]!r}")
+```
+
+Quatro ajustes, o mesmo valor **bit a bit** — não "parecido", idêntico até o último dígito da representação. Quadruplicar os passos não move nada, e trocar o chute inicial também não.
+
+O motivo é que o gradiente descendente estocástico com taxa de aprendizado fixa e ordem de lote fixa não pousa no mínimo: ele entra numa **órbita estável deslocada** dele. Como a sequência de lotes se repete igual a cada passagem pelos dados, não há ruído a promediar — mais voltas percorrem a mesma órbita. O viés é estrutural do otimizador com estes hiperparâmetros, e o tamanho dele depende do problema: para o modelo de quatro variáveis, que é o deste capítulo, ele cai para a terceira casa decimal (0,9748 contra 0,9725 exato).
+
+Vale registrar isso em vez de esconder, por dois motivos. Primeiro, porque o **padrão** — o coeficiente de `amigos` subir quando as outras variáveis entram — é robusto e aparece igual na solução exata, que é a da tabela acima. Segundo, porque é um lembrete de que todo número deste capítulo tem duas fontes de incerteza empilhadas: a dos dados e a do otimizador. As seções 12.6 e 12.7 medem a primeira, que é a que interessa. A segunda não é ruído que se promedia: é viés de instrumento, e só some trocando o instrumento — outra taxa de aprendizado, outra ordem de lote, ou a álgebra exata.
 :::
 
 ::: {.callout-tip collapse="true"}

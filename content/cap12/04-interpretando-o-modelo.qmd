@@ -4,13 +4,15 @@
 Esta seção corresponde a *Interpreting the Model*, do capítulo 15 de @grus2019.
 :::
 
+A [seção anterior](03-ajustando-o-modelo.qmd) produziu quatro números. Ajustar é a parte fácil; dizer o que eles significam é onde a estatística aplicada costuma errar — e o erro não é de conta, é de leitura.
+
 ```{python}
 #| label: importa
 #| include: false
 import random
 random.seed(0)
 from scratch.multiple_regression import inputs, least_squares_fit
-from scratch.statistics import daily_minutes_good, mean
+from scratch.statistics import daily_minutes_good
 import matplotlib.pyplot as plt
 plt.close('all')
 ```
@@ -42,27 +44,10 @@ Essa leitura está correta. Ela também contém, na primeira parte de cada frase
 ::: {.callout-important}
 O coeficiente 0,975 **não** é o efeito de ter mais um amigo. É o efeito de ter mais um amigo **entre pessoas com as mesmas horas de trabalho e o mesmo status de doutorado**.
 
-São afirmações diferentes, e a diferença tem consequência. A [seção 12.2](02-hipoteses-do-minimos-quadrados.qmd) mostrou o mesmo coeficiente valendo 0,84 no modelo de uma variável e 0,97 no modelo de três. Nenhum dos dois está errado: eles respondem a perguntas distintas. O primeiro responde *"quanto mais tempo, em média, passa no site quem tem um amigo a mais?"*. O segundo responde *"quanto mais tempo passa no site quem tem um amigo a mais, comparado com alguém que trabalha as mesmas horas e tem a mesma formação?"*. Se essas duas perguntas têm respostas diferentes, é porque o número de amigos anda junto com as outras variáveis — e é isso que os dados dizem.
+São afirmações diferentes, e a diferença tem consequência. A [seção 12.2](02-hipoteses-do-minimos-quadrados.qmd) mostrou o mesmo coeficiente valendo 0,904 no modelo de uma variável e 0,973 no modelo de três. Nenhum dos dois está errado: eles respondem a perguntas distintas. O primeiro responde *"quanto mais tempo, em média, passa no site quem tem um amigo a mais?"*. O segundo responde *"quanto mais tempo passa no site quem tem um amigo a mais, comparado com alguém que trabalha as mesmas horas e tem a mesma formação?"*. Se essas duas perguntas têm respostas diferentes, é porque o número de amigos anda junto com as outras variáveis — e é isso que os dados dizem.
 :::
 
-O problema é que "mantendo tudo o mais constante" descreve uma comparação hipotética, e nada garante que ela seja uma comparação **que os dados sustentam**. A [seção 12.2](02-hipoteses-do-minimos-quadrados.qmd) já mediu isso neste conjunto:
-
-```{python}
-#| label: sobreposicao
-amigos = [x[1] for x in inputs]
-phd    = [x[3] for x in inputs]
-
-com_doutorado = [a for a, p in zip(amigos, phd) if p == 1]
-sem_doutorado = [a for a, p in zip(amigos, phd) if p == 0]
-
-print(f"com doutorado: {min(com_doutorado)} a {max(com_doutorado)} amigos "
-      f"(média {mean(com_doutorado):.2f})")
-print(f"sem doutorado: {min(sem_doutorado)} a {max(sem_doutorado)} amigos "
-      f"(média {mean(sem_doutorado):.2f})")
-
-sobrepostos = sum(1 for a, p in zip(amigos, phd) if a == 6)
-print(f"usuários na única faixa de amigos onde os dois grupos coexistem: {sobrepostos}")
-```
+O problema é que "mantendo tudo o mais constante" descreve uma comparação hipotética, e nada garante que ela seja uma comparação **que os dados sustentam**. A [seção 12.2](02-hipoteses-do-minimos-quadrados.qmd) já mediu isso neste conjunto: abaixo de 6 amigos o usuário tem doutorado, acima de 6 não tem, e a única faixa em que os dois grupos coexistem é a de exatamente 6 amigos.
 
 O coeficiente de `doutorado` afirma comparar duas pessoas idênticas em tudo, exceto o doutorado. Nos dados, essa comparação só é observável em 22 dos 203 usuários — os que têm exatamente 6 amigos. Para todos os outros, "mesma quantidade de amigos, doutorado diferente" **não é um caso raro: é um caso inexistente**. O modelo produz o coeficiente mesmo assim, porque a álgebra não sabe disso; ele o produz extrapolando.
 
@@ -90,13 +75,13 @@ O modelo diz que o efeito de cada variável é o mesmo para todo mundo, e que el
 
 **Não linearidades.** É possível que mais amigos aumentem o tempo no site **até certo ponto**, e que a partir dali amigos demais tornem a experiência sobrecarregada e o tempo caia. Uma reta não faz curva; uma reta somada a uma coluna com o **quadrado** de `amigos` faz. Mesmo truque, mesma observação: o modelo continua linear nos parâmetros.
 
-::: {.exemplo}
+Nos dois casos, note **quem** faz o trabalho: você. É preciso desconfiar da interação, escrever a coluna do produto, desconfiar da curva, escrever a coluna do quadrado. Modelos que capturam interações e não linearidades sem que ninguém as escreva à mão existem, e este livro chega a eles: as árvores de decisão do [Capítulo 14](../cap14/index.qmd) partem os dados em regiões e por isso representam interações de graça, e as redes neurais do [Capítulo 15](../cap15/index.qmd) compõem transformações não lineares umas sobre as outras. O que eles cobram por isso é justamente o que esta seção acabou de fazer: a leitura direta de um coeficiente.
+
 Repare que os dois casos usam a mesma ferramenta: construir uma coluna nova a partir das que já existem, e deixar a regressão descobrir o coeficiente dela. Isso é **engenharia de atributos**, o assunto da [seção 8.6](../cap08/06-extracao-e-selecao-de-atributos.qmd), aplicado aqui de forma bem literal.
 
 E é aqui que o capítulo vira. Não há limite para o número de produtos, logaritmos, quadrados e potências que podemos acrescentar — e cada um deles é uma coluna nova, com um coeficiente novo, que o ajuste vai estimar de bom grado. A partir do momento em que começamos a inventar variáveis, precisamos de um jeito de saber quais delas **importam**.
 
 A [seção 12.5](05-qualidade-do-ajuste.qmd) mostra que a métrica que temos até agora — o R² — é exatamente a ferramenta errada para essa pergunta.
-:::
 
 ::: {.callout-tip collapse="true"}
 ## Na prática: `scikit-learn`

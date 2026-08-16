@@ -39,7 +39,7 @@ plt.close('all')
 #| label: ridge-penalty
 from scratch.linear_algebra import dot, Vector, add
 
-# alpha é um *hiperparâmetro* que controla a dureza da penalidade.
+# alpha é um *hiperparâmetro* que controla a força da penalidade.
 # Às vezes ele é chamado de "lambda", mas isso já significa algo em Python.
 def ridge_penalty(beta: Vector, alpha: float) -> float:
     return alpha * dot(beta[1:], beta[1:])
@@ -84,7 +84,7 @@ def sqerror_ridge_gradient(x: Vector,
 
 Como a perda é uma soma de duas parcelas, o gradiente é a soma dos dois gradientes — e é literalmente isso que `add` faz.
 
-`error` e `sqerror_gradient`, usados acima, são exatamente as funções da [seção 12.3](03-ajustando-o-modelo.qmd); como cada página deste livro roda num kernel próprio, elas vêm importadas de `scratch.multiple_regression`, que é o mesmo código. A partir daí, basta trocar `sqerror_gradient` por `sqerror_ridge_gradient` dentro do `least_squares_fit` daquela seção; o resto do otimizador não muda uma linha. O pacote vendorizado já traz essa versão pronta, como `least_squares_fit_ridge`.
+`error` e `sqerror_gradient`, usados acima, são exatamente as funções da [seção 12.3](03-ajustando-o-modelo.qmd); como cada página deste livro roda num kernel próprio, elas vêm importadas de `scratch.multiple_regression`, que é o mesmo código. A partir daí, a mudança conceitual no otimizador é uma só: trocar `sqerror_gradient` por `sqerror_ridge_gradient` dentro do `least_squares_fit` daquela seção. O chute inicial, o laço sobre lotes, o `gradient_step` — tudo o que faz o gradiente descendente ser gradiente descendente fica igual. O pacote vendorizado já traz essa versão pronta, como `least_squares_fit_ridge`. Se você abrir o arquivo para conferir, vai encontrar mais uma diferença além dessa, e ela não é conceitual: o `tqdm.trange` do laço externo virou um `range` comum, ou seja, esta versão simplesmente não desenha barra de progresso.
 
 ## O efeito de apertar a penalidade
 
@@ -122,7 +122,7 @@ Regularização é, nesse sentido, uma **seleção automática de variáveis por
 Repare também no que o R² faz nessa tabela. Ele **desce** conforme `alpha` sobe: 0,680 → 0,680 → 0,675 → 0,560. Isso é a contrapartida obrigatória do que a [seção 12.5](05-qualidade-do-ajuste.qmd) demonstrou. O modelo sem penalidade é, por definição, o que minimiza o erro de treino; qualquer coisa que o afaste dali piora o erro de treino. A aposta da regularização é que essa piora no treino compra uma melhora nos dados que o modelo ainda não viu — que é a única melhora que importa. Repare que `alpha = 0,1` custou 0,0003 de R² e derrubou o coeficiente do `doutorado` pela metade: barato.
 
 ::: {.callout-warning}
-## Reescale antes de regularizar
+## Ponha as variáveis na mesma escala antes de regularizar
 
 A penalidade *ridge* soma os quadrados dos coeficientes, e o tamanho de um coeficiente depende da **unidade** da variável dele.
 
@@ -145,13 +145,23 @@ A diferença de comportamento é maior do que a diferença de código sugere. En
 
 E aqui o livro esbarra num limite honesto: **a *lasso* não é tratável por gradiente descendente**, então não conseguimos resolvê-la do zero. O motivo é visível na definição: $|\beta_j|$ não tem derivada em $\beta_j = 0$ — a função tem um bico ali. E o bico está exatamente no ponto para o qual a *lasso* quer empurrar os coeficientes, ou seja, não é uma patologia que dê para ignorar. Resolvê-la exige métodos de otimização (descida por coordenadas, operadores proximais) que estão fora do escopo daqui.
 
-::: {.exemplo}
-Vale reparar que este é o segundo limite de escopo deste capítulo, e que os dois são de naturezas diferentes.
+::: {.callout-note}
+## Dois limites de escopo, de naturezas diferentes
+
+Vale reparar que este é o segundo limite de escopo deste capítulo, e que os dois não são o mesmo tipo de limite.
 
 A fórmula fechada da [seção 12.3](03-ajustando-o-modelo.qmd) ficou de fora porque exigiria construir álgebra linear que o livro não construiu — uma decisão de orçamento de páginas. A *lasso* fica de fora porque a ferramenta de otimização que o livro construiu **não serve** para ela: não é questão de páginas, é questão de o gradiente descendente ser a ferramenta errada para uma função com bico.
 
 Reconhecer qual dos dois casos você está enfrentando é uma habilidade prática. No primeiro, insistir eventualmente funciona. No segundo, insistir nunca funciona.
 :::
+
+## O que este capítulo amarra
+
+Oito seções, uma linha só de raciocínio. O modelo de várias variáveis é o produto escalar da [seção 12.1](01-o-modelo.qmd), e ajustá-lo não exigiu nada além do gradiente descendente que o [Capítulo 5](../cap05/index.qmd) já tinha: a [seção 12.3](03-ajustando-o-modelo.qmd) passou de uma variável explicativa para três sem mudar uma linha do otimizador. Se o capítulo terminasse aí, seria um capítulo curto sobre generalizar uma fórmula.
+
+O que o alonga é tudo o que vem **depois** de ter os coeficientes na mão. A [seção 12.4](04-interpretando-o-modelo.qmd) mostrou que ler um coeficiente é afirmar "mantendo tudo o mais constante" — uma comparação que os dados podem simplesmente não conter, e que nos nossos não contêm para o `doutorado`. A [seção 12.5](05-qualidade-do-ajuste.qmd) mostrou que a métrica óbvia para arbitrar isso é cega: o R² sobe até com colunas de ruído puro, e uma métrica que nunca piora não serve de critério para deixar nada de fora. A [seção 12.6](06-digressao-o-bootstrap.qmd) foi buscar por outro caminho — reamostrar os próprios dados — o que a teoria clássica não nos deixava calcular; a [seção 12.7](07-erros-padrao-dos-coeficientes.qmd) converteu isso num erro padrão por coeficiente e, com ele, disse com todas as letras que o coeficiente do `doutorado` é indistinguível de zero. Esta seção fechou o circuito: em vez de olhar a tabela e remover a variável à mão, mudou o objetivo que o ajuste persegue, para que o coeficiente que os dados não sustentam encolha sozinho.
+
+Três peças ficam para o resto do livro, e nenhuma delas é sobre regressão. **O bootstrap** estima a incerteza de qualquer estatística que você consiga escrever como função de uma lista — e a reamostragem com reposição que ele inventou para isso reaparece com outro objetivo nas florestas aleatórias do [Capítulo 14](../cap14/index.qmd), lá para treinar modelos em vez de medir incerteza. **O erro padrão** separa efeito de ruído, e é o que permite dizer "esta variável não se sustenta" com um número em vez de com uma impressão. **A regularização** é a resposta padrão ao sobreajuste do [Capítulo 8](../cap08/03-overfitting-e-underfitting.qmd), e ela viaja intacta para o próximo modelo: o [Capítulo 13](../cap13/index.qmd) troca a soma dos erros ao quadrado por outra função de perda, perde a fórmula fechada de vez e passa a depender inteiramente do gradiente descendente — e a penalidade desta seção o acompanha sem nenhuma alteração conceitual, uma parcela somada à perda, um gradiente somado ao gradiente. É por isso que o `scikit-learn` mantém a regularização **ligada por padrão** no `LogisticRegression`, detalhe que costuma pegar de surpresa quem chega lá sem ter passado por aqui.
 
 ::: {.callout-tip collapse="true"}
 ## Na prática: `scikit-learn`
@@ -172,7 +182,5 @@ Quatro coisas que este código traz e o nosso não:
 - **`ElasticNet`**, que combina as duas penalidades e é o que se usa na dúvida.
 - **`RidgeCV`** (e `LassoCV`), que escolhem o `alpha` por validação cruzada em vez de por tentativa e erro. Note que `alpha` é um **hiperparâmetro**: não sai do ajuste, tem que ser escolhido de fora, e a maneira honesta de escolhê-lo é medir desempenho em dados que o modelo não viu — o [Capítulo 8](../cap08/04-correcao.qmd) de novo.
 
-Um aviso de nomenclatura: o `alpha` do `Ridge` do `scikit-learn` tem o mesmo papel do nosso, mas o `LogisticRegression` usa `C`, que é o **inverso** da força da penalidade — ali, `C` pequeno significa penalidade forte. Confundir os dois inverte o modelo por completo, e é um erro que não gera exceção nenhuma.
-
-O `LogisticRegression` aparece já no [Capítulo 13](../cap13/index.qmd), e vale registrar como este capítulo se conecta com ele: o próximo modelo troca a soma dos erros ao quadrado por outra função de perda, perde a fórmula fechada de vez e passa a depender inteiramente do gradiente descendente. A regularização desta seção o acompanha sem alteração conceitual — uma penalidade somada à perda, um gradiente somado ao gradiente —, e por isso o `scikit-learn` a mantém **ligada por padrão** naquele modelo.
+Um aviso de nomenclatura, para quando você chegar ao [Capítulo 13](../cap13/index.qmd): o `alpha` do `Ridge` do `scikit-learn` tem o mesmo papel do nosso, mas o `LogisticRegression` usa `C`, que é o **inverso** da força da penalidade — ali, `C` pequeno significa penalidade forte. Confundir os dois inverte o modelo por completo, e é um erro que não gera exceção nenhuma.
 :::
