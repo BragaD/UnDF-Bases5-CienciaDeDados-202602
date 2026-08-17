@@ -83,3 +83,64 @@ Três afirmações que eu tinha escrito e que a verificação não sustentava:
    nesse trecho, é aí que ele pode virar propaganda por acidente.
 3. O `index` promete que o cap. 16 generaliza esta rede numa biblioteca de camadas. O cap. 16
    ainda é stub — é dívida a cobrar de quem o escrever.
+
+---
+
+# Adendo — aplicação das correções (`cap15-correcoes.md`)
+
+Status: **todos os itens do contrato aplicados**. `make render` → `render OK (tentativa 1)`;
+`make teste` → **24 passed**. Nada ficou de fora.
+
+## Importantes (ambos em `04:238`, a frase foi reescrita e virou dois parágrafos)
+
+- **I1** — Saiu a implicação falsa ("acertava 100% do treino **e por isso mesmo** não dizia
+  nada"). Entrou a leitura correta: o que se lê é a **distância** entre treino e teste, e o
+  exemplo agora vem da [seção 14.6], que é material bem mais forte — árvore sem poda 99,7%
+  treino / 82,4% teste, contra a de profundidade 2 com 85,0% treino / **100%** teste. O link
+  passou de `../cap14/index.qmd` para `../cap14/06-florestas-aleatorias.qmd`.
+- **I2** — "Viés e variância equilibrados" removido. Ficou "não há sinal de sobreajuste" +
+  "menos de dois pontos separam os dois números", sem nomear nada que o cap. 8 proíbe medir
+  num único treino.
+
+## Padronização
+
+14 ocorrências de "época/épocas" → `epoch/epochs` (gênero masculino, como no cap. 5). Inclui
+`plt.xlabel("epoch")`, o `fig-cap` "epoch a epoch", e o `print` do diagnóstico (variável de laço
+`epoca` → `epoch`, para o rótulo impresso e o código não divergirem). **`grep -c época
+content/cap15/` agora é 0**, e o eixo do gráfico foi conferido no PNG renderizado.
+
+## Menores
+
+- **M1** — Nota de meia linha no topo da caixa de derivação de `03` ("Desta caixa em diante, $i$
+  numera os de saída e $h$, os escondidos; o `i` que percorre `hidden_outputs` é este $h$") e um
+  aposto na ponte de `:123`, que é exatamente onde as duas convenções se encostam.
+- **M2** — "é, exemplo a exemplo, o espelho" → "é praticamente o espelho — seria exatamente o
+  espelho se os dois pesos já fossem iguais". A frase seguinte ("quase igualmente") ficou intacta.
+- **M3** — `~0,4 s` → `~2 s` na linha `(25,) logistic lbfgs`. Não mexi na leitura de "uma a duas
+  ordens de grandeza mais rápida", que continua válida (1 min contra 2 s).
+- **M4** — "a rede **aprendeu** divisibilidade" → "construiu alguma coisa que **faz o papel** da
+  divisibilidade", com um parágrafo novo cobrando o preço: 70 e 100 são múltiplos de 5 e ela erra
+  os dois; 4 e 34 levam "fizz" chutado. Reusa a formulação já preparada no callout de `:77–79`.
+- **M5** — Comentei a saída (não escondi): parágrafo curto após o chunk dos pesos iniciais dizendo
+  o que são os nove números e mandando guardar a ordem de grandeza, que a subseção "O que a rede
+  aprendeu" cobra de volta ($[7,7,-3]$, $[5,5,-8]$, $[11,-12,-5]$).
+
+## Verificação
+
+Reproduziu idêntico após o render: `96 / 100`, `erros: [(4,'fizz','4'), (34,'fizz','34'),
+(70,'70','buzz'), (100,'100','buzz')]`, e as seis linhas do diagnóstico (199, 493, 493, 494, 632,
+903 de 923). O PNG `fig-perda-fizz-buzz` foi aberto: eixo `epoch`, queda abrupta, platô em ~590
+entre os epochs ~20 e ~125, descida real depois — exatamente o que a prosa descreve.
+
+Nada da seção "Não mexa nisto" foi tocado.
+
+## Preocupações
+
+1. O `make render` avisou edição concorrente em `content/cap16/04-...qmd` (outro agente). **Não
+   afeta o cap. 15** — `test_freeze_corresponde_ao_fonte` passa, e a própria rodada 3 do alvo já
+   reexecutou o arquivo do cap. 16. Fica o registro para quem for fechar o cap. 16.
+2. Verifiquei o HTML do `_book/` logo após o meu render; segundos depois outro `quarto render`
+   começou e limpou `_book/content/`. As evidências acima foram colhidas antes disso, e o
+   `_freeze/` do cap. 15 (que é o que o próximo render reusa) está correto.
+3. M3 ficou como `~2 s` e a linha do `relu`/`adam` também diz `~2 s`. São duas medições
+   independentes que calharam próximas, não um erro de cópia.
