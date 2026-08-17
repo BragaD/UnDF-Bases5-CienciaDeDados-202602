@@ -41,6 +41,18 @@ RUN=(docker compose run --rm --no-deps livro)
 MAX_TENTATIVAS=6   # contra a corrida do bind mount do Docker no macOS
 MAX_RODADAS=3      # contra o freeze envenenado por edição concorrente
 
+# ORÇAMENTO GLOBAL, em segundos. Este número não vem do render: vem da ferramenta
+# de shell dos agentes, que aborta em 10 min. Sem ele, a espera pelo lock (até 7
+# min) MAIS seis tentativas de render (até ~2 min cada) somam mais de 19 minutos, e
+# o agente recebe um timeout opaco no meio — foi o que aconteceu com o corretor do
+# capítulo 17, que terminou o trabalho sem conseguir renderizar.
+#
+# Estourar o orçamento não perde trabalho: o `_freeze` guarda tudo o que já
+# executou, então a rodada seguinte continua de onde parou e costuma ser rápida.
+ORCAMENTO=420      # ~7 min, com folga para a ferramenta de 10
+INICIO=$SECONDS
+resta() { [ $((SECONDS - INICIO)) -lt "$ORCAMENTO" ]; }
+
 # --- lock -------------------------------------------------------------------
 #
 # A espera é LIMITADA a ~7 min, e o motivo não é o render: é a ferramenta de
@@ -67,7 +79,7 @@ while ! mkdir "$LOCK" 2>/dev/null; do
     continue
   fi
 
-  if [ "$espera" -ge "$ESPERA_MAX" ]; then
+  if [ "$espera" -ge "$ESPERA_MAX" ] || ! resta; then
     cat <<'FILA'
 
 ╔══════════════════════════════════════════════════════════════════════════╗
@@ -101,6 +113,23 @@ for rodada in $(seq 1 "$MAX_RODADAS"); do
   # --- render, com retentativa contra a corrida do bind mount ---------------
   ok=nao
   for i in $(seq 1 "$MAX_TENTATIVAS"); do
+    if ! resta; then
+      cat <<'ORC'
+
+╔══════════════════════════════════════════════════════════════════════════╗
+║  NÃO TERMINOU — acabou o tempo, não o conteúdo. Rode `make render` de novo. ║
+╚══════════════════════════════════════════════════════════════════════════╝
+
+O render vinha repetindo tentativas (a corrida do bind mount do macOS) e o
+orçamento de ~7 min acabou antes de convergir. Isto NÃO é erro do seu conteúdo e
+NÃO se resolve com `make clean`.
+
+**Nada foi perdido:** o `_freeze` guarda tudo o que já executou, então a próxima
+rodada continua de onde esta parou e costuma terminar rápido. Rode de novo.
+
+ORC
+      exit 75   # EX_TEMPFAIL
+    fi
     # O Quarto cria `*_files` e `.html` durante o render e os apaga no fim. Se
     # o render abortou antes, esse lixo trava o render seguinte.
     find content -name '*_files' -type d -exec rm -rf {} + 2>/dev/null || true

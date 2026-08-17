@@ -4,7 +4,188 @@
 Esta seção corresponde a *The Layer Abstraction*, do capítulo 19 de @grus2019.
 :::
 
+Esta seção só faz sentido depois de doer, então vale recuperar a dor.
+
+O [Capítulo 15](../cap15/index.qmd) construiu uma rede que empilhava duas camadas de neurônios, cada um calculando `sigmoid(dot(weights, inputs))`. O `feed_forward` de lá, aliás, aceitava qualquer número de camadas. O problema não estava na ida — estava na volta. A função `sqerror_gradients`, da [seção 15.3](../cap15/03-retropropagacao.qmd), começava assim:
+
+```python
+hidden_outputs, outputs = feed_forward(network, input_vector)
+```
+
+Essa linha desempacota a lista de saídas em exatamente **dois** nomes. Uma rede de três camadas estoura ali com `ValueError`. E o resto da função — `network[0]`, `network[-1]`, `output_deltas`, `hidden_deltas` — supõe o tempo todo que existe uma camada escondida e uma de saída, e nada entre elas.
+
+Havia uma segunda rigidez, mais escondida. A sigmoide não estava em lugar nenhum como uma escolha: ela estava soldada dentro de `neuron_output` na ida, e a derivada dela aparecia escrita à mão, como `output * (1 - output)`, em duas linhas diferentes da passada para trás. **Trocar a função de ativação significava reescrever o gradiente à mão**, em pontos do código que nem se pareciam entre si.
+
+::: {.conceito}
+Os dois problemas têm a mesma raiz: o `forward` e o `backward` estavam **entrelaçados num laço só**, escrito para uma topologia específica.
+
+A abstração desta seção separa as duas coisas na única fronteira em que elas se separam bem: a camada. Cada camada passa a saber fazer a sua própria conta na ida **e** propagar o gradiente através de si mesma na volta. Ninguém mais precisa saber quantas camadas existem, nem qual função cada uma aplica.
+:::
+
+## O contrato
+
+Uma camada é qualquer coisa que saiba fazer quatro coisas:
+
+```{python}
+#| label: classe-layer
+from typing import Iterable, Tuple, List
+
+Tensor = list
+
+class Layer:
+    """
+    Nossas redes neurais serão compostas de Layers, cada uma sabendo
+    fazer alguma conta sobre suas entradas na direção "forward" e
+    propagar gradientes na direção "backward".
+    """
+    def forward(self, input):
+        """
+        Repare na falta de tipos. Não vamos ser prescritivos sobre
+        que tipos de entrada as camadas podem receber nem que tipos
+        de saída podem devolver.
+        """
+        raise NotImplementedError
+
+    def backward(self, gradient):
+        """
+        Do mesmo modo, não vamos ser prescritivos sobre a forma do
+        gradiente. Cabe a você, usuário, garantir que está fazendo
+        coisas sensatas.
+        """
+        raise NotImplementedError
+
+    def params(self) -> Iterable[Tensor]:
+        """
+        Devolve os parâmetros desta camada. A implementação padrão
+        não devolve nada, para que uma camada sem parâmetros não
+        precise implementar isto.
+        """
+        return ()
+
+    def grads(self) -> Iterable[Tensor]:
+        """
+        Devolve os gradientes, na mesma ordem de params().
+        """
+        return ()
+```
+
+Quatro métodos, e dois deles com implementação padrão vazia. Vale ler o que cada um significa:
+
+- **`forward(input)`** calcula a saída da camada a partir da entrada. É a metade fácil.
+- **`backward(gradient)`** recebe $\partial L / \partial \text{saída}$ e devolve $\partial L / \partial \text{entrada}$. Isto é, recebe a culpa que chegou da camada seguinte e devolve a culpa que cabe à camada anterior. É a regra da cadeia da [seção 15.3](../cap15/03-retropropagacao.qmd), agora encapsulada num método.
+- **`params()`** devolve os tensores de parâmetros da camada, se houver. Uma camada de ativação não tem nenhum, e por isso o padrão devolve a tupla vazia.
+- **`grads()`** devolve os gradientes correspondentes, **na mesma ordem**. Essa correspondência posicional é o que permite ao otimizador percorrer os dois em paralelo sem saber nada sobre a camada.
+
+::: {.callout-note}
+## A falta de anotações de tipo é deliberada
+
+O livro-texto anota tipos com rigor em quase tudo, e aqui abre exceção: `forward` e `backward` não dizem o que recebem nem o que devolvem.
+
+O motivo é que camadas diferentes trabalham com formas diferentes. Uma camada linear recebe um vetor; uma camada convolucional receberia um tensor de três dimensões; uma camada recorrente carregaria estado entre chamadas. Prescrever um tipo aqui limitaria o que se pode encaixar depois.
+
+O preço é que nada verifica se a saída de uma camada faz sentido como entrada da próxima. O livro-texto diz isso na cara: *cabe a você garantir que está fazendo coisas sensatas*. É a mesma ausência de verificação da seção anterior, agora na fronteira entre camadas em vez de dentro do tensor.
+:::
+
+## A camada mais simples que existe
+
+Uma forma de olhar as redes do capítulo anterior é como uma camada "linear", seguida de uma camada "sigmoide", seguida de outra linear e outra sigmoide. Não as distinguíamos nesses termos, e é justamente essa distinção que permite experimentar estruturas mais gerais.
+
+A camada sigmoide não tem parâmetro nenhum: ela só aplica uma função a cada elemento.
+
+```{python}
+#| label: importa-tensores
+#| output: false
+from scratch.deep_learning import tensor_apply, tensor_combine
+from scratch.neural_networks import sigmoid
+```
+
+```{python}
+#| label: classe-sigmoid
+class Sigmoid(Layer):
+    def forward(self, input: Tensor) -> Tensor:
+        """
+        Aplica a sigmoide a cada elemento do tensor de entrada,
+        e guarda os resultados para usar na retropropagação.
+        """
+        self.sigmoids = tensor_apply(sigmoid, input)
+        return self.sigmoids
+
+    def backward(self, gradient: Tensor) -> Tensor:
+        return tensor_combine(lambda sig, grad: sig * (1 - sig) * grad,
+                              self.sigmoids,
+                              gradient)
+```
+
+::: {.callout-note}
+As funções `tensor_apply` e `tensor_combine` são as da [seção 16.1](01-o-tensor.qmd) — importadas de `scratch.deep_learning`, o pacote copiado literalmente do repositório do livro-texto, e não uma segunda versão delas. Cada página deste livro roda num kernel próprio, então nomes definidos numa página não existem em outra; o pacote existe em todas. A `sigmoid` vem de `scratch.neural_networks`, escrita no [Capítulo 15](../cap15/02-redes-feed-forward.qmd).
+
+O chunk do `import` leva `#| output: false` por um motivo específico deste projeto: `scratch/deep_learning.py` importa `scratch/probability.py`, que tem dezoito chamadas `plt.*` soltas no nível do módulo. O import deixa uma figura pendurada, e sem o `output: false` ela apareceria como saída da célula. Nada disso se corrige editando `scratch/` — o pacote é vendorizado e não se edita.
+:::
+
+Três coisas para reparar nessa classe.
+
+**A primeira é `self.sigmoids`.** Na ida, a camada guarda o que calculou. Na volta, ela precisa desses valores: a derivada da sigmoide em um ponto se escreve em função da própria saída, $\sigma'(z) = \sigma(z)\,(1 - \sigma(z))$. Praticamente toda camada vai fazer esse tipo de coisa — guardar, na passada para a frente, o que a passada para trás precisar.
+
+**A segunda é de onde vem o `sig * (1 - sig) * grad`.** É a regra da cadeia, e ela corresponde exatamente ao termo `output * (1 - output) * (output - target)` da rede do capítulo anterior. O que mudou é o lugar: lá o `(output - target)` vinha da perda e estava misturado com a derivada da ativação na mesma expressão. Aqui a camada recebe o `grad` de fora — ela não sabe nem se importa de onde ele veio — e só multiplica pela sua própria derivada.
+
+**A terceira é que `params` e `grads` não foram implementados.** A camada não tem o que atualizar, então a implementação padrão da classe-base serve, e o otimizador simplesmente não terá nada a fazer com ela.
+
+## Conferindo
+
+A camada funciona? A ida é fácil de conferir de cabeça; a volta merece uma comparação com a derivada calculada à mão. Passando um gradiente de 1 em toda parte, `backward` deveria devolver exatamente $\sigma(x)(1-\sigma(x))$ para cada entrada $x$:
+
+```{python}
+#| label: confere-sigmoid
+camada = Sigmoid()
+entrada = [[-2.0, 0.0], [1.0, 3.0]]
+
+saida = camada.forward(entrada)
+print("forward       :", [[round(v, 4) for v in linha] for linha in saida])
+
+grad = camada.backward([[1.0, 1.0], [1.0, 1.0]])
+print("backward(1s)  :", [[round(v, 4) for v in linha] for linha in grad])
+print("σ'(x) à mão   :", [[round(sigmoid(x) * (1 - sigmoid(x)), 4)
+                           for x in linha] for linha in entrada])
+```
+
+As duas últimas linhas coincidem, casa por casa. Repare também no maior valor da derivada, 0,25, que ocorre na entrada 0 — é o pico do sino que o [Capítulo 15](../cap15/02-redes-feed-forward.qmd) desenhou. E repare no menor, 0,0452 para a entrada 3: um neurônio com pré-ativação 3 já está quase saturado, e o gradiente que passa por ele é cinco vezes menor. Esse é o problema que a [seção 16.6](06-outras-funcoes-de-ativacao.qmd) vai atacar trocando a ativação — o que agora custa trocar um objeto de lugar, e não reescrever gradiente nenhum.
+
 ::: {.callout-warning}
-## Em construção
-O conteúdo desta seção ainda será escrito.
+## A camada guarda estado, e ninguém confere a ordem
+
+`backward` só funciona se `forward` tiver sido chamado antes, com a entrada certa. A camada não verifica isso.
+
+```{python}
+#| label: sigmoid-fora-de-ordem
+outra = Sigmoid()
+outra.forward([0.0, 0.0])          # a camada guarda [0.5, 0.5]
+outra.forward([10.0, 10.0])        # agora guarda [0.99995, 0.99995]
+outra.backward([1.0, 1.0])         # gradiente de QUAL das duas passadas?
+```
+
+O resultado é minúsculo, e não 0,25: é a derivada da sigmoide em 10, não em 0. O `self.sigmoids` da primeira passada foi sobrescrito pela segunda, e a camada retropropagou a que sobrou. Se o seu laço de treino calcular duas previsões antes de retropropagar a primeira, os gradientes da primeira estão perdidos, e nada avisa: o treino continua, converge para algum lugar, e o modelo simplesmente fica pior do que deveria.
+
+Isso vale para **toda** camada deste capítulo, e é a razão pela qual o laço de treino que vamos escrever sempre faz `forward`, depois `backward`, depois `step`, um exemplo por vez. A ordem não é estilo; é a única ordem correta.
+:::
+
+::: {.callout-tip collapse="true"}
+## Na prática: `torch.nn.Module`
+
+A classe que você acabou de escrever tem um equivalente exato, e o nome dele é `torch.nn.Module`. Uma camada em PyTorch é assim:
+
+```python
+import torch.nn as nn
+
+class Sigmoide(nn.Module):
+    def forward(self, x):
+        return 1 / (1 + torch.exp(-x))
+```
+
+Repare no que **não** está lá: o `backward`. É a diferença mais importante entre a nossa biblioteca e uma de verdade.
+
+O PyTorch não pede que você escreva a passada para trás porque ele a deriva sozinho. Cada operação sobre um tensor registra, num grafo, qual foi a operação e quais foram os operandos; quando você chama `.backward()` no resultado final, o framework percorre esse grafo na ordem inversa aplicando a regra da cadeia. É a **diferenciação automática em modo reverso** que o [Capítulo 15](../cap15/03-retropropagacao.qmd) mencionou, e ela torna o nosso `backward` desnecessário — o preço é que o grafo precisa existir, o que exige a classe `Tensor` completa que decidimos não escrever.
+
+O resto do contrato está lá, com outros nomes: `params()` virou `.parameters()`, `grads()` virou o atributo `.grad` de cada parâmetro, e a distinção entre camadas com e sem parâmetro é feita por registro automático em vez de por implementação padrão.
+
+Vale notar o contraste com o `scikit-learn`, que apareceu nos callouts do capítulo anterior. O `MLPClassifier` **não** tem essa abstração: ele é um objeto monolítico que recebe `hidden_layer_sizes=(25,)` e `activation='relu'` como argumentos, e não há camada nenhuma para instanciar, compor ou substituir. As duas bibliotecas resolvem problemas diferentes — e a fronteira entre elas é exatamente a abstração desta seção.
 :::

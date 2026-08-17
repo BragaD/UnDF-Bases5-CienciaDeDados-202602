@@ -4,7 +4,211 @@
 Esta seção corresponde a *The Tensor*, do capítulo 19 de @grus2019.
 :::
 
+Até aqui o livro trabalhou com duas estruturas: **vetores**, que são arranjos de uma dimensão, e **matrizes**, que são de duas. O [Capítulo 4](../cap04/index.qmd) construiu as duas e as operações entre elas. Redes neurais mais complicadas precisam de mais: um lote de imagens coloridas, por exemplo, é um arranjo de quatro dimensões — imagem, linha, coluna, canal de cor.
+
+Nas bibliotecas de rede neural, um arranjo de *n* dimensões se chama **tensor**, e é assim que vamos chamá-lo também.
+
+::: {.callout-note}
+Há razões matemáticas legítimas para não chamar um arranjo de *n* dimensões de "tensor" — em álgebra multilinear, um tensor é um objeto com regras de transformação que um arranjo qualquer não tem. O livro-texto reconhece a objeção e segue em frente, porque o uso da palavra na área já está consolidado. Se você for desses puristas, considere a objeção registrada.
+:::
+
+## A trapaça
+
+Um livro dedicado a deep learning implementaria uma classe `Tensor` completa, sobrecarregando os operadores aritméticos do Python e cuidando de uma variedade de operações. Isso ocuparia um capítulo inteiro sozinho. Aqui vamos trapacear:
+
+```{python}
+#| label: tensor-def
+Tensor = list
+```
+
+É só isso. Um tensor **é** uma lista.
+
+A trapaça vale numa direção só. Todos os nossos vetores, matrizes e análogos de dimensão mais alta são listas — isso é verdade. Mas a recíproca é falsa: a maioria das listas do Python não é um arranjo de *n* dimensões no sentido que queremos.
+
+O que gostaríamos de escrever é uma definição recursiva:
+
+```python
+# Um tensor é ou um float, ou uma lista de tensores
+Tensor = Union[float, List[Tensor]]
+```
+
+O Python não aceita tipos recursivos definidos assim. E, mesmo que aceitasse, a definição ainda estaria errada: ela permitiria "tensores" como
+
+```python
+[[1.0, 2.0],
+ [3.0]]
+```
+
+cujas linhas têm tamanhos diferentes — o que não é um arranjo de *n* dimensões coisa nenhuma.
+
+::: {.conceito}
+Um tensor não é uma estrutura de dados nova. É uma **convenção sobre a forma** de uma lista aninhada: todas as sublistas de um mesmo nível têm o mesmo comprimento, e o aninhamento tem profundidade uniforme.
+
+Nada no Python garante essa convenção, e nós não vamos verificá-la. Tudo o que vem depois — camadas, gradientes, redes inteiras — é recursão sobre listas aninhadas que **presumimos** bem formadas.
+:::
+
+## A forma
+
+A primeira função auxiliar descobre a forma de um tensor:
+
+```{python}
+#| label: shape
+from typing import List
+
+def shape(tensor: Tensor) -> List[int]:
+    sizes: List[int] = []
+    while isinstance(tensor, list):
+        sizes.append(len(tensor))
+        tensor = tensor[0]
+    return sizes
+
+assert shape([1, 2, 3]) == [3]
+assert shape([[1, 2], [3, 4], [5, 6]]) == [3, 2]
+```
+
+Ela desce pelo primeiro elemento, anotando o comprimento de cada nível, até encontrar algo que não é lista.
+
 ::: {.callout-warning}
-## Em construção
-O conteúdo desta seção ainda será escrito.
+## `shape` acredita no primeiro elemento
+
+Repare no `tensor = tensor[0]`: a função olha **só** o primeiro elemento de cada nível. Ela nunca confere se os irmãos dele têm o mesmo tamanho.
+
+```{python}
+#| label: shape-mentiroso
+shape([[1, 2], [3]])
+```
+
+O resultado é `[2, 2]`, e a segunda linha tem um elemento só. Nenhum erro, nenhum aviso — a função devolve uma forma que o objeto não tem.
+
+Isso não é descuido do livro-texto; é a consequência direta de `Tensor = list`. Sem uma classe de verdade, não há lugar onde a invariante possa ser verificada uma vez e valer para sempre. O preço da trapaça é que a corretude do formato vira responsabilidade de quem escreve o código. Guarde isso: é exatamente o tipo de erro que uma biblioteca real pega no construtor, e a nossa não pega em lugar nenhum.
+:::
+
+## Recursão, quatro vezes
+
+Como um tensor pode ter qualquer número de dimensões, quase tudo que se faz com ele é recursivo: um caso base para o vetor, uma chamada recursiva para o resto. O teste do caso base é este:
+
+```{python}
+#| label: is-1d
+def is_1d(tensor: Tensor) -> bool:
+    """
+    Se tensor[0] é uma lista, é um tensor de ordem mais alta.
+    Caso contrário, tensor tem uma dimensão só (isto é, é um vetor).
+    """
+    return not isinstance(tensor[0], list)
+
+assert is_1d([1, 2, 3])
+assert not is_1d([[1, 2], [3, 4]])
+```
+
+Com ele, somar todos os valores de um tensor:
+
+```{python}
+#| label: tensor-sum
+def tensor_sum(tensor: Tensor) -> float:
+    """Soma todos os valores do tensor"""
+    if is_1d(tensor):
+        return sum(tensor)                   # só uma lista de floats: sum do Python
+    else:
+        return sum(tensor_sum(tensor_i)      # chama tensor_sum em cada linha
+                   for tensor_i in tensor)   # e soma os resultados
+
+assert tensor_sum([1, 2, 3]) == 6
+assert tensor_sum([[1, 2], [3, 4]]) == 10
+```
+
+Esse é o padrão que vai se repetir o capítulo inteiro. Para não reescrevê-lo toda vez, o livro-texto o encapsula em duas funções de ordem superior. A primeira aplica uma função elemento a elemento:
+
+```{python}
+#| label: tensor-apply
+from typing import Callable
+
+def tensor_apply(f: Callable[[float], float], tensor: Tensor) -> Tensor:
+    """Aplica f elemento a elemento"""
+    if is_1d(tensor):
+        return [f(x) for x in tensor]
+    else:
+        return [tensor_apply(f, tensor_i) for tensor_i in tensor]
+
+assert tensor_apply(lambda x: x + 1, [1, 2, 3]) == [2, 3, 4]
+assert tensor_apply(lambda x: 2 * x, [[1, 2], [3, 4]]) == [[2, 4], [6, 8]]
+```
+
+E com ela sai de graça uma função que cria um tensor de zeros com a mesma forma de outro:
+
+```{python}
+#| label: zeros-like
+def zeros_like(tensor: Tensor) -> Tensor:
+    return tensor_apply(lambda _: 0.0, tensor)
+
+assert zeros_like([1, 2, 3]) == [0, 0, 0]
+assert zeros_like([[1, 2], [3, 4]]) == [[0, 0], [0, 0]]
+```
+
+A segunda função de ordem superior aplica uma função a elementos **correspondentes** de dois tensores, que deveriam ter exatamente a mesma forma — embora não vamos verificar isso:
+
+```{python}
+#| label: tensor-combine
+def tensor_combine(f: Callable[[float, float], float],
+                   t1: Tensor,
+                   t2: Tensor) -> Tensor:
+    """Aplica f a elementos correspondentes de t1 e t2"""
+    if is_1d(t1):
+        return [f(x, y) for x, y in zip(t1, t2)]
+    else:
+        return [tensor_combine(f, t1_i, t2_i)
+                for t1_i, t2_i in zip(t1, t2)]
+
+import operator
+assert tensor_combine(operator.add, [1, 2, 3], [4, 5, 6]) == [5, 7, 9]
+assert tensor_combine(operator.mul, [1, 2, 3], [4, 5, 6]) == [4, 10, 18]
+```
+
+::: {.callout-warning}
+## O `zip` que engole a diferença
+
+O "deveriam ter exatamente a mesma forma" acima tem consequência prática, e ela vem do `zip`: quando os dois tensores têm tamanhos diferentes, ele simplesmente para no menor.
+
+```{python}
+#| label: combine-mudo
+tensor_combine(operator.add, [1, 2, 3], [4, 5])
+```
+
+Somar um tensor de três elementos com um de dois devolve um tensor de dois, sem reclamar. Num laço de treino, isso é uma forma silenciosa de perder um pedaço do gradiente — o modelo continua treinando, um pouco pior, e nada indica o motivo.
+
+Essas duas armadilhas — `shape` que acredita no primeiro elemento e `tensor_combine` que trunca — são o mesmo defeito visto de dois ângulos: **não existe um lugar onde a forma de um tensor seja um fato verificado.** É a primeira coisa que uma biblioteca de verdade acrescenta.
+:::
+
+## Cinco funções, e o capítulo inteiro
+
+Vale parar um instante e reparar em quão pouco código foi escrito: `shape`, `is_1d`, `tensor_sum`, `tensor_apply`, `zeros_like` e `tensor_combine`. Nada além de recursão sobre listas.
+
+Todas as camadas das próximas seções vão ser escritas com essas peças. A camada sigmoide é um `tensor_apply` na ida e um `tensor_combine` na volta. O gradiente descendente é um `tensor_combine` entre parâmetros e gradientes. O momento é um `zeros_like` mais dois `tensor_combine`. A biblioteca inteira que este capítulo constrói cabe sobre essas seis funções.
+
+```{python}
+#| label: formas-do-livro
+# a rede XOR do capítulo 15, na forma em que ela existia lá
+xor_network = [[[20., 20, -30],
+                [20., 20, -10]],
+               [[-60., 60, -30]]]
+
+print("forma da rede do capítulo 15:", shape(xor_network))
+print("total de pesos:", tensor_sum(tensor_apply(lambda _: 1.0, xor_network)))
+```
+
+Aquela "lista de camadas de neurônios de pesos" que o [Capítulo 15](../cap15/02-redes-feed-forward.qmd) descreveu em português tem, agora, um nome e uma forma medida: é um tensor irregular de forma `[2, 2, 3]` — irregular porque a segunda camada tem um neurônio, não dois, e `shape` acreditou no primeiro elemento, como avisado acima. Isso é um bom retrato do que muda neste capítulo: a partir da próxima seção, os pesos deixam de morar numa lista aninhada solta e passam a morar **dentro de uma camada**, que sabe o que fazer com eles.
+
+::: {.callout-tip collapse="true"}
+## Na prática: `numpy.ndarray` e `torch.Tensor`
+
+O `Tensor = list` deste livro é o único lugar da área onde um tensor é uma lista aninhada. Em qualquer biblioteca real, um tensor é um objeto com três coisas que a nossa lista não tem:
+
+**Um bloco contíguo de memória.** Um `numpy.ndarray` de 60.000 × 784 floats é um único bloco de bytes, com um tipo (`dtype`) e um passo (`strides`) por dimensão. A nossa lista de listas é um vetor de ponteiros para vetores de ponteiros para objetos `float` do Python, cada um com cabeçalho, contador de referências e alocação própria. Percorrer o primeiro é sequencial; percorrer o segundo é perseguir ponteiros pela memória inteira.
+
+**Uma forma que é um fato.** `array.shape` não desce pelo primeiro elemento adivinhando: é um atributo, fixado na construção. Arranjos irregulares simplesmente não existem — a construção falha. As duas caixas de aviso desta seção não têm equivalente lá.
+
+**Operações no laço interno em código compilado.** `a + b` sobre dois arranjos de um milhão de elementos é um laço em C, possivelmente vetorizado pelo processador; num `torch.Tensor` em GPU, são milhares de somas simultâneas. O nosso `tensor_combine` é um `zip` interpretado, um elemento por vez.
+
+A diferença de velocidade entre as duas coisas é de duas a quatro ordens de grandeza, e a [seção 16.8](08-exemplo-mnist.qmd) mede exatamente o que isso significa em minutos de espera.
+
+**E ainda assim não vamos usar nenhuma delas.** Reescrever este capítulo com `numpy` deixaria o código mais curto e centenas de vezes mais rápido, e apagaria o assunto: a recursão explícita acima **é** o que uma biblioteca de tensores faz, e vê-la escrita em seis funções de três linhas é o que permite reconhecê-la depois, escondida atrás de um operador sobrecarregado.
 :::

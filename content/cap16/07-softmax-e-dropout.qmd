@@ -1,10 +1,334 @@
 # Softmax, Entropia Cruzada e Dropout
 
 ::: {.callout-note}
-Esta seção corresponde a *Softmaxes and Cross-Entropy; Dropout*, do capítulo 19 de @grus2019.
+Esta seção corresponde a *Softmaxes and Cross-Entropy* e a *Dropout*, do capítulo 19 de @grus2019.
 :::
 
+A rede da seção anterior termina numa camada `Sigmoid`, o que significa que a saída dela é um vetor de números entre 0 e 1. Em particular, ela pode devolver um vetor só de zeros, ou um vetor só de uns.
+
+Num problema de classificação, o que queremos é outra coisa: um 1 na classe certa e 0 em todas as outras. As previsões nunca serão tão perfeitas, mas gostaríamos que fossem, pelo menos, uma **distribuição de probabilidade** sobre as classes. Se um modelo com duas classes devolve $[0, 0]$, é difícil dar sentido a isso — ele acha que a entrada não pertence a classe nenhuma? Já $[0{,}4;\ 0{,}6]$ se lê sem esforço: 40% de chance de ser a primeira classe, 60% de ser a segunda.
+
+::: {.callout-important}
+## A dívida da seção 15.4
+
+O capítulo anterior fechou com exatamente essa observação, e a deixou pendurada. Lá, a rede do Fizz Buzz devolvia quatro sigmoides independentes, e a caixa "Estes quatro números não são uma distribuição de probabilidade" mostrou uma saída cuja soma dava 1,0769 e outra cuja soma dava 0,9062.
+
+Cada neurônio de saída tinha a sua própria sigmoide e produzia um número em $[0, 1]$ **independentemente dos outros**. Quatro números em $[0, 1]$ não formam uma distribuição só porque estão lado a lado, e ler o maior deles como "confiança" era inventar uma garantia que o modelo não dava.
+
+Esta seção paga essa dívida.
+:::
+
+## A softmax
+
+A correção é abandonar a camada `Sigmoid` final e usar a função **softmax**, que converte um vetor de números reais num vetor de probabilidades. Calculamos $e^x$ para cada número — o que produz um vetor de positivos — e dividimos cada um pela soma. O resultado é um punhado de números positivos que somam 1.
+
+Só há um cuidado: $e^{1000}$ estoura em Python. Antes de exponenciar, subtraímos o maior valor do vetor, o que não muda as probabilidades e é mais seguro de calcular:
+
+```{python}
+#| label: importa-camadas
+#| output: false
+import math
+import random
+from typing import List
+from scratch.deep_learning import (Layer, Linear, Sequential, Tanh, Tensor,
+                                   is_1d, tensor_apply, tensor_combine, tensor_sum,
+                                   Loss, Momentum)
+from scratch.neural_networks import sigmoid
+import operator
+```
+
+```{python}
+#| label: softmax
+def softmax(tensor: Tensor) -> Tensor:
+    """Softmax ao longo da última dimensão"""
+    if is_1d(tensor):
+        # Subtrai o maior valor, por estabilidade numérica.
+        largest = max(tensor)
+        exps = [math.exp(x - largest) for x in tensor]
+
+        sum_of_exps = sum(exps)                 # este é o "peso" total
+        return [exp_i / sum_of_exps             # a probabilidade é a fração
+                for exp_i in exps]              # do peso total
+    else:
+        return [softmax(tensor_i) for tensor_i in tensor]
+```
+
+Vale ver os dois efeitos lado a lado — o de normalizar e o de ser insensível a deslocamentos:
+
+```{python}
+#| label: softmax-demo
+v = [2.0, 1.0, 0.1, -3.0]
+
+sigmoides = [sigmoid(x) for x in v]
+probs = softmax(v)
+
+print("vetor            ", [round(x, 4) for x in v])
+print("sigmoides        ", [round(x, 4) for x in sigmoides],
+      " soma:", round(sum(sigmoides), 4))
+print("softmax          ", [round(x, 4) for x in probs],
+      " soma:", round(sum(probs), 4))
+print("softmax(v + 100) ", [round(x, 4) for x in softmax([x + 100 for x in v])])
+```
+
+As quatro sigmoides somam 2,1843, que não é nada. A softmax soma 1, e continua somando o mesmo depois de somar 100 a todo mundo — o que é a justificativa do truque de subtrair o máximo: deslocar o vetor inteiro não altera o resultado, então podemos deslocá-lo para onde a exponencial não estoura.
+
+::: {.conceito}
+## A softmax é a logística, para mais de duas classes
+
+O [Capítulo 13](../cap13/02-a-funcao-logistica.qmd) construiu a função logística para espremer uma combinação linear dentro de $[0, 1]$ e poder lê-la como probabilidade. A softmax faz o mesmo trabalho quando há mais de duas classes — e, com exatamente duas, **ela é a logística**:
+
+```{python}
+#| label: softmax-duas-classes
+for z in (-2.0, 0.0, 1.5):
+    print(f"z = {z:5.1f}   softmax([z, 0]) = "
+          f"{[round(p, 6) for p in softmax([z, 0.0])]}"
+          f"   logística(z) = {sigmoid(z):.6f}")
+```
+
+A primeira componente da softmax de $[z, 0]$ é exatamente $\sigma(z)$, e a segunda é $1 - \sigma(z)$. A conta é de uma linha: $e^z / (e^z + e^0) = 1/(1 + e^{-z})$.
+
+Isso arruma os dois capítulos numa hierarquia só. A regressão logística prevê uma probabilidade entre duas classes; a softmax prevê uma distribuição entre $k$; e a primeira é o caso $k = 2$ da segunda. É por isso que a última seção deste capítulo vai chamar `Linear(784, 10)` seguido de softmax de "regressão logística multiclasse" sem nenhuma licença poética.
+:::
+
+## A entropia cruzada
+
+Uma vez que a rede produz probabilidades, usa-se uma perda diferente: a **entropia cruzada**, também chamada de log-verossimilhança negativa.
+
+O nome já entrega o argumento, e ele é o do [Capítulo 11](../cap11/03-maxima-verossimilhanca.qmd): lá, o uso dos mínimos quadrados na regressão linear foi justificado mostrando que, sob certas hipóteses, os coeficientes de mínimos quadrados **maximizam a verossimilhança** dos dados observados. Aqui a coisa é análoga: se as saídas da rede são probabilidades, a entropia cruzada é a log-verossimilhança negativa dos dados observados — e minimizá-la é maximizar a verossimilhança.
+
+```{python}
+#| label: softmax-cross-entropy
+class SoftmaxCrossEntropy(Loss):
+    """
+    Esta é a log-verossimilhança negativa dos valores observados, dado o
+    modelo de rede neural. Então, se escolhemos pesos que a minimizam,
+    o nosso modelo estará maximizando a verossimilhança dos dados observados.
+    """
+    def loss(self, predicted: Tensor, actual: Tensor) -> float:
+        # Aplica a softmax para obter probabilidades
+        probabilities = softmax(predicted)
+
+        # Isto vale log p_i para a classe verdadeira i, e 0 para as demais.
+        # Somamos um tantinho a p para evitar log(0).
+        likelihoods = tensor_combine(lambda p, act: math.log(p + 1e-30) * act,
+                                     probabilities,
+                                     actual)
+
+        # E então somamos os negativos.
+        return -tensor_sum(likelihoods)
+
+    def gradient(self, predicted: Tensor, actual: Tensor) -> Tensor:
+        probabilities = softmax(predicted)
+
+        # Que equação agradável, não?
+        return tensor_combine(lambda p, actual: p - actual,
+                              probabilities,
+                              actual)
+```
+
+::: {.callout-important}
+## A softmax não entra na rede
+
+Repare no que acabou de acontecer: a softmax está dentro da **perda**, não da rede. A rede termina numa `Linear` e devolve números reais quaisquer, sem restrição de sinal ou de escala.
+
+Isso não é arrumação estética. Olhe o `gradient`: ele é `probabilities - actual`, e nada mais. Duas subtrações e uma exponencial. Se a softmax fosse uma camada da rede, o gradiente teria de atravessá-la — e a derivada da softmax em relação às suas entradas é uma matriz, não um vetor, porque cada saída depende de **todas** as entradas.
+
+Quando a softmax e a entropia cruzada são derivadas **juntas**, essa matriz se cancela contra a derivada do logaritmo e sobra a subtração. É por isso que praticamente toda biblioteca oferece uma perda chamada `CrossEntropyLoss` que aplica a softmax internamente, e por isso que aplicar softmax na rede **e** usar essa perda é um dos erros mais comuns de quem começa: a softmax acaba aplicada duas vezes, o gradiente fica achatado e o treino arrasta.
+:::
+
+## Fizz Buzz, mais uma vez
+
+O livro-texto relata que treinar a mesma rede do Fizz Buzz com `SoftmaxCrossEntropy` costuma ser **muito** mais rápido — em muito menos epochs. A explicação dele vale ser lida com atenção, porque é geométrica.
+
+Para prever a classe 0 no arranjo anterior — linear seguido de sigmoide —, a rede precisa que a primeira saída seja um número **grande e positivo** e que as outras três sejam **grandes e negativas**. Com a softmax, basta que a primeira saída seja **maior** que as outras três. Há muito mais jeitos de a segunda condição acontecer do que a primeira, e é razoável esperar que seja mais fácil encontrar pesos que a satisfaçam.
+
+A rede é a mesma da seção anterior, com uma camada a menos:
+
+```{python}
+#| label: rede-softmax
+from scratch.neural_networks import binary_encode, fizz_buzz_encode, argmax
+
+xs = [binary_encode(n) for n in range(101, 1024)]
+ys = [fizz_buzz_encode(n) for n in range(101, 1024)]
+
+NUM_HIDDEN = 25
+
+random.seed(0)
+
+net = Sequential([
+    Linear(input_dim=10, output_dim=NUM_HIDDEN, init='uniform'),
+    Tanh(),
+    Linear(input_dim=NUM_HIDDEN, output_dim=4, init='uniform')
+    # sem camada de sigmoide no fim agora
+])
+
+def fizzbuzz_accuracy(low: int, hi: int, net: Layer) -> float:
+    num_correct = 0
+    for n in range(low, hi):
+        if argmax(net.forward(binary_encode(n))) == argmax(fizz_buzz_encode(n)):
+            num_correct += 1
+    return num_correct / (hi - low)
+```
+
+E o laço de treino é, de novo, **o mesmo**. Só a perda mudou:
+
+```{python}
+#| label: treino-softmax
+#| warning: false
+import tqdm
+
+optimizer = Momentum(learning_rate=0.1, momentum=0.9)
+loss = SoftmaxCrossEntropy()                       # <- a única troca
+
+marcos = [1, 10, 25, 50, 75, 100]
+historico = {}
+
+with tqdm.trange(100) as t:
+    for epoch in t:
+        epoch_loss = 0.0
+
+        for x, y in zip(xs, ys):
+            predicted = net.forward(x)
+            epoch_loss += loss.loss(predicted, y)
+            gradient = loss.gradient(predicted, y)
+            net.backward(gradient)
+
+            optimizer.step(net)
+
+        t.set_description(f"fb loss: {epoch_loss:.3f}")
+
+        if epoch + 1 in marcos:
+            historico[epoch + 1] = (epoch_loss,
+                                    fizzbuzz_accuracy(101, 1024, net),
+                                    fizzbuzz_accuracy(1, 101, net))
+```
+
+```{python}
+#| label: historico-softmax
+print("epoch      perda   treino   teste")
+for epoch in marcos:
+    perda, treino, teste = historico[epoch]
+    print(f"{epoch:5d}  {perda:9.3f}   {treino:.3f}   {teste:.3f}")
+```
+
+::: {.conceito}
+## A comparação, em números
+
+| perda | epochs | tempo | acerto no treino | acerto no teste |
+|---|---|---|---|---|
+| `SSE` com sigmoide final ([16.6](06-outras-funcoes-de-ativacao.qmd)) | 300 | ~36 s | 0,884 | 0,890 |
+| `SoftmaxCrossEntropy` | 100 | ~12 s | 1,000 | 0,970 |
+
+Um terço dos epochs, um terço do tempo, e um resultado melhor nos dois conjuntos — com **a mesma arquitetura, a mesma inicialização, a mesma semente e o mesmo otimizador**. A única diferença é a última camada e a função de perda.
+
+Vale a ressalva de sempre: são 100 números de teste, e a diferença entre 0,890 e 0,970 são oito acertos. Isso sozinho caberia dentro do ruído. O que **não** cabe no ruído é a coluna do treino, com 923 exemplos: 0,884 contra 1,000. A rede com softmax aprendeu o conjunto de treino inteiro em 100 epochs; a outra não tinha chegado lá em 300.
+:::
+
+## Os três erros
+
+Agora que a saída é uma distribuição, dá para olhar os erros de um jeito que o capítulo anterior não permitia:
+
+```{python}
+#| label: erros-softmax
+rotulos = ["o próprio número", "fizz", "buzz", "fizzbuzz"]
+
+for n in range(1, 101):
+    previsto = argmax(net.forward(binary_encode(n)))
+    correto = argmax(fizz_buzz_encode(n))
+    if previsto != correto:
+        bruta = net.forward(binary_encode(n))
+        probs = softmax(bruta)
+        print(f"n = {n:3d}  previu '{rotulos[previsto]}', era '{rotulos[correto]}'")
+        print(f"         saída bruta {[round(v, 3) for v in bruta]}")
+        print(f"         probabilidades {[round(p, 4) for p in probs]}"
+              f"  soma {sum(probs):.4f}")
+```
+
+Três erros em cem, e eles não são do mesmo tipo — mas agora essa frase tem apoio numérico em vez de intuição. Para $n = 40$, as duas probabilidades disputam de perto: a rede está **genuinamente indecisa** entre "fizz" e "buzz", e a soma continua sendo 1, então essa disputa se lê como uma disputa de probabilidade. Para $n = 34$, a rede põe mais de 99% numa resposta errada: está **confiantemente errada**, que é sempre o pior tipo de erro.
+
+A [seção 15.4](../cap15/04-exemplo-fizz-buzz.qmd) fez exatamente essa distinção e teve de fazê-la de olho, comparando magnitudes de números que não somavam nada em particular. Aqui a distinção é uma leitura direta: 0,61 contra 0,39 é indecisão; 0,99 contra 0,01 é confiança. **A softmax não deixou o modelo mais certo — deixou o modelo mais legível.**
+
+## Dropout
+
+Como quase todo modelo de aprendizado de máquina, redes neurais tendem a **sobreajustar** os dados de treino. O [Capítulo 8](../cap08/index.qmd) definiu o problema, e a [seção 12.8](../cap12/08-regularizacao.qmd) apresentou uma solução: penalizar coeficientes grandes, encolhendo os parâmetros em direção a zero.
+
+O dropout é outra solução, e ela é estranha na primeira leitura. **Durante o treino, desligamos cada neurônio ao acaso** — substituímos a saída dele por 0 — com uma probabilidade fixa. A rede fica impedida de depender de qualquer neurônio individual, o que parece ajudar contra o sobreajuste.
+
+Na hora de avaliar, não queremos desligar neurônio nenhum. Então a camada precisa saber se está treinando ou não. E, como no treino ela deixa passar só uma fração da entrada, para que a saída seja comparável na avaliação ela **encolhe** as saídas uniformemente por essa mesma fração:
+
+```{python}
+#| label: dropout
+class Dropout(Layer):
+    def __init__(self, p: float) -> None:
+        self.p = p
+        self.train = True
+
+    def forward(self, input: Tensor) -> Tensor:
+        if self.train:
+            # Cria uma máscara de 0s e 1s com a forma da entrada,
+            # usando a probabilidade especificada.
+            self.mask = tensor_apply(
+                lambda _: 0 if random.random() < self.p else 1,
+                input)
+            # Multiplica pela máscara para desligar entradas.
+            return tensor_combine(operator.mul, input, self.mask)
+        else:
+            # Na avaliação, só encolhe as saídas uniformemente.
+            return tensor_apply(lambda x: x * (1 - self.p), input)
+
+    def backward(self, gradient: Tensor) -> Tensor:
+        if self.train:
+            # Só propaga os gradientes onde a máscara vale 1.
+            return tensor_combine(operator.mul, gradient, self.mask)
+        else:
+            raise RuntimeError("não chame backward fora do modo de treino")
+```
+
+Os dois modos, com um `p` exagerado para ficar visível:
+
+```{python}
+#| label: dropout-demo
+random.seed(7)
+
+camada = Dropout(0.5)
+entrada = [1.0] * 10
+
+print("treino     :", camada.forward(entrada))
+camada.train = False
+print("avaliação  :", camada.forward(entrada))
+```
+
+No treino, metade dos valores foi zerada e a outra metade passou intacta — e o sorteio é diferente a cada chamada. Na avaliação, **nada** é zerado e tudo é multiplicado por $1 - p = 0{,}5$. As duas saídas têm a mesma soma esperada, que é o ponto do encolhimento: a camada seguinte recebe entradas da mesma magnitude típica nos dois modos, e por isso os pesos aprendidos no treino continuam valendo na avaliação.
+
 ::: {.callout-warning}
-## Em construção
-O conteúdo desta seção ainda será escrito.
+## O primeiro modelo deste livro que se comporta diferente conforme o momento
+
+Até aqui, um modelo treinado era uma função: mesma entrada, mesma saída, sempre. Com dropout, isso deixa de valer, e de duas formas ao mesmo tempo.
+
+**A saída passa a ser aleatória durante o treino.** Duas chamadas de `forward` com a mesma entrada devolvem coisas diferentes, porque a máscara é sorteada de novo. É por isso que todo chunk desta seção leva `random.seed` — sem semente, o texto pararia de bater com a saída a cada renderização.
+
+**A saída depende de um atributo mutável, `self.train`.** Esquecer de pôr `train = False` antes de avaliar é o bug clássico do dropout, e ele não levanta erro nenhum: o modelo simplesmente avalia com neurônios desligados ao acaso, e a métrica sai pior e instável. Ninguém desconfia da métrica quando ela sai *pior* — desconfia-se do modelo. A [seção 16.8](08-exemplo-mnist.qmd) mede esse prejuízo num caso concreto.
+
+Repare que `backward` **levanta** `RuntimeError` fora do modo de treino, e é a única verificação defensiva de toda a biblioteca deste capítulo. Ela protege o caso simétrico e mais raro; o caso comum, o de avaliar em modo de treino, não é protegido por nada.
+:::
+
+::: {.callout-tip collapse="true"}
+## Na prática: `CrossEntropyLoss`, `model.train()` e `model.eval()`
+
+**A perda.** No PyTorch, `nn.CrossEntropyLoss()` faz exatamente o que a nossa `SoftmaxCrossEntropy` faz: recebe as saídas **cruas** da rede — os *logits* — e aplica a softmax por dentro. A documentação avisa isso em negrito, justamente porque aplicar `nn.Softmax` na rede e depois usar essa perda é o erro comum descrito acima. No `scikit-learn`, o `MLPClassifier` faz o mesmo sem oferecer escolha: para mais de duas classes, ele usa softmax na saída e entropia cruzada como perda, o que é verificável em `out_activation_` e `loss` — e é exatamente o que a caixa final do [Capítulo 15](../cap15/04-exemplo-fizz-buzz.qmd) constatou.
+
+**Os modos.** O `self.train` da nossa camada existe lá como um método do modelo inteiro:
+
+```python
+modelo.train()   # liga o dropout, e o que mais depender do modo
+saida = modelo(x)
+
+modelo.eval()    # desliga
+with torch.no_grad():
+    saida = modelo(x_teste)
+```
+
+Chamar `.train()` ou `.eval()` no modelo propaga o modo para **todas** as camadas de dentro, recursivamente. É uma melhoria real sobre o nosso arranjo, em que cada `Dropout` precisa ser guardado numa variável para poder ser alternado à mão — como a [seção 16.8](08-exemplo-mnist.qmd) vai fazer, de forma desconfortável.
+
+**Uma diferença de convenção que vale saber.** O `nn.Dropout` do PyTorch **não** encolhe as saídas na avaliação, como o nosso faz. Ele faz o contrário: durante o treino, além de zerar, ele **amplia** os valores sobreviventes por $1/(1-p)$, e na avaliação não faz nada. Isso se chama *inverted dropout*, e o efeito esperado é o mesmo — a diferença é que a avaliação fica sendo a identidade, o que é mais barato e permite exportar o modelo sem carregar o `p` junto. Se você comparar as duas implementações valor a valor, elas não coincidem; se comparar as médias, coincidem.
 :::

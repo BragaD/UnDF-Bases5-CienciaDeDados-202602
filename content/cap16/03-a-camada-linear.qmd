@@ -4,7 +4,283 @@
 Esta seção corresponde a *The Linear Layer*, do capítulo 19 de @grus2019.
 :::
 
+Falta a outra metade da rede do capítulo anterior: a camada que representa o `dot(weights, inputs)` dos neurônios. Ao contrário da sigmoide, essa camada **tem** parâmetros — e parâmetros precisam ser inicializados.
+
+## A inicialização não é detalhe
+
+Os valores iniciais dos pesos fazem uma diferença enorme na rapidez com que a rede treina, e às vezes em **se** ela treina. O motivo é a saturação que a seção anterior mediu: se os pesos forem grandes demais, as pré-ativações caem numa faixa onde a derivada da ativação é quase zero, e uma parte da rede com gradiente zero não aprende nada por gradiente descendente — nunca.
+
+O livro-texto registra isso com uma franqueza que vale citar: *algumas das redes deste capítulo eu não consegui treinar de jeito nenhum com inicializações diferentes das que usei.*
+
+São três esquemas. O primeiro sorteia cada valor uniformemente em $[0, 1]$, com `random.random()`. O segundo, que é o padrão, sorteia de uma normal padrão. O terceiro é a **inicialização de Xavier**, em que cada peso vem de uma normal de média 0 e variância $2 / (\text{entradas} + \text{saídas})$ — uma escolha que, segundo o livro-texto, costuma funcionar bem para pesos de rede neural.
+
+```{python}
+#| label: importa-inverse-normal
+#| output: false
+import random
+from typing import List, Iterable
+from scratch.deep_learning import Layer, Tensor
+from scratch.probability import inverse_normal_cdf
+from scratch.linear_algebra import dot
+```
+
+::: {.callout-note}
+O `Layer` e o `Tensor` vêm de `scratch.deep_learning` — são o mesmo código da [seção 16.2](02-a-abstracao-de-camada.qmd), não uma segunda versão dele, já que cada página deste livro roda num kernel próprio. O `inverse_normal_cdf` vem de `scratch/probability.py`, módulo do capítulo de probabilidade do livro-texto, que ficou fora da ementa desta disciplina mas do qual o pacote depende. Esse import executa dezoito chamadas `plt.*` que aquele arquivo tem soltas no nível do módulo, e é por isso que o chunk leva `#| output: false`.
+:::
+
+```{python}
+#| label: random-tensores
+def random_uniform(*dims: int) -> Tensor:
+    if len(dims) == 1:
+        return [random.random() for _ in range(dims[0])]
+    else:
+        return [random_uniform(*dims[1:]) for _ in range(dims[0])]
+
+def random_normal(*dims: int,
+                  mean: float = 0.0,
+                  variance: float = 1.0) -> Tensor:
+    if len(dims) == 1:
+        return [mean + variance * inverse_normal_cdf(random.random())
+                for _ in range(dims[0])]
+    else:
+        return [random_normal(*dims[1:], mean=mean, variance=variance)
+                for _ in range(dims[0])]
+
+from scratch.deep_learning import shape
+
+assert shape(random_uniform(2, 3, 4)) == [2, 3, 4]
+assert shape(random_normal(5, 6, mean=10)) == [5, 6]
+```
+
+As duas funções seguem o mesmo padrão recursivo da [seção 16.1](01-o-tensor.qmd): o caso base produz uma lista de números, e o caso geral produz uma lista de tensores de uma dimensão a menos. Os três esquemas se embrulham numa função só:
+
+```{python}
+#| label: random-tensor
+def random_tensor(*dims: int, init: str = 'normal') -> Tensor:
+    if init == 'normal':
+        return random_normal(*dims)
+    elif init == 'uniform':
+        return random_uniform(*dims)
+    elif init == 'xavier':
+        variance = len(dims) / sum(dims)
+        return random_normal(*dims, variance=variance)
+    else:
+        raise ValueError(f"unknown init: {init}")
+```
+
+O `len(dims) / sum(dims)` é a fórmula de Xavier escrita de um jeito compacto: para um tensor de duas dimensões, `len(dims)` vale 2 e `sum(dims)` vale entradas mais saídas.
+
 ::: {.callout-warning}
-## Em construção
-O conteúdo desta seção ainda será escrito.
+## O parâmetro chamado `variance` é o desvio padrão
+
+Olhe a linha que faz o sorteio:
+
+```python
+mean + variance * inverse_normal_cdf(random.random())
+```
+
+O `inverse_normal_cdf(u)` devolve um valor sorteado de uma **normal padrão**, de variância 1. Multiplicar uma normal padrão por uma constante $c$ produz uma normal de desvio padrão $c$ — e portanto de variância $c^2$, não $c$. O parâmetro se chama `variance`, mas o papel que ele desempenha na conta é o de desvio padrão.
+
+Dá para medir:
+
+```{python}
+#| label: variance-medida
+import statistics
+
+random.seed(0)
+amostra = random_normal(100000, variance=4.0)
+
+print(f"desvio padrão da amostra: {statistics.pstdev(amostra):.4f}")
+print(f"variância da amostra:     {statistics.pvariance(amostra):.4f}")
+```
+
+Pedimos variância 4 e recebemos variância 16, que é $4^2$.
+
+A consequência para a inicialização de Xavier é maior do que parece, porque a fórmula real de Glorot e Bengio pede **desvio padrão** $\sqrt{2/(n_{ent} + n_{sai})}$, e o código passa $2/(n_{ent} + n_{sai})$ como se fosse o desvio:
+
+```{python}
+#| label: xavier-medido
+import math
+
+random.seed(0)
+pesos = random_tensor(30, 784, init='xavier')
+achatado = [w for linha in pesos for w in linha]
+
+print(f"desvio padrão obtido: {statistics.pstdev(achatado):.5f}")
+print(f"2 / (784 + 30)      = {2 / 814:.5f}")
+print(f"sqrt(2 / (784 + 30)) = {math.sqrt(2 / 814):.5f}")
+```
+
+Os pesos saem cerca de **vinte vezes mais estreitos** do que a fórmula de Xavier pediria. Não vamos consertar isso — `scratch/` é uma cópia literal do repositório do livro-texto e não se edita, e além disso as redes deste capítulo treinam assim, com estes valores. Registre como aviso de leitura: quando o livro-texto diz "inicialização de Xavier", o que o código faz não é bem isso, e a observação dele sobre não conseguir treinar com outras inicializações provavelmente tem a ver com esta discrepância.
+:::
+
+## A camada
+
+Com o sorteio resolvido, a camada linear precisa saber a dimensão da entrada (quantos pesos cada neurônio tem), a dimensão da saída (quantos neurônios são) e o esquema de inicialização:
+
+```{python}
+#| label: linear
+class Linear(Layer):
+    def __init__(self, input_dim: int, output_dim: int,
+                 init: str = 'xavier') -> None:
+        """
+        Uma camada de output_dim neurônios, cada um com input_dim pesos
+        (e um viés).
+        """
+        self.input_dim = input_dim
+        self.output_dim = output_dim
+
+        # self.w[o] são os pesos do o-ésimo neurônio
+        self.w = random_tensor(output_dim, input_dim, init=init)
+
+        # self.b[o] é o termo de viés do o-ésimo neurônio
+        self.b = random_tensor(output_dim, init=init)
+
+    def forward(self, input: Tensor) -> Tensor:
+        # Guarda a entrada para usar na passada para trás.
+        self.input = input
+
+        # Devolve o vetor de saídas dos neurônios.
+        return [dot(input, self.w[o]) + self.b[o]
+                for o in range(self.output_dim)]
+
+    def backward(self, gradient: Tensor) -> Tensor:
+        # Cada b[o] é somado a output[o], o que significa que
+        # o gradiente de b é igual ao gradiente da saída.
+        self.b_grad = gradient
+
+        # Cada w[o][i] multiplica input[i] e é somado a output[o].
+        # Então o gradiente dele é input[i] * gradient[o].
+        self.w_grad = [[self.input[i] * gradient[o]
+                        for i in range(self.input_dim)]
+                       for o in range(self.output_dim)]
+
+        # Cada input[i] multiplica todo w[o][i] e é somado a todo
+        # output[o]. Então o gradiente dele é a soma de w[o][i] * gradient[o]
+        # sobre todas as saídas.
+        return [sum(self.w[o][i] * gradient[o] for o in range(self.output_dim))
+                for i in range(self.input_dim)]
+
+    def params(self) -> Iterable[Tensor]:
+        return [self.w, self.b]
+
+    def grads(self) -> Iterable[Tensor]:
+        return [self.w_grad, self.b_grad]
+```
+
+::: {.conceito}
+## A dívida do Capítulo 4, cobrada
+
+A [seção 4.2](../cap04/02-matrizes.qmd) prometeu que uma matriz $n \times k$ representa uma função linear que leva vetores de $k$ dimensões em vetores de $n$ dimensões, e disse que as camadas de uma rede neural são exatamente isso. Aqui está a promessa, em código: `self.w` é uma matriz de forma `[output_dim, input_dim]`, e `forward` é a multiplicação dessa matriz pelo vetor de entrada, mais um deslocamento.
+
+Repare numa mudança em relação ao [Capítulo 15](../cap15/02-redes-feed-forward.qmd): lá, o viés era anexado ao fim do vetor de pesos e a entrada ganhava um 1 constante, para que a conta do neurônio virasse um produto escalar puro. **Aqui o viés é um tensor separado, `self.b`.** Aquilo era contabilidade nossa, não uma verdade sobre redes neurais — e o callout do capítulo anterior já tinha observado que o `scikit-learn` também guarda o viés à parte, em `intercepts_`. As duas representações descrevem a mesma função.
+:::
+
+O `forward` é a metade fácil: uma saída por neurônio, cada uma um produto escalar mais o viés, e o guardar da entrada para depois. O `backward` é a parte que dá trabalho, e ele tem **três parcelas** — as mesmas três que o [Capítulo 15](../cap15/03-retropropagacao.qmd) descreveu em português, agora escritas uma vez e para sempre. Elas se leem assim:
+
+- **O viés recebe o gradiente inteiro.** `b[o]` entra somado em `output[o]` com coeficiente 1, então $\partial \text{saída}[o] / \partial b[o] = 1$ e a culpa passa direto.
+- **A culpa de um peso é a culpa do neurônio vezes a entrada que aquele peso multiplica.** É a mesma frase da [seção 15.3](../cap15/03-retropropagacao.qmd): um peso cuja entrada valia 0 naquele exemplo não teve influência nenhuma, e o gradiente dele é zero.
+- **A culpa de uma entrada é emprestada de todos os neurônios que a usaram.** Cada `input[i]` foi enviada a todos os `output_dim` neurônios, cada um por um peso conhecido; a culpa volta por esses mesmos pesos e se soma. É o "o mesmo peso que levou o sinal para a frente traz a culpa de volta", agora sem a derivada da sigmoide junto — porque a ativação virou outra camada.
+
+E `params` e `grads` são a razão de existirem: a camada expõe dois tensores de parâmetros e dois de gradiente, **na mesma ordem**, e o otimizador da [seção 16.5](05-perda-e-otimizacao.qmd) vai percorrer os dois em paralelo sem saber o que eles são.
+
+## Conferindo o gradiente por diferenças finitas
+
+Um `backward` errado não estoura: ele treina mal. Vale conferir, e a forma padrão de conferir é comparar o gradiente analítico com a derivada numérica.
+
+A ideia é direta. Se $g$ é o gradiente que chega de cima, a perda que estamos derivando é $L = \sum_o g[o] \cdot \text{saída}[o]$ — porque $\partial L/\partial \text{saída} = g$, por construção. Então basta empurrar uma entrada um tiquinho para cada lado e medir quanto $L$ muda:
+
+```{python}
+#| label: diferencas-finitas
+random.seed(0)
+
+camada = Linear(3, 2)
+x = [0.5, -1.0, 2.0]
+g = [1.0, -2.0]                      # gradiente vindo de cima, escolhido a dedo
+
+camada.forward(x)
+grad_entrada = camada.backward(g)
+
+def perda(entrada):
+    saida = camada.forward(entrada)
+    return sum(a * b for a, b in zip(saida, g))
+
+h = 1e-6
+numerico = []
+for i in range(3):
+    mais, menos = list(x), list(x)
+    mais[i] += h
+    menos[i] -= h
+    numerico.append((perda(mais) - perda(menos)) / (2 * h))
+
+print("analítico:", [round(v, 6) for v in grad_entrada])
+print("numérico :", [round(v, 6) for v in numerico])
+```
+
+Os dois batem em todas as casas impressas. Vale fazer o mesmo com um peso, para conferir a segunda parcela:
+
+```{python}
+#| label: diferencas-finitas-peso
+camada.forward(x)
+camada.backward(g)
+
+o, i = 1, 2                          # o peso do 2º neurônio para a 3ª entrada
+original = camada.w[o][i]
+
+camada.w[o][i] = original + h; mais = perda(x)
+camada.w[o][i] = original - h; menos = perda(x)
+camada.w[o][i] = original
+
+print(f"analítico: {camada.w_grad[o][i]:.6f}")
+print(f"numérico : {(mais - menos) / (2 * h):.6f}")
+```
+
+O valor é exatamente `input[2] * g[1]`, isto é, $2{,}0 \times (-2{,}0) = -4$, como a segunda parcela prometia.
+
+::: {.exemplo}
+## Por que essa conferência importa mais aqui do que em outros capítulos
+
+Nos capítulos anteriores, um gradiente errado aparecia: a perda não caía, o `assert` do fim falhava, o modelo previa besteira.
+
+Numa rede de várias camadas, um `backward` sutilmente errado numa camada **do meio** costuma não fazer nada disso. A rede ainda treina, porque as outras camadas compensam; a perda ainda cai, mais devagar; e o resultado final é um pouco pior, dentro da faixa que se atribuiria a "escolhi mal a taxa de aprendizado". A conferência por diferenças finitas é o teste que separa as duas hipóteses, e é padrão em qualquer implementação de camada nova — inclusive nas bibliotecas de verdade, que trazem utilitários prontos para isso.
+:::
+
+## Quantos parâmetros
+
+Uma última observação de escala, que vai importar na [seção 16.8](08-exemplo-mnist.qmd):
+
+```{python}
+#| label: contagem-parametros
+for entradas, saidas in [(2, 2), (10, 25), (784, 30), (784, 10)]:
+    print(f"Linear({entradas}, {saidas}):"
+          f" {entradas * saidas} pesos + {saidas} vieses"
+          f" = {entradas * saidas + saidas} parâmetros")
+```
+
+Uma camada que recebe uma imagem de 28 × 28 pixels e produz 30 números tem 23.550 parâmetros. Compare com os 4 coeficientes da regressão múltipla do [Capítulo 12](../cap12/index.qmd), que se liam um a um em português, e com os 379 pesos da rede do [Capítulo 15](../cap15/04-exemplo-fizz-buzz.qmd).
+
+::: {.callout-tip collapse="true"}
+## Na prática: `torch.nn.Linear`
+
+A classe que você acabou de escrever existe no PyTorch com o mesmo nome e quase a mesma assinatura:
+
+```python
+import torch.nn as nn
+
+camada = nn.Linear(in_features=784, out_features=30)
+camada.weight     # tensor de forma (30, 784)
+camada.bias       # tensor de forma (30,)
+```
+
+`weight` tem exatamente a forma do nosso `self.w`, e `bias` a do nosso `self.b`. A conta é a mesma: $Wx + b$.
+
+Três diferenças, todas informativas.
+
+**A multiplicação é uma operação só.** O nosso `forward` é uma compreensão de lista que chama `dot` uma vez por neurônio, e cada `dot` é um `sum` sobre um `zip`. O `nn.Linear` faz uma multiplicação de matriz, despachada para uma rotina de álgebra linear compilada — e, se houver GPU, para milhares de núcleos ao mesmo tempo. Além disso, ele processa um **lote** de exemplos de uma vez: a entrada é uma matriz de forma (exemplos × entradas), e a saída sai numa multiplicação só. O nosso laço de treino processa um exemplo por vez, porque a nossa camada não sabe fazer outra coisa.
+
+**A inicialização padrão é outra.** O nosso padrão é `init='xavier'`, com a ressalva medida acima. O `nn.Linear` usa inicialização de Kaiming uniforme, pensada para redes com ativação ReLU, e é um dos poucos lugares em que a documentação do PyTorch avisa que o padrão pode não ser o que você quer.
+
+**O gradiente não é seu problema.** Não existe um `backward` a implementar: as três parcelas que escrevemos à mão saem do grafo de autodiferenciação. Elas continuam sendo calculadas — só que por código gerado, e não por código escrito.
+
+O que a biblioteca **não** faz diferente é a matemática. `w_grad[o][i] = input[i] * gradient[o]` é literalmente o que acontece lá dentro, para cada um dos 23.550 parâmetros.
 :::

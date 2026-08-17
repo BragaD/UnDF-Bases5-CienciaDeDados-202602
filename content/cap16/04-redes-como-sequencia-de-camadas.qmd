@@ -4,7 +4,184 @@
 Esta seção corresponde a *Neural Networks as a Sequence of Layers*, do capítulo 19 de @grus2019.
 :::
 
-::: {.callout-warning}
-## Em construção
-O conteúdo desta seção ainda será escrito.
+Temos duas camadas: a `Linear`, com parâmetros, e a `Sigmoid`, sem. Falta o que junta várias delas numa rede.
+
+A resposta é curta, e o truque está em enxergá-la: **a rede resultante é ela mesma uma camada**. Ela recebe uma entrada e devolve uma saída; ela recebe um gradiente e devolve um gradiente; ela tem parâmetros, que são os das camadas de dentro. Então ela implementa a interface `Layer`, e implementa cada método da forma óbvia:
+
+```{python}
+#| label: importa-camadas
+#| output: false
+import random
+from typing import List, Iterable
+from scratch.deep_learning import Layer, Linear, Sigmoid, Tensor, shape
+```
+
+```{python}
+#| label: sequential
+class Sequential(Layer):
+    """
+    Uma camada que consiste numa sequência de outras camadas.
+    Cabe a você garantir que a saída de cada camada faz sentido
+    como entrada da camada seguinte.
+    """
+    def __init__(self, layers: List[Layer]) -> None:
+        self.layers = layers
+
+    def forward(self, input):
+        """Só passa a entrada pelas camadas, em ordem."""
+        for layer in self.layers:
+            input = layer.forward(input)
+        return input
+
+    def backward(self, gradient):
+        """Só retropropaga o gradiente pelas camadas, na ordem inversa."""
+        for layer in reversed(self.layers):
+            gradient = layer.backward(gradient)
+        return gradient
+
+    def params(self) -> Iterable[Tensor]:
+        """Só devolve os params de cada camada."""
+        return (param for layer in self.layers for param in layer.params())
+
+    def grads(self) -> Iterable[Tensor]:
+        """Só devolve os grads de cada camada."""
+        return (grad for layer in self.layers for grad in layer.grads())
+```
+
+Quatro métodos, quatro linhas de corpo cada. E a palavra que aparece em todos os quatro comentários — *só* — é o ponto da seção.
+
+::: {.conceito}
+`forward` é um laço para a frente. `backward` é o **mesmo** laço com `reversed`. É a assimetria inteira entre a ida e a volta de uma rede neural, escrita como uma chamada de função embutida.
+
+Isso não é uma coincidência de implementação. A retropropagação é a regra da cadeia aplicada na ordem inversa da composição, e composição de funções é exatamente o que `Sequential` representa. O `reversed` é a regra da cadeia.
+:::
+
+Repare também no que a classe **não** faz: ela não sabe quantas camadas tem, nem que tipo elas são, nem se elas têm parâmetros. O `params()` de uma camada de ativação devolve a tupla vazia, e o gerador simplesmente não produz nada para ela. Nenhum `if`, em lugar nenhum.
+
+## A rede XOR, nesta representação
+
+A rede do XOR, que o [Capítulo 15](../cap15/02-redes-feed-forward.qmd) escreveu como uma lista de listas de listas, agora se monta assim:
+
+```{python}
+#| label: rede-xor
+random.seed(0)
+
+xor_net = Sequential([
+    Linear(input_dim=2, output_dim=2),
+    Sigmoid(),
+    Linear(input_dim=2, output_dim=1),
+    Sigmoid()
+])
+
+[shape(param) for param in xor_net.params()]
+```
+
+Quatro tensores de parâmetros: a matriz $2 \times 2$ e o viés da primeira camada linear, a matriz $1 \times 2$ e o viés da segunda. As camadas de sigmoide não contribuem com nada, como esperado.
+
+## É a mesma rede?
+
+Uma forma convincente de mostrar que a nova representação não mudou o modelo é **transplantar** os pesos que o capítulo anterior escolheu à mão para dentro desta estrutura, e comparar as saídas.
+
+Lá, cada neurônio era um vetor com o viés grudado no fim: `[20., 20, -30]` significava pesos 20 e 20 e viés −30. Aqui os dois moram separados:
+
+```{python}
+#| label: transplante
+#| output: false
+from scratch.neural_networks import feed_forward
+
+# a rede escolhida à mão na seção 15.2
+xor_network = [[[20., 20, -30],      # neurônio 'e'
+                [20., 20, -10]],     # neurônio 'ou'
+               [[-60., 60, -30]]]    # neurônio '2ª entrada mas não a 1ª'
+
+# os mesmos números, na representação desta seção
+xor_net.layers[0].w = [[20., 20.], [20., 20.]]
+xor_net.layers[0].b = [-30., -10.]
+xor_net.layers[2].w = [[-60., 60.]]
+xor_net.layers[2].b = [-30.]
+```
+
+```{python}
+#| label: compara-transplante
+for entrada in [[0., 0], [0., 1], [1., 0], [1., 1]]:
+    nova = xor_net.forward(entrada)[0]
+    velha = feed_forward(xor_network, entrada)[-1][0]
+    print(f"{entrada} -> Sequential {nova:.6f}   "
+          f"feed_forward do cap. 15 {velha:.6f}   iguais: {nova == velha}")
+```
+
+Bit por bit iguais — não "próximos", **iguais**, porque as duas implementações fazem exatamente as mesmas multiplicações e somas, na mesma ordem. O que mudou foi só onde os números moram e quem sabe derivá-los.
+
+## A profundidade ficou de graça
+
+A [seção 15.3](../cap15/03-retropropagacao.qmd) terminou com um aviso: aquela implementação da retropropagação só funcionava para duas camadas, e cada topologia nova exigiria uma função nova. Esse aviso acabou de expirar.
+
+```{python}
+#| label: rede-profunda
+random.seed(0)
+
+funda = Sequential([
+    Linear(10, 8), Sigmoid(),
+    Linear(8, 6),  Sigmoid(),
+    Linear(6, 4),  Sigmoid(),
+    Linear(4, 2)
+])
+
+print("formas dos parâmetros:", [shape(p) for p in funda.params()])
+print("saída para um vetor de 10 zeros:",
+      [round(v, 4) for v in funda.forward([0.0] * 10)])
+```
+
+Sete camadas, quatro delas com parâmetros. Nenhuma linha de código de gradiente foi escrita para isso funcionar: o `backward` de `Sequential` percorre a lista ao contrário, e cada camada sabe se virar. A rede acima é "profunda" no sentido original da expressão *deep learning* — mais de uma camada escondida —, e escrevê-la custou uma lista.
+
+::: {.exemplo}
+## Uma rede dentro de uma rede
+
+Como `Sequential` é uma `Layer`, nada impede pôr uma dentro da outra:
+
+```{python}
+#| label: rede-aninhada
+random.seed(0)
+
+bloco = Sequential([Linear(4, 4), Sigmoid()])
+
+aninhada = Sequential([
+    Linear(10, 4),
+    bloco,
+    bloco,          # o MESMO bloco, duas vezes
+    Linear(4, 2)
+])
+
+print("parâmetros vistos por params():", [shape(p) for p in aninhada.params()])
+```
+
+Repare no detalhe: o mesmo objeto `bloco` aparece duas vezes na lista, e por isso os pesos dele aparecem **duplicados** em `params()` — o gerador percorre a lista de camadas, não um conjunto de objetos distintos. Um otimizador aplicaria o passo àquele tensor duas vezes por exemplo, com dois gradientes diferentes, e o segundo sobrescreveria o `w_grad` do primeiro antes de ser usado.
+
+Compartilhar pesos entre camadas é uma técnica real e útil — é o que faz uma rede recorrente ser recorrente. Mas fazê-la funcionar exige que os gradientes se **acumulem** em vez de se sobrescreverem, e a nossa `Linear` faz `self.w_grad = ...`, não `+=`. Ou seja: a composição permite escrever a rede, e o resto da biblioteca não a treina corretamente. É o custo de uma abstração que não verifica nada — o mesmo custo das duas caixas de aviso da [seção 16.1](01-o-tensor.qmd).
+:::
+
+::: {.callout-tip collapse="true"}
+## Na prática: `torch.nn.Sequential`
+
+Desta vez não há nem tradução a fazer. O PyTorch expõe:
+
+```python
+import torch.nn as nn
+
+modelo = nn.Sequential(
+    nn.Linear(784, 30),
+    nn.Tanh(),
+    nn.Linear(30, 10),
+)
+```
+
+Mesmo nome de classe, mesma ideia, mesma lista de camadas. O Keras tem `keras.Sequential([...])`, com a mesma assinatura — e é dele que o desenho da biblioteca do livro-texto é vagamente copiado, como a seção de leituras adicionais do capítulo registra.
+
+Duas diferenças que valem a pena.
+
+**Lá, `Sequential` é o caso simples, não o caso geral.** Redes de verdade raramente são uma sequência: há conexões que saltam camadas, entradas que se juntam no meio, saídas múltiplas. Para isso, o PyTorch pede que você escreva uma subclasse de `nn.Module` com o `forward` que quiser, e o autograd cuida do resto. O nosso `Sequential` é o único combinador que temos, e ele só sabe encadear.
+
+**O registro dos parâmetros é automático.** Atribuir `self.camada = nn.Linear(...)` dentro de um `nn.Module` registra aqueles parâmetros na hora — inclusive detectando o compartilhamento que a caixa acima quebrou. O nosso `params()` é um gerador escrito à mão, e ele devolve o que a lista contiver, repetido ou não.
+
+O que **não** muda é a leitura do objeto: quando você vê `Sequential([Linear(784, 30), Tanh(), Linear(30, 10)])` num código qualquer, o que está do outro lado é um `forward` que é um laço e um `backward` que é o mesmo laço com `reversed`.
 :::
