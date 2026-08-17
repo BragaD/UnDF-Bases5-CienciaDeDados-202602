@@ -495,3 +495,57 @@ regra continua valendo para menções gratuitas.
 **Ruling U — a §14.6 ficou com 9 callouts, e tudo bem.** O M16 pedia enxugar; o C1 e
 o I1 exigiram um callout novo cada. A §14.3 caiu de 7 para 6 como pedido. Densidade
 alta numa seção que agora carrega duas correções estruturais é troca aceitável.
+
+---
+
+## Rodada final — os 17 capítulos escritos
+
+**FECHADOS:** 5, 6, 7, 9, 10, 11, 12, 13, 14, **17**. **Em correção (rodada 2):** 15.
+**Escrito, aguardando revisão:** 16 (2.412 linhas, o maior do livro).
+**Nenhum stub resta no livro.**
+
+### Ruling V — o contrato de correção precisa da mesma verificação que o texto
+
+**Segunda vez que escrevo um contrato errado e só o portão seguinte pega.** A primeira
+foi o teste do Luke, no cap. 10. Agora: mandei o cap. 15 usar "a **distância** entre
+treino e teste" como critério, e o critério não discrimina — árvore sem poda **cai**
+17,3 pontos, árvore de profundidade 2 **sobe** 15,0. Distâncias parecidas, sentidos
+opostos. A palavra certa era **queda**.
+
+O corretor aplicou fielmente, como devia. **Um critério que eu proponho sem testar
+contra os próprios números do parágrafo é exatamente o que um corretor obediente
+reproduz sem questionar.**
+
+### Ruling W — nunca editar um `.sh` que agentes estão rodando
+
+Editei `scripts/render-seguro.sh` para acrescentar o orçamento de tempo **enquanto um
+agente o executava**. O bash lê o script incrementalmente: ele perdeu a posição e
+estourou `syntax error near unexpected token 'done'` — erro de sintaxe que não existia,
+num script que passa em `bash -n`. O agente gastou tempo investigando um defeito que
+não era dele. Remédio: arquivo temporário e `mv` (atômico; o bash em execução continua
+no inode antigo). Registrado no CLAUDE.md.
+
+### Ruling X — o meu teto de shell é o mesmo dos agentes: 10 min
+
+Eu vinha assumindo que podia esperar mais que eles. Não posso — o `timeout` que passo
+é limitado a 600 s igual. Isso **confirma** que o orçamento de 420 s no script está
+dimensionado certo para todos, inclusive para o coordenador.
+
+### O fecho do livro
+
+A revisão didática do cap. 17 achou o melhor defeito possível para um último capítulo:
+o fecho dizia "o Capítulo 1 prometeu uma coisa só: abrir as caixas-pretas". O cap. 1
+promete **duas**, e a segunda — "identificar usos que ajudam pessoas e usos que as
+manipulam, e perceber que a técnica é a mesma nos dois" — era a **única promessa de
+abertura que o fecho não conferia**. A §17.1 chega a reabrir o fio (cadastro de
+eleitores) e ninguém voltava a ele.
+
+Escrevi o parágrafo eu mesmo e mandei o portão julgá-lo **sem me poupar**. Ele conferiu
+contra o texto real do cap. 1 e confirmou: a segunda metade é reúso **verbatim** da
+promessa, o par de usos vem da própria §17.1, e não promete o que o livro não fez.
+
+### Decisão de escopo registrada
+
+**Não** escrever o callout sobre `adjusted_rand_score` na §17.4, que a revisão sugeriu.
+O capítulo passa seis seções fechando a porta do "mas e se houvesse rótulos"; reabri-la
+no penúltimo callout enfraquece a lição central por ganho pequeno.
