@@ -849,3 +849,36 @@ por comando, não por leitura.
 **O padrão que atravessa a sessão inteira:** as revisões que **rodaram** alguma coisa acharam
 quase todos os defeitos reais; as que só leram produziram os dois falsos positivos. Vale como
 regra para o próximo livro.
+
+### A prova final: `make offline`
+
+Rodado depois do FECHA: **82 seções reexecutadas do zero, com a rede desligada**, exit 0. O
+alvo apaga o `_freeze/` antes de propósito — sem isso ele passaria sem executar um chunk e não
+provaria nada. É a invariante central do livro, e é o que o CI roda a cada push.
+
+## O livro, no fim
+
+| | |
+|---|---|
+| capítulos | 17 |
+| páginas publicadas | 105 |
+| linhas de conteúdo | 17.855 |
+| figuras | 64 |
+| callouts "Na prática" | 80 |
+| testes | 24 |
+| commits | 74 |
+
+## As três lições que eu levaria para o próximo livro
+
+1. **Revisor que não roda não conta.** As revisões que executaram alguma coisa acharam quase
+   todos os defeitos reais; as que só leram produziram os dois falsos positivos da sessão. A
+   partir da quinta passagem passei a exigir que as **aprovações** fossem justificadas por
+   comando — e foi isso que transformou amostragem em varredura.
+2. **Afirmação sobre o livro inteiro escrita de dentro de um capítulo é defeito estrutural, não
+   descuido.** Dezessete delas, e a cura nunca foi acertar a contagem: foi **dar escopo** ou
+   **mudar o eixo** para uma propriedade do que o código faz. Uma afirmação que precisa de
+   inventário para ser verdadeira vai envelhecer.
+3. **O coordenador erra mais do que os agentes.** Doze defeitos meus, todos escritos corrigindo
+   direto, sem contrato e sem revisão prévia — incluindo três na mesma frase, um atrás do outro.
+   A prática que funcionou: quando eu corrijo direto, o portão seguinte recebe a lista dos meus
+   erros anteriores e a instrução de olhar o meu texto com mais ceticismo que o de um agente.
