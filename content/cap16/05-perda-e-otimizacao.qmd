@@ -74,7 +74,9 @@ Até aqui, todo gradiente descendente do livro foi feito à mão, com uma linha 
 theta = gradient_step(theta, grad, -learning_rate)
 ```
 
-Isso não serve mais, por duas razões. A primeira é que uma rede tem **muitos** tensores de parâmetros, e todos precisam ser atualizados. A segunda é que queremos poder usar variantes mais espertas do gradiente descendente sem reescrever nada.
+É o `gradient_step` do [Capítulo 5](../cap05/index.qmd), a função de cinco linhas que a regressão linear, a múltipla, a logística e a rede do capítulo anterior chamaram sem exceção: ela recebe **um** vetor de parâmetros, **um** gradiente do mesmo tamanho, e devolve o vetor andado.
+
+Isso não serve mais, por duas razões. A primeira é que uma rede tem **muitos** tensores de parâmetros, de formas diferentes, e todos precisam ser atualizados. A segunda é que queremos poder usar variantes mais espertas do gradiente descendente sem reescrever nada.
 
 ```{python}
 #| label: classe-optimizer
@@ -160,7 +162,7 @@ class Momentum(Optimizer):
 ::: {.conceito}
 `Momentum` guarda estado entre chamadas — a média móvel `self.updates` — e `GradientDescent` não guarda nada. Do ponto de vista de quem usa, isso é invisível: os dois têm um `step(layer)` e nada mais.
 
-Essa é a diferença entre uma função e uma abstração. `gradient_step` era uma função pura, e trocar a regra de atualização significava trocar a função e todo o código que a chamava. Um `Optimizer` é um objeto com estado próprio, e trocar a regra é trocar **uma linha**: a que constrói o objeto.
+Essa é a diferença entre uma função e uma abstração. O `gradient_step` do [Capítulo 5](../cap05/index.qmd) era uma função pura — sem memória de um passo para o outro —, e trocar a regra de atualização significava trocar a função e todo o código que a chamava. Um `Momentum` escrito como função pura nem seria possível: a média móvel precisa sobreviver entre as chamadas, e a única forma de guardá-la seria passá-la para dentro e para fora da função, mudando a assinatura de todo mundo. Um `Optimizer` é um objeto com estado próprio, e trocar a regra é trocar **uma linha**: a que constrói o objeto.
 :::
 
 ## Exemplo: XOR revisitado
@@ -345,7 +347,13 @@ perda = nn.MSELoss()
 otimizador = optim.SGD(modelo.parameters(), lr=0.1, momentum=0.9)
 ```
 
-O `optim.SGD` com `momentum=0.9` é o nosso `Momentum`; sem o argumento, é o nosso `GradientDescent`. O laço de treino em PyTorch é este:
+Sem o argumento `momentum`, o `optim.SGD` é exatamente o nosso `GradientDescent`. Com `momentum=0.9` ele é o nosso `Momentum` **na ideia, não na convenção** — e a diferença tem tamanho.
+
+O nosso acumula uma **média móvel** do gradiente, $u \leftarrow \mu u + (1 - \mu) g$: os pesos $\mu$ e $1-\mu$ somam 1, então, diante de um gradiente constante $g$, o `update` converge para o próprio $g$, e o passo `lr * u` nunca passa de um passo de gradiente comum. O PyTorch, com o padrão `dampening=0`, acumula uma **soma amortecida**, $b \leftarrow \mu b + g$. Sem o fator $(1 - \mu)$, o buffer converge para $g/(1-\mu)$ — com $\mu = 0{,}9$, **dez vezes** $g$.
+
+Ou seja: para a mesma taxa de aprendizado, o passo efetivo do PyTorch é dez vezes o nosso, e traduzir um `Momentum(learning_rate=0.1, momentum=0.9)` daqui para lá pede `lr=0.01`. É a mesma matemática com outra normalização — o tipo de detalhe que só aparece quando se põem as duas fórmulas lado a lado, e a razão pela qual "é o mesmo otimizador" nunca dispensa olhar a documentação.
+
+O laço de treino em PyTorch é este:
 
 ```python
 saida = modelo(x)

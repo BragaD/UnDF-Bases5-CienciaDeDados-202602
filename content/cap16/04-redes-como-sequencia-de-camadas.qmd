@@ -155,13 +155,13 @@ aninhada = Sequential([
 print("parâmetros vistos por params():", [shape(p) for p in aninhada.params()])
 ```
 
-Repare no detalhe: o mesmo objeto `bloco` aparece duas vezes na lista, e por isso os pesos dele aparecem **duplicados** em `params()` — o gerador percorre a lista de camadas, não um conjunto de objetos distintos. Um otimizador aplicaria o passo àquele tensor duas vezes por exemplo, com dois gradientes diferentes, e o segundo sobrescreveria o `w_grad` do primeiro antes de ser usado.
+Repare no detalhe: o mesmo objeto `bloco` aparece duas vezes na lista, e por isso os pesos dele aparecem **duplicados** em `params()` — o gerador percorre a lista de camadas, não um conjunto de objetos distintos. E o estrago acontece antes do otimizador entrar em cena: no `backward`, o bloco é visitado duas vezes e escreve `self.w_grad` nas duas, então a segunda visita **sobrescreve** o gradiente da primeira. Quando o `step` chega, as duas entradas de `grads()` devolvem o mesmo tensor — o que sobrou —, e o otimizador aplica duas vezes o mesmo passo ao mesmo parâmetro. Um dos dois gradientes sumiu; o outro conta em dobro.
 
 Compartilhar pesos entre camadas é uma técnica real e útil — é o que faz uma rede recorrente ser recorrente. Mas fazê-la funcionar exige que os gradientes se **acumulem** em vez de se sobrescreverem, e a nossa `Linear` faz `self.w_grad = ...`, não `+=`. Ou seja: a composição permite escrever a rede, e o resto da biblioteca não a treina corretamente. É o custo de uma abstração que não verifica nada — o mesmo custo das duas caixas de aviso da [seção 16.1](01-o-tensor.qmd).
 :::
 
 ::: {.callout-tip collapse="true"}
-## Na prática: `torch.nn.Sequential`
+## Na prática: `torch.nn.Sequential` e `keras.Sequential`
 
 Desta vez não há nem tradução a fazer. O PyTorch expõe:
 
@@ -175,7 +175,18 @@ modelo = nn.Sequential(
 )
 ```
 
-Mesmo nome de classe, mesma ideia, mesma lista de camadas. O Keras tem `keras.Sequential([...])`, com a mesma assinatura — e é dele que o desenho da biblioteca do livro-texto é vagamente copiado, como a seção de leituras adicionais do capítulo registra.
+Mesmo nome de classe, mesma ideia, mesma lista de camadas. E no Keras, que roda sobre o TensorFlow, é a mesma frase de novo:
+
+```python
+from tensorflow import keras
+
+modelo = keras.Sequential([
+    keras.layers.Dense(30, activation="tanh", input_shape=(784,)),
+    keras.layers.Dense(10),
+])
+```
+
+O `Dense` do Keras é a `Linear` daqui com a ativação embutida como argumento, à moda do `MLPClassifier`; fora isso, é a mesma lista de camadas com o mesmo nome de contêiner. E é do Keras que o desenho da biblioteca do livro-texto é vagamente copiado, como a seção de leituras adicionais do capítulo registra — o que torna esta a comparação mais próxima do capítulo inteiro.
 
 Duas diferenças que valem a pena.
 

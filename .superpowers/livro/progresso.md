@@ -549,3 +549,29 @@ promessa, o par de usos vem da própria §17.1, e não promete o que o livro nã
 **Não** escrever o callout sobre `adjusted_rand_score` na §17.4, que a revisão sugeriu.
 O capítulo passa seis seções fechando a porta do "mas e se houvesse rótulos"; reabri-la
 no penúltimo callout enfraquece a lição central por ganho pequeno.
+
+### Cap. 15 FECHA — e o portão testou a semente, que eu não pedi
+
+O portão validou a subseção nova (a simetria de período 4) reproduzindo o treino inteiro do
+zero e conferindo os oito números. Depois fez a checagem que faltava no meu contrato: rodou
+com **sementes 1 e 2**. A recuperação parcial acontece também, mas **em grupos diferentes** —
+{1,5,9} a 4–5% e {3,7} a 8% na semente 2, enquanto {0,4,8} se perde a 19–73%.
+
+Ou seja: **a rede sempre acha alguma simetria, mas qual ela acha é sorteado.** Isso não
+desmente o texto — confirma a palavra "irregular" que o contrato exigiu, e o texto em nenhum
+ponto generaliza os oito números.
+
+**Não levei isso para o livro**, e a razão é a mesma lição de sempre: três sementes não
+sustentam "sempre acha alguma". Seria repetir o "1 em 3, medido em 5 rodadas" com outra roupa.
+
+### Ruling Y — medição única sob carga não é medição
+
+O portão achou **o único defeito que uma correção minha introduziu** em todo o projeto: o M3 da
+rodada 2 do cap. 15 mandou trocar "~0,4 s" por "~2 s" no tempo do `lbfgs`, com base numa
+medição única feita enquanto outros agentes rodavam. Medi de novo, isolado, três vezes:
+**0,32 / 0,32 / 0,41 s**. O número original estava certo e eu o piorei.
+
+Mesma lição que o projeto já tinha aprendido com a asserção sem semente do `working_with_data`
+("1 em 3, medido em 5 rodadas" contra 25% em 20.000). **Vale explicitamente para medições de
+TEMPO, que são as mais sensíveis à carga da máquina — e este livro é escrito com cinco agentes
+rodando ao mesmo tempo.**
