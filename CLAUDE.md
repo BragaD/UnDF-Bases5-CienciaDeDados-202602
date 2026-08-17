@@ -127,6 +127,10 @@ Detalhes que importam se você for mexer nisso:
 
 **Consequência prática de coordenação: não deixe mais de dois ou três agentes que precisem renderizar trabalhando ao mesmo tempo.** Cada render leva alguns minutos, e a fila cresce mais rápido que a paciência da ferramenta.
 
+**Nunca edite `scripts/render-seguro.sh` (nem qualquer `.sh`) enquanto um agente pode estar rodando.** O bash lê o script **incrementalmente**, conforme executa — editar o arquivo no meio faz o interpretador perder a posição e estourar num erro de sintaxe que não existe, tipicamente `syntax error near unexpected token 'done'`. Isso já derrubou o render de um agente, que gastou tempo investigando um defeito que não era dele nem do conteúdo.
+
+Se precisar mudar o script com agentes ativos, escreva num arquivo temporário e mova por cima (`mv` é atômico, e o bash em execução continua lendo o inode antigo). Editar direto só quando ninguém estiver renderizando.
+
 ### O `_freeze` envenenado — a falha mais silenciosa deste projeto
 
 **Sintoma:** o `.qmd` está certo, o `make render` diz `render OK`, e a página publicada em `_book/` continua mostrando a versão antiga. Rodar `make render` de novo não muda nada. Nenhum erro, nenhum aviso.
