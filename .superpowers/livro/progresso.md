@@ -619,7 +619,7 @@ fábrica", "a única seção cujo fecho não é o scikit-learn".
 
 ### Ruling AA — eu corrijo pior do que encomendo, e agora tem número
 
-Nesta sessão escrevi **sete** defeitos corrigindo direto, sem contrato e sem revisão prévia:
+Nesta sessão escrevi **nove** defeitos corrigindo direto, sem contrato e sem revisão prévia:
 
 1. o par 98,1%/1,4% do teste do Luke (contrato do cap. 10);
 2. o critério "distância" que não discriminava os casos que apresentava (cap. 15);
@@ -643,3 +643,28 @@ Afirmei num commit que duas figuras eram idênticas com "zero pixels de diferen�
 mediu: são idênticas **na área de plotagem**; a faixa do título difere por construção, porque os
 títulos são diferentes. A afirmação do livro ("podem ser sobrepostas") se sustenta; a minha, sem
 o escopo, era mais forte do que a medição.
+
+**Os dois últimos, acrescentados depois:**
+
+8. **Corrigi um superlativo falso e deixei o gêmeo na linha imediatamente acima**, no mesmo
+   parágrafo. Li a frase que o portão citou e não li a anterior.
+9. **Ao consertar o alinhamento de uns carets, o meu script de realinhamento descartou o `#`
+   da linha** — e o bloco de código deixou de ser Python colável. Consertar introduziu o defeito
+   seguinte, no mesmo lugar, na mesma sessão.
+
+### A varredura final de superlativos: onze, no total
+
+Pedi ao portão que varresse o livro inteiro atrás da construção, em vez de conferir caso a caso.
+Achou mais dois, ambos **contraditos dentro do próprio capítulo**:
+
+- `cap13/05:291` — "o gradiente descendente virou a única via até um modelo. **É assim no resto
+  do livro**", desmentido **três linhas abaixo** (a árvore "não tem gradiente") e pelo
+  `cap05/index:20`, que lista quatro modelos sem gradiente, dois deles posteriores ao cap. 13.
+- `cap17/06:351` — no **parágrafo de fecho do livro**: "é apropriado que seja **o único** sem
+  resposta certa". O capítulo inteiro não tem gabarito, o k-means da §17.2 inclusive.
+
+**Onze superlativos falsos no total.** É a classe de defeito mais produtiva do projeto, e a
+explicação é estrutural: são afirmações sobre o livro inteiro **escritas de dentro de um
+capítulo**, por um agente que só via aquele capítulo — e portanto não verificáveis de onde
+foram escritas. Nenhuma revisão por capítulo as pega. **Só uma varredura do livro completo pega,
+e ela precisa ser por construção gramatical, não por assunto.**
