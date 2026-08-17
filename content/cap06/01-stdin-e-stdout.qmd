@@ -48,15 +48,9 @@ cat egrep.py | python egrep.py 'sys' | python line_count.py
 
 Isso conta quantas linhas do próprio `egrep.py` mencionam `sys` — um jeito barato de testar o pipeline sem precisar de nenhum outro arquivo.
 
-::: {.callout-important}
-## Por que estes chunks não são `{python}` executáveis
+O que faz esse encadeamento funcionar é que `sys.stdin` é apenas mais um iterável de linhas, do mesmo jeito que qualquer coisa sobre a qual você já rodou um `for`. É a mesma noção de gerador do [Capítulo 2](../cap02/05-testes-classes-e-geradores.qmd) — as linhas chegam sob demanda, uma de cada vez, sem que o programa precise carregar a entrada inteira na memória antes de começar.
 
-Os dois scripts acima dependem de coisas que só existem num terminal de verdade: `sys.argv` e um `sys.stdin` alimentado por outro processo via pipe. Uma célula do Quarto não recebe argumentos de linha de comando, e ler de `sys.stdin` sem que nada o alimente trava o render esperando uma entrada que nunca chega.
-
-A ideia continua válida e é isso que importa aqui: `sys.stdin` é apenas mais um iterável de linhas, do mesmo jeito que qualquer coisa sobre a qual você já rodou um `for`. É a mesma noção de gerador do [Capítulo 2](../cap02/05-testes-classes-e-geradores.qmd) — as linhas chegam sob demanda, uma de cada vez, sem que o programa precise carregar a entrada inteira na memória antes de começar.
-:::
-
-Para provar que a lógica funciona sem depender de um pipe real, dá para escrever a mesma coisa como uma função que recebe **qualquer** iterável de linhas — `sys.stdin` é só um caso particular disso:
+Justamente por isso, dá para escrever a mesma lógica como uma função que recebe **qualquer** iterável de linhas — `sys.stdin` é só um caso particular disso:
 
 ```{python}
 #| label: egrep-generico
@@ -104,13 +98,13 @@ for word, count in counter.most_common(num_words):
 O `try`/`except` em torno de `int(sys.argv[1])` é o mesmo idioma do [Capítulo 2](../cap02/02-funcoes-strings-excecoes.qmd): em vez de checar antes se o argumento é um número válido, tenta converter e trata o erro se a conversão falhar.
 
 ::: {.callout-warning}
-## Aqui o texto se desvia do Grus, de propósito
+## Nomeie as exceções que você sabe tratar
 
-O código de `most_common_words.py` no repositório do Grus usa `except:` pelado nesse `try`. Reescrevemos para `except (ValueError, IndexError):`, e a razão é a mesma lição que a [seção 3](03-raspando-a-web.qmd) acabou de dar sobre o `html.parser`: uma falha silenciosa é pior que uma falha alta.
+Escrever `except:` pelado nesse `try` sairia mais curto, e seria pior — pela mesma razão que atravessa este capítulo: uma falha silenciosa é pior que uma falha alta.
 
 Rodar o script sem argumento nenhum estoura `IndexError` em `sys.argv[1]`; rodar com um argumento não numérico estoura `ValueError` em `int(...)`. São exatamente essas duas causas que merecem virar "uso incorreto" — e só essas duas. Um `except:` pelado captura isso também, mas captura **qualquer outra coisa** junto: um `NameError` de uma variável digitada errado, um `KeyboardInterrupt`, um `MemoryError`. Cada um desses viraria, em silêncio, a mesma mensagem "uso: most_common_words.py num_palavras" — escondendo exatamente o tipo de erro que você precisaria ver para corrigir. É o que o [Capítulo 2](../cap02/02-funcoes-strings-excecoes.qmd) avisa: "um `except:` pelado engole também os erros que você gostaria de ver."
 
-Nomear as duas exceções específicas entrega o mesmo comportamento visível — a mesma mensagem de uso, para as mesmas duas causas — sem esconder nada além delas. Se você abrir o repositório do Grus para comparar, é por isso que os dois códigos não são idênticos aqui.
+Nomear as duas exceções específicas entrega o mesmo comportamento visível — a mesma mensagem de uso, para as mesmas duas causas — sem esconder nada além delas.
 :::
 
 De novo, a lógica que faz o trabalho de verdade não depende de `sys.stdin` nem de `sys.argv` — só de um iterável de linhas e de um número:
@@ -130,7 +124,7 @@ texto2 = ["the quick brown fox\n", "the lazy dog\n", "the fox ran\n"]
 most_common_words(texto2, 3)
 ```
 
-Rodado de verdade na linha de comando, contra um arquivo de texto grande, o padrão do Grus seria:
+Rodado de verdade na linha de comando, contra um arquivo de texto grande, a chamada seria:
 
 ```bash
 cat the_bible.txt | python most_common_words.py 10

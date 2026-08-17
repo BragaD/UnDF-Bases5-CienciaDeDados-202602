@@ -47,7 +47,7 @@ Cluster = Union[Leaf, Merged]
 ```
 
 ::: {.callout-note}
-`Merged.children` deveria ser anotado como `Tuple[Cluster, Cluster]`, mas os tipos recursivos não são aceitos pelo verificador `mypy` que o livro-texto usa, então fica `tuple` mesmo. É um dos poucos lugares do livro em que a anotação de tipo fica mais fraca do que a realidade — e o autor deixa isso registrado em vez de esconder.
+`Merged.children` deveria ser anotado como `Tuple[Cluster, Cluster]`, mas `Cluster` é um tipo **recursivo** — ele aparece dentro da própria definição —, e o verificador `mypy` não aceita isso. Fica `tuple`, uma anotação mais fraca do que a realidade. Vale saber que acontece: nem sempre o sistema de tipos consegue escrever o que o código de fato faz.
 :::
 
 Um grupo pode conter outros grupos, então recuperar os valores dentro dele é uma recursão:
@@ -96,7 +96,7 @@ O padrão da função é `min`. Guarde isso: o mesmo algoritmo, sobre os mesmos 
 
 ## O algoritmo
 
-Falta anotar a ordem das fusões. A convenção do livro-texto é que números **menores** representam fusões **mais tardias** — a última fusão de todas recebe ordem 0. Assim, "desfazer as fusões mais recentes" é percorrer as ordens da menor para a maior. Folhas nunca foram fundidas, então recebem infinito:
+Falta anotar a ordem das fusões. A convenção é que números **menores** representam fusões **mais tardias** — a última fusão de todas recebe ordem 0. Assim, "desfazer as fusões mais recentes" é percorrer as ordens da menor para a maior. Folhas nunca foram fundidas, então recebem infinito:
 
 ```{python}
 #| label: ordem-e-filhos
@@ -277,7 +277,7 @@ Quando duas escolhas independentes concordam — como acontece aqui —, isso é
 
 ## Três diferenças práticas em relação ao k-means
 
-**Não há semente.** Repare que nenhum chunk desta seção fixa `random.seed` antes de agrupar — o único que fixa é o que treina o k-means, para comparação. O bottom-up é determinístico: dados os mesmos pontos e a mesma ligação, ele sempre devolve a mesma árvore. Depois de duas seções lidando com ótimos locais e execuções que discordam entre si, essa propriedade não é pouca coisa.
+**Não há semente.** Repare que nenhum agrupamento desta seção precisou de `random.seed` — o único que fixa semente é o treino do k-means, para comparação. O bottom-up é determinístico: dados os mesmos pontos e a mesma ligação, ele sempre devolve a mesma árvore. Depois de duas seções lidando com ótimos locais e execuções que discordam entre si, essa propriedade não é pouca coisa.
 
 **A hierarquia é aninhada por construção.** A [seção 17.3](03-exemplo-encontros.qmd) avisou que a solução do k-means com *k* + 1 grupos não é necessariamente um refinamento da solução com *k*. Aqui é, e não por sorte: os três grupos saem de desfazer uma fusão a mais na mesma árvore que produziu os dois. É a mesma estrutura, cortada em outra altura.
 
@@ -296,10 +296,10 @@ bottom_up_cluster(inputs, min_contando)
 print(f"distâncias ponto a ponto calculadas: {contagem}")
 ```
 
-Três mil distâncias para agrupar vinte pontos. Compare com o k-means: cada passagem dele compara os vinte pontos com as três médias, o que dá sessenta distâncias, e ele converge em pouquíssimas passagens — o total fica na casa da centena. A razão da diferença é que `cluster_distance` recalcula, a cada fusão, todas as distâncias entre todos os pares de pontos dos dois grupos — inclusive as que já haviam sido calculadas dezenas de vezes antes. O próprio autor do livro-texto chama a implementação de "assombrosamente ineficiente" e aponta a correção: pré-calcular a distância entre cada par de entradas uma única vez e consultar essa tabela dentro de `cluster_distance`; uma versão realmente eficiente ainda guardaria as distâncias entre grupos de um passo para o seguinte.
+Três mil distâncias para agrupar vinte pontos. Compare com o k-means: cada passagem dele compara os vinte pontos com as três médias, o que dá sessenta distâncias, e ele converge em pouquíssimas passagens — o total fica na casa da centena. A razão da diferença é que `cluster_distance` recalcula, a cada fusão, todas as distâncias entre todos os pares de pontos dos dois grupos — inclusive as que já haviam sido calculadas dezenas de vezes antes. É uma implementação assombrosamente ineficiente, e a correção é conhecida: pré-calcular a distância entre cada par de entradas uma única vez e consultar essa tabela dentro de `cluster_distance`. Uma versão realmente eficiente ainda guardaria as distâncias entre grupos de um passo para o seguinte.
 
 ::: {.callout-warning}
-## Um defeito silencioso no código do livro-texto
+## Um defeito silencioso no `bottom_up_cluster`
 
 O `bottom_up_cluster` remove os dois grupos fundidos com `[c for c in clusters if c != c1 and c != c2]`, e `c != c1` compara `NamedTuple`s **por valor**. Duas folhas com as mesmas coordenadas são objetos distintos — `is` diria que não são a mesma —, mas são **iguais** por `==`, e é a igualdade que o filtro usa. O defeito mora exatamente nessa distinção: o filtro pretendia remover *aqueles dois* grupos e remove *todos os que se parecem com eles*.
 

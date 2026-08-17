@@ -4,18 +4,12 @@
 Esta seção corresponde a *Testing Our Model*, do capítulo 13 de @grus2019.
 :::
 
-Vamos garantir que o modelo funciona escrevendo alguns testes para ele — pequenos o bastante para que as contas caibam à mão.
+Vamos garantir que o modelo funciona escrevendo alguns testes para ele — pequenos o bastante para que as contas caibam à mão. `tokenize`, `Message` e `NaiveBayesClassifier` não são redefinidos aqui: vêm de `scratch.naive_bayes`, o mesmo código que você escreveu na [seção anterior](03-implementacao.qmd).
 
 ```{python}
 #| label: import-scratch
 from scratch.naive_bayes import tokenize, Message, NaiveBayesClassifier
 ```
-
-::: {.callout-note}
-Cada página deste livro roda num kernel próprio, então a classe `NaiveBayesClassifier` que você escreveu na [seção anterior](03-implementacao.qmd) não existe mais aqui. Em vez de reescrevê-la, importamos de `scratch.naive_bayes` — o mesmo código, copiado literalmente do repositório do livro-texto (é o padrão já usado no [Capítulo 9](../cap09/02-exemplo-o-dataset-iris.qmd)).
-
-Há uma consequência a mais aqui, específica deste módulo: `scratch/naive_bayes.py` não tem só as definições. No corpo do arquivo, fora de qualquer função, ele treina um classificador de brinquedo e faz exatamente as afirmações que esta seção do livro descreve — inclusive a mais delicada delas, discutida no callout mais abaixo. Isso significa que o chunk acima, além de trazer os nomes para este kernel, também executa esse teste embutido como efeito colateral do `import`. Se ele falhasse, o `import` já teria estourado.
-:::
 
 Primeiro, conferimos se as contagens saíram certas:
 
@@ -68,7 +62,7 @@ assert model.predict(text) == p_if_spam / (p_if_spam + p_if_ham)
 model.predict(text)
 ```
 
-O teste passa: nesta renderização, `model.predict(text)` dá aproximadamente 0,835. Olhando as probabilidades de verdade, os dois termos que dominam esse número são que a mensagem contém *spam* (o que a nossa única mensagem de spam de treino também continha) e não contém *ham* (o que as duas mensagens de ham continham).
+O teste passa: `model.predict(text)` dá aproximadamente 0,835. Olhando as probabilidades de verdade, os dois termos que dominam esse número são que a mensagem contém *spam* (o que a nossa única mensagem de spam de treino também continha) e não contém *ham* (o que as duas mensagens de ham continham).
 
 ::: {.callout-warning}
 ## Um `assert` que compara `float` por igualdade exata
@@ -77,9 +71,7 @@ Repare no que a linha acima faz: `model.predict(text) == p_if_spam / (p_if_spam 
 
 E a ordem de iteração de um `set` em Python não é a ordem de inserção — ela depende do hash de cada string, e o Python randomiza esse hash por processo, a menos que a variável de ambiente `PYTHONHASHSEED` esteja fixada. Sem ela, este mesmo `assert`, rodado de novo, pode somar os quatro termos em outra ordem, produzir um float ligeiramente diferente no último bit, e estourar — não porque o modelo esteja errado, mas porque `==` entre `float` é a pergunta errada.
 
-Isso já aconteceu neste projeto: medido neste ambiente, o `import scratch.naive_bayes` falhava em 2 de cada 15 sementes de hash testadas. A correção está no `Dockerfile`, que fixa `PYTHONHASHSEED=0` — não porque o código deste livro precise de aleatoriedade determinística (o `assert` não tem `random` nenhum), mas porque a ordem de iteração de um `set` de strings é, ela mesma, uma fonte de não determinismo que a suíte não podia herdar.
-
-É um erro instrutivo do próprio livro-texto, da mesma família de dois outros que este livro já assinalou: o `shuffle` que embaralha os índices de início dos lotes — não os pontos, deixando cada lote sempre com os mesmos exemplos — no [Capítulo 5](../cap05/06-minibatch-e-estocastico.qmd), e a correlação sem semente que falha uma vez em cada quatro execuções no [Capítulo 7](../cap07/01-explorando-seus-dados.qmd). Os três são a mesma lição com fachadas diferentes: uma afirmação escrita como se fosse determinística, sobre algo que não é. Comparar `float` por igualdade é, especificamente, o erro que **você** vai cometer algum dia — e aqui ele já está no livro-texto, pronto para ser reconhecido da próxima vez.
+É a terceira vez que esta mesma lição aparece, com fachadas diferentes: o `shuffle` que embaralha os índices de início dos lotes — não os pontos, deixando cada lote sempre com os mesmos exemplos — no [Capítulo 5](../cap05/06-minibatch-e-estocastico.qmd), e a afirmação sobre correlação que só é reprodutível com a semente fixada, no [Capítulo 7](../cap07/01-explorando-seus-dados.qmd). Nos três casos, uma afirmação escrita como se fosse determinística, sobre algo que não é. Comparar `float` por igualdade é, especificamente, o erro que **você** vai cometer algum dia; reconhecê-lo aqui é o que faz você desconfiar da próxima vez.
 
 A comparação certa usa tolerância, não igualdade exata: `math.isclose(model.predict(text), p_if_spam / (p_if_spam + p_if_ham))`. `math.isclose` está na biblioteca padrão desde o Python 3.5, e é a ferramenta certa sempre que dois cálculos de ponto flutuante deveriam chegar ao "mesmo" resultado por caminhos diferentes.
 :::

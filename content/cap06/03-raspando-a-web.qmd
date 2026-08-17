@@ -28,7 +28,7 @@ Para isso usamos a biblioteca **Beautiful Soup**, que constrói uma árvore a pa
 
 "Tolerante" aqui tem um sentido preciso. Um navegador, ao abrir uma página com uma tag não fechada ou aninhada errado, não trava — ele segue um **algoritmo de recuperação de erros** especificado (o algoritmo de parsing do padrão HTML5), que decide deterministicamente onde cada tag quebrada deveria ter fechado. O parser embutido do Python (`html.parser`) não implementa esse algoritmo, e o problema não é que ele trave: `BeautifulSoup(texto, "html.parser")` sobre uma tag `<p>` aninhada dentro de outra `<p>` não levanta exceção nenhuma — devolve uma árvore **errada**, em silêncio, sem avisar que a marcação estava quebrada. É a mesma classe de falha que a seção anterior ensinou a temer: nenhuma mensagem de erro, só uma resposta incorreta. O `html5lib` implementa o mesmo algoritmo que os navegadores usam, e por isso interpreta a mesma sopa de tags malformadas do jeito que um navegador interpretaria.
 
-No livro, o HTML vem de uma requisição — `html = requests.get(url).text` — antes de virar `soup = BeautifulSoup(html, 'html5lib')`. Este livro é renderizado com a rede desligada, de propósito, então trocamos a busca por um `open()`: o arquivo que o `requests.get(url)` do Grus buscaria já está vendorizado em `dados/getting-data.html`, commitado no repositório. O resultado do `BeautifulSoup` é idêntico, porque o conteúdo é idêntico — só a origem do texto muda.
+Na prática, o HTML viria de uma requisição — `html = requests.get(url).text` — antes de virar `soup = BeautifulSoup(html, 'html5lib')`. Aqui ele vem de uma cópia salva da mesma página, em `dados/getting-data.html`, para que o exemplo dê o mesmo resultado a cada execução. O `BeautifulSoup` recebe exatamente o mesmo texto nos dois casos: só a origem muda.
 
 ```{python}
 #| label: le-html-vendorizado
@@ -127,7 +127,7 @@ Ao tempo em que o Grus escreveu o livro, havia uma página com links para os sit
 </td>
 ```
 
-A função abaixo — pura lógica sobre uma string de HTML, sem tocar a rede — verifica se algum `<p>` de um texto menciona uma palavra-chave. Ela não depende do site do Congresso, então roda de verdade:
+A função abaixo — pura lógica sobre uma string de HTML, sem tocar a rede — verifica se algum `<p>` de um texto menciona uma palavra-chave:
 
 ```{python}
 #| label: paragraph-mentions
@@ -148,7 +148,7 @@ assert not paragraph_mentions(text, "facebook")  # não está dentro de um <p>
 paragraph_mentions(text, "twitter")
 ```
 
-O restante do fluxo — coletar os links da página de representantes, filtrar por regex os que terminam em `.house.gov`, visitar cada site, achar a página de comunicados de imprensa, e procurar "data" em cada um — depende do site do `house.gov` estar no ar e responder exatamente como respondia quando o Grus escreveu o capítulo:
+O restante do fluxo — coletar os links da página de representantes, filtrar por regex os que terminam em `.house.gov`, visitar cada site, achar a página de comunicados de imprensa, e procurar "data" em cada um — são dezenas a centenas de requisições HTTP encadeadas, todas dependendo de o `house.gov` estar no ar e responder exatamente como respondia quando o capítulo foi escrito:
 
 ```{python}
 #| eval: false
@@ -220,13 +220,7 @@ for house_url, pr_links in press_releases.items():
             break  # termina com este house_url
 ```
 
-::: {.callout-important}
-## Por que a raspagem do Congresso não roda aqui
-
-Este exemplo visita `house.gov`, depois **cada um** dos sites de centenas de representantes, e por fim cada link de comunicado de imprensa encontrado — dezenas a centenas de requisições HTTP encadeadas. É também o exemplo mais datado do capítulo: os números nos comentários (`965`, `862`, `431`) são os que o Grus obteve **quando escreveu o livro**, não uma constante do site — `house.gov` pode reformular a página, um representante pode trocar de site, e a lista de representantes muda a cada eleição.
-
-O código fica no livro porque a *técnica* — coletar links, filtrar com regex, visitar cada página, aplicar `paragraph_mentions` sobre o resultado — continua sendo o padrão real de raspagem em várias etapas. Só a execução contra a rede é que fica de fora.
-:::
+Este é o exemplo mais datado do capítulo, e vale reparar por quê: os números nos comentários (`965`, `862`, `431`) são o resultado de uma execução específica, não uma constante do site. O `house.gov` pode reformular a página, um representante pode trocar de site, e a lista de representantes muda a cada eleição. O que dura é a técnica — coletar links, filtrar com regex, visitar cada página, aplicar `paragraph_mentions` sobre o resultado —, não os números que ela devolve.
 
 ::: {.callout-note}
 Raspar um site livremente como o exemplo faz é, em geral, indelicado. A maioria dos sites tem um arquivo `robots.txt` que indica com que frequência (e quais caminhos) você tem permissão de raspar — mas, como observa o próprio Grus, tratando-se do Congresso, não há necessidade de ser particularmente educado.

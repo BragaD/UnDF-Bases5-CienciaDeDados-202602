@@ -92,12 +92,6 @@ def build_tree_forest(inputs: List[Any],
 
 A diferença em relação ao `build_tree_id3` da [seção 14.5](05-juntando-tudo.qmd) cabe em cinco linhas — o `if`/`else` que reduz `split_attributes` a `sampled_split_candidates` antes do `min`. Todo o resto é idêntico.
 
-::: {.callout-note}
-No livro-texto, essa modificação aparece como **fragmento**, não como função: @grus2019 mostra apenas as cinco linhas que mudam. E o fragmento não roda como está — ele lê `split_candidates` em vez de `split_attributes` e consulta um `self.num_split_candidates`, resíduo de uma versão anterior em que a árvore era uma classe. Não há `self` em lugar nenhum do capítulo, e o pacote `scratch/decision_trees.py` termina no `build_tree_id3`, sem código de floresta.
-
-A função acima é esse fragmento **completado**: as cinco linhas do livro, com o resto vindo do `build_tree_id3` e o `self.` virando um parâmetro com valor padrão.
-:::
-
 E a combinação das saídas é uma votação simples:
 
 ```{python}
@@ -128,7 +122,9 @@ for atributo, n in raizes.most_common():
 ::: {.callout-warning}
 ## A semente não é opcional
 
-`random.seed(12)` está ali porque tudo nesta seção é aleatório: as reamostras, os subconjuntos de atributos e, por consequência, as contagens acima. Sem ela, cada renderização do livro produziria uma floresta diferente, e os números do texto deixariam de bater com os da sua tela. É o `random` da biblioteca padrão, como no livro inteiro — nunca o `numpy.random`.
+`random.seed(12)` está ali porque tudo nesta seção é aleatório: as reamostras, os subconjuntos de atributos e, por consequência, as contagens acima. Sem a semente, cada execução constrói uma floresta diferente e devolve outros números — e aí ninguém consegue repetir o seu resultado, nem você mesmo no dia seguinte. Um experimento que não se repete não é uma medição, é uma anedota; a semente é o que transforma um em outro.
+
+Repare em qual gerador está sendo semeado: o `random` da biblioteca padrão, que é o que este código usa. `random.seed` não tem efeito nenhum sobre o `numpy.random`, que tem semente própria — semear um e sortear do outro é um jeito silencioso de achar que fixou a aleatoriedade sem ter fixado.
 :::
 
 Lembre-se de que a árvore determinística da seção anterior dividia por `level` na raiz, sempre. Na floresta, `level` só é a raiz de uma fração das árvores; nas outras, a raiz é o atributo que por acaso caiu no sorteio e venceu localmente. Uma das cem nem chegou a ser uma árvore: a reamostra que ela recebeu, por sorte do bootstrap, continha candidatos de um único rótulo, e o passo 1 do ID3 devolveu uma folha na hora.
@@ -153,7 +149,7 @@ As três previsões coincidem com as da árvore única, mas agora vêm com algo 
 ::: {.callout-important}
 Catorze exemplos não permitem **medir** se a floresta é melhor que a árvore. Com esse tamanho, qualquer comparação de acurácia oscila mais em função de qual exemplo caiu em qual lado do que em função do método, e uma medição dessas diria mais sobre o sorteio do que sobre o algoritmo.
 
-A [seção 8.3](../cap08/03-overfitting-e-underfitting.qmd) mostra o tamanho desse efeito em números: numa base pequena e desbalanceada, a quantidade de positivos que cai no conjunto de teste varia de 0 a 6 só em função da semente. Uma medição feita sobre poucas repetições é um chute com aparência de número — e este projeto já cometeu esse erro na prática. Então vamos medir direito, num conjunto grande o bastante para a resposta significar alguma coisa.
+A [seção 8.3](../cap08/03-overfitting-e-underfitting.qmd) mostra o tamanho desse efeito em números: numa base pequena e desbalanceada, a quantidade de positivos que cai no conjunto de teste varia de 0 a 6 só em função da semente. Uma medição feita sobre poucas repetições é um chute com aparência de número. Então vamos medir direito, num conjunto grande o bastante para a resposta significar alguma coisa.
 :::
 
 ## Medindo o que a floresta compra
@@ -306,13 +302,13 @@ O **sorteio de atributos** acrescenta um ganho a mais, e o mecanismo é sutil: s
 Isso é um exemplo de uma técnica mais ampla chamada **aprendizado de comitê** (*ensemble learning*): combinar muitos modelos medíocres para produzir um bom. E vale dizer com precisão que tipo de modelo medíocre a floresta combina, porque é fácil errar isso. Ela combina árvores de **viés baixo e variância alta** — árvores que crescem até decorar o próprio treino, exatamente como os dois primeiros números da medição acima mostram —, e o que a média entre elas reduz é a **variância**. Reamostrar é uma imitação barata de "obter mais dados", que é a saída que a [seção 8.5](../cap08/05-vies-e-variancia.qmd) indica para variância alta, e não para viés alto.
 
 ::: {.callout-warning}
-## Um deslize do livro-texto, e ele vale como conteúdo
+## Aprendiz fraco: viés alto ou variância alta?
 
-Neste ponto, @grus2019 escreve que o aprendizado de comitê combina vários aprendizes fracos, "tipicamente modelos de **viés alto e variância baixa**". Está trocado — e a troca é instrutiva, porque descreve com exatidão **outro** método.
+Uma frase que circula bastante diz que o aprendizado de comitê combina vários aprendizes fracos, "tipicamente modelos de **viés alto e variância baixa**". Para a floresta aleatória, isso está trocado — e vale desfazer a troca com cuidado, porque a descrição errada descreve com exatidão **outro** método.
 
 Viés alto com variância baixa é a definição de *underfitting* da [seção 8.5](../cap08/05-vies-e-variancia.qmd): um modelo que erra sistematicamente e erra a mesma coisa em qualquer conjunto de treino. Uma árvore sem poda é o oposto exato disso, e este capítulo acabou de medir: 99,7% no treino contra 82,4% em dados novos é viés baixíssimo com variância altíssima. E se as árvores de uma floresta tivessem mesmo viés alto e variância baixa, tirar a média entre elas não adiantaria nada — elas errariam todas do mesmo jeito, e a média de erros idênticos é o mesmo erro. A floresta só funciona porque a premissa da frase é falsa.
 
-O método que de fato parte de modelos de viés alto é o **boosting**, mencionado no fim desta seção. Ele usa árvores propositalmente rasas — às vezes com uma pergunta só — e as encadeia, cada uma treinada para corrigir o resíduo das anteriores, reduzindo **viés**. Floresta e boosting atacam pontas opostas do mesmo compromisso, e a expressão *weak learner*, que é vocabulário de boosting, é provavelmente o que arrastou a frase para o lado errado.
+O método que de fato parte de modelos de viés alto é o **boosting**, mencionado no fim desta seção. Ele usa árvores propositalmente rasas — às vezes com uma pergunta só — e as encadeia, cada uma treinada para corrigir o resíduo das anteriores, reduzindo **viés**. Floresta e boosting atacam pontas opostas do mesmo compromisso, e a expressão *weak learner*, que é vocabulário de boosting, é provavelmente o que arrasta a frase para o lado errado.
 :::
 
 ## Então quando é que a floresta ganha?

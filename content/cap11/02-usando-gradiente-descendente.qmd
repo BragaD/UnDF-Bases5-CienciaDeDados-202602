@@ -6,7 +6,7 @@ Esta seção corresponde a *Using Gradient Descent*, do capítulo 14 de @grus201
 
 A [seção anterior](01-o-modelo.qmd) ajustou $\alpha$ e $\beta$ com uma fórmula fechada — duas médias, uma correlação, dois desvios padrão, sem laço nenhum. Isso só foi possível porque a regressão linear simples é um caso particularmente simples: derivar a soma dos erros ao quadrado à mão, igualar a zero e resolver o sistema dá conta do recado. Esta seção resolve o **mesmo problema**, com os **mesmos dados**, pelo caminho construído no [Capítulo 5](../cap05/index.qmd): gradiente descendente. O objetivo não é achar uma resposta melhor — é mostrar que os dois caminhos, o direto e o iterativo, chegam ao mesmo lugar.
 
-Como cada `.qmd` deste livro roda num kernel próprio, os nomes definidos na seção anterior não existem aqui. Em vez de reescrever `error`, `sum_of_sqerrors` e o resultado já ajustado, importamos do mesmo pacote vendorizado que a seção anterior usou — é o mesmo código, só sem repetir:
+Precisamos de três coisas da seção anterior: as funções `error` e `sum_of_sqerrors`, os dados da DataSciencester e o par $(\alpha, \beta)$ que a fórmula fechada já devolveu. Tudo isso vem de `scratch/simple_linear_regression.py` — é o mesmo código, só sem repetir:
 
 ```{python}
 #| label: importa-fechada
@@ -20,26 +20,20 @@ import matplotlib.pyplot as plt
 plt.close('all')
 ```
 
-`scratch/simple_linear_regression.py` roda, no próprio nível do módulo (não atrás de um `if __name__ == "__main__"`), os mesmos `assert` que a seção anterior escreveu à mão — inclusive o que calcula `alpha, beta = least_squares_fit(num_friends_good, daily_minutes_good)`. São esses `alpha` e `beta` — os valores de mínimos quadrados, já calculados — que importamos aqui como `alpha_fechada` e `beta_fechada`. Eles são o **gabarito** desta seção: o número que o gradiente descendente vai ter que encontrar sozinho, sem nunca vê-lo.
+`alpha_fechada` e `beta_fechada` são os valores de mínimos quadrados que a seção anterior calculou com `least_squares_fit`. Eles são o **gabarito** desta seção: o número que o gradiente descendente vai ter que encontrar sozinho, sem nunca vê-lo.
 
 ```{python}
 #| label: mostra-fechada
 alpha_fechada, beta_fechada
 ```
 
-::: {.callout-note collapse="true"}
-## Por que o chunk do `import` está escondido
-
-`scratch/simple_linear_regression.py` importa de `scratch.statistics` no próprio nível do módulo — o que dispara, por tabela, as cinco chamadas `plt.*` daquele módulo, documentadas na seção anterior. Daí o `#| include: false` e o `plt.close('all')`.
-:::
-
 ## O gradiente da soma dos erros ao quadrado
 
-Se escrevermos `theta = [alpha, beta]` — o vetor de parâmetros que a [seção 5.5](../cap05/05-ajustando-modelos.qmd) batizou assim, e que o código do livro-texto abaixo chama de `guess`, "o palpite" —, o problema é o mesmo que aquela seção já resolveu para uma reta com parâmetros conhecidos: minimizar o erro quadrático ajustando `theta` um passo de cada vez. O que muda é o dado — ali era uma reta perfeita, `y = 20x + 5`; aqui são os 203 pontos reais e ruidosos da DataSciencester.
+Se escrevermos `theta = [alpha, beta]` — o vetor de parâmetros que a [seção 5.5](../cap05/05-ajustando-modelos.qmd) batizou assim, e que o código abaixo chama de `guess`, "o palpite" —, o problema é o mesmo que aquela seção já resolveu para uma reta com parâmetros conhecidos: minimizar o erro quadrático ajustando `theta` um passo de cada vez. O que muda é o dado — ali era uma reta perfeita, `y = 20x + 5`; aqui são os 203 pontos reais e ruidosos da DataSciencester.
 
-Duas coisas mudam além do dado, e nenhuma das duas muda o destino. O Grus escreve as duas derivadas parciais soltas no laço, em vez de embrulhá-las numa função `linear_gradient`; e soma os gradientes sobre os 203 pontos em vez de tirar a média deles. Somar em vez de tirar a média multiplica o gradiente inteiro por 203 — o que aponta exatamente para a mesma direção, só com comprimento outro, e por isso só pede uma taxa de aprendizado proporcionalmente menor. O fundo da tigela não se move.
+Muda também a forma de escrever o gradiente, e a mudança não move o destino: as duas derivadas parciais aparecem soltas dentro do laço, em vez de embrulhadas numa função `linear_gradient`, e os gradientes são **somados** sobre os 203 pontos em vez de terem a média tirada. Somar em vez de tirar a média multiplica o gradiente inteiro por 203 — o que aponta exatamente para a mesma direção, só com comprimento outro, e por isso só pede uma taxa de aprendizado proporcionalmente menor. O fundo da tigela não se move.
 
-Aqui está o laço inteiro. A única mudança em relação ao código do livro-texto é a lista `perdas`: o Grus calcula a perda a cada epoch só para escrevê-la na barra de progresso e descartá-la em seguida; nós guardamos, porque essas dez mil perdas desenham a figura que fecha esta seção.
+Aqui está o laço inteiro. A perda de cada epoch vai para a barra de progresso e também para a lista `perdas` — são essas dez mil perdas que desenham a figura que fecha esta seção.
 
 ```{python}
 #| label: treina-gradiente

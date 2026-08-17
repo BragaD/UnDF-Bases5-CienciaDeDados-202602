@@ -34,7 +34,7 @@ for filename in FILES:
         tf.extractall(OUTPUT_DIR)
 ```
 
-Depois de baixar, você teria três pastas — *spam*, *easy_ham* e *hard_ham* —, cada uma com centenas de e-mails, um por arquivo. Para simplificar, o livro olha só a linha de assunto de cada e-mail, identificada por começar com `"Subject:"`:
+Depois de baixar, você teria três pastas — *spam*, *easy_ham* e *hard_ham* —, cada uma com centenas de e-mails, um por arquivo. Para simplificar, olhamos só a linha de assunto de cada e-mail, identificada por começar com `"Subject:"`:
 
 ```{python}
 #| label: extrai-assuntos
@@ -61,11 +61,11 @@ for filename in glob.glob(path):
 ```
 
 ::: {.callout-important}
-Os dois chunks acima **não são executados** neste livro — repare no `eval: false` em ambos.
+Os dois blocos de código acima **não são executados** aqui.
 
-O corpus SpamAssassin completo soma centenas de megabytes, espalhados por milhares de arquivos de e-mail. E o código logo acima descarta tudo, de cada arquivo, menos a linha `Subject:`. Baixar centenas de MB para usar uma linha de texto por arquivo não se justifica dentro de um repositório de livro — então este material já traz commitado só o que o classificador de fato usa: `dados/spam-assuntos.csv`, com duas colunas, `assunto` e `is_spam`.
+O corpus SpamAssassin completo soma centenas de megabytes, espalhados por milhares de arquivos de e-mail. E o código logo acima descarta tudo, de cada arquivo, menos a linha `Subject:`. O resultado dessa varredura, já reduzido ao que o classificador de fato usa, está em `dados/spam-assuntos.csv`, com duas colunas, `assunto` e `is_spam` — é esse arquivo que carregamos a seguir.
 
-O código de download e o de varredura continuam aqui porque saber de onde o dado vem, e como alguém reduziria um e-mail inteiro a uma única linha, *é* parte da lição — a mesma razão pela qual o [Capítulo 9](../cap09/02-exemplo-o-dataset-iris.qmd) mostra o download do Iris sem executá-lo. O que não precisa acontecer a cada renderização é o download em si, nem a varredura de milhares de arquivos para produzir de novo o CSV que já está commitado.
+O código de download e o de varredura continuam à vista porque saber de onde o dado vem, e como alguém reduziria um e-mail inteiro a uma única linha, *é* parte da lição.
 :::
 
 ## Carregando os dados
@@ -100,7 +100,7 @@ Um classificador que respondesse "não é spam" para tudo, sem examinar uma pala
 
 ## Treinando e avaliando
 
-Como sempre que há aleatoriedade, fixamos a semente antes de dividir os dados — sem isso, cada renderização deste livro produziria uma divisão diferente, e a matriz de confusão abaixo não bateria com o texto que a descreve:
+Como sempre que há aleatoriedade, fixamos a semente antes de dividir os dados — sem isso, cada execução produziria uma divisão diferente, e a matriz de confusão abaixo não bateria com o texto que a descreve:
 
 ```{python}
 #| label: divide-treino
@@ -178,22 +178,20 @@ tp, fp, fn, tn
 accuracy(tp, fp, fn, tn), precision(tp, fp, fn, tn), recall(tp, fp, fn, tn), f1_score(tp, fp, fn, tn)
 ```
 
-Nesta renderização: 80 verdadeiros positivos, 24 falsos positivos, 675 verdadeiros negativos e 46 falsos negativos. `accuracy`, `precision`, `recall` e `f1_score` são as mesmas funções do [Capítulo 8](../cap08/04-correcao.qmd) — importadas de `scratch.machine_learning` no chunk do piso, não redefinidas aqui. A acurácia sai em 91,5%, a precisão em 76,9%, a revocação em 63,5% e o F1 em 0,696.
+São 80 verdadeiros positivos, 24 falsos positivos, 675 verdadeiros negativos e 46 falsos negativos. `accuracy`, `precision`, `recall` e `f1_score` são as mesmas funções do [Capítulo 8](../cap08/04-correcao.qmd). A acurácia sai em 91,5%, a precisão em 76,9%, a revocação em 63,5% e o F1 em 0,696.
 
 ::: {.conceito}
 Sete pontos de acurácia — 84,7% do piso contra 91,5% do classificador treinado — parecem pouco, e é exatamente aí que a acurácia engana, como a piada do Luke do Capítulo 8 avisou. As outras métricas contam outra história: o piso tinha revocação 0,0 e precisão indefinida; o classificador treinado tem revocação de 63,5% e F1 de 0,696 (o F1 do piso nem chega a existir — sem precisão, não há como calculá-lo). Não é uma melhora de sete pontos. É a diferença entre um modelo e nada, com um número de acurácia enorme escondendo os dois lados dela — igual ao teste do Luke, só que aqui o modelo treinado também existe, e vence por uma distância que a acurácia sozinha nunca mostraria.
 
-Ainda assim, a precisão e a revocação do classificador treinado continuam moderadas, não excelentes. De cada 100 mensagens que o modelo aponta como spam, cerca de 23 são, na verdade, legítimas — e de cada 100 mensagens que realmente são spam, o modelo deixa passar cerca de 36. Para um classificador que olha só a linha de assunto, sem ver o corpo da mensagem, não é um resultado ruim; é o resultado de deliberadamente jogar fora quase toda a informação disponível, exatamente como o livro descreve.
+Ainda assim, a precisão e a revocação do classificador treinado continuam moderadas, não excelentes. De cada 100 mensagens que o modelo aponta como spam, cerca de 23 são, na verdade, legítimas — e de cada 100 mensagens que realmente são spam, o modelo deixa passar cerca de 36. Para um classificador que olha só a linha de assunto, sem ver o corpo da mensagem, não é um resultado ruim; é o resultado de deliberadamente jogar fora quase toda a informação disponível.
 :::
 
 Vale notar uma escolha que o modelo faz sem anunciar. `predict` devolve `prob_if_spam / (prob_if_spam + prob_if_ham)`, sem peso nenhum pela proporção real de spam no treino — o que equivale a assumir $P(\text{spam}) = P(\text{ham}) = 0{,}5$, a mesma simplificação da [seção 10.1](01-um-filtro-de-spam-bem-burro.qmd). Só que o treino tem 2.101 mensagens de ham para 374 de spam, não 50/50. Essa suposição embutida — e nunca corrigida por uma proporção real — explica parte dos 24 falsos positivos: o modelo empurra a decisão para "spam" com mais facilidade do que a proporção do treino justificaria. É também por onde o `scikit-learn` se afasta silenciosamente do nosso código, como o callout da seção anterior menciona: `BernoulliNB` usa `fit_prior=True` por padrão, estimando as duas probabilidades a partir das proporções de treino em vez de assumir 50/50.
 
-Vale parar também num detalhe fácil de passar batido: `predict` devolve uma **probabilidade**, não um rótulo — e o `> 0.5` do chunk `treina-e-preve` é uma escolha nossa, não uma exigência do modelo. O [Capítulo 8](../cap08/04-correcao.qmd) já avisou que, num filtro de spam, um falso positivo (e-mail importante que some no lixo) costuma custar mais caro que um falso negativo (propaganda que passa), e que por isso o limiar deveria pender para a precisão — um limiar mais alto que 0,5, que só chama de spam o que o modelo tem mais certeza. A troca é nessa direção: exigir mais confiança **derruba os 24 falsos positivos e paga com mais falsos negativos** que os 46 atuais. Você não ganha os dois lados; escolhe qual erro prefere cometer. É também o contraste mais limpo com o k-vizinhos do Capítulo 9: lá, `majority_vote` devolve um rótulo, ponto final, sem botão para girar depois. Aqui há um botão, e girá-lo é o que você de fato vai fazer ao usar isto.
-
-Os números da nossa renderização ficam muito perto dos que @grus2019 relata rodando o mesmo código sobre o corpus completo — 84 verdadeiros positivos, 25 falsos positivos, 703 verdadeiros negativos, 44 falsos negativos, com precisão de 77% e revocação de 65%. A proximidade não é coincidência: o CSV que carregamos veio do mesmo corpus, só reduzido antes, em vez de durante, a renderização — e é mais uma evidência de que manter só os assuntos preservou o que o classificador de fato usa.
+Vale parar também num detalhe fácil de passar batido: `predict` devolve uma **probabilidade**, não um rótulo — e o `> 0.5` que usamos acima para transformar essa probabilidade em previsão é uma escolha nossa, não uma exigência do modelo. O [Capítulo 8](../cap08/04-correcao.qmd) já avisou que, num filtro de spam, um falso positivo (e-mail importante que some no lixo) costuma custar mais caro que um falso negativo (propaganda que passa), e que por isso o limiar deveria pender para a precisão — um limiar mais alto que 0,5, que só chama de spam o que o modelo tem mais certeza. A troca é nessa direção: exigir mais confiança **derruba os 24 falsos positivos e paga com mais falsos negativos** que os 46 atuais. Você não ganha os dois lados; escolhe qual erro prefere cometer. É também o contraste mais limpo com o k-vizinhos do Capítulo 9: lá, `majority_vote` devolve um rótulo, ponto final, sem botão para girar depois. Aqui há um botão, e girá-lo é o que você de fato vai fazer ao usar isto.
 
 ::: {.callout-note}
-O livro observa, depois desses números: "presumivelmente faríamos melhor se olhássemos além da linha de assunto." É um lembrete de que o [Capítulo 8](../cap08/06-extracao-e-selecao-de-atributos.qmd) já tinha antecipado — o classificador Naive Bayes é adequado a atributos do tipo sim-ou-não, e a linha de assunto sozinha só entrega um subconjunto pequeno desses atributos. O corpo do e-mail inteiro daria muito mais palavras — muito mais atributos sim-ou-não — para o modelo condicionar sua decisão.
+@grus2019 observa, depois desses números: "presumivelmente faríamos melhor se olhássemos além da linha de assunto." É um lembrete de que o [Capítulo 8](../cap08/06-extracao-e-selecao-de-atributos.qmd) já tinha antecipado — o classificador Naive Bayes é adequado a atributos do tipo sim-ou-não, e a linha de assunto sozinha só entrega um subconjunto pequeno desses atributos. O corpo do e-mail inteiro daria muito mais palavras — muito mais atributos sim-ou-não — para o modelo condicionar sua decisão.
 :::
 
 ## O que o modelo aprendeu
@@ -213,7 +211,7 @@ print("mais spammy:", words[-10:])
 print("mais hammy:", words[:10])
 ```
 
-As palavras mais "spammy" desta renderização incluem *sale*, *money*, *rates*, *mortgage* e *clearance* — o tipo de vocabulário publicitário que se espera de propaganda em massa. As mais "hammy" incluem *spambayes*, *users*, *apt* e *perl* — vocabulário técnico de listas de discussão sobre software livre, que é de onde vem boa parte do ham deste corpus.
+As palavras mais "spammy" incluem *sale*, *money*, *rates*, *mortgage* e *clearance* — o tipo de vocabulário publicitário que se espera de propaganda em massa. As mais "hammy" incluem *spambayes*, *users*, *apt* e *perl* — vocabulário técnico de listas de discussão sobre software livre, que é de onde vem boa parte do ham deste corpus.
 
 ::: {.callout-note}
 Isso dá alguma confiança intuitiva de que o modelo está fazendo a coisa certa: ele não decorou rótulos, ele encontrou palavras que de fato diferenciam as duas classes neste corpus específico. "Perl" ser hammy não é uma verdade universal sobre spam — é uma verdade sobre *esta* lista de discussão, onde e-mails técnicos legítimos falam de Perl com frequência. Um corpus de e-mails corporativos teria palavras hammy completamente diferentes.
@@ -221,18 +219,18 @@ Isso dá alguma confiança intuitiva de que o modelo está fazendo a coisa certa
 
 ## Como este modelo poderia melhorar
 
-@grus2019 fecha o capítulo com quatro sugestões de melhoria. Nenhuma delas é implementada aqui, mas vale registrar o que ficou de fora e por quê:
+@grus2019 fecha o capítulo com quatro sugestões de melhoria. Nenhuma delas é implementada aqui, mas todas valem como próximo passo para quem quiser levar o classificador adiante:
 
 - **Mais dados de treino** — a saída mais óbvia, e a que costuma compensar mais que qualquer ajuste no algoritmo.
 - Um limiar `min_count`, ignorando tokens vistos poucas vezes no treino. Palavras raras carregam pouca evidência estatística; incluí-las pode acrescentar ruído em vez de sinal.
-- Um **stemmer**: uma função que reduz palavras aparentadas à mesma forma, para que `cheap` e `cheapest` contem como o mesmo token. O próprio módulo vendorizado, `scratch/naive_bayes.py`, define um stemmer ingênuo que nenhuma seção deste capítulo chama:
+- Um **stemmer**: uma função que reduz palavras aparentadas à mesma forma, para que `cheap` e `cheapest` contem como o mesmo token. O esboço mais ingênuo possível remove o "s" final:
 
   ```python
   def drop_final_s(word):
       return re.sub("s$", "", word)
   ```
 
-  Ele existe no código do livro como esboço de uma ideia, não como parte do classificador — daí não aparecer em nenhum chunk executado aqui. Um stemmer sério é bem mais delicado que remover um "s" final; o [Porter stemmer](https://tartarus.org/martin/PorterStemmer/), citado pelo próprio @grus2019, é o padrão da área.
+  É um esboço de ideia, não uma peça do classificador. Um stemmer sério é bem mais delicado que remover um "s" final; o [Porter stemmer](https://tartarus.org/martin/PorterStemmer/), citado por @grus2019, é o padrão da área.
 - Atributos "fantasmas", como um token artificial `contains:number` que marcaria a presença de qualquer dígito na mensagem — uma forma de extrair sinal que `tokenize` sozinho não captura, sem sair do modelo de atributos sim-ou-não.
 
 ## Contraste com o Capítulo 9
