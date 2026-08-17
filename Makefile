@@ -5,7 +5,7 @@ COMPOSE := docker compose
 RUN := $(COMPOSE) run --rm --no-deps livro
 
 help: ## Mostra esta ajuda
-	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN{FS=":.*?## "}{printf "  \033[36m%-10s\033[0m %s\n", $$1, $$2}'
+	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN{FS=":.*?## "}{printf "  \033[36m%-16s\033[0m %s\n", $$1, $$2}'
 
 build: ## Constrói a imagem Docker
 	$(COMPOSE) build
@@ -68,6 +68,26 @@ offline: ## Renderiza SEM REDE (limpa _freeze antes — veja o motivo abaixo)
 	docker run --rm --network none -u "$(UID):$(GID)" -e HOME=/tmp \
 	  -v "$(PWD)":/livro -w /livro bases5-ciencia-de-dados:local quarto render
 
+jupyter: ## Abre o JupyterLab em http://localhost:8901 (para dar aula)
+# A raiz é /livro, não /livro/notebooks, para o aluno enxergar `dados/` e
+# `scratch/` — e porque com o cwd na raiz a célula de preparo não precisa subir.
+# Sem token: o compose prende a porta em 127.0.0.1, então só a máquina local
+# alcança. Se você mudar aquele mapeamento, ponha o token de volta.
+	$(COMPOSE) run --rm --service-ports livro \
+	  jupyter lab --ip=0.0.0.0 --port=8901 --no-browser \
+	  --ServerApp.token='' --ServerApp.password='' --ServerApp.root_dir=/livro
+
+notebooks: ## Regenera os notebooks de aula a partir dos .qmd
+# Os notebooks são DERIVADOS do livro, não uma segunda fonte. Editou um .qmd,
+# rode isto. Editar o .ipynb à mão é trabalho perdido: o gerador sobrescreve.
+	$(RUN) python scripts/gerar-notebooks.py
+
+notebooks-teste: ## Executa todos os notebooks de ponta a ponta (demora; não grava saída)
+# Esta é a verificação dos notebooks, análoga ao `quarto render` para o livro.
+# Roda com o cwd em notebooks/, que é o caso mais apertado — o do aluno que
+# abriu o Jupyter dentro da pasta e depende da célula de preparo achar a raiz.
+	$(RUN) python scripts/executar-notebooks.py
+
 teste: ## Roda a suíte de invariantes estruturais
 	$(RUN) pytest tests/ -v
 
@@ -98,4 +118,4 @@ clean: ## Remove artefatos de render (inclusive o lixo que um render abortado de
 	  [ -f "$${html%.html}.qmd" ] && rm -f "$$html"; \
 	done; true
 
-.PHONY: help build preview render refresh offline teste shell check lock clean
+.PHONY: help build preview render refresh offline jupyter notebooks notebooks-teste teste shell check lock clean

@@ -6,7 +6,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 O design está aprovado e escrito em `docs/superpowers/specs/2026-08-15-estrutura-livro-bases5-design.md` — **leia essa spec antes de mexer na estrutura.** Este arquivo é o resumo operacional; a spec é a fonte das decisões e das razões. A spec carrega algumas notas de correção pós-implementação — leia-as também; elas registram onde a decisão original mudou depois de escrita.
 
-**O andaime está construído.** 17 capítulos, 88 seções + 17 `index.qmd` = 105 `.qmd`, todos registrados em `_quarto.yml`. Container Docker (Quarto + `uv`), CI publicando em `gh-pages`, 20 testes (`make teste`) guardando os invariantes estruturais. O **capítulo 9 (k-Vizinhos Mais Próximos) está escrito por inteiro** — é o único capítulo de conteúdo pronto e é o **modelo de estilo** para os outros 16: leia `content/cap09/` antes de escrever qualquer outro capítulo, para o formato pegar (ver "Antes de escrever um capítulo", abaixo). **Os outros 16 capítulos são stubs** — callout `de @grus2019` citando capítulo e título da seção reais, mais um callout "Em construção" — aguardando conteúdo.
+**O livro está escrito e publicado.** 17 capítulos, 88 seções + 17 `index.qmd` = 105 `.qmd` (17.855 linhas), todos registrados em `_quarto.yml`. Nenhum stub restante. Container Docker (Quarto + `uv`), CI publicando em `gh-pages`, 32 testes (`make teste`) guardando os invariantes. O **capítulo 9 (k-Vizinhos Mais Próximos)** foi o primeiro escrito e segue sendo o **modelo de estilo** da casa: leia `content/cap09/` antes de mexer em qualquer capítulo, para o formato pegar (ver "Antes de escrever um capítulo", abaixo).
+
+Além do livro, `notebooks/` traz **um `.ipynb` por capítulo**, gerado a partir dos `.qmd` para executar ao vivo na aula (ver "Os notebooks de aula", abaixo), e `atividades/` guarda o PID da disciplina.
 
 Os irmãos já prontos definiram o padrão da casa **na hora de montar o andaime**; agora servem como referência de convenção, não como fonte para copiar arquivo — a infra já existe aqui e já está adaptada:
 
@@ -76,18 +78,21 @@ Cada seção implementa o algoritmo em Python puro, como o Grus faz, e **fecha c
 Tudo roda dentro do container — não há Python instalado no host.
 
 ```bash
-make preview   # hot-reload em http://localhost:4201
-make render    # renderiza para _book/
-make teste     # roda a suíte de invariantes estruturais (pytest, tests/)
-make offline   # renderiza SEM REDE, com _freeze/ limpo antes — prova o isolamento
-make shell     # shell dentro do container
-make check     # quarto check
-make build     # reconstrói a imagem (após mudar Dockerfile ou uv.lock)
-make lock      # regenera uv.lock após editar pyproject.toml
-make clean     # remove _book/, _freeze/, .quarto/ e o lixo de render abortado
+make preview          # hot-reload em http://localhost:4201
+make render           # renderiza para _book/
+make teste            # roda a suíte de invariantes estruturais (pytest, tests/)
+make offline          # renderiza SEM REDE, com _freeze/ limpo antes — prova o isolamento
+make jupyter          # JupyterLab em http://localhost:8901 (notebooks de aula)
+make notebooks        # regenera notebooks/ a partir dos .qmd
+make notebooks-teste  # executa os 17 notebooks de ponta a ponta (demora)
+make shell            # shell dentro do container
+make check            # quarto check
+make build            # reconstrói a imagem (após mudar Dockerfile ou uv.lock)
+make lock             # regenera uv.lock após editar pyproject.toml
+make clean            # remove _book/, _freeze/, .quarto/ e o lixo de render abortado
 ```
 
-**`make teste` roda `pytest tests/`** — 20 testes em três arquivos: `test_estrutura.py` (registro no `_quarto.yml`, caminhos de dados, citações, e os totais de 17 capítulos / 88 seções / 105 arquivos contra o `LIVRO` de `scripts/gerar-stubs.py`), `test_scratch.py` (o pacote vendorizado — inclusive um hash SHA-256 travando que `scratch/` continua verbatim upstream) e `test_dados.py` (os seis conjuntos commitados). É o que garante a regra "todo `.qmd` novo precisa ser registrado em `_quarto.yml`", abaixo — sem essa suíte, um arquivo esquecido no YAML só aparece quando alguém percebe a seção faltando no site publicado.
+**`make teste` roda `pytest tests/`** — 32 testes em seis arquivos: `test_estrutura.py` (registro no `_quarto.yml`, caminhos de dados, citações, e os totais de 17 capítulos / 88 seções / 105 arquivos contra o `LIVRO` de `scripts/gerar-stubs.py`), `test_scratch.py` (o pacote vendorizado — inclusive um hash SHA-256 travando que `scratch/` continua verbatim upstream), `test_dados.py` (os seis conjuntos commitados), `test_freeze.py` (o cache envenenado), `test_gradiente.py` (toda subida de gradiente tem motivo registrado) e `test_notebooks.py` (os notebooks de aula não podem defasar dos `.qmd`). É o que garante a regra "todo `.qmd` novo precisa ser registrado em `_quarto.yml`", abaixo — sem essa suíte, um arquivo esquecido no YAML só aparece quando alguém percebe a seção faltando no site publicado.
 
 **Porta 4201, não 4200.** O `bases_3_estatistica` ocupa a 4200, e os dois livros são editados na mesma tarde.
 
@@ -166,6 +171,30 @@ content/cap09/
 "For Further Exploration" fecha quase todo capítulo do Grus. Não vira arquivo: vira uma seção *Leituras adicionais* no fim do `index.qmd` do capítulo.
 
 **Duas exceções, ambas conferidas no PDF e já codificadas no `LIVRO` de `scripts/gerar-stubs.py`:** o capítulo 16 do Grus (o nosso 13, Regressão Logística) fecha com "For Further **Investigation**", e o capítulo 1 não tem seção de leituras — termina em "Onward". Duas revisões independentes já apontaram o "Investigation" como inconsistência a uniformizar; **não é.** O comentário no gerador avisa isso na fonte.
+
+### Os notebooks de aula — derivados do livro, nunca editados à mão
+
+`notebooks/` tem **um `.ipynb` por capítulo**, para executar ao vivo na aula. Eles são gerados por `scripts/gerar-notebooks.py` a partir dos `.qmd`, e a relação é a mesma do `scratch/` com o upstream: **o livro é a fonte, o notebook é cópia derivada.** Editar um `.ipynb` é trabalho perdido — o próximo `make notebooks` sobrescreve. Mudou a aula? Mude o `.qmd`.
+
+`test_notebooks_estao_atualizados` regera cada notebook em memória e compara com o arquivo em disco, então um `.qmd` que anda sem o notebook derruba `make teste`. É o guarda contra a falha óbvia: a aula rodando uma versão do capítulo que o site publicado já não tem.
+
+**Os 19 chunks dentro de callouts.** No livro, 19 chunks `{python}` que **executam** moram dentro de `::: {.conceito}`, `::: {.exemplo}` e afins. Um conversor que trate todo `:::` como texto os transforma em markdown — e aí o notebook abre, executa, e quebra várias células adiante num `NameError` que não aponta para a causa. O gerador converte o corpo do callout recursivamente: o que é prosa vira blockquote, o que é código continua célula de código. `test_todo_chunk_executavel_do_livro_virou_celula` conta os chunks de forma independente do gerador e trava isso.
+
+Três traduções que o gerador faz porque o Jupyter não entende o que o Quarto entende:
+
+- **Callouts** viram blockquotes com rótulo e ícone.
+- **Links entre `.qmd`** viram URLs absolutas do site publicado — um caminho relativo a `../cap05/index.qmd` não resolve de dentro de `notebooks/`.
+- **Citações `@grus2019`** viram o texto da citação, com a bibliografia numa célula final. As referências saem do `references.bib`, para não existir uma segunda cópia.
+
+**A célula de preparo.** No livro, `execute-dir: project` põe o cwd na raiz, e é isso que faz `from scratch...` e `dados/...` resolverem. O notebook não tem esse mecanismo, então a primeira célula de código de todo notebook sobe os diretórios até achar `_quarto.yml` e faz `os.chdir`. Funciona tanto com o Jupyter aberto na raiz quanto dentro de `notebooks/`.
+
+**Os arquivos entram no git sem saída de execução**, de propósito: quem executa é o aluno. Saída congelada tornaria o diff ruído binário e tiraria o sentido de rodar o código. `test_nenhum_notebook_guarda_saida` trava isso.
+
+**Uma diferença de execução em relação ao livro, que vale conhecer:** no site, cada `.qmd` roda no **seu próprio kernel** e nomes não atravessam páginas — daí os `import` se repetirem de seção para seção. No notebook, o capítulo inteiro roda num kernel só. Na prática só ajuda (a ordem de leitura é a mesma), mas é a razão de um notebook poder executar uma célula que, isolada, faltaria um import.
+
+**Verificação:** `make notebooks-teste` executa os 17 de ponta a ponta com o cwd em `notebooks/` — o caso mais apertado. É o análogo do `quarto render` para os notebooks, e pelo mesmo motivo: os módulos de `scratch/` têm `assert` no nível do módulo. Demora — medido: **~11 minutos no total**, dominado pelo cap. 16 (MNIST, 343 s) e pelo cap. 12 (bootstrap, 157 s). Não roda no CI por isso; é alvo deliberado.
+
+`notebooks/` está no **`.quartoignore`** — sem isso o Quarto trataria os `.ipynb` como conteúdo do livro.
 
 ### O pacote `scratch/` — vendorizado literalmente, nunca editado
 
