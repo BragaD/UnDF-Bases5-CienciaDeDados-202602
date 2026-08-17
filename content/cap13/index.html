@@ -97,6 +97,35 @@ div.csl-indent {
   }
 }</script>
 
+  <script src="https://cdnjs.cloudflare.com/polyfill/v3/polyfill.min.js?features=es6"></script>
+  <script defer="" src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-chtml-full.js" type="text/javascript"></script>
+
+<script type="text/javascript">
+const typesetMath = (el) => {
+  if (window.MathJax) {
+    // MathJax Typeset
+    window.MathJax.typeset([el]);
+  } else if (window.katex) {
+    // KaTeX Render
+    var mathElements = el.getElementsByClassName("math");
+    var macros = [];
+    for (var i = 0; i < mathElements.length; i++) {
+      var texText = mathElements[i].firstChild;
+      if (mathElements[i].tagName == "SPAN" && texText && texText.data) {
+        window.katex.render(texText.data, mathElements[i], {
+          displayMode: mathElements[i].classList.contains('display'),
+          throwOnError: false,
+          macros: macros,
+          fleqn: false
+        });
+      }
+    }
+  }
+}
+window.Quarto = {
+  typesetMath
+};
+</script>
 
 <link rel="stylesheet" href="../../styles.css">
 </head>
@@ -1077,19 +1106,24 @@ Nota
 <p>Este capítulo corresponde ao capítulo 16 de <span class="citation" data-cites="grus2019">Grus (<a href="#ref-grus2019" role="doc-biblioref">2019</a>)</span>.</p>
 </div>
 </div>
-<div class="callout callout-style-default callout-warning callout-titled">
-<div class="callout-header d-flex align-content-center">
-<div class="callout-icon-container">
-<i class="callout-icon"></i>
-</div>
-<div class="callout-title-container flex-fill">
-<span class="screen-reader-only">Aviso</span>Em construção
-</div>
-</div>
-<div class="callout-body-container callout-body">
-<p>A visão geral deste capítulo ainda será escrita.</p>
-</div>
-</div>
+<blockquote class="blockquote">
+<p>Muita gente diz que existe uma linha tênue entre a genialidade e a loucura. Eu não acho que a linha seja tênue — acho que existe um abismo entre as duas.</p>
+<p>— Bill Bailey</p>
+</blockquote>
+<p>O <a href="../../content/cap12/index.html">Capítulo 12</a> terminou com um modelo que prevê <strong>quanto</strong>: minutos por dia, um número contínuo, com um coeficiente por variável explicativa. Este capítulo troca a pergunta por outra, que na prática é a mais comum das duas: <strong>sim ou não</strong>. O usuário pagou pela conta premium? A mensagem é spam? O candidato passa na entrevista? A variável a prever deixa de ser uma quantidade e passa a ser um rótulo, codificado como 0 ou 1.</p>
+<p>A <a href="../../content/cap13/01-o-problema.html">seção 13.1</a> faz a coisa óbvia: pega o modelo linear do capítulo anterior, sem alterar uma linha, e o aponta para um alvo 0/1. Ele roda, devolve coeficientes e prevê — números negativos, e números maiores que 1, para uma variável que só assume os valores 0 e 1. É um fracasso instrutivo, e ele define o problema que o resto do capítulo resolve: a saída precisa ficar presa no intervalo <span class="math inline">\([0, 1]\)</span> para poder ser lida como probabilidade.</p>
+<p>Este capítulo também cobra duas dívidas antigas. A primeira é da <a href="../../content/cap05/05-ajustando-modelos.html">seção 5.5</a>, que prometeu que a regressão logística <strong>não tem fórmula fechada</strong> — não existem duas médias e uma covariância que resolvam este problema, e nem sequer um sistema linear a resolver, como havia na regressão múltipla. O gradiente descendente deixa de ser o caminho mais prático entre dois possíveis e passa a ser o <strong>único</strong> caminho: sem ele, não há modelo. A segunda dívida é da <a href="../../content/cap11/03-maxima-verossimilhanca.html">seção 11.3</a>, que introduziu estimação por máxima verossimilhança e mostrou que, para erros normais, maximizar a verossimilhança é exatamente minimizar a soma dos quadrados. Aqui os erros não são normais — o alvo é binário —, aquela equivalência some, e sobra a verossimilhança sozinha. É ela que vamos otimizar, na forma em que um computador consegue: <strong>minimizando a log-verossimilhança negativa</strong>.</p>
+<p>E há um terceiro fio, que só se enxerga na última seção. Ajustar <span class="math inline">\(\beta\)</span> produz, de brinde, um <strong>hiperplano</strong> que separa as duas classes — o conjunto de pontos onde <code>dot(x, beta)</code> vale zero. Encontrar diretamente o hiperplano que melhor separa as classes, sem passar por probabilidade nenhuma, é um critério diferente e dá origem a outra família de classificadores: as <strong>máquinas de vetores de suporte</strong>. A <a href="../../content/cap13/05-maquinas-de-vetores-de-suporte.html">seção 13.5</a> fecha o capítulo comparando os dois critérios.</p>
+<p>Ao final deste capítulo, você será capaz de:</p>
+<ul>
+<li>Explicar por que um modelo linear não serve para prever uma variável binária, e demonstrar isso com previsões fora do intervalo <span class="math inline">\([0, 1]\)</span></li>
+<li>Escrever a função logística, justificar por que ela resolve o problema do alcance e derivar a sua derivada</li>
+<li>Derivar a log-verossimilhança de um modelo com alvo binário e explicar por que maximizá-la equivale a minimizar a log-verossimilhança negativa</li>
+<li>Ajustar uma regressão logística por gradiente descendente, sem nenhuma fórmula fechada disponível</li>
+<li>Explicar por que um ajuste pode reportar perda zero e estar completamente errado, e por que nenhuma biblioteca teria mostrado isso a você</li>
+<li>Avaliar um classificador probabilístico com precisão e revocação, e explicar de onde vem o limiar de 0,5</li>
+<li>Descrever o critério de margem máxima de uma máquina de vetores de suporte e dizer em que ele difere de maximizar a verossimilhança</li>
+</ul>
 <section id="seções" class="level2">
 <h2 class="anchored" data-anchor-id="seções">Seções</h2>
 <table class="caption-top table">
@@ -1125,12 +1159,21 @@ Nota
 </section>
 <section id="leituras-adicionais" class="level2">
 <h2 class="anchored" data-anchor-id="leituras-adicionais">Leituras adicionais</h2>
-<p><em>A seção “For Further Investigation” do capítulo 16 de <span class="citation" data-cites="grus2019">Grus (<a href="#ref-grus2019" role="doc-biblioref">2019</a>)</span> entra aqui.</em></p>
+<p>A seção “For Further Investigation” do capítulo 16 de <span class="citation" data-cites="grus2019">Grus (<a href="#ref-grus2019" role="doc-biblioref">2019</a>)</span> faz duas sugestões.</p>
+<p>A primeira é o <code>scikit-learn</code>, que tem módulos tanto para <a href="https://scikit-learn.org/stable/modules/linear_model.html#logistic-regression">regressão logística</a> quanto para <a href="https://scikit-learn.org/stable/modules/svm.html">máquinas de vetores de suporte</a>. Os callouts de fechamento de cada seção deste capítulo mostram as duas interfaces.</p>
+<p>A segunda é o <a href="https://www.csie.ntu.edu.tw/~cjlin/libsvm/">LIBSVM</a>, a implementação de máquinas de vetores de suporte que o <code>scikit-learn</code> usa por baixo em <code>SVC</code> e <code>SVR</code>. O site traz um guia prático curto — <em>A Practical Guide to Support Vector Classification</em> — que vale a leitura justamente por ser prático: ele começa recomendando reescalonar os dados, que é a lição que a <a href="../../content/cap13/03-aplicando-o-modelo.html">seção 13.3</a> aprende do jeito difícil.</p>
+<p>Para o tratamento estatístico da regressão logística — testes sobre coeficientes, razões de chances, diagnóstico —, <span class="citation" data-cites="james2021">James et al. (<a href="#ref-james2021" role="doc-biblioref">2021</a>)</span> é o ponto de partida usual, e <span class="citation" data-cites="hastie2009">Hastie et al. (<a href="#ref-hastie2009" role="doc-biblioref">2009</a>)</span> vai fundo tanto na logística quanto no problema de otimização que a máquina de vetores de suporte resolve e que este capítulo não implementa.</p>
 
 
 <div id="refs" class="references csl-bib-body hanging-indent" role="list">
 <div id="ref-grus2019" class="csl-entry" role="listitem">
 Grus, Joel. 2019. <em>Data Science from Scratch: First Principles with Python</em>. 2nd ed. O’Reilly Media.
+</div>
+<div id="ref-hastie2009" class="csl-entry" role="listitem">
+Hastie, Trevor, Robert Tibshirani, e Jerome Friedman. 2009. <em>The Elements of Statistical Learning</em>. 2nd ed. Springer.
+</div>
+<div id="ref-james2021" class="csl-entry" role="listitem">
+James, Gareth, Daniela Witten, Trevor Hastie, e Robert Tibshirani. 2021. <em>An Introduction to Statistical Learning</em>. 2nd ed. Springer.
 </div>
 </div>
 </section>

@@ -24,6 +24,41 @@ ul.task-list li input[type="checkbox"] {
   margin: 0 0.8em 0.2em -1em; /* quarto-specific, see https://github.com/quarto-dev/quarto-cli/issues/4556 */ 
   vertical-align: middle;
 }
+/* CSS for syntax highlighting */
+html { -webkit-text-size-adjust: 100%; }
+pre > code.sourceCode { white-space: pre; position: relative; }
+pre > code.sourceCode > span { display: inline-block; line-height: 1.25; }
+pre > code.sourceCode > span:empty { height: 1.2em; }
+.sourceCode { overflow: visible; }
+code.sourceCode > span { color: inherit; text-decoration: inherit; }
+div.sourceCode { margin: 1em 0; }
+pre.sourceCode { margin: 0; }
+@media screen {
+div.sourceCode { overflow: auto; }
+}
+@media print {
+pre > code.sourceCode { white-space: pre-wrap; }
+pre > code.sourceCode > span { text-indent: -5em; padding-left: 5em; }
+}
+pre.numberSource code
+  { counter-reset: source-line 0; }
+pre.numberSource code > span
+  { position: relative; left: -4em; counter-increment: source-line; }
+pre.numberSource code > span > a:first-child::before
+  { content: counter(source-line);
+    position: relative; left: -1em; text-align: right; vertical-align: baseline;
+    border: none; display: inline-block;
+    -webkit-touch-callout: none; -webkit-user-select: none;
+    -khtml-user-select: none; -moz-user-select: none;
+    -ms-user-select: none; user-select: none;
+    padding: 0 4px; width: 4em;
+  }
+pre.numberSource { margin-left: 3em;  padding-left: 4px; }
+div.sourceCode
+  {   }
+@media screen {
+pre > code.sourceCode > span > a:first-child::before { text-decoration: underline; }
+}
 /* CSS for citations */
 div.csl-bib-body { }
 div.csl-entry {
@@ -97,6 +132,35 @@ div.csl-indent {
   }
 }</script>
 
+  <script src="https://cdnjs.cloudflare.com/polyfill/v3/polyfill.min.js?features=es6"></script>
+  <script defer="" src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-chtml-full.js" type="text/javascript"></script>
+
+<script type="text/javascript">
+const typesetMath = (el) => {
+  if (window.MathJax) {
+    // MathJax Typeset
+    window.MathJax.typeset([el]);
+  } else if (window.katex) {
+    // KaTeX Render
+    var mathElements = el.getElementsByClassName("math");
+    var macros = [];
+    for (var i = 0; i < mathElements.length; i++) {
+      var texText = mathElements[i].firstChild;
+      if (mathElements[i].tagName == "SPAN" && texText && texText.data) {
+        window.katex.render(texText.data, mathElements[i], {
+          displayMode: mathElements[i].classList.contains('display'),
+          throwOnError: false,
+          macros: macros,
+          fleqn: false
+        });
+      }
+    }
+  }
+}
+window.Quarto = {
+  typesetMath
+};
+</script>
 
 <link rel="stylesheet" href="../../styles.css">
 </head>
@@ -1070,17 +1134,98 @@ Nota
 <p>Esta seção corresponde a <em>Using the Gradient</em>, do capítulo 8 de <span class="citation" data-cites="grus2019">Grus (<a href="#ref-grus2019" role="doc-biblioref">2019</a>)</span>.</p>
 </div>
 </div>
-<div class="callout callout-style-default callout-warning callout-titled">
-<div class="callout-header d-flex align-content-center">
+<p>Derivando à mão, a derivada parcial de <span class="math inline">\(\sum_j v_j^2\)</span> em relação a <span class="math inline">\(v_i\)</span> é <span class="math inline">\(2v_i\)</span> — a soma dos quadrados só depende de <span class="math inline">\(v_i\)</span> através do termo <span class="math inline">\(v_i^2\)</span>, e a derivada de <span class="math inline">\(x^2\)</span> é <span class="math inline">\(2x\)</span>. Confira contra a seção anterior: <code>estimate_gradient(sum_of_squares, [3.0, 4.0, 5.0])</code> devolveu <code>[6.0001, 8.0001, 10.0001]</code> — o exato <code>[6, 8, 10]</code>, que é <span class="math inline">\([2 \cdot 3, 2 \cdot 4, 2 \cdot 5]\)</span>, mais o <code>h</code> que a seção 5.2 previu. Daqui em diante calculamos gradientes assim, com a fórmula fechada — a estimativa numérica da seção anterior passa a ser o instrumento de <strong>conferência</strong>, não o de produção.</p>
+<p>É fácil ver, então, que a função <code>sum_of_squares</code> é mínima quando sua entrada <code>v</code> é um vetor de zeros. Mas imagine que não soubéssemos disso. Vamos usar gradientes para achar o mínimo entre todos os vetores tridimensionais. Vamos simplesmente escolher um ponto de partida aleatório e então dar passos pequenos na direção oposta ao gradiente, até chegar a um ponto em que o gradiente é muito pequeno:</p>
+<div id="gradient-step" class="cell" data-execution_count="1">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb1"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> random</span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> scratch.linear_algebra <span class="im">import</span> Vector, distance, add, scalar_multiply</span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> gradient_step(v: Vector, gradient: Vector, step_size: <span class="bu">float</span>) <span class="op">-&gt;</span> Vector:</span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a>    <span class="co">"""Anda `step_size` na direção do `gradient`, a partir de `v`"""</span></span>
+<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a>    <span class="cf">assert</span> <span class="bu">len</span>(v) <span class="op">==</span> <span class="bu">len</span>(gradient)</span>
+<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a>    step <span class="op">=</span> scalar_multiply(step_size, gradient)</span>
+<span id="cb1-8"><a href="#cb1-8" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> add(v, step)</span>
+<span id="cb1-9"><a href="#cb1-9" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-10"><a href="#cb1-10" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> sum_of_squares_gradient(v: Vector) <span class="op">-&gt;</span> Vector:</span>
+<span id="cb1-11"><a href="#cb1-11" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> [<span class="dv">2</span> <span class="op">*</span> v_i <span class="cf">for</span> v_i <span class="kw">in</span> v]</span></code></pre></div><button title="Copiar para a área de transferência" class="code-copy-button"><i class="bi"></i></button></div>
+</div>
+<p><code>gradient_step</code> é a peça inteira do capítulo — as duas linhas de código que fazem o trabalho. Dado um ponto <code>v</code>, um gradiente naquele ponto e um <code>step_size</code> — positivo para andar <em>com</em> o gradiente, negativo para andar <em>contra</em> ele —, ela devolve o próximo ponto.</p>
+<p>Repare que o sinal fica por conta de quem chama a função: é você que passa <code>-0.01</code> para descer. As bibliotecas de verdade (PyTorch, scikit-learn) escondem esse sinal — recebem um <code>learning_rate</code> <strong>positivo</strong> e embutem o <code>-1</code> por dentro. Se mais adiante você vir <code>lr=0.001</code> em código de produção, é o mesmo <code>step_size=-0.001</code> que vamos passar aqui, só que com o sinal de descida já aplicado por quem escreveu a biblioteca.</p>
+<p>Agora usamos as duas funções para minimizar <code>sum_of_squares</code>, partindo de um ponto aleatório e dando 1.000 passos pequenos na direção oposta ao gradiente:</p>
+<div id="cell-minimiza-sum-of-squares" class="cell" data-execution_count="2">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb2"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a>random.seed(<span class="dv">0</span>)</span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a><span class="co"># escolhe um ponto de partida aleatório</span></span>
+<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a>v <span class="op">=</span> [random.uniform(<span class="op">-</span><span class="dv">10</span>, <span class="dv">10</span>) <span class="cf">for</span> i <span class="kw">in</span> <span class="bu">range</span>(<span class="dv">3</span>)]</span>
+<span id="cb2-5"><a href="#cb2-5" aria-hidden="true" tabindex="-1"></a>v</span></code></pre></div><button title="Copiar para a área de transferência" class="code-copy-button"><i class="bi"></i></button></div>
+<div id="minimiza-sum-of-squares" class="cell-output cell-output-display" data-execution_count="2">
+<pre><code>[6.888437030500963, 5.159088058806049, -1.5885683833831]</code></pre>
+</div>
+</div>
+<p>Aqui, <em>epoch</em> é só o nome que damos a cada iteração do laço — cada tentativa de melhorar <code>v</code> um pouco. A partir da <a href="../../content/cap05/05-ajustando-modelos.html">seção 5.5</a>, quando houver um conjunto de dados de verdade para percorrer, a palavra ganha um sentido mais específico: uma passagem completa por ele.</p>
+<div id="cell-fig-distancia-epoch" class="cell" data-execution_count="3">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb4"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a>distancias <span class="op">=</span> [distance(v, [<span class="dv">0</span>, <span class="dv">0</span>, <span class="dv">0</span>])]</span>
+<span id="cb4-2"><a href="#cb4-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-3"><a href="#cb4-3" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> epoch <span class="kw">in</span> <span class="bu">range</span>(<span class="dv">1000</span>):</span>
+<span id="cb4-4"><a href="#cb4-4" aria-hidden="true" tabindex="-1"></a>    grad <span class="op">=</span> sum_of_squares_gradient(v)    <span class="co"># calcula o gradiente em v</span></span>
+<span id="cb4-5"><a href="#cb4-5" aria-hidden="true" tabindex="-1"></a>    v <span class="op">=</span> gradient_step(v, grad, <span class="op">-</span><span class="fl">0.01</span>)    <span class="co"># dá um passo negativo na direção do gradiente</span></span>
+<span id="cb4-6"><a href="#cb4-6" aria-hidden="true" tabindex="-1"></a>    distancias.append(distance(v, [<span class="dv">0</span>, <span class="dv">0</span>, <span class="dv">0</span>]))</span>
+<span id="cb4-7"><a href="#cb4-7" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-8"><a href="#cb4-8" aria-hidden="true" tabindex="-1"></a><span class="cf">assert</span> distance(v, [<span class="dv">0</span>, <span class="dv">0</span>, <span class="dv">0</span>]) <span class="op">&lt;</span> <span class="fl">0.001</span>    <span class="co"># v deve estar perto de 0</span></span>
+<span id="cb4-9"><a href="#cb4-9" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-10"><a href="#cb4-10" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> matplotlib <span class="im">import</span> pyplot <span class="im">as</span> plt</span>
+<span id="cb4-11"><a href="#cb4-11" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-12"><a href="#cb4-12" aria-hidden="true" tabindex="-1"></a>plt.plot(<span class="bu">range</span>(<span class="bu">len</span>(distancias)), distancias)</span>
+<span id="cb4-13"><a href="#cb4-13" aria-hidden="true" tabindex="-1"></a>plt.yscale(<span class="st">"log"</span>)</span>
+<span id="cb4-14"><a href="#cb4-14" aria-hidden="true" tabindex="-1"></a>plt.xlabel(<span class="st">"epoch"</span>)</span>
+<span id="cb4-15"><a href="#cb4-15" aria-hidden="true" tabindex="-1"></a>plt.ylabel(<span class="st">"distância de v até a origem"</span>)</span>
+<span id="cb4-16"><a href="#cb4-16" aria-hidden="true" tabindex="-1"></a>plt.show()</span></code></pre></div><button title="Copiar para a área de transferência" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="cell-output cell-output-display">
+<div id="fig-distancia-epoch" class="quarto-float quarto-figure quarto-figure-center anchored">
+<figure class="quarto-float quarto-float-fig figure">
+<div aria-describedby="fig-distancia-epoch-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<img src="03-usando-o-gradiente_files/figure-html/fig-distancia-epoch-output-1.png" width="600" height="431" class="figure-img">
+</div>
+<figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-fig" id="fig-distancia-epoch-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Figura&nbsp;23.1: Distância de v à origem ao longo de 1000 epochs (escala log)
+</figcaption>
+</figure>
+</div>
+</div>
+</div>
+<div id="cell-v-final" class="cell" data-execution_count="4">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb5"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a>v, distance(v, [<span class="dv">0</span>, <span class="dv">0</span>, <span class="dv">0</span>])</span></code></pre></div><button title="Copiar para a área de transferência" class="code-copy-button"><i class="bi"></i></button></div>
+<div id="v-final" class="cell-output cell-output-display" data-execution_count="4">
+<pre><code>([1.1593014664570754e-08, 8.6825767959732e-09, -2.6735087339390776e-09],
+ 1.4728638015151751e-08)</code></pre>
+</div>
+</div>
+<p>A semente fixa esconde o que importa: troque-a e o ponto de partida muda, mas o destino não — <code>v</code> termina praticamente na origem em qualquer partida.</p>
+<div class="conceito">
+<p>A curva acima é (quase) uma reta porque o eixo vertical está em escala logarítmica — e isso não é acidente.</p>
+<p>Cada componente de <code>v</code> é multiplicado pelo mesmo fator a cada passo: <code>gradient_step</code> calcula <code>v + step_size * gradient</code>, e como <code>sum_of_squares_gradient(v)</code> é <code>2 * v</code>, isso é <code>v + (-0.01) * (2 * v)</code>, ou seja, <code>v * 0.98</code>. A distância à origem, portanto, decai geometricamente com razão <code>0.98</code> por epoch — depois de 1.000 epochs, <code>0.98 ** 1000</code>, um número na casa de <code>10⁻⁹</code>, multiplicado pela distância inicial. Uma reta em escala log <strong>é</strong> decaimento geométrico.</p>
+<p>Essa é uma propriedade de <code>sum_of_squares</code> em particular — a maioria das funções que vamos minimizar neste livro não tem uma forma fechada tão simples assim para a taxa de convergência. Mas o padrão qualitativo (queda rápida no início, cada vez mais lenta perto do mínimo) é típico do gradiente descendente com passo fixo, e vai reaparecer.</p>
+</div>
+<div class="callout callout-style-default callout-tip callout-titled">
+<div class="callout-header d-flex align-content-center collapsed" data-bs-toggle="collapse" data-bs-target=".callout-2-contents" aria-controls="callout-2" aria-expanded="false" aria-label="Toggle callout">
 <div class="callout-icon-container">
 <i class="callout-icon"></i>
 </div>
 <div class="callout-title-container flex-fill">
-<span class="screen-reader-only">Aviso</span>Em construção
+<span class="screen-reader-only">Dica</span>Na prática: otimizadores prontos
 </div>
+<div class="callout-btn-toggle d-inline-block border-0 py-1 ps-1 pe-0 float-end"><i class="callout-toggle"></i></div>
 </div>
+<div id="callout-2" class="callout-2-contents callout-collapse collapse">
 <div class="callout-body-container callout-body">
-<p>O conteúdo desta seção ainda será escrito.</p>
+<p>O que você acabou de escrever — calcule o gradiente, ande na direção oposta, repita — é, no fundo, o que qualquer otimizador de propósito geral faz. A versão de biblioteca:</p>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb7"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb7-1"><a href="#cb7-1" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> scipy.optimize <span class="im">import</span> minimize</span>
+<span id="cb7-2"><a href="#cb7-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb7-3"><a href="#cb7-3" aria-hidden="true" tabindex="-1"></a>resultado <span class="op">=</span> minimize(<span class="kw">lambda</span> v: <span class="bu">sum</span>(x<span class="op">**</span><span class="dv">2</span> <span class="cf">for</span> x <span class="kw">in</span> v), x0<span class="op">=</span>[<span class="fl">6.9</span>, <span class="fl">5.2</span>, <span class="op">-</span><span class="fl">1.6</span>])</span>
+<span id="cb7-4"><a href="#cb7-4" aria-hidden="true" tabindex="-1"></a>resultado.x</span></code></pre></div><button title="Copiar para a área de transferência" class="code-copy-button"><i class="bi"></i></button></div>
+<p>A diferença não é a ideia — é a sofisticação da escolha de passo e de direção. <code>scipy.optimize.minimize</code>, por padrão, usa BFGS: além do gradiente, ele mantém uma aproximação da curvatura da função (uma aproximação da matriz Hessiana) para decidir não só a direção, mas um tamanho de passo razoável a cada iteração, com busca em linha para não passar do ponto. <code>gradient_step</code>, com passo fixo, não sabe nada sobre curvatura — funciona porque <code>sum_of_squares</code> é uma tigela bem-comportada.</p>
+<p>A versão simples que você escreveu reaparece, praticamente sem alteração, dentro de todo otimizador que você vai encontrar nos capítulos <a href="../../content/cap11/index.html">11</a>, <a href="../../content/cap12/index.html">12</a>, <a href="../../content/cap13/index.html">13</a>, <a href="../../content/cap15/index.html">15</a> e <a href="../../content/cap16/index.html">16</a> deste livro. <code>gradient_step</code> não é uma versão de brinquedo de um otimizador de verdade — é o núcleo de um.</p>
+</div>
 </div>
 </div>
 

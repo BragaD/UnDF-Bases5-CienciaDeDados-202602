@@ -24,6 +24,41 @@ ul.task-list li input[type="checkbox"] {
   margin: 0 0.8em 0.2em -1em; /* quarto-specific, see https://github.com/quarto-dev/quarto-cli/issues/4556 */ 
   vertical-align: middle;
 }
+/* CSS for syntax highlighting */
+html { -webkit-text-size-adjust: 100%; }
+pre > code.sourceCode { white-space: pre; position: relative; }
+pre > code.sourceCode > span { display: inline-block; line-height: 1.25; }
+pre > code.sourceCode > span:empty { height: 1.2em; }
+.sourceCode { overflow: visible; }
+code.sourceCode > span { color: inherit; text-decoration: inherit; }
+div.sourceCode { margin: 1em 0; }
+pre.sourceCode { margin: 0; }
+@media screen {
+div.sourceCode { overflow: auto; }
+}
+@media print {
+pre > code.sourceCode { white-space: pre-wrap; }
+pre > code.sourceCode > span { text-indent: -5em; padding-left: 5em; }
+}
+pre.numberSource code
+  { counter-reset: source-line 0; }
+pre.numberSource code > span
+  { position: relative; left: -4em; counter-increment: source-line; }
+pre.numberSource code > span > a:first-child::before
+  { content: counter(source-line);
+    position: relative; left: -1em; text-align: right; vertical-align: baseline;
+    border: none; display: inline-block;
+    -webkit-touch-callout: none; -webkit-user-select: none;
+    -khtml-user-select: none; -moz-user-select: none;
+    -ms-user-select: none; user-select: none;
+    padding: 0 4px; width: 4em;
+  }
+pre.numberSource { margin-left: 3em;  padding-left: 4px; }
+div.sourceCode
+  {   }
+@media screen {
+pre > code.sourceCode > span > a:first-child::before { text-decoration: underline; }
+}
 /* CSS for citations */
 div.csl-bib-body { }
 div.csl-entry {
@@ -97,6 +132,35 @@ div.csl-indent {
   }
 }</script>
 
+  <script src="https://cdnjs.cloudflare.com/polyfill/v3/polyfill.min.js?features=es6"></script>
+  <script defer="" src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-chtml-full.js" type="text/javascript"></script>
+
+<script type="text/javascript">
+const typesetMath = (el) => {
+  if (window.MathJax) {
+    // MathJax Typeset
+    window.MathJax.typeset([el]);
+  } else if (window.katex) {
+    // KaTeX Render
+    var mathElements = el.getElementsByClassName("math");
+    var macros = [];
+    for (var i = 0; i < mathElements.length; i++) {
+      var texText = mathElements[i].firstChild;
+      if (mathElements[i].tagName == "SPAN" && texText && texText.data) {
+        window.katex.render(texText.data, mathElements[i], {
+          displayMode: mathElements[i].classList.contains('display'),
+          throwOnError: false,
+          macros: macros,
+          fleqn: false
+        });
+      }
+    }
+  }
+}
+window.Quarto = {
+  typesetMath
+};
+</script>
 
 <link rel="stylesheet" href="../../styles.css">
 </head>
@@ -1025,8 +1089,16 @@ div.csl-indent {
 </nav>
 <div id="quarto-sidebar-glass" class="quarto-sidebar-collapse-item" data-bs-toggle="collapse" data-bs-target=".quarto-sidebar-collapse-item"></div>
 <!-- margin-sidebar -->
-    <div id="quarto-margin-sidebar" class="sidebar margin-sidebar zindex-bottom">
-        
+    <div id="quarto-margin-sidebar" class="sidebar margin-sidebar">
+        <nav id="TOC" role="doc-toc" class="toc-active">
+    <h2 id="toc-title">Nesta página</h2>
+   
+  <ul>
+  <li><a href="#a-suposição-ingênua" id="toc-a-suposição-ingênua" class="nav-link active" data-scroll-target="#a-suposição-ingênua">A suposição ingênua</a></li>
+  <li><a href="#o-problema-do-underflow" id="toc-o-problema-do-underflow" class="nav-link" data-scroll-target="#o-problema-do-underflow">O problema do <em>underflow</em></a></li>
+  <li><a href="#estimando-as-probabilidades-por-palavra" id="toc-estimando-as-probabilidades-por-palavra" class="nav-link" data-scroll-target="#estimando-as-probabilidades-por-palavra">Estimando as probabilidades por palavra</a></li>
+  </ul>
+<div class="toc-actions"><ul><li><a href="https://github.com/BragaD/UnDF-Bases5-CienciaDeDados-202602/issues/new" class="toc-action"><i class="bi bi-github"></i>Criar uma issue</a></li></ul></div></nav>
     </div>
 <!-- main -->
 <main class="content" id="quarto-document-content">
@@ -1070,17 +1142,103 @@ Nota
 <p>Esta seção corresponde a <em>A More Sophisticated Spam Filter</em>, do capítulo 13 de <span class="citation" data-cites="grus2019">Grus (<a href="#ref-grus2019" role="doc-biblioref">2019</a>)</span>.</p>
 </div>
 </div>
-<div class="callout callout-style-default callout-warning callout-titled">
+<p>Uma palavra só é pouco. Imagine agora um vocabulário inteiro, <span class="math inline">\(w_1, \ldots, w_n\)</span>. Para levar isso para a teoria da probabilidade, escrevemos <span class="math inline">\(X_i\)</span> para o evento “a mensagem contém a palavra <span class="math inline">\(w_i\)</span>”. Também imaginamos que já temos, de algum jeito, uma estimativa <span class="math inline">\(P(X_i \mid S)\)</span> — a probabilidade de que uma mensagem de spam contenha a <span class="math inline">\(i\)</span>-ésima palavra — e uma estimativa análoga <span class="math inline">\(P(X_i \mid \lnot S)\)</span> para mensagens legítimas.</p>
+<section id="a-suposição-ingênua" class="level2">
+<h2 class="anchored" data-anchor-id="a-suposição-ingênua">A suposição ingênua</h2>
+<p>A peça central do Naive Bayes é assumir — de forma grosseira — que as presenças (ou ausências) de cada palavra são independentes entre si, condicionadas a saber se a mensagem é spam ou não. Em termos matemáticos:</p>
+<p><span class="math display">\[
+P(X_1 = x_1, \ldots, X_n = x_n \mid S) = P(X_1 = x_1 \mid S) \times \cdots \times P(X_n = x_n \mid S)
+\]</span></p>
+<p>Aqui, cada <span class="math inline">\(x_i\)</span> vale 1 se a palavra <span class="math inline">\(w_i\)</span> aparece na mensagem e 0 caso contrário — e o fator correspondente muda de acordo: quando <span class="math inline">\(x_i = 1\)</span> o fator é <span class="math inline">\(P(X_i \mid S)\)</span>, a probabilidade de ver a palavra; quando <span class="math inline">\(x_i = 0\)</span> o fator é <span class="math inline">\(1 - P(X_i \mid S)\)</span>, a probabilidade de <strong>não</strong> vê-la. A ausência de uma palavra é informação tanto quanto a presença, e o modelo vai usar as duas.</p>
+<p>Intuitivamente, a suposição significa que saber se uma mensagem de spam contém a palavra <em>bitcoin</em> não diz nada sobre se ela também contém <em>rolex</em>. É uma suposição extrema — daí o nome do método — e é fácil ver o quanto ela ignora: se o vocabulário fosse só <em>bitcoin</em> e <em>rolex</em>, e metade das mensagens de spam fosse “ganhe bitcoin” e a outra metade “rolex autêntico”, o modelo estimaria</p>
+<p><span class="math display">\[
+P(X_1 = 1, X_2 = 1 \mid S) = P(X_1 = 1 \mid S)\, P(X_2 = 1 \mid S) = 0{,}5 \times 0{,}5 = 0{,}25
+\]</span></p>
+<p>para a probabilidade de uma mensagem de spam conter as duas palavras — mesmo sabendo, pela própria descrição do exemplo, que <em>bitcoin</em> e <em>rolex</em> nunca ocorrem juntas nesse conjunto de treino. A suposição está descartando, de propósito, exatamente a informação que tornaria a estimativa certa.</p>
+<div class="callout callout-style-default callout-important callout-titled">
 <div class="callout-header d-flex align-content-center">
 <div class="callout-icon-container">
 <i class="callout-icon"></i>
 </div>
 <div class="callout-title-container flex-fill">
-<span class="screen-reader-only">Aviso</span>Em construção
+Importante
 </div>
 </div>
 <div class="callout-body-container callout-body">
-<p>O conteúdo desta seção ainda será escrito.</p>
+<p>Apesar de irrealista, essa suposição é o que torna o modelo <strong>tratável</strong>: em vez de estimar a probabilidade conjunta de todas as combinações possíveis de palavras — algo que exigiria dados demais para qualquer vocabulário razoável —, basta estimar <span class="math inline">\(P(w_i \mid S)\)</span> palavra por palavra e multiplicar. É uma troca deliberada de precisão por viabilidade, e funciona bem o suficiente na prática para ter sido, historicamente, usada de verdade em filtros de spam.</p>
+</div>
+</div>
+<p>O mesmo raciocínio de Bayes usado no filtro de uma palavra dá a probabilidade de uma mensagem ser spam a partir de um vetor de presenças <span class="math inline">\(x = (x_1, \ldots, x_n)\)</span>:</p>
+<p><span class="math display">\[
+P(S \mid X = x) = \frac{P(X = x \mid S)}{P(X = x \mid S) + P(X = x \mid \lnot S)}
+\]</span></p>
+<p>E a suposição de independência é o que permite calcular cada probabilidade do lado direito simplesmente multiplicando as estimativas individuais de cada palavra do vocabulário.</p>
+</section>
+<section id="o-problema-do-underflow" class="level2">
+<h2 class="anchored" data-anchor-id="o-problema-do-underflow">O problema do <em>underflow</em></h2>
+<p>Na prática, é melhor evitar multiplicar muitas probabilidades entre si, por causa de um problema chamado <strong>underflow</strong>. O menor <code>float</code> positivo normal fica em torno de <span class="math inline">\(10^{-308}\)</span> — e isso não é uma questão de precisão, é o alcance do expoente que a representação de ponto flutuante consegue guardar. Multiplicar, por exemplo, 300 fatores de 0,01 pediria algo perto de <span class="math inline">\(10^{-600}\)</span>: não há expoente para isso, então o produto não fica impreciso — ele vira exatamente <code>0.0</code>, e leva a informação junto. Um vocabulário de milhares de palavras multiplica exatamente esse tipo de fator, milhares de vezes.</p>
+<p>Lembrando da álgebra: <span class="math inline">\(\log(ab) = \log a + \log b\)</span> e <span class="math inline">\(\exp(\log x) = x\)</span>. Então, em vez de calcular <span class="math inline">\(p_1 \times \cdots \times p_n\)</span> diretamente, calculamos o equivalente — mas mais amigável ao ponto flutuante:</p>
+<p><span class="math display">\[
+\exp\big(\log(p_1) + \cdots + \log(p_n)\big)
+\]</span></p>
+<p>Uma soma de logaritmos negativos nunca sofre <em>underflow</em> — um número muito negativo continua perfeitamente representável em <code>float</code>, ao contrário de um número muito próximo de zero pela direita, que eventualmente deixa de ser distinguível de zero. O <code>float</code> só corre risco na última etapa, o <code>exp</code> único, no fim de tudo — e só se a soma de logs já for extrema demais para qualquer probabilidade fazer sentido.</p>
+<div class="exemplo">
+<p>O exemplo a seguir é sintético, só para tornar o problema visível — não são números do classificador real. Imagine duas hipóteses concorrentes, cada uma resultando de multiplicar centenas de probabilidades pequenas:</p>
+<div id="cell-underflow-demo" class="cell" data-execution_count="1">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb1"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> math</span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a><span class="co"># 300 palavras "raras" sob a hipótese spam, com 1% de chance cada</span></span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a>probs_spam <span class="op">=</span> [<span class="fl">0.01</span>] <span class="op">*</span> <span class="dv">300</span></span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a><span class="co"># 300 palavras "raras" sob a hipótese ham, ligeiramente menos raras</span></span>
+<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a>probs_ham <span class="op">=</span> [<span class="fl">0.012</span>] <span class="op">*</span> <span class="dv">300</span></span>
+<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-8"><a href="#cb1-8" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> produto_direto(probs):</span>
+<span id="cb1-9"><a href="#cb1-9" aria-hidden="true" tabindex="-1"></a>    p <span class="op">=</span> <span class="fl">1.0</span></span>
+<span id="cb1-10"><a href="#cb1-10" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> x <span class="kw">in</span> probs:</span>
+<span id="cb1-11"><a href="#cb1-11" aria-hidden="true" tabindex="-1"></a>        p <span class="op">*=</span> x</span>
+<span id="cb1-12"><a href="#cb1-12" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> p</span>
+<span id="cb1-13"><a href="#cb1-13" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-14"><a href="#cb1-14" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> soma_de_logs(probs):</span>
+<span id="cb1-15"><a href="#cb1-15" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> <span class="bu">sum</span>(math.log(x) <span class="cf">for</span> x <span class="kw">in</span> probs)</span>
+<span id="cb1-16"><a href="#cb1-16" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-17"><a href="#cb1-17" aria-hidden="true" tabindex="-1"></a>produto_direto(probs_spam), produto_direto(probs_ham)</span></code></pre></div><button title="Copiar para a área de transferência" class="code-copy-button"><i class="bi"></i></button></div>
+<div id="underflow-demo" class="cell-output cell-output-display" data-execution_count="1">
+<pre><code>(0.0, 0.0)</code></pre>
+</div>
+</div>
+<div id="cell-underflow-log" class="cell" data-execution_count="2">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb3"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a>soma_de_logs(probs_spam), soma_de_logs(probs_ham)</span></code></pre></div><button title="Copiar para a área de transferência" class="code-copy-button"><i class="bi"></i></button></div>
+<div id="underflow-log" class="cell-output cell-output-display" data-execution_count="2">
+<pre><code>(-1381.5510557964274, -1326.854588758241)</code></pre>
+</div>
+</div>
+<p>Multiplicando direto, as duas hipóteses colapsam para exatamente <code>0.0</code> — informação perdida, não dá mais para saber qual das duas era mais provável. Trabalhando em espaço de log, a diferença continua visível: a soma da hipótese <code>ham</code> é menos negativa, ou seja, mais provável. O <code>exp()</code> só entra no fim, uma vez, sobre esse resultado já calculado com segurança.</p>
+</div>
+</section>
+<section id="estimando-as-probabilidades-por-palavra" class="level2">
+<h2 class="anchored" data-anchor-id="estimando-as-probabilidades-por-palavra">Estimando as probabilidades por palavra</h2>
+<p>Falta só decidir como estimar <span class="math inline">\(P(X_i \mid S)\)</span> e <span class="math inline">\(P(X_i \mid \lnot S)\)</span> — a probabilidade de uma mensagem de spam (ou legítima) conter a palavra <span class="math inline">\(w_i\)</span>. Com um conjunto de mensagens de treino já rotuladas, a primeira ideia é estimar <span class="math inline">\(P(X_i \mid S)\)</span> simplesmente como a fração das mensagens de spam que contêm <span class="math inline">\(w_i\)</span>.</p>
+<p>Isso causa um problema sério. Imagine que, no conjunto de treino, a palavra <em>data</em> só aparece em mensagens legítimas. Estimaríamos <span class="math inline">\(P(\text{data} \mid S) = 0\)</span> — e o classificador atribuiria probabilidade zero de spam a <em>qualquer</em> mensagem que contivesse “data”, mesmo uma como “data sobre bitcoin grátis e rolex autêntico”. Para evitar isso, usa-se <strong>suavização</strong> (<em>smoothing</em>).</p>
+<p>Em particular, escolhemos um <strong>pseudocontador</strong> <span class="math inline">\(k\)</span> e estimamos a probabilidade de ver a <span class="math inline">\(i\)</span>-ésima palavra numa mensagem de spam como (esta é a <strong>suavização de Laplace</strong>, também chamada de <strong>regra da sucessão</strong> — vale saber o nome para poder procurar o assunto por conta própria):</p>
+<p><span class="math display">\[
+P(X_i \mid S) = \frac{k + \text{número de spams contendo } w_i}{2k + \text{número de spams}}
+\]</span></p>
+<p>E de forma análoga para <span class="math inline">\(P(X_i \mid \lnot S)\)</span>. Ou seja: ao calcular as probabilidades de spam para a <span class="math inline">\(i\)</span>-ésima palavra, fingimos que também vimos <span class="math inline">\(k\)</span> spams adicionais contendo a palavra e <span class="math inline">\(k\)</span> spams adicionais sem ela — e o mesmo do lado das mensagens legítimas.</p>
+<div class="exemplo">
+<p>Se <em>data</em> ocorre em 0 de 98 mensagens de spam, e <span class="math inline">\(k = 1\)</span>, a estimativa vira <span class="math inline">\(P(\text{data} \mid S) = 1/100 = 0{,}01\)</span> — pequena, refletindo que <em>data</em> é rara em spam, mas nunca exatamente zero. É o que permite ao classificador atribuir alguma probabilidade de spam, por menor que seja, a mensagens que contêm a palavra.</p>
+<p>Não existe um valor único e correto de <span class="math inline">\(k\)</span> — é um hiperparâmetro como outro qualquer, normalmente escolhido por validação. Ao longo deste capítulo você vai ver <span class="math inline">\(k=1\)</span> aqui, <span class="math inline">\(k=0{,}5\)</span> como padrão da classe na próxima seção, e ainda outros valores nos callouts de <code>scikit-learn</code> (que chama o mesmo parâmetro de <code>alpha</code>). Nenhum é “o certo”: são escolhas diferentes de quão forte suavizar.</p>
+</div>
+<div class="callout callout-style-default callout-note callout-titled">
+<div class="callout-header d-flex align-content-center">
+<div class="callout-icon-container">
+<i class="callout-icon"></i>
+</div>
+<div class="callout-title-container flex-fill">
+Nota
+</div>
+</div>
+<div class="callout-body-container callout-body">
+<p>Este é o mesmo problema, e a mesma solução, do <a href="../../content/cap08/06-extracao-e-selecao-de-atributos.html">capítulo sobre extração de atributos</a>: um atributo do tipo sim-ou-não (a palavra apareceu ou não) precisa de uma estimativa que nunca trave em 0 ou em 1 diante de pouco dado. Um pseudocontador tem o mesmo espírito de um <em>prior</em> fraco — uma estimativa inicial, antes de olhar qualquer dado, que os dados corrigem aos poucos conforme chegam.</p>
 </div>
 </div>
 
@@ -1090,6 +1248,7 @@ Nota
 Grus, Joel. 2019. <em>Data Science from Scratch: First Principles with Python</em>. 2nd ed. O’Reilly Media.
 </div>
 </div>
+</section>
 
 </main> <!-- /main -->
 <script>
@@ -1620,7 +1779,7 @@ document.addEventListener('DOMContentLoaded', function () {
 </div>   
     <div class="nav-footer-center">
       &nbsp;
-    <div class="toc-actions"><ul><li><a href="https://github.com/BragaD/UnDF-Bases5-CienciaDeDados-202602/issues/new" class="toc-action"><i class="bi bi-github"></i>Criar uma issue</a></li></ul></div></div>
+    <div class="toc-actions d-sm-block d-md-none"><ul><li><a href="https://github.com/BragaD/UnDF-Bases5-CienciaDeDados-202602/issues/new" class="toc-action"><i class="bi bi-github"></i>Criar uma issue</a></li></ul></div></div>
     <div class="nav-footer-right">
       <ul class="footer-items list-unstyled">
     <li class="nav-item compact">

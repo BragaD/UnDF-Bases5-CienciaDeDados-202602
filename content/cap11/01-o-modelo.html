@@ -24,6 +24,41 @@ ul.task-list li input[type="checkbox"] {
   margin: 0 0.8em 0.2em -1em; /* quarto-specific, see https://github.com/quarto-dev/quarto-cli/issues/4556 */ 
   vertical-align: middle;
 }
+/* CSS for syntax highlighting */
+html { -webkit-text-size-adjust: 100%; }
+pre > code.sourceCode { white-space: pre; position: relative; }
+pre > code.sourceCode > span { display: inline-block; line-height: 1.25; }
+pre > code.sourceCode > span:empty { height: 1.2em; }
+.sourceCode { overflow: visible; }
+code.sourceCode > span { color: inherit; text-decoration: inherit; }
+div.sourceCode { margin: 1em 0; }
+pre.sourceCode { margin: 0; }
+@media screen {
+div.sourceCode { overflow: auto; }
+}
+@media print {
+pre > code.sourceCode { white-space: pre-wrap; }
+pre > code.sourceCode > span { text-indent: -5em; padding-left: 5em; }
+}
+pre.numberSource code
+  { counter-reset: source-line 0; }
+pre.numberSource code > span
+  { position: relative; left: -4em; counter-increment: source-line; }
+pre.numberSource code > span > a:first-child::before
+  { content: counter(source-line);
+    position: relative; left: -1em; text-align: right; vertical-align: baseline;
+    border: none; display: inline-block;
+    -webkit-touch-callout: none; -webkit-user-select: none;
+    -khtml-user-select: none; -moz-user-select: none;
+    -ms-user-select: none; user-select: none;
+    padding: 0 4px; width: 4em;
+  }
+pre.numberSource { margin-left: 3em;  padding-left: 4px; }
+div.sourceCode
+  {   }
+@media screen {
+pre > code.sourceCode > span > a:first-child::before { text-decoration: underline; }
+}
 /* CSS for citations */
 div.csl-bib-body { }
 div.csl-entry {
@@ -97,6 +132,35 @@ div.csl-indent {
   }
 }</script>
 
+  <script src="https://cdnjs.cloudflare.com/polyfill/v3/polyfill.min.js?features=es6"></script>
+  <script defer="" src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-chtml-full.js" type="text/javascript"></script>
+
+<script type="text/javascript">
+const typesetMath = (el) => {
+  if (window.MathJax) {
+    // MathJax Typeset
+    window.MathJax.typeset([el]);
+  } else if (window.katex) {
+    // KaTeX Render
+    var mathElements = el.getElementsByClassName("math");
+    var macros = [];
+    for (var i = 0; i < mathElements.length; i++) {
+      var texText = mathElements[i].firstChild;
+      if (mathElements[i].tagName == "SPAN" && texText && texText.data) {
+        window.katex.render(texText.data, mathElements[i], {
+          displayMode: mathElements[i].classList.contains('display'),
+          throwOnError: false,
+          macros: macros,
+          fleqn: false
+        });
+      }
+    }
+  }
+}
+window.Quarto = {
+  typesetMath
+};
+</script>
 
 <link rel="stylesheet" href="../../styles.css">
 </head>
@@ -1025,8 +1089,18 @@ div.csl-indent {
 </nav>
 <div id="quarto-sidebar-glass" class="quarto-sidebar-collapse-item" data-bs-toggle="collapse" data-bs-target=".quarto-sidebar-collapse-item"></div>
 <!-- margin-sidebar -->
-    <div id="quarto-margin-sidebar" class="sidebar margin-sidebar zindex-bottom">
-        
+    <div id="quarto-margin-sidebar" class="sidebar margin-sidebar">
+        <nav id="TOC" role="doc-toc" class="toc-active">
+    <h2 id="toc-title">Nesta página</h2>
+   
+  <ul>
+  <li><a href="#o-modelo" id="toc-o-modelo" class="nav-link active" data-scroll-target="#o-modelo">O modelo</a></li>
+  <li><a href="#prevendo-e-medindo-o-erro" id="toc-prevendo-e-medindo-o-erro" class="nav-link" data-scroll-target="#prevendo-e-medindo-o-erro">Prevendo e medindo o erro</a></li>
+  <li><a href="#a-fórmula-fechada" id="toc-a-fórmula-fechada" class="nav-link" data-scroll-target="#a-fórmula-fechada">A fórmula fechada</a></li>
+  <li><a href="#olhando-o-ajuste" id="toc-olhando-o-ajuste" class="nav-link" data-scroll-target="#olhando-o-ajuste">Olhando o ajuste</a></li>
+  <li><a href="#quão-bom-é-o-ajuste" id="toc-quão-bom-é-o-ajuste" class="nav-link" data-scroll-target="#quão-bom-é-o-ajuste">Quão bom é o ajuste?</a></li>
+  </ul>
+<div class="toc-actions"><ul><li><a href="https://github.com/BragaD/UnDF-Bases5-CienciaDeDados-202602/issues/new" class="toc-action"><i class="bi bi-github"></i>Criar uma issue</a></li></ul></div></nav>
     </div>
 <!-- main -->
 <main class="content" id="quarto-document-content">
@@ -1070,17 +1144,273 @@ Nota
 <p>Esta seção corresponde a <em>The Model</em>, do capítulo 14 de <span class="citation" data-cites="grus2019">Grus (<a href="#ref-grus2019" role="doc-biblioref">2019</a>)</span>.</p>
 </div>
 </div>
+<p>Voltamos à rede social fictícia DataSciencester, que aparece em vários capítulos deste livro. A pergunta de negócio é simples de enunciar: existe relação entre quantos amigos um usuário tem e quanto tempo por dia ele passa no site? E se existe, dá para descrevê-la com números — não só “existe uma tendência”, mas “cada amigo a mais vale, em média, tantos minutos a mais”?</p>
+<p>O primeiro passo, que você provavelmente já viu antes de chegar a este livro, é medir a <strong>correlação</strong>: um único número entre -1 e 1 que resume o quanto duas variáveis variam juntas. <code>scratch/statistics.py</code> — o pacote vendorizado do livro-texto — já traz essa função pronta, junto com os dados da própria DataSciencester:</p>
+<p>São duas listas paralelas, uma entrada por usuário: <code>num_friends_good</code> guarda quantos amigos cada um tem, <code>daily_minutes_good</code> guarda quantos minutos por dia ele passa no site. O sufixo <code>_good</code> marca a versão <strong>limpa</strong> dos dados — o livro-texto descartou um usuário antes de calcular qualquer coisa, e daqui a pouco vamos ver qual e por quê.</p>
+<div id="cell-descreve-dados" class="cell" data-execution_count="2">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb1"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="bu">len</span>(num_friends_good), mean(num_friends_good), mean(daily_minutes_good)</span></code></pre></div><button title="Copiar para a área de transferência" class="code-copy-button"><i class="bi"></i></button></div>
+<div id="descreve-dados" class="cell-output cell-output-display" data-execution_count="2">
+<pre><code>(203, 6.876847290640394, 29.163300492610837)</code></pre>
+</div>
+</div>
+<div id="cell-correlacao-dados" class="cell" data-execution_count="3">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb3"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a>correlation(num_friends_good, daily_minutes_good)</span></code></pre></div><button title="Copiar para a área de transferência" class="code-copy-button"><i class="bi"></i></button></div>
+<div id="correlacao-dados" class="cell-output cell-output-display" data-execution_count="3">
+<pre><code>0.5736792115665601</code></pre>
+</div>
+</div>
+<p>São 203 usuários. Em média, cada um tem quase 7 amigos e passa cerca de 29 minutos por dia no site. E a correlação — pouco mais de 0,57 — diz que existe uma tendência real: mais amigos, mais tempo. Mas repare no que esse número <strong>não</strong> diz. Ele não diz se um amigo a mais vale, em média, 10 segundos ou 10 minutos a mais de uso. Ele não dá uma equação. Para isso, precisamos de outra coisa: um modelo.</p>
 <div class="callout callout-style-default callout-warning callout-titled">
 <div class="callout-header d-flex align-content-center">
 <div class="callout-icon-container">
 <i class="callout-icon"></i>
 </div>
 <div class="callout-title-container flex-fill">
-<span class="screen-reader-only">Aviso</span>Em construção
+<span class="screen-reader-only">Aviso</span>Um ponto em 204 derruba a correlação a 43%
 </div>
 </div>
 <div class="callout-body-container callout-body">
-<p>O conteúdo desta seção ainda será escrito.</p>
+<p>As listas cruas — <code>num_friends</code> e <code>daily_minutes</code>, sem o sufixo — têm 204 usuários. O livro-texto descartou um deles: alguém que declarava <strong>100 amigos</strong> e passava <strong>1 minuto por dia</strong> no site. Cem amigos é mais que o dobro do segundo colocado (49), e um minuto por dia é o piso da amostra; a combinação das duas coisas é quase certamente uma conta de teste ou um erro de captura, não um usuário. Veja o que esse único ponto faz com a correlação:</p>
+<div id="cell-correlacao-com-outlier" class="cell" data-execution_count="4">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb5"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a><span class="bu">len</span>(num_friends), correlation(num_friends, daily_minutes)</span></code></pre></div><button title="Copiar para a área de transferência" class="code-copy-button"><i class="bi"></i></button></div>
+<div id="correlacao-com-outlier" class="cell-output cell-output-display" data-execution_count="4">
+<pre><code>(204, 0.24736957366478227)</code></pre>
+</div>
+</div>
+<p>Com ele dentro, 0,2474. Sem ele, 0,5737. <strong>Um ponto em 204 derruba a correlação para 43% do valor</strong> — porque ele fica no extremo direito do eixo <code>x</code>, onde cada ponto tem alavanca desproporcional, e aponta para baixo enquanto todo o resto aponta para cima.</p>
+<p>Isso é um aviso permanente, não uma curiosidade deste conjunto: a correlação — e, como o resto desta seção vai mostrar, a regressão que se calcula a partir dela — não tem defesa nenhuma contra um outlier. Nenhuma mensagem de erro avisa; o número simplesmente sai outro. E nenhum resumo numérico denuncia o problema: os 0,2474 são um número perfeitamente plausível de se publicar. Quem viu o ponto foi quem olhou a nuvem de pontos — que é para o que serve o gráfico de dispersão logo adiante nesta seção.</p>
+</div>
+</div>
+<div class="callout callout-style-default callout-note callout-titled">
+<div class="callout-header d-flex align-content-center collapsed" data-bs-toggle="collapse" data-bs-target=".callout-3-contents" aria-controls="callout-3" aria-expanded="false" aria-label="Toggle callout">
+<div class="callout-icon-container">
+<i class="callout-icon"></i>
+</div>
+<div class="callout-title-container flex-fill">
+<span class="screen-reader-only">Nota</span>Por que o chunk do <code>import</code> está escondido
+</div>
+<div class="callout-btn-toggle d-inline-block border-0 py-1 ps-1 pe-0 float-end"><i class="callout-toggle"></i></div>
+</div>
+<div id="callout-3" class="callout-3-contents callout-collapse collapse">
+<div class="callout-body-container callout-body">
+<p><code>scratch/statistics.py</code> tem cinco chamadas <code>plt.*</code> soltas no nível do módulo — o <code>import</code> acima dispara todas elas. O chunk é <code>#| include: false</code> para que essas figuras não pedidas não apareçam na página, e <code>plt.close('all')</code> limpa o que sobrou antes que vaze para a próxima célula.</p>
+<p>O módulo também roda uma bateria de <code>assert</code> no próprio nível do módulo (<code>assert 7.3333 &lt; mean(num_friends) &lt; 7.3334</code>, e outros), mas são todos sobre dado fixo, sem aleatoriedade — sempre passam, e importar o módulo é, na prática, rodar a suíte de testes dele.</p>
+</div>
+</div>
+</div>
+<section id="o-modelo" class="level2">
+<h2 class="anchored" data-anchor-id="o-modelo">O modelo</h2>
+<div class="callout callout-style-default callout-important callout-titled">
+<div class="callout-header d-flex align-content-center">
+<div class="callout-icon-container">
+<i class="callout-icon"></i>
+</div>
+<div class="callout-title-container flex-fill">
+Importante
+</div>
+</div>
+<div class="callout-body-container callout-body">
+<p>Vamos supor que você já se convenceu de que ter mais amigos <strong>causa</strong> mais tempo no site — e não o contrário (quem já passa mais tempo no site tende a fazer mais amigos ali), nem um terceiro fator que produz os dois efeitos ao mesmo tempo (por exemplo, ter mais tempo livre em geral). Correlação sozinha nunca prova isso; é uma suposição que se traz de fora dos dados, não uma conclusão que se tira deles. O capítulo segue com essa suposição porque o objetivo aqui é regressão, não inferência causal — mas vale lembrar que ela está sendo feita.</p>
+</div>
+</div>
+<p>Com essa suposição em mãos, supomos que existam constantes <span class="math inline">\(\alpha\)</span> (alfa) e <span class="math inline">\(\beta\)</span> (beta) tais que:</p>
+<p><span class="math display">\[
+y_i = \beta x_i + \alpha + \varepsilon_i
+\]</span></p>
+<p>em que <span class="math inline">\(y_i\)</span> é o número de minutos que o usuário <span class="math inline">\(i\)</span> passa no site por dia, <span class="math inline">\(x_i\)</span> é o número de amigos que o usuário <span class="math inline">\(i\)</span> tem, e <span class="math inline">\(\varepsilon_i\)</span> é um termo de erro — esperamos que pequeno — que representa outros fatores não capturados por este modelo simples: o que o usuário faz da vida, se está de férias, quantos outros aplicativos disputam a atenção dele, e assim por diante.</p>
+<p><span class="math inline">\(\beta\)</span> é a <strong>inclinação</strong>: quantos minutos a mais por dia um amigo adicional está associado a produzir. <span class="math inline">\(\alpha\)</span> é o <strong>intercepto</strong>: quantos minutos por dia o modelo prevê para um usuário com zero amigos.</p>
+</section>
+<section id="prevendo-e-medindo-o-erro" class="level2">
+<h2 class="anchored" data-anchor-id="prevendo-e-medindo-o-erro">Prevendo e medindo o erro</h2>
+<p>Supondo que já sabemos escolher <span class="math inline">\(\alpha\)</span> e <span class="math inline">\(\beta\)</span>, fazer previsões é imediato:</p>
+<div id="predict-error" class="cell" data-execution_count="5">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb7"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb7-1"><a href="#cb7-1" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> predict(alpha: <span class="bu">float</span>, beta: <span class="bu">float</span>, x_i: <span class="bu">float</span>) <span class="op">-&gt;</span> <span class="bu">float</span>:</span>
+<span id="cb7-2"><a href="#cb7-2" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> beta <span class="op">*</span> x_i <span class="op">+</span> alpha</span>
+<span id="cb7-3"><a href="#cb7-3" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb7-4"><a href="#cb7-4" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> error(alpha: <span class="bu">float</span>, beta: <span class="bu">float</span>, x_i: <span class="bu">float</span>, y_i: <span class="bu">float</span>) <span class="op">-&gt;</span> <span class="bu">float</span>:</span>
+<span id="cb7-5"><a href="#cb7-5" aria-hidden="true" tabindex="-1"></a>    <span class="co">"""</span></span>
+<span id="cb7-6"><a href="#cb7-6" aria-hidden="true" tabindex="-1"></a><span class="co">    O erro ao prever beta * x_i + alpha</span></span>
+<span id="cb7-7"><a href="#cb7-7" aria-hidden="true" tabindex="-1"></a><span class="co">    quando o valor real é y_i</span></span>
+<span id="cb7-8"><a href="#cb7-8" aria-hidden="true" tabindex="-1"></a><span class="co">    """</span></span>
+<span id="cb7-9"><a href="#cb7-9" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> predict(alpha, beta, x_i) <span class="op">-</span> y_i</span></code></pre></div><button title="Copiar para a área de transferência" class="code-copy-button"><i class="bi"></i></button></div>
+</div>
+<p>Como escolher <span class="math inline">\(\alpha\)</span> e <span class="math inline">\(\beta\)</span>? Qualquer escolha das duas nos dá uma previsão para cada <code>x_i</code>. Como conhecemos o valor real <code>y_i</code>, podemos calcular o erro de cada par. O que gostaríamos de saber é o erro <strong>total</strong> sobre o conjunto de dados inteiro — mas somar os erros direto não serve: se a previsão para <code>x_1</code> está alta demais e a previsão para <code>x_2</code> está baixa demais na mesma proporção, os erros se cancelam e escondem um modelo ruim. A saída é somar os erros <strong>ao quadrado</strong>:</p>
+<div id="sum-of-sqerrors" class="cell" data-execution_count="6">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb8"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb8-1"><a href="#cb8-1" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> scratch.linear_algebra <span class="im">import</span> Vector</span>
+<span id="cb8-2"><a href="#cb8-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb8-3"><a href="#cb8-3" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> sum_of_sqerrors(alpha: <span class="bu">float</span>, beta: <span class="bu">float</span>, x: Vector, y: Vector) <span class="op">-&gt;</span> <span class="bu">float</span>:</span>
+<span id="cb8-4"><a href="#cb8-4" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> <span class="bu">sum</span>(error(alpha, beta, x_i, y_i) <span class="op">**</span> <span class="dv">2</span></span>
+<span id="cb8-5"><a href="#cb8-5" aria-hidden="true" tabindex="-1"></a>               <span class="cf">for</span> x_i, y_i <span class="kw">in</span> <span class="bu">zip</span>(x, y))</span></code></pre></div><button title="Copiar para a área de transferência" class="code-copy-button"><i class="bi"></i></button></div>
+</div>
+<p>A solução de <strong>mínimos quadrados</strong> é escolher o <span class="math inline">\(\alpha\)</span> e o <span class="math inline">\(\beta\)</span> que deixam <code>sum_of_sqerrors</code> a menor possível.</p>
+</section>
+<section id="a-fórmula-fechada" class="level2">
+<h2 class="anchored" data-anchor-id="a-fórmula-fechada">A fórmula fechada</h2>
+<p>Aqui está a dívida deste capítulo com o <a href="../../content/cap05/index.html">Capítulo 5</a>. Ao apresentar gradiente descendente, aquele capítulo mostrou como ajustar <code>theta = [inclinação, intercepto]</code> iterando — um passo pequeno de cada vez, na direção oposta ao gradiente do erro quadrático médio — e prometeu que a regressão linear simples tinha um jeito mais direto: uma <strong>fórmula fechada</strong>.</p>
+<p>Usando cálculo (ou álgebra tediosa, nas palavras do próprio Grus), o <span class="math inline">\(\alpha\)</span> e o <span class="math inline">\(\beta\)</span> que minimizam o erro são dados por:</p>
+<div id="least-squares-fit" class="cell" data-execution_count="7">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb9"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb9-1"><a href="#cb9-1" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> typing <span class="im">import</span> Tuple</span>
+<span id="cb9-2"><a href="#cb9-2" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> scratch.linear_algebra <span class="im">import</span> Vector</span>
+<span id="cb9-3"><a href="#cb9-3" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> scratch.statistics <span class="im">import</span> correlation, standard_deviation, mean</span>
+<span id="cb9-4"><a href="#cb9-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb9-5"><a href="#cb9-5" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> least_squares_fit(x: Vector, y: Vector) <span class="op">-&gt;</span> Tuple[<span class="bu">float</span>, <span class="bu">float</span>]:</span>
+<span id="cb9-6"><a href="#cb9-6" aria-hidden="true" tabindex="-1"></a>    <span class="co">"""</span></span>
+<span id="cb9-7"><a href="#cb9-7" aria-hidden="true" tabindex="-1"></a><span class="co">    Dados dois vetores x e y,</span></span>
+<span id="cb9-8"><a href="#cb9-8" aria-hidden="true" tabindex="-1"></a><span class="co">    encontra os valores de alpha e beta de mínimos quadrados</span></span>
+<span id="cb9-9"><a href="#cb9-9" aria-hidden="true" tabindex="-1"></a><span class="co">    """</span></span>
+<span id="cb9-10"><a href="#cb9-10" aria-hidden="true" tabindex="-1"></a>    beta <span class="op">=</span> correlation(x, y) <span class="op">*</span> standard_deviation(y) <span class="op">/</span> standard_deviation(x)</span>
+<span id="cb9-11"><a href="#cb9-11" aria-hidden="true" tabindex="-1"></a>    alpha <span class="op">=</span> mean(y) <span class="op">-</span> beta <span class="op">*</span> mean(x)</span>
+<span id="cb9-12"><a href="#cb9-12" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> alpha, beta</span></code></pre></div><button title="Copiar para a área de transferência" class="code-copy-button"><i class="bi"></i></button></div>
+</div>
+<div class="conceito">
+<p>Nada de laço, nada de <code>theta</code> inicial aleatório, nada de taxa de aprendizado. <code>least_squares_fit</code> calcula duas médias, uma correlação (que por baixo é uma covariância dividida por dois desvios padrão) e dois desvios padrão — e devolve a resposta exata. É exatamente o que a <a href="../../content/cap05/05-ajustando-modelos.html">seção 5.5</a> prometeu: <strong>duas médias, uma covariância, uma variância, sem laço nenhum</strong>.</p>
+<p>Essa fórmula existe porque o problema é simples o bastante para ter solução fechada: derive <code>sum_of_sqerrors</code> em relação a <span class="math inline">\(\alpha\)</span> e a <span class="math inline">\(\beta\)</span>, iguale as duas derivadas a zero, resolva o sistema — e o que sobra são só médias, variância e covariância. A <a href="../../content/cap11/02-usando-gradiente-descendente.html">seção 11.2</a> resolve exatamente o mesmo problema pelo caminho do Capítulo 5, iterando em vez de calculando direto, e as duas respostas vão bater.</p>
+</div>
+<p>Sem passar pela conta exata, vale pensar no porquê disso fazer sentido. A escolha de <span class="math inline">\(\alpha\)</span> diz que, ao ver o valor <strong>médio</strong> da variável explicativa <code>x</code>, prevemos o valor <strong>médio</strong> do alvo <code>y</code> — é por isso que <code>alpha = mean(y) - beta * mean(x)</code>. A escolha de <span class="math inline">\(\beta\)</span> diz que, a cada aumento de um desvio padrão em <code>x</code>, a previsão aumenta <code>correlation(x, y)</code> desvios padrão de <code>y</code> — de modo que correlação 1 devolve o aumento inteiro, correlação -1 devolve uma queda de mesmo tamanho, e correlação 0 zera <code>beta</code>, deixando a previsão insensível a <code>x</code>.</p>
+<p>Como sempre, escrevemos um teste rápido:</p>
+<div id="teste-least-squares" class="cell" data-execution_count="8">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb10"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb10-1"><a href="#cb10-1" aria-hidden="true" tabindex="-1"></a>x <span class="op">=</span> [i <span class="cf">for</span> i <span class="kw">in</span> <span class="bu">range</span>(<span class="op">-</span><span class="dv">100</span>, <span class="dv">110</span>, <span class="dv">10</span>)]</span>
+<span id="cb10-2"><a href="#cb10-2" aria-hidden="true" tabindex="-1"></a>y <span class="op">=</span> [<span class="dv">3</span> <span class="op">*</span> i <span class="op">-</span> <span class="dv">5</span> <span class="cf">for</span> i <span class="kw">in</span> x]</span>
+<span id="cb10-3"><a href="#cb10-3" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb10-4"><a href="#cb10-4" aria-hidden="true" tabindex="-1"></a><span class="co"># Deveria encontrar que y = 3x - 5</span></span>
+<span id="cb10-5"><a href="#cb10-5" aria-hidden="true" tabindex="-1"></a><span class="cf">assert</span> least_squares_fit(x, y) <span class="op">==</span> (<span class="op">-</span><span class="dv">5</span>, <span class="dv">3</span>)</span></code></pre></div><button title="Copiar para a área de transferência" class="code-copy-button"><i class="bi"></i></button></div>
+</div>
+<p>Agora é fácil aplicar isso aos dados sem outlier que já carregamos:</p>
+<div id="cell-ajusta-dados-reais" class="cell" data-execution_count="9">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb11"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb11-1"><a href="#cb11-1" aria-hidden="true" tabindex="-1"></a>alpha, beta <span class="op">=</span> least_squares_fit(num_friends_good, daily_minutes_good)</span>
+<span id="cb11-2"><a href="#cb11-2" aria-hidden="true" tabindex="-1"></a><span class="cf">assert</span> <span class="fl">22.9</span> <span class="op">&lt;</span> alpha <span class="op">&lt;</span> <span class="fl">23.0</span></span>
+<span id="cb11-3"><a href="#cb11-3" aria-hidden="true" tabindex="-1"></a><span class="cf">assert</span> <span class="fl">0.9</span> <span class="op">&lt;</span> beta <span class="op">&lt;</span> <span class="fl">0.905</span></span>
+<span id="cb11-4"><a href="#cb11-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb11-5"><a href="#cb11-5" aria-hidden="true" tabindex="-1"></a>alpha, beta</span></code></pre></div><button title="Copiar para a área de transferência" class="code-copy-button"><i class="bi"></i></button></div>
+<div id="ajusta-dados-reais" class="cell-output cell-output-display" data-execution_count="9">
+<pre><code>(22.947552413468976, 0.9038659456058725)</code></pre>
+</div>
+</div>
+<p>Isso dá <span class="math inline">\(\alpha \approx 22{,}95\)</span> e <span class="math inline">\(\beta \approx 0{,}904\)</span>. O modelo diz que esperamos que um usuário com <span class="math inline">\(n\)</span> amigos passe <span class="math inline">\(22{,}95 + n \times 0{,}904\)</span> minutos por dia no site. Ou seja: prevemos que um usuário sem nenhum amigo no DataSciencester ainda passaria uns 23 minutos por dia no site — e que cada amigo adicional está associado a quase mais um minuto de uso diário.</p>
+</section>
+<section id="olhando-o-ajuste" class="level2">
+<h2 class="anchored" data-anchor-id="olhando-o-ajuste">Olhando o ajuste</h2>
+<p>Como o <a href="../../content/cap03/04-graficos-de-dispersao.html">Capítulo 3</a> mostrou, um gráfico de dispersão é a ferramenta certa para duas variáveis pareadas. Aquele capítulo já desenhou “amigos × minutos”, mas com nove pontos inventados para ilustrar o tipo de gráfico, numa escala completamente outra (60 a 72 amigos, 105 a 220 minutos); aqui são os 203 usuários reais da DataSciencester. Vamos usar o mesmo <code>plt.scatter</code>, agora com esses pontos, e desenhar a reta ajustada por cima:</p>
+<div id="cell-fig-regressao-amigos-minutos" class="cell" data-execution_count="10">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb13"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb13-1"><a href="#cb13-1" aria-hidden="true" tabindex="-1"></a>plt.scatter(num_friends_good, daily_minutes_good)</span>
+<span id="cb13-2"><a href="#cb13-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb13-3"><a href="#cb13-3" aria-hidden="true" tabindex="-1"></a>x_reta <span class="op">=</span> [<span class="bu">min</span>(num_friends_good), <span class="bu">max</span>(num_friends_good)]</span>
+<span id="cb13-4"><a href="#cb13-4" aria-hidden="true" tabindex="-1"></a>y_reta <span class="op">=</span> [predict(alpha, beta, x_i) <span class="cf">for</span> x_i <span class="kw">in</span> x_reta]</span>
+<span id="cb13-5"><a href="#cb13-5" aria-hidden="true" tabindex="-1"></a>plt.plot(x_reta, y_reta, color<span class="op">=</span><span class="st">'black'</span>)</span>
+<span id="cb13-6"><a href="#cb13-6" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb13-7"><a href="#cb13-7" aria-hidden="true" tabindex="-1"></a>plt.title(<span class="st">"Regressão linear simples"</span>)</span>
+<span id="cb13-8"><a href="#cb13-8" aria-hidden="true" tabindex="-1"></a>plt.xlabel(<span class="st">"# de amigos"</span>)</span>
+<span id="cb13-9"><a href="#cb13-9" aria-hidden="true" tabindex="-1"></a>plt.ylabel(<span class="st">"minutos por dia"</span>)</span>
+<span id="cb13-10"><a href="#cb13-10" aria-hidden="true" tabindex="-1"></a>plt.show()</span></code></pre></div><button title="Copiar para a área de transferência" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="cell-output cell-output-display">
+<div id="fig-regressao-amigos-minutos" class="quarto-float quarto-figure quarto-figure-center anchored">
+<figure class="quarto-float quarto-float-fig figure">
+<div aria-describedby="fig-regressao-amigos-minutos-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<img src="01-o-modelo_files/figure-html/fig-regressao-amigos-minutos-output-1.png" width="585" height="451" class="figure-img">
+</div>
+<figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-fig" id="fig-regressao-amigos-minutos-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Figura&nbsp;60.1: Modelo de regressão linear simples sobre os dados da DataSciencester
+</figcaption>
+</figure>
+</div>
+</div>
+</div>
+<p>A reta passa razoavelmente perto da nuvem de pontos, mas está longe de tocar a maioria deles — a dispersão vertical em torno da reta é grande, principalmente para valores baixos de <code>x</code>, onde a maior parte dos dados está concentrada.</p>
+</section>
+<section id="quão-bom-é-o-ajuste" class="level2">
+<h2 class="anchored" data-anchor-id="quão-bom-é-o-ajuste">Quão bom é o ajuste?</h2>
+<p>Olhar o gráfico dá uma impressão, mas “razoavelmente perto” não é uma métrica. A métrica usual para regressão é o <strong>coeficiente de determinação</strong> (ou R²), que mede a fração da variação total em <code>y</code> que o modelo captura:</p>
+<div id="cell-r-squared" class="cell" data-execution_count="11">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb14"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb14-1"><a href="#cb14-1" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> scratch.statistics <span class="im">import</span> de_mean</span>
+<span id="cb14-2"><a href="#cb14-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb14-3"><a href="#cb14-3" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> total_sum_of_squares(y: Vector) <span class="op">-&gt;</span> <span class="bu">float</span>:</span>
+<span id="cb14-4"><a href="#cb14-4" aria-hidden="true" tabindex="-1"></a>    <span class="co">"""a variação quadrática total dos y_i em torno da média deles"""</span></span>
+<span id="cb14-5"><a href="#cb14-5" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> <span class="bu">sum</span>(v <span class="op">**</span> <span class="dv">2</span> <span class="cf">for</span> v <span class="kw">in</span> de_mean(y))</span>
+<span id="cb14-6"><a href="#cb14-6" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb14-7"><a href="#cb14-7" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> r_squared(alpha: <span class="bu">float</span>, beta: <span class="bu">float</span>, x: Vector, y: Vector) <span class="op">-&gt;</span> <span class="bu">float</span>:</span>
+<span id="cb14-8"><a href="#cb14-8" aria-hidden="true" tabindex="-1"></a>    <span class="co">"""</span></span>
+<span id="cb14-9"><a href="#cb14-9" aria-hidden="true" tabindex="-1"></a><span class="co">    a fração da variação em y capturada pelo modelo, que é igual a</span></span>
+<span id="cb14-10"><a href="#cb14-10" aria-hidden="true" tabindex="-1"></a><span class="co">    1 menos a fração da variação em y NÃO capturada pelo modelo</span></span>
+<span id="cb14-11"><a href="#cb14-11" aria-hidden="true" tabindex="-1"></a><span class="co">    """</span></span>
+<span id="cb14-12"><a href="#cb14-12" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> <span class="fl">1.0</span> <span class="op">-</span> (sum_of_sqerrors(alpha, beta, x, y) <span class="op">/</span></span>
+<span id="cb14-13"><a href="#cb14-13" aria-hidden="true" tabindex="-1"></a>                  total_sum_of_squares(y))</span>
+<span id="cb14-14"><a href="#cb14-14" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb14-15"><a href="#cb14-15" aria-hidden="true" tabindex="-1"></a>rsq <span class="op">=</span> r_squared(alpha, beta, num_friends_good, daily_minutes_good)</span>
+<span id="cb14-16"><a href="#cb14-16" aria-hidden="true" tabindex="-1"></a><span class="cf">assert</span> <span class="fl">0.328</span> <span class="op">&lt;</span> rsq <span class="op">&lt;</span> <span class="fl">0.330</span></span>
+<span id="cb14-17"><a href="#cb14-17" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb14-18"><a href="#cb14-18" aria-hidden="true" tabindex="-1"></a>rsq</span></code></pre></div><button title="Copiar para a área de transferência" class="code-copy-button"><i class="bi"></i></button></div>
+<div id="r-squared" class="cell-output cell-output-display" data-execution_count="11">
+<pre><code>0.32910783778362984</code></pre>
+</div>
+</div>
+<p>O R² dá cerca de 0,329. Para entender de onde vêm os limites dessa métrica, vale comparar com o modelo de referência mais simples possível: sempre prever a média de <code>y</code>, ignorando <code>x</code> completamente — o que corresponde a <code>alpha = mean(y)</code> e <code>beta = 0</code>. A soma dos erros ao quadrado desse modelo “vazio” é, por construção, exatamente igual a <code>total_sum_of_squares(y)</code>: sem informação nenhuma sobre <code>x</code>, o melhor palpite constante para cada ponto é a própria média. Isso dá R² = 0.</p>
+<p>O modelo de mínimos quadrados precisa ser <strong>pelo menos</strong> tão bom quanto esse, porque ele é, por definição, a escolha de <span class="math inline">\(\alpha\)</span> e <span class="math inline">\(\beta\)</span> que minimiza a soma dos erros ao quadrado — e “sempre prever a média” é só mais uma escolha possível de <span class="math inline">\(\alpha\)</span> e <span class="math inline">\(\beta\)</span> entre todas as que ele considerou. Logo a soma dos erros ao quadrado do modelo ajustado é <strong>no máximo</strong> a soma dos erros ao quadrado do modelo vazio, o que trava o R² entre 0 e 1: quanto mais alto, melhor o ajuste.</p>
+<div class="callout callout-style-default callout-warning callout-titled">
+<div class="callout-header d-flex align-content-center">
+<div class="callout-icon-container">
+<i class="callout-icon"></i>
+</div>
+<div class="callout-title-container flex-fill">
+<span class="screen-reader-only">Aviso</span>0,329 não é “bom” nem “ruim” — é o que os dados sustentam
+</div>
+</div>
+<div class="callout-body-container callout-body">
+<p>Um R² de 0,329 diz que o número de amigos explica cerca de um terço da variação em quantos minutos alguém passa no site. Isso é um ajuste <strong>razoável, mas nada além disso</strong> — o modelo captura uma tendência real (a correlação de 0,57 já indicava isso), mas dois terços da variação vêm de outras coisas: hábitos individuais, o que cada pessoa faz na vida, fatores que este modelo de uma única variável não tem como enxergar. Um R² baixo não é sinal de erro de código; pode ser, e frequentemente é, sinal de que a variável escolhida não conta a história inteira.</p>
+</div>
+</div>
+<p>O <a href="../../content/cap08/index.html">Capítulo 8</a> deu o vocabulário para julgar modelos de classificação — acurácia, precisão, revocação. R² é a métrica equivalente para regressão: mede qualidade de ajuste, não corretude de categoria. A <a href="../../content/cap11/03-maxima-verossimilhanca.html">seção 11.3</a>, a seguir, dá a justificativa de fundo para minimizar exatamente essa soma de quadrados, em vez de qualquer outra medida de erro que também punisse desvios grandes.</p>
+<div class="callout callout-style-default callout-tip callout-titled">
+<div class="callout-header d-flex align-content-center collapsed" data-bs-toggle="collapse" data-bs-target=".callout-6-contents" aria-controls="callout-6" aria-expanded="false" aria-label="Toggle callout">
+<div class="callout-icon-container">
+<i class="callout-icon"></i>
+</div>
+<div class="callout-title-container flex-fill">
+<span class="screen-reader-only">Dica</span>Na prática: <code>scikit-learn</code>
+</div>
+<div class="callout-btn-toggle d-inline-block border-0 py-1 ps-1 pe-0 float-end"><i class="callout-toggle"></i></div>
+</div>
+<div id="callout-6" class="callout-6-contents callout-collapse collapse">
+<div class="callout-body-container callout-body">
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb16"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb16-1"><a href="#cb16-1" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> sklearn.linear_model <span class="im">import</span> LinearRegression</span>
+<span id="cb16-2"><a href="#cb16-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb16-3"><a href="#cb16-3" aria-hidden="true" tabindex="-1"></a>X <span class="op">=</span> [[x] <span class="cf">for</span> x <span class="kw">in</span> num_friends_good]</span>
+<span id="cb16-4"><a href="#cb16-4" aria-hidden="true" tabindex="-1"></a>y <span class="op">=</span> daily_minutes_good</span>
+<span id="cb16-5"><a href="#cb16-5" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb16-6"><a href="#cb16-6" aria-hidden="true" tabindex="-1"></a>modelo <span class="op">=</span> LinearRegression().fit(X, y)</span>
+<span id="cb16-7"><a href="#cb16-7" aria-hidden="true" tabindex="-1"></a>modelo.intercept_, modelo.coef_[<span class="dv">0</span>]   <span class="co"># alpha, beta</span></span>
+<span id="cb16-8"><a href="#cb16-8" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb16-9"><a href="#cb16-9" aria-hidden="true" tabindex="-1"></a>modelo.score(X, y)                    <span class="co"># R²</span></span></code></pre></div><button title="Copiar para a área de transferência" class="code-copy-button"><i class="bi"></i></button></div>
+<p>Vale rodar e comparar com o que as três funções desta seção devolveram, valor a valor:</p>
+<table class="caption-top table">
+<thead>
+<tr class="header">
+<th></th>
+<th>à mão, nesta seção</th>
+<th><code>scikit-learn</code> 1.9</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td><span class="math inline">\(\alpha\)</span></td>
+<td><code>22.947552413468976</code></td>
+<td><code>22.947552413468976</code></td>
+</tr>
+<tr class="even">
+<td><span class="math inline">\(\beta\)</span></td>
+<td><code>0.9038659456058725</code></td>
+<td><code>0.9038659456058724</code></td>
+</tr>
+<tr class="odd">
+<td>R²</td>
+<td><code>0.32910783778362984</code></td>
+<td><code>0.32910783778362984</code></td>
+</tr>
+</tbody>
+</table>
+<p><span class="math inline">\(\alpha\)</span> e o R² saem <strong>idênticos</strong>, bit a bit. O <span class="math inline">\(\beta\)</span> difere no último dígito da representação — um único bit de mantissa, a menor diferença que um <code>float64</code> sabe expressar, e nem sequer erro de método: é a ordem em que as somas de ponto flutuante foram feitas. As trinta e poucas linhas desta seção e a biblioteca que roda em produção no mundo inteiro estão calculando <strong>a mesma coisa</strong>.</p>
+<p><code>LinearRegression</code> não itera e não pede taxa de aprendizado: ela resolve o sistema de mínimos quadrados por álgebra linear direta (decomposição em valores singulares), o equivalente industrial da fórmula fechada que você acabou de escrever à mão. <code>.score()</code> devolve o R² sem que você precise escrever <code>total_sum_of_squares</code> nem <code>r_squared</code> — mas é a mesma conta, e agora você sabe o que ela faz por dentro: soma de quadrados do modelo dividida pela soma de quadrados do modelo vazio, subtraída de 1.</p>
+<p>O chunk acima não é executado nesta página — o <code>scikit-learn</code> nunca entra na implementação de uma seção deste livro, só neste callout. Os números da tabela foram medidos rodando o código, não estimados.</p>
+</div>
 </div>
 </div>
 
@@ -1090,6 +1420,7 @@ Nota
 Grus, Joel. 2019. <em>Data Science from Scratch: First Principles with Python</em>. 2nd ed. O’Reilly Media.
 </div>
 </div>
+</section>
 
 </main> <!-- /main -->
 <script>
@@ -1620,7 +1951,7 @@ document.addEventListener('DOMContentLoaded', function () {
 </div>   
     <div class="nav-footer-center">
       &nbsp;
-    <div class="toc-actions"><ul><li><a href="https://github.com/BragaD/UnDF-Bases5-CienciaDeDados-202602/issues/new" class="toc-action"><i class="bi bi-github"></i>Criar uma issue</a></li></ul></div></div>
+    <div class="toc-actions d-sm-block d-md-none"><ul><li><a href="https://github.com/BragaD/UnDF-Bases5-CienciaDeDados-202602/issues/new" class="toc-action"><i class="bi bi-github"></i>Criar uma issue</a></li></ul></div></div>
     <div class="nav-footer-right">
       <ul class="footer-items list-unstyled">
     <li class="nav-item compact">

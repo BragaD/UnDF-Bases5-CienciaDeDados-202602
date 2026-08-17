@@ -1077,19 +1077,37 @@ Nota
 <p>Este capítulo corresponde ao capítulo 8 de <span class="citation" data-cites="grus2019">Grus (<a href="#ref-grus2019" role="doc-biblioref">2019</a>)</span>.</p>
 </div>
 </div>
-<div class="callout callout-style-default callout-warning callout-titled">
+<blockquote class="blockquote">
+<p>Quem se vangloria da própria descendência está se vangloriando daquilo que deve a outros.</p>
+<p>— Sêneca</p>
+</blockquote>
+<p>Boa parte da ciência de dados é resolver um problema de otimização disfarçado. “Ajustar um modelo” quase sempre significa achar os parâmetros que minimizam algum erro ou maximizam alguma verossimilhança — e “melhor modelo”, na prática, é o nome bonito que damos à solução desse problema. Este capítulo constrói, do zero, a técnica que este livro inteiro vai usar para resolver esses problemas: o <strong>gradiente descendente</strong>.</p>
+<p>A ideia cabe numa frase: calcule a direção em que uma função cresce mais rápido, e ande na direção oposta, em passos pequenos, até quase não se mover mais. O capítulo constrói essa ideia em camadas — o que é o gradiente, como estimá-lo, como usá-lo para minimizar uma função, quanto andar a cada passo, como usar tudo isso para ajustar um modelo a dados, e como fazer isso em escala — e chega, já na seção 5.3, a uma função de <strong>cinco linhas</strong>, <code>gradient_step</code>: a peça que os capítulos seguintes de fato chamam.</p>
+<div class="callout callout-style-default callout-important callout-titled">
 <div class="callout-header d-flex align-content-center">
 <div class="callout-icon-container">
 <i class="callout-icon"></i>
 </div>
 <div class="callout-title-container flex-fill">
-<span class="screen-reader-only">Aviso</span>Em construção
+<span class="screen-reader-only">Importante</span>Por que este capítulo pesa mais que os outros
 </div>
 </div>
 <div class="callout-body-container callout-body">
-<p>A visão geral deste capítulo ainda será escrita.</p>
+<p><code>gradient_step</code> não é só mais um algoritmo do livro. É a máquina que treina praticamente tudo o que vem depois dela. Os capítulos <a href="../../content/cap11/index.html">11</a> (Regressão Linear Simples), <a href="../../content/cap12/index.html">12</a> (Regressão Múltipla), <a href="../../content/cap13/index.html">13</a> (Regressão Logística), <a href="../../content/cap15/index.html">15</a> (Redes Neurais) e <a href="../../content/cap16/index.html">16</a> (Deep Learning) chamam essa função — direta ou indiretamente — para ajustar os parâmetros dos modelos que constroem. Nenhum deles reimplementa a ideia; todos importam a mesma peça que você vai escrever aqui.</p>
+<p>Os modelos que <strong>não</strong> passam por este capítulo são os que não se ajustam descendo um gradiente, e vale saber quais são desde já: o k-vizinhos mais próximos (<a href="../../content/cap09/index.html">Capítulo 9</a>), cuja previsão é uma busca nos dados guardados; o Naive Bayes (<a href="../../content/cap10/index.html">Capítulo 10</a>), que se treina <strong>contando</strong>; as árvores de decisão (<a href="../../content/cap14/index.html">Capítulo 14</a>), construídas por uma escolha gulosa repetida; e o k-means (<a href="../../content/cap17/index.html">Capítulo 17</a>), que alterna dois passos exatos.</p>
+<p>Isso não quer dizer que esses quatro não tenham nada a ajustar — o <code>k</code> do k-vizinhos e o do k-means são escolhidos de fora, por quem usa o modelo, em vez de aprendidos a partir dos dados. A diferença é essa: um parâmetro que o gradiente descobre, contra um que você decide.</p>
+<p>Isso inverte a ordem usual de aprender machine learning. Normalmente você vê um algoritmo, depois outro, e só bem mais tarde percebe que todos treinam do mesmo jeito por baixo. Aqui você constrói o “por baixo” primeiro. Depois deste capítulo, cinco capítulos inteiros deixam de ser caixas-pretas de treino e passam a ser “mais um jeito de calcular um gradiente e chamar <code>gradient_step</code>”.</p>
 </div>
 </div>
+<p>Ao final deste capítulo, você será capaz de:</p>
+<ul>
+<li>Explicar a ideia por trás do gradiente descendente: por que seguir a direção oposta ao gradiente reduz o valor de uma função</li>
+<li>Estimar a derivada e o gradiente de uma função por diferença finita, e explicar por que essa estimativa não é o que se usa na prática</li>
+<li>Implementar <code>gradient_step</code> e usá-lo para minimizar uma função simples a partir de um ponto aleatório</li>
+<li>Diagnosticar, numericamente, o que acontece quando o tamanho do passo é grande demais ou pequeno demais</li>
+<li>Ajustar um modelo linear a dados calculando o gradiente do erro quadrático médio e aplicando gradiente descendente</li>
+<li>Distinguir gradiente descendente em lote, minibatch e estocástico, e explicar o compromisso entre eles</li>
+</ul>
 <section id="seções" class="level2">
 <h2 class="anchored" data-anchor-id="seções">Seções</h2>
 <table class="caption-top table">
@@ -1129,7 +1147,12 @@ Nota
 </section>
 <section id="leituras-adicionais" class="level2">
 <h2 class="anchored" data-anchor-id="leituras-adicionais">Leituras adicionais</h2>
-<p><em>A seção “For Further Exploration” do capítulo 8 de <span class="citation" data-cites="grus2019">Grus (<a href="#ref-grus2019" role="doc-biblioref">2019</a>)</span> entra aqui.</em></p>
+<p>A seção “For Further Exploration” do capítulo 8 de <span class="citation" data-cites="grus2019">Grus (<a href="#ref-grus2019" role="doc-biblioref">2019</a>)</span> sugere:</p>
+<ul>
+<li>Continuar lendo — o próprio autor observa que o livro vai usar gradiente descendente para resolver problemas até o fim, e de fato: é o que os capítulos 11, 12, 13, 15 e 16 deste livro fazem.</li>
+<li><em><a href="https://activecalculus.org/">Active Calculus 1.0</a></em>, de Matthew Boelkins, David Austin e Steven Schlicker (Grand Valley State University Libraries), disponível gratuitamente, para quem quiser revisar cálculo.</li>
+<li>O <a href="https://www.ruder.io/optimizing-gradient-descent/">texto de Sebastian Ruder</a> comparando gradiente descendente e suas muitas variantes — momentum, RMSProp, Adam — que reaparecem nos capítulos sobre redes neurais.</li>
+</ul>
 
 
 <div id="refs" class="references csl-bib-body hanging-indent" role="list">

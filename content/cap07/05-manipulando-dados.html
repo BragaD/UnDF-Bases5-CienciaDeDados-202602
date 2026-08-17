@@ -24,6 +24,41 @@ ul.task-list li input[type="checkbox"] {
   margin: 0 0.8em 0.2em -1em; /* quarto-specific, see https://github.com/quarto-dev/quarto-cli/issues/4556 */ 
   vertical-align: middle;
 }
+/* CSS for syntax highlighting */
+html { -webkit-text-size-adjust: 100%; }
+pre > code.sourceCode { white-space: pre; position: relative; }
+pre > code.sourceCode > span { display: inline-block; line-height: 1.25; }
+pre > code.sourceCode > span:empty { height: 1.2em; }
+.sourceCode { overflow: visible; }
+code.sourceCode > span { color: inherit; text-decoration: inherit; }
+div.sourceCode { margin: 1em 0; }
+pre.sourceCode { margin: 0; }
+@media screen {
+div.sourceCode { overflow: auto; }
+}
+@media print {
+pre > code.sourceCode { white-space: pre-wrap; }
+pre > code.sourceCode > span { text-indent: -5em; padding-left: 5em; }
+}
+pre.numberSource code
+  { counter-reset: source-line 0; }
+pre.numberSource code > span
+  { position: relative; left: -4em; counter-increment: source-line; }
+pre.numberSource code > span > a:first-child::before
+  { content: counter(source-line);
+    position: relative; left: -1em; text-align: right; vertical-align: baseline;
+    border: none; display: inline-block;
+    -webkit-touch-callout: none; -webkit-user-select: none;
+    -khtml-user-select: none; -moz-user-select: none;
+    -ms-user-select: none; user-select: none;
+    padding: 0 4px; width: 4em;
+  }
+pre.numberSource { margin-left: 3em;  padding-left: 4px; }
+div.sourceCode
+  {   }
+@media screen {
+pre > code.sourceCode > span > a:first-child::before { text-decoration: underline; }
+}
 /* CSS for citations */
 div.csl-bib-body { }
 div.csl-entry {
@@ -1070,17 +1105,233 @@ Nota
 <p>Esta seção corresponde a <em>Manipulating Data</em>, do capítulo 10 de <span class="citation" data-cites="grus2019">Grus (<a href="#ref-grus2019" role="doc-biblioref">2019</a>)</span>.</p>
 </div>
 </div>
-<div class="callout callout-style-default callout-warning callout-titled">
+<p>Uma das habilidades mais importantes de quem trabalha com dado é <strong>manipulá-lo</strong>. É mais uma abordagem geral do que uma técnica específica — então esta seção percorre alguns exemplos, para dar a ideia.</p>
+<p>Imagine que temos uma pilha de preços de ações como esta:</p>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb1"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a>data <span class="op">=</span> [</span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a>    StockPrice(symbol<span class="op">=</span><span class="st">'MSFT'</span>,</span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a>              date<span class="op">=</span>datetime.date(<span class="dv">2018</span>, <span class="dv">12</span>, <span class="dv">24</span>),</span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a>              closing_price<span class="op">=</span><span class="fl">106.03</span>),</span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a>    <span class="co"># ...</span></span>
+<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a>]</span></code></pre></div><button title="Copiar para a área de transferência" class="code-copy-button"><i class="bi"></i></button></div>
+<p>e começamos a fazer perguntas sobre esse dado. Ao longo do caminho, vamos tentar notar padrões no que estamos fazendo e abstrair ferramentas que tornem a manipulação mais fácil.</p>
+<p>Desta vez, em vez de um conjunto de brinquedo, vamos usar <code>dados/stocks.csv</code> inteiro — as 23.105 linhas de preços diários de quatro ações (AAPL, FB, GOOG, MSFT) já usadas no restante deste livro:</p>
+<div id="cell-carrega-stocks-completo" class="cell" data-execution_count="1">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb2"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> csv, re, datetime</span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> typing <span class="im">import</span> Dict, List, NamedTuple, Optional</span>
+<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> dateutil.parser <span class="im">import</span> parse</span>
+<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-5"><a href="#cb2-5" aria-hidden="true" tabindex="-1"></a><span class="kw">class</span> StockPrice(NamedTuple):</span>
+<span id="cb2-6"><a href="#cb2-6" aria-hidden="true" tabindex="-1"></a>    symbol: <span class="bu">str</span></span>
+<span id="cb2-7"><a href="#cb2-7" aria-hidden="true" tabindex="-1"></a>    date: datetime.date</span>
+<span id="cb2-8"><a href="#cb2-8" aria-hidden="true" tabindex="-1"></a>    closing_price: <span class="bu">float</span></span>
+<span id="cb2-9"><a href="#cb2-9" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-10"><a href="#cb2-10" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> try_parse_row(row: List[<span class="bu">str</span>]) <span class="op">-&gt;</span> Optional[StockPrice]:</span>
+<span id="cb2-11"><a href="#cb2-11" aria-hidden="true" tabindex="-1"></a>    symbol, date_, closing_price_ <span class="op">=</span> row</span>
+<span id="cb2-12"><a href="#cb2-12" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> <span class="kw">not</span> re.match(<span class="vs">r"</span><span class="dv">^</span><span class="pp">[A-Z]</span><span class="op">+</span><span class="dv">$</span><span class="vs">"</span>, symbol):</span>
+<span id="cb2-13"><a href="#cb2-13" aria-hidden="true" tabindex="-1"></a>        <span class="cf">return</span> <span class="va">None</span></span>
+<span id="cb2-14"><a href="#cb2-14" aria-hidden="true" tabindex="-1"></a>    <span class="cf">try</span>:</span>
+<span id="cb2-15"><a href="#cb2-15" aria-hidden="true" tabindex="-1"></a>        date <span class="op">=</span> parse(date_).date()</span>
+<span id="cb2-16"><a href="#cb2-16" aria-hidden="true" tabindex="-1"></a>    <span class="cf">except</span> <span class="pp">ValueError</span>:</span>
+<span id="cb2-17"><a href="#cb2-17" aria-hidden="true" tabindex="-1"></a>        <span class="cf">return</span> <span class="va">None</span></span>
+<span id="cb2-18"><a href="#cb2-18" aria-hidden="true" tabindex="-1"></a>    <span class="cf">try</span>:</span>
+<span id="cb2-19"><a href="#cb2-19" aria-hidden="true" tabindex="-1"></a>        closing_price <span class="op">=</span> <span class="bu">float</span>(closing_price_)</span>
+<span id="cb2-20"><a href="#cb2-20" aria-hidden="true" tabindex="-1"></a>    <span class="cf">except</span> <span class="pp">ValueError</span>:</span>
+<span id="cb2-21"><a href="#cb2-21" aria-hidden="true" tabindex="-1"></a>        <span class="cf">return</span> <span class="va">None</span></span>
+<span id="cb2-22"><a href="#cb2-22" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> StockPrice(symbol, date, closing_price)</span>
+<span id="cb2-23"><a href="#cb2-23" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-24"><a href="#cb2-24" aria-hidden="true" tabindex="-1"></a><span class="cf">with</span> <span class="bu">open</span>(<span class="st">"dados/stocks.csv"</span>, <span class="st">"r"</span>) <span class="im">as</span> f:</span>
+<span id="cb2-25"><a href="#cb2-25" aria-hidden="true" tabindex="-1"></a>    reader <span class="op">=</span> csv.DictReader(f)</span>
+<span id="cb2-26"><a href="#cb2-26" aria-hidden="true" tabindex="-1"></a>    rows <span class="op">=</span> [[row[<span class="st">'Symbol'</span>], row[<span class="st">'Date'</span>], row[<span class="st">'Close'</span>]]</span>
+<span id="cb2-27"><a href="#cb2-27" aria-hidden="true" tabindex="-1"></a>            <span class="cf">for</span> row <span class="kw">in</span> reader]</span>
+<span id="cb2-28"><a href="#cb2-28" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-29"><a href="#cb2-29" aria-hidden="true" tabindex="-1"></a><span class="co"># garante que todas carregaram com sucesso</span></span>
+<span id="cb2-30"><a href="#cb2-30" aria-hidden="true" tabindex="-1"></a>maybe_data <span class="op">=</span> [try_parse_row(row) <span class="cf">for</span> row <span class="kw">in</span> rows]</span>
+<span id="cb2-31"><a href="#cb2-31" aria-hidden="true" tabindex="-1"></a><span class="cf">assert</span> maybe_data</span>
+<span id="cb2-32"><a href="#cb2-32" aria-hidden="true" tabindex="-1"></a><span class="cf">assert</span> <span class="bu">all</span>(sp <span class="kw">is</span> <span class="kw">not</span> <span class="va">None</span> <span class="cf">for</span> sp <span class="kw">in</span> maybe_data)</span>
+<span id="cb2-33"><a href="#cb2-33" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-34"><a href="#cb2-34" aria-hidden="true" tabindex="-1"></a>data <span class="op">=</span> [sp <span class="cf">for</span> sp <span class="kw">in</span> maybe_data <span class="cf">if</span> sp <span class="kw">is</span> <span class="kw">not</span> <span class="va">None</span>]</span>
+<span id="cb2-35"><a href="#cb2-35" aria-hidden="true" tabindex="-1"></a><span class="bu">len</span>(data), <span class="bu">sorted</span>(<span class="bu">set</span>(sp.symbol <span class="cf">for</span> sp <span class="kw">in</span> data))</span></code></pre></div><button title="Copiar para a área de transferência" class="code-copy-button"><i class="bi"></i></button></div>
+<div id="carrega-stocks-completo" class="cell-output cell-output-display" data-execution_count="1">
+<pre><code>(23105, ['AAPL', 'FB', 'GOOG', 'MSFT'])</code></pre>
+</div>
+</div>
+<div class="callout callout-style-default callout-note callout-titled">
 <div class="callout-header d-flex align-content-center">
 <div class="callout-icon-container">
 <i class="callout-icon"></i>
 </div>
 <div class="callout-title-container flex-fill">
-<span class="screen-reader-only">Aviso</span>Em construção
+Nota
 </div>
 </div>
 <div class="callout-body-container callout-body">
-<p>O conteúdo desta seção ainda será escrito.</p>
+<p>Diferente do CSV de brinquedo da <a href="../../content/cap07/04-limpeza-e-transformacao.html">seção anterior</a>, aqui as 23.105 linhas passam <strong>todas</strong> por <code>try_parse_row</code> sem cair fora — este arquivo não tem o mesmo tipo de linha corrompida. O <code>assert all(...)</code> acima é o mesmo teste que o <span class="citation" data-cites="grus2019">Grus (<a href="#ref-grus2019" role="doc-biblioref">2019</a>)</span> usa para confirmar isso no código-fonte.</p>
+</div>
+</div>
+<p>Suponha que queremos saber o maior preço de fechamento já registrado para a AAPL. Podemos dividir isso em passos concretos:</p>
+<ol type="1">
+<li>Restringir às linhas da AAPL.</li>
+<li>Pegar o <code>closing_price</code> de cada linha.</li>
+<li>Tirar o <code>max</code> desses preços.</li>
+</ol>
+<p>Uma compreensão faz as três coisas de uma vez:</p>
+<div id="cell-max-aapl" class="cell" data-execution_count="2">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb4"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a>max_aapl_price <span class="op">=</span> <span class="bu">max</span>(stock_price.closing_price</span>
+<span id="cb4-2"><a href="#cb4-2" aria-hidden="true" tabindex="-1"></a>                     <span class="cf">for</span> stock_price <span class="kw">in</span> data</span>
+<span id="cb4-3"><a href="#cb4-3" aria-hidden="true" tabindex="-1"></a>                     <span class="cf">if</span> stock_price.symbol <span class="op">==</span> <span class="st">"AAPL"</span>)</span>
+<span id="cb4-4"><a href="#cb4-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-5"><a href="#cb4-5" aria-hidden="true" tabindex="-1"></a>max_aapl_price</span></code></pre></div><button title="Copiar para a área de transferência" class="code-copy-button"><i class="bi"></i></button></div>
+<div id="max-aapl" class="cell-output cell-output-display" data-execution_count="2">
+<pre><code>232.070007</code></pre>
+</div>
+</div>
+<p>Mais geralmente, podemos querer saber o maior preço de fechamento de cada ação no conjunto. Uma forma de fazer isso:</p>
+<ol type="1">
+<li>Criar um <code>dict</code> para guardar o maior preço de cada símbolo (usando um <code>defaultdict</code> que devolve menos infinito para símbolos ainda não vistos, já que qualquer preço será maior que isso).</li>
+<li>Percorrer os dados, atualizando esse <code>dict</code>.</li>
+</ol>
+<div id="cell-max-precos-por-simbolo" class="cell" data-execution_count="3">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb6"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb6-1"><a href="#cb6-1" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> collections <span class="im">import</span> defaultdict</span>
+<span id="cb6-2"><a href="#cb6-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb6-3"><a href="#cb6-3" aria-hidden="true" tabindex="-1"></a>max_prices: Dict[<span class="bu">str</span>, <span class="bu">float</span>] <span class="op">=</span> defaultdict(<span class="kw">lambda</span>: <span class="bu">float</span>(<span class="st">'-inf'</span>))</span>
+<span id="cb6-4"><a href="#cb6-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb6-5"><a href="#cb6-5" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> sp <span class="kw">in</span> data:</span>
+<span id="cb6-6"><a href="#cb6-6" aria-hidden="true" tabindex="-1"></a>    symbol, closing_price <span class="op">=</span> sp.symbol, sp.closing_price</span>
+<span id="cb6-7"><a href="#cb6-7" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> closing_price <span class="op">&gt;</span> max_prices[symbol]:</span>
+<span id="cb6-8"><a href="#cb6-8" aria-hidden="true" tabindex="-1"></a>        max_prices[symbol] <span class="op">=</span> closing_price</span>
+<span id="cb6-9"><a href="#cb6-9" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb6-10"><a href="#cb6-10" aria-hidden="true" tabindex="-1"></a><span class="bu">dict</span>(<span class="bu">sorted</span>(max_prices.items()))</span></code></pre></div><button title="Copiar para a área de transferência" class="code-copy-button"><i class="bi"></i></button></div>
+<div id="max-precos-por-simbolo" class="cell-output cell-output-display" data-execution_count="3">
+<pre><code>{'AAPL': 232.070007, 'FB': 217.5, 'GOOG': 1268.329956, 'MSFT': 115.610001}</code></pre>
+</div>
+</div>
+<p>Agora podemos começar a fazer perguntas mais complicadas, como quais foram as maiores e as menores variações percentuais em um único dia no conjunto de dados. A variação percentual é <code>preço_hoje / preço_ontem - 1</code>, o que significa que precisamos de alguma forma de associar o preço de hoje ao de ontem. Uma abordagem é agrupar os preços por símbolo e, dentro de cada grupo:</p>
+<ol type="1">
+<li>Ordenar os preços por data.</li>
+<li>Usar <code>zip</code> para formar pares (anterior, atual).</li>
+<li>Transformar os pares em novas linhas de “variação percentual”.</li>
+</ol>
+<p>Vamos começar agrupando os preços por símbolo:</p>
+<div id="agrupa-por-simbolo" class="cell" data-execution_count="4">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb8"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb8-1"><a href="#cb8-1" aria-hidden="true" tabindex="-1"></a>prices: Dict[<span class="bu">str</span>, List[StockPrice]] <span class="op">=</span> defaultdict(<span class="bu">list</span>)</span>
+<span id="cb8-2"><a href="#cb8-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb8-3"><a href="#cb8-3" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> sp <span class="kw">in</span> data:</span>
+<span id="cb8-4"><a href="#cb8-4" aria-hidden="true" tabindex="-1"></a>    prices[sp.symbol].append(sp)</span></code></pre></div><button title="Copiar para a área de transferência" class="code-copy-button"><i class="bi"></i></button></div>
+</div>
+<p>Como os preços são tuplas, eles são ordenados pelos campos, na ordem: primeiro por símbolo, depois por data, depois por preço. Isso significa que, se temos preços todos com o mesmo símbolo, <code>sort</code> os ordena por data (e depois por preço, o que não muda nada, já que só há um preço por data) — que é o que queremos:</p>
+<div id="ordena-por-data" class="cell" data-execution_count="5">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb9"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb9-1"><a href="#cb9-1" aria-hidden="true" tabindex="-1"></a><span class="co"># ordena os preços por data</span></span>
+<span id="cb9-2"><a href="#cb9-2" aria-hidden="true" tabindex="-1"></a>prices <span class="op">=</span> {symbol: <span class="bu">sorted</span>(symbol_prices)</span>
+<span id="cb9-3"><a href="#cb9-3" aria-hidden="true" tabindex="-1"></a>          <span class="cf">for</span> symbol, symbol_prices <span class="kw">in</span> prices.items()}</span></code></pre></div><button title="Copiar para a área de transferência" class="code-copy-button"><i class="bi"></i></button></div>
+</div>
+<p>o que podemos usar para calcular uma sequência de variações dia a dia:</p>
+<div id="variacoes-dia-a-dia" class="cell" data-execution_count="6">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb10"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb10-1"><a href="#cb10-1" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> pct_change(yesterday: StockPrice, today: StockPrice) <span class="op">-&gt;</span> <span class="bu">float</span>:</span>
+<span id="cb10-2"><a href="#cb10-2" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> today.closing_price <span class="op">/</span> yesterday.closing_price <span class="op">-</span> <span class="dv">1</span></span>
+<span id="cb10-3"><a href="#cb10-3" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb10-4"><a href="#cb10-4" aria-hidden="true" tabindex="-1"></a><span class="kw">class</span> DailyChange(NamedTuple):</span>
+<span id="cb10-5"><a href="#cb10-5" aria-hidden="true" tabindex="-1"></a>    symbol: <span class="bu">str</span></span>
+<span id="cb10-6"><a href="#cb10-6" aria-hidden="true" tabindex="-1"></a>    date: datetime.date</span>
+<span id="cb10-7"><a href="#cb10-7" aria-hidden="true" tabindex="-1"></a>    pct_change: <span class="bu">float</span></span>
+<span id="cb10-8"><a href="#cb10-8" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb10-9"><a href="#cb10-9" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> day_over_day_changes(prices: List[StockPrice]) <span class="op">-&gt;</span> List[DailyChange]:</span>
+<span id="cb10-10"><a href="#cb10-10" aria-hidden="true" tabindex="-1"></a>    <span class="co">"""Assume que os preços são de uma única ação e estão em ordem"""</span></span>
+<span id="cb10-11"><a href="#cb10-11" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> [DailyChange(symbol<span class="op">=</span>today.symbol,</span>
+<span id="cb10-12"><a href="#cb10-12" aria-hidden="true" tabindex="-1"></a>                        date<span class="op">=</span>today.date,</span>
+<span id="cb10-13"><a href="#cb10-13" aria-hidden="true" tabindex="-1"></a>                        pct_change<span class="op">=</span>pct_change(yesterday, today))</span>
+<span id="cb10-14"><a href="#cb10-14" aria-hidden="true" tabindex="-1"></a>            <span class="cf">for</span> yesterday, today <span class="kw">in</span> <span class="bu">zip</span>(prices, prices[<span class="dv">1</span>:])]</span></code></pre></div><button title="Copiar para a área de transferência" class="code-copy-button"><i class="bi"></i></button></div>
+</div>
+<p><code>zip(prices, prices[1:])</code> é o mesmo truque de percorrer duas sequências em paralelo que o <a href="../../content/cap02/06-ferramentas-e-tipos.html">Capítulo 2</a> apresentou: aqui, desalinhar uma lista de si mesma por uma posição transforma a sequência inteira numa sequência de pares (ontem, hoje), prontos para <code>pct_change</code>.</p>
+<p>e depois juntar todas:</p>
+<div id="cell-todas-as-variacoes" class="cell" data-execution_count="7">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb11"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb11-1"><a href="#cb11-1" aria-hidden="true" tabindex="-1"></a>all_changes <span class="op">=</span> [change</span>
+<span id="cb11-2"><a href="#cb11-2" aria-hidden="true" tabindex="-1"></a>              <span class="cf">for</span> symbol_prices <span class="kw">in</span> prices.values()</span>
+<span id="cb11-3"><a href="#cb11-3" aria-hidden="true" tabindex="-1"></a>              <span class="cf">for</span> change <span class="kw">in</span> day_over_day_changes(symbol_prices)]</span>
+<span id="cb11-4"><a href="#cb11-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb11-5"><a href="#cb11-5" aria-hidden="true" tabindex="-1"></a><span class="bu">len</span>(all_changes)</span></code></pre></div><button title="Copiar para a área de transferência" class="code-copy-button"><i class="bi"></i></button></div>
+<div id="todas-as-variacoes" class="cell-output cell-output-display" data-execution_count="7">
+<pre><code>23101</code></pre>
+</div>
+</div>
+<p>A partir daqui é fácil achar a maior e a menor:</p>
+<div id="cell-maior-menor-variacao" class="cell" data-execution_count="8">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb13"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb13-1"><a href="#cb13-1" aria-hidden="true" tabindex="-1"></a>max_change <span class="op">=</span> <span class="bu">max</span>(all_changes, key<span class="op">=</span><span class="kw">lambda</span> change: change.pct_change)</span>
+<span id="cb13-2"><a href="#cb13-2" aria-hidden="true" tabindex="-1"></a>min_change <span class="op">=</span> <span class="bu">min</span>(all_changes, key<span class="op">=</span><span class="kw">lambda</span> change: change.pct_change)</span>
+<span id="cb13-3"><a href="#cb13-3" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb13-4"><a href="#cb13-4" aria-hidden="true" tabindex="-1"></a>max_change, min_change</span></code></pre></div><button title="Copiar para a área de transferência" class="code-copy-button"><i class="bi"></i></button></div>
+<div id="maior-menor-variacao" class="cell-output cell-output-display" data-execution_count="8">
+<pre><code>(DailyChange(symbol='AAPL', date=datetime.date(1997, 8, 6), pct_change=0.33227854830957937),
+ DailyChange(symbol='AAPL', date=datetime.date(2000, 9, 29), pct_change=-0.5186915679972073))</code></pre>
+</div>
+</div>
+<p>O maior salto de um dia para o outro foi a AAPL, em 6 de agosto de 1997 — mais de 33% em um único pregão. A maior queda foi também a AAPL, em 29 de setembro de 2000 — quase 52% em um dia. As duas datas batem com eventos reais e documentados: o investimento de US$ 150 milhões da Microsoft na Apple, anunciado naquele agosto de 1997, e o alerta de resultados abaixo do esperado que a Apple divulgou em setembro de 2000.</p>
+<p>Podemos agora usar esse conjunto <code>all_changes</code> para descobrir qual é o melhor mês para investir em ações de tecnologia. Basta olhar a variação diária média por mês:</p>
+<div id="cell-variacao-media-por-mes" class="cell" data-execution_count="9">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb15"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb15-1"><a href="#cb15-1" aria-hidden="true" tabindex="-1"></a>changes_by_month: Dict[<span class="bu">int</span>, List[DailyChange]] <span class="op">=</span> {month: [] <span class="cf">for</span> month <span class="kw">in</span> <span class="bu">range</span>(<span class="dv">1</span>, <span class="dv">13</span>)}</span>
+<span id="cb15-2"><a href="#cb15-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb15-3"><a href="#cb15-3" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> change <span class="kw">in</span> all_changes:</span>
+<span id="cb15-4"><a href="#cb15-4" aria-hidden="true" tabindex="-1"></a>    changes_by_month[change.date.month].append(change)</span>
+<span id="cb15-5"><a href="#cb15-5" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb15-6"><a href="#cb15-6" aria-hidden="true" tabindex="-1"></a>avg_daily_change <span class="op">=</span> {</span>
+<span id="cb15-7"><a href="#cb15-7" aria-hidden="true" tabindex="-1"></a>    month: <span class="bu">sum</span>(change.pct_change <span class="cf">for</span> change <span class="kw">in</span> changes) <span class="op">/</span> <span class="bu">len</span>(changes)</span>
+<span id="cb15-8"><a href="#cb15-8" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> month, changes <span class="kw">in</span> changes_by_month.items()</span>
+<span id="cb15-9"><a href="#cb15-9" aria-hidden="true" tabindex="-1"></a>}</span>
+<span id="cb15-10"><a href="#cb15-10" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb15-11"><a href="#cb15-11" aria-hidden="true" tabindex="-1"></a>{mes: <span class="bu">round</span>(v, <span class="dv">5</span>) <span class="cf">for</span> mes, v <span class="kw">in</span> avg_daily_change.items()}</span></code></pre></div><button title="Copiar para a área de transferência" class="code-copy-button"><i class="bi"></i></button></div>
+<div id="variacao-media-por-mes" class="cell-output cell-output-display" data-execution_count="9">
+<pre><code>{1: 0.00219,
+ 2: 0.00014,
+ 3: 0.001,
+ 4: 0.00172,
+ 5: 0.00105,
+ 6: -0.00039,
+ 7: 0.00087,
+ 8: 0.00123,
+ 9: -0.0,
+ 10: 0.00291,
+ 11: 0.00081,
+ 12: 0.00092}</code></pre>
+</div>
+</div>
+<div class="callout callout-style-default callout-note callout-titled">
+<div class="callout-header d-flex align-content-center">
+<div class="callout-icon-container">
+<i class="callout-icon"></i>
+</div>
+<div class="callout-title-container flex-fill">
+Nota
+</div>
+</div>
+<div class="callout-body-container callout-body">
+<p>No código-fonte do <span class="citation" data-cites="grus2019">Grus (<a href="#ref-grus2019" role="doc-biblioref">2019</a>)</span>, esta mesma linha está anotada como <code>changes_by_month: List[DailyChange] = {month: [] for month in range(1, 13)}</code> — uma <code>List</code> recebendo um <code>dict</code>. É outro exemplo do que o <a href="../../content/cap02/06-ferramentas-e-tipos.html">Capítulo 2</a> já avisou: <strong>anotações de tipo não são verificadas em tempo de execução</strong>. Um verificador como <code>mypy</code> acusaria o descompasso na hora; o interpretador Python, sozinho, deixa passar — o código roda exatamente igual, porque a anotação nunca influencia o que é executado. Aqui em cima a anotação já está corrigida para <code>Dict[int, List[DailyChange]]</code>, que é o tipo que o valor de fato tem.</p>
+</div>
+</div>
+<div id="cell-melhor-mes" class="cell" data-execution_count="10">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb17"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb17-1"><a href="#cb17-1" aria-hidden="true" tabindex="-1"></a>melhor_mes <span class="op">=</span> <span class="bu">max</span>(avg_daily_change, key<span class="op">=</span><span class="kw">lambda</span> mes: avg_daily_change[mes])</span>
+<span id="cb17-2"><a href="#cb17-2" aria-hidden="true" tabindex="-1"></a><span class="cf">assert</span> melhor_mes <span class="op">==</span> <span class="dv">10</span>   <span class="co"># outubro é o melhor mês</span></span>
+<span id="cb17-3"><a href="#cb17-3" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb17-4"><a href="#cb17-4" aria-hidden="true" tabindex="-1"></a>melhor_mes, avg_daily_change[melhor_mes]</span></code></pre></div><button title="Copiar para a área de transferência" class="code-copy-button"><i class="bi"></i></button></div>
+<div id="melhor-mes" class="cell-output cell-output-display" data-execution_count="10">
+<pre><code>(10, 0.0029054238938500837)</code></pre>
+</div>
+</div>
+<p>Outubro é o melhor mês para investir, com uma variação diária média de cerca de 0,29% — número que vale hesitar antes de levar a sério: são apenas quatro ações e quase quatro décadas de dados misturados numa única média por mês, sem nenhum teste de significância por trás. É o tipo de padrão fácil de achar e fácil demais de acreditar.</p>
+<p>Faremos esse tipo de manipulação pelo livro inteiro, em geral sem chamar muita atenção para ela.</p>
+<div class="callout callout-style-default callout-tip callout-titled">
+<div class="callout-header d-flex align-content-center collapsed" data-bs-toggle="collapse" data-bs-target=".callout-4-contents" aria-controls="callout-4" aria-expanded="false" aria-label="Toggle callout">
+<div class="callout-icon-container">
+<i class="callout-icon"></i>
+</div>
+<div class="callout-title-container flex-fill">
+<span class="screen-reader-only">Dica</span>Na prática: <code>pandas</code>
+</div>
+<div class="callout-btn-toggle d-inline-block border-0 py-1 ps-1 pe-0 float-end"><i class="callout-toggle"></i></div>
+</div>
+<div id="callout-4" class="callout-4-contents callout-collapse collapse">
+<div class="callout-body-container callout-body">
+<p>Tudo que esta seção fez à mão tem uma linha de <code>pandas</code> correspondente: <code>df.groupby('Symbol')['Close'].max()</code> no lugar do <code>defaultdict</code> que acha o maior preço por símbolo; <code>df.groupby('Symbol')['Close'].pct_change()</code> no lugar de <code>day_over_day_changes</code>; <code>df.resample('ME')</code> para agregações por mês, no lugar do <code>dict</code> <code>changes_by_month</code> construído à mão — e repare no <code>'ME'</code>, de <em>month end</em>: o <code>'M'</code> que a maior parte do material antigo usa foi depreciado no <code>pandas</code> 2.2.</p>
+<p>O que isso esconde, e vale saber que está sendo escondido: <code>.pct_change()</code> não ordena nada — ela assume que as linhas já chegam ordenadas e contíguas, exatamente a etapa <code>sorted(symbol_prices)</code> que esta seção gastou um parágrafo justificando antes de calcular <code>day_over_day_changes</code>. Esqueça o <code>sort_values('Date')</code> antes de agrupar e o <code>pandas</code> não levanta erro nenhum: <code>.pct_change()</code> roda normalmente e devolve, em silêncio, variações entre dias que não são consecutivos — uma “variação diária” que na verdade compara terça com sexta.</p>
+</div>
 </div>
 </div>
 

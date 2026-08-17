@@ -24,6 +24,41 @@ ul.task-list li input[type="checkbox"] {
   margin: 0 0.8em 0.2em -1em; /* quarto-specific, see https://github.com/quarto-dev/quarto-cli/issues/4556 */ 
   vertical-align: middle;
 }
+/* CSS for syntax highlighting */
+html { -webkit-text-size-adjust: 100%; }
+pre > code.sourceCode { white-space: pre; position: relative; }
+pre > code.sourceCode > span { display: inline-block; line-height: 1.25; }
+pre > code.sourceCode > span:empty { height: 1.2em; }
+.sourceCode { overflow: visible; }
+code.sourceCode > span { color: inherit; text-decoration: inherit; }
+div.sourceCode { margin: 1em 0; }
+pre.sourceCode { margin: 0; }
+@media screen {
+div.sourceCode { overflow: auto; }
+}
+@media print {
+pre > code.sourceCode { white-space: pre-wrap; }
+pre > code.sourceCode > span { text-indent: -5em; padding-left: 5em; }
+}
+pre.numberSource code
+  { counter-reset: source-line 0; }
+pre.numberSource code > span
+  { position: relative; left: -4em; counter-increment: source-line; }
+pre.numberSource code > span > a:first-child::before
+  { content: counter(source-line);
+    position: relative; left: -1em; text-align: right; vertical-align: baseline;
+    border: none; display: inline-block;
+    -webkit-touch-callout: none; -webkit-user-select: none;
+    -khtml-user-select: none; -moz-user-select: none;
+    -ms-user-select: none; user-select: none;
+    padding: 0 4px; width: 4em;
+  }
+pre.numberSource { margin-left: 3em;  padding-left: 4px; }
+div.sourceCode
+  {   }
+@media screen {
+pre > code.sourceCode > span > a:first-child::before { text-decoration: underline; }
+}
 /* CSS for citations */
 div.csl-bib-body { }
 div.csl-entry {
@@ -1025,8 +1060,15 @@ div.csl-indent {
 </nav>
 <div id="quarto-sidebar-glass" class="quarto-sidebar-collapse-item" data-bs-toggle="collapse" data-bs-target=".quarto-sidebar-collapse-item"></div>
 <!-- margin-sidebar -->
-    <div id="quarto-margin-sidebar" class="sidebar margin-sidebar zindex-bottom">
-        
+    <div id="quarto-margin-sidebar" class="sidebar margin-sidebar">
+        <nav id="TOC" role="doc-toc" class="toc-active">
+    <h2 id="toc-title">Nesta página</h2>
+   
+  <ul>
+  <li><a href="#o-gradiente-do-erro-quadrático" id="toc-o-gradiente-do-erro-quadrático" class="nav-link active" data-scroll-target="#o-gradiente-do-erro-quadrático">O gradiente do erro quadrático</a></li>
+  <li><a href="#ajustando-theta" id="toc-ajustando-theta" class="nav-link" data-scroll-target="#ajustando-theta">Ajustando theta</a></li>
+  </ul>
+<div class="toc-actions"><ul><li><a href="https://github.com/BragaD/UnDF-Bases5-CienciaDeDados-202602/issues/new" class="toc-action"><i class="bi bi-github"></i>Criar uma issue</a></li></ul></div></nav>
     </div>
 <!-- main -->
 <main class="content" id="quarto-document-content">
@@ -1070,17 +1112,125 @@ Nota
 <p>Esta seção corresponde a <em>Using Gradient Descent to Fit Models</em>, do capítulo 8 de <span class="citation" data-cites="grus2019">Grus (<a href="#ref-grus2019" role="doc-biblioref">2019</a>)</span>.</p>
 </div>
 </div>
-<div class="callout callout-style-default callout-warning callout-titled">
-<div class="callout-header d-flex align-content-center">
+<p>Neste livro, vamos usar gradiente descendente para ajustar modelos parametrizados a dados. No caso usual, temos um conjunto de dados e algum modelo hipotético para os dados, que depende — de forma diferenciável — de um ou mais parâmetros. Também temos uma função de <strong>perda</strong> (<em>loss</em>) que mede o quanto o modelo erra nos dados — quanto menor, melhor o ajuste.</p>
+<p>Se pensarmos nos dados como fixos, nossa função de perda nos diz o quanto um conjunto específico de parâmetros é bom ou ruim. Isso significa que podemos usar gradiente descendente para achar os parâmetros do modelo que deixam a perda a menor possível. Vamos ver um exemplo simples:</p>
+<div id="inputs-lineares" class="cell" data-execution_count="1">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb1"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="co"># x varia de -50 a 49, y é sempre 20 * x + 5</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a>inputs <span class="op">=</span> [(x, <span class="dv">20</span> <span class="op">*</span> x <span class="op">+</span> <span class="dv">5</span>) <span class="cf">for</span> x <span class="kw">in</span> <span class="bu">range</span>(<span class="op">-</span><span class="dv">50</span>, <span class="dv">50</span>)]</span></code></pre></div><button title="Copiar para a área de transferência" class="code-copy-button"><i class="bi"></i></button></div>
+</div>
+<p>Neste caso <em>sabemos</em> os parâmetros da relação linear entre <code>x</code> e <code>y</code> — inclinação <code>20</code>, intercepto <code>5</code> —, mas imagine que quiséssemos aprendê-los a partir dos dados. Vamos usar gradiente descendente para achar a inclinação e o intercepto que minimizam o erro quadrático médio.</p>
+<section id="o-gradiente-do-erro-quadrático" class="level2">
+<h2 class="anchored" data-anchor-id="o-gradiente-do-erro-quadrático">O gradiente do erro quadrático</h2>
+<p>Vamos chamar os parâmetros de <code>theta</code> (θ) — a convenção deste livro, e de quase todo texto de aprendizado de máquina, para “o vetor de parâmetros do modelo, sejam eles quais forem”. O <a href="../../content/cap11/index.html">Capítulo 11</a> herda o mesmo nome; do <a href="../../content/cap12/index.html">12</a> em diante o vetor passa a se chamar <code>beta</code>, seguindo a notação usual de regressão. Aqui, <code>theta</code> guarda inclinação e intercepto.</p>
+<p>Vamos começar com uma função que determina o gradiente com base no erro de um único ponto de dado:</p>
+<div id="linear-gradient" class="cell" data-execution_count="2">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb2"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> scratch.linear_algebra <span class="im">import</span> Vector</span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> linear_gradient(x: <span class="bu">float</span>, y: <span class="bu">float</span>, theta: Vector) <span class="op">-&gt;</span> Vector:</span>
+<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a>    slope, intercept <span class="op">=</span> theta</span>
+<span id="cb2-5"><a href="#cb2-5" aria-hidden="true" tabindex="-1"></a>    predicted <span class="op">=</span> slope <span class="op">*</span> x <span class="op">+</span> intercept    <span class="co"># a previsão do modelo</span></span>
+<span id="cb2-6"><a href="#cb2-6" aria-hidden="true" tabindex="-1"></a>    error <span class="op">=</span> (predicted <span class="op">-</span> y)              <span class="co"># o erro é (previsto - real)</span></span>
+<span id="cb2-7"><a href="#cb2-7" aria-hidden="true" tabindex="-1"></a>    squared_error <span class="op">=</span> error <span class="op">**</span> <span class="dv">2</span>           <span class="co"># vamos minimizar o erro ao quadrado</span></span>
+<span id="cb2-8"><a href="#cb2-8" aria-hidden="true" tabindex="-1"></a>    grad <span class="op">=</span> [<span class="dv">2</span> <span class="op">*</span> error <span class="op">*</span> x, <span class="dv">2</span> <span class="op">*</span> error]    <span class="co"># usando seu gradiente</span></span>
+<span id="cb2-9"><a href="#cb2-9" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> grad</span></code></pre></div><button title="Copiar para a área de transferência" class="code-copy-button"><i class="bi"></i></button></div>
+</div>
+<p>Vale pensar no que esse gradiente significa. Imagine que, para algum <code>x</code>, nossa previsão está grande demais. Nesse caso o <code>error</code> é positivo. O segundo termo do gradiente, <code>2 * error</code>, também é positivo — o que reflete o fato de que pequenos aumentos no intercepto vão deixar a previsão (já grande demais) ainda maior, o que vai fazer o erro quadrático (para esse <code>x</code>) aumentar mais ainda.</p>
+<p>O primeiro termo do gradiente, <code>2 * error * x</code>, tem o mesmo sinal de <code>x</code>. De fato, se <code>x</code> é positivo, pequenos aumentos na inclinação também vão aumentar a previsão (e, portanto, o erro). Se <code>x</code> é negativo, porém, pequenos aumentos na inclinação vão <em>diminuir</em> a previsão (e, portanto, o erro).</p>
+<p>Esse cálculo foi para um único ponto de dado. Para o conjunto de dados inteiro, olhamos para o <strong>erro quadrático médio</strong>. E o gradiente do erro quadrático médio é simplesmente a média dos gradientes individuais.</p>
+</section>
+<section id="ajustando-theta" class="level2">
+<h2 class="anchored" data-anchor-id="ajustando-theta">Ajustando theta</h2>
+<p>Então, aqui está o que vamos fazer:</p>
+<ol type="1">
+<li>Começar com um valor aleatório para <code>theta</code>.</li>
+<li>Calcular a média dos gradientes.</li>
+<li>Ajustar <code>theta</code> naquela direção.</li>
+<li>Repetir.</li>
+</ol>
+<div class="conceito">
+<p>Esta é a receita que o resto do livro vai repetir, trocando só o que entra em cada seta:</p>
+<p><strong>parâmetros aleatórios → gradiente da perda → um passo contra ele → repete</strong></p>
+<p>Troque “inclinação e intercepto” por “os pesos de uma rede neural” e “erro quadrático” por “log-verossimilhança”, e é exatamente o que os capítulos 11 a 16 fazem. O laço não muda; só o que ele recebe.</p>
+</div>
+<p><code>gradient_step</code> já foi escrita na <a href="../../content/cap05/03-usando-o-gradiente.html">seção 5.3</a>, e <code>vector_mean</code> vem do <a href="../../content/cap04/01-vetores.html">Capítulo 4</a> — a média componente a componente de uma lista de vetores. As duas são o mesmo código que você já escreveu; importamos em vez de reescrever, como a <a href="../../content/cap05/04-escolhendo-o-tamanho-do-passo.html">seção anterior</a> explicou:</p>
+<div id="importa-passo-media" class="cell" data-execution_count="3">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb3"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> random</span>
+<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> scratch.gradient_descent <span class="im">import</span> gradient_step</span>
+<span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> scratch.linear_algebra <span class="im">import</span> vector_mean</span></code></pre></div><button title="Copiar para a área de transferência" class="code-copy-button"><i class="bi"></i></button></div>
+</div>
+<p>Depois de muitos epochs, deveríamos aprender algo perto dos parâmetros corretos:</p>
+<div id="cell-ajusta-theta" class="cell" data-execution_count="4">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb4"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a>random.seed(<span class="dv">0</span>)</span>
+<span id="cb4-2"><a href="#cb4-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-3"><a href="#cb4-3" aria-hidden="true" tabindex="-1"></a><span class="co"># Começa com valores aleatórios para inclinação e intercepto</span></span>
+<span id="cb4-4"><a href="#cb4-4" aria-hidden="true" tabindex="-1"></a>theta <span class="op">=</span> [random.uniform(<span class="op">-</span><span class="dv">1</span>, <span class="dv">1</span>), random.uniform(<span class="op">-</span><span class="dv">1</span>, <span class="dv">1</span>)]</span>
+<span id="cb4-5"><a href="#cb4-5" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-6"><a href="#cb4-6" aria-hidden="true" tabindex="-1"></a>learning_rate <span class="op">=</span> <span class="fl">0.001</span></span>
+<span id="cb4-7"><a href="#cb4-7" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-8"><a href="#cb4-8" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> mse(theta: Vector, dados) <span class="op">-&gt;</span> <span class="bu">float</span>:</span>
+<span id="cb4-9"><a href="#cb4-9" aria-hidden="true" tabindex="-1"></a>    slope, intercept <span class="op">=</span> theta</span>
+<span id="cb4-10"><a href="#cb4-10" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> <span class="bu">sum</span>((slope <span class="op">*</span> x <span class="op">+</span> intercept <span class="op">-</span> y) <span class="op">**</span> <span class="dv">2</span> <span class="cf">for</span> x, y <span class="kw">in</span> dados) <span class="op">/</span> <span class="bu">len</span>(dados)</span>
+<span id="cb4-11"><a href="#cb4-11" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-12"><a href="#cb4-12" aria-hidden="true" tabindex="-1"></a>erros <span class="op">=</span> [mse(theta, inputs)]</span>
+<span id="cb4-13"><a href="#cb4-13" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-14"><a href="#cb4-14" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> epoch <span class="kw">in</span> <span class="bu">range</span>(<span class="dv">5000</span>):</span>
+<span id="cb4-15"><a href="#cb4-15" aria-hidden="true" tabindex="-1"></a>    <span class="co"># Calcula a média dos gradientes</span></span>
+<span id="cb4-16"><a href="#cb4-16" aria-hidden="true" tabindex="-1"></a>    grad <span class="op">=</span> vector_mean([linear_gradient(x, y, theta) <span class="cf">for</span> x, y <span class="kw">in</span> inputs])</span>
+<span id="cb4-17"><a href="#cb4-17" aria-hidden="true" tabindex="-1"></a>    <span class="co"># Dá um passo naquela direção</span></span>
+<span id="cb4-18"><a href="#cb4-18" aria-hidden="true" tabindex="-1"></a>    theta <span class="op">=</span> gradient_step(theta, grad, <span class="op">-</span>learning_rate)</span>
+<span id="cb4-19"><a href="#cb4-19" aria-hidden="true" tabindex="-1"></a>    erros.append(mse(theta, inputs))</span>
+<span id="cb4-20"><a href="#cb4-20" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-21"><a href="#cb4-21" aria-hidden="true" tabindex="-1"></a><span class="co"># o erro quadrático médio nunca deveria SUBIR de um epoch para o outro</span></span>
+<span id="cb4-22"><a href="#cb4-22" aria-hidden="true" tabindex="-1"></a><span class="cf">assert</span> <span class="bu">all</span>(depois <span class="op">&lt;=</span> antes <span class="cf">for</span> antes, depois <span class="kw">in</span> <span class="bu">zip</span>(erros, erros[<span class="dv">1</span>:]))</span>
+<span id="cb4-23"><a href="#cb4-23" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-24"><a href="#cb4-24" aria-hidden="true" tabindex="-1"></a>erros[<span class="dv">0</span>], erros[<span class="op">-</span><span class="dv">1</span>]</span></code></pre></div><button title="Copiar para a área de transferência" class="code-copy-button"><i class="bi"></i></button></div>
+<div id="ajusta-theta" class="cell-output cell-output-display" data-execution_count="4">
+<pre><code>(310762.96548521525, 4.106657588388331e-08)</code></pre>
+</div>
+</div>
+<div id="cell-theta-final" class="cell" data-execution_count="5">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb6"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb6-1"><a href="#cb6-1" aria-hidden="true" tabindex="-1"></a>slope, intercept <span class="op">=</span> theta</span>
+<span id="cb6-2"><a href="#cb6-2" aria-hidden="true" tabindex="-1"></a><span class="cf">assert</span> <span class="fl">19.9</span> <span class="op">&lt;</span> slope <span class="op">&lt;</span> <span class="fl">20.1</span>,   <span class="st">"a inclinação deveria ser aproximadamente 20"</span></span>
+<span id="cb6-3"><a href="#cb6-3" aria-hidden="true" tabindex="-1"></a><span class="cf">assert</span> <span class="fl">4.9</span> <span class="op">&lt;</span> intercept <span class="op">&lt;</span> <span class="fl">5.1</span>, <span class="st">"o intercepto deveria ser aproximadamente 5"</span></span>
+<span id="cb6-4"><a href="#cb6-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb6-5"><a href="#cb6-5" aria-hidden="true" tabindex="-1"></a>slope, intercept</span></code></pre></div><button title="Copiar para a área de transferência" class="code-copy-button"><i class="bi"></i></button></div>
+<div id="theta-final" class="cell-output cell-output-display" data-execution_count="5">
+<pre><code>(19.99999987827074, 4.999797320703872)</code></pre>
+</div>
+</div>
+<p>O erro quadrático médio cai de mais de <code>3 × 10⁵</code> para menos de <code>10⁻⁷</code> ao longo de 5.000 epochs — e o <code>assert</code> acima confirma, epoch a epoch, que ele nunca sobe. Isso <strong>não</strong> é porque cada passo garante uma perda menor: essa garantia só vale para um passo infinitesimal, e o nosso é finito. O que garante o decréscimo aqui é a mesma lição da <a href="../../content/cap05/04-escolhendo-o-tamanho-do-passo.html">seção 5.4</a>, agora do lado seguro — <code>learning_rate = 0.001</code> é pequeno o bastante frente à curvatura desta perda para que cada passo finito ainda ande na direção certa, em vez de supercorrigir e passar do ponto.</p>
+<p>E há uma segunda razão para a busca nunca “se perder”: a seção 5.1 avisou que gradiente descendente pode encontrar um mínimo <em>local</em> errado, dependendo de onde a busca começa. Aqui isso não é risco — o erro quadrático médio de um modelo linear é uma função <strong>convexa</strong> de <code>theta</code>, uma tigela de verdade, sem vales escondidos —, então não importa o ponto de partida aleatório: a busca sempre chega ao mesmo lugar. É por isso que a seção 5.6, adiante, pode trocar a semente e a forma de percorrer os dados sem trocar o destino.</p>
+<p>A inclinação e o intercepto encontrados ficam a menos de <code>0.001</code> dos valores reais, <code>20</code> e <code>5</code>.</p>
+<div class="exemplo">
+<p>Essa mesma conta — inclinação e intercepto que minimizam o erro quadrático — vai aparecer de novo neste livro, por um caminho bem diferente. O <a href="../../content/cap11/index.html">Capítulo 11</a> — Regressão Linear Simples — ajusta a mesma coisa com uma <strong>fórmula fechada</strong>: duas médias, uma covariância, uma variância, sem laço nenhum.</p>
+<p>Aqui chegamos a esse tipo de resposta por outro caminho — iterando, um pequeno passo de cada vez. Para regressão linear simples, a fórmula fechada é mais rápida e mais exata, e por isso ela existe. Mas ela só existe <em>porque</em> o problema é simples o bastante para ter solução fechada; é por isso que o Capítulo 11 pode se dar ao luxo de usá-la, com dados reais em vez de uma reta perfeita. A regressão logística do <a href="../../content/cap13/index.html">Capítulo 13</a> e as redes neurais do <a href="../../content/cap15/index.html">Capítulo 15</a> não têm fórmula fechada nenhuma — para elas, o caminho que você acabou de construir aqui é o <strong>único</strong> caminho.</p>
+</div>
+<div class="callout callout-style-default callout-tip callout-titled">
+<div class="callout-header d-flex align-content-center collapsed" data-bs-toggle="collapse" data-bs-target=".callout-2-contents" aria-controls="callout-2" aria-expanded="false" aria-label="Toggle callout">
 <div class="callout-icon-container">
 <i class="callout-icon"></i>
 </div>
 <div class="callout-title-container flex-fill">
-<span class="screen-reader-only">Aviso</span>Em construção
+<span class="screen-reader-only">Dica</span>Na prática: <code>scikit-learn</code>
 </div>
+<div class="callout-btn-toggle d-inline-block border-0 py-1 ps-1 pe-0 float-end"><i class="callout-toggle"></i></div>
 </div>
+<div id="callout-2" class="callout-2-contents callout-collapse collapse">
 <div class="callout-body-container callout-body">
-<p>O conteúdo desta seção ainda será escrito.</p>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb8"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb8-1"><a href="#cb8-1" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> sklearn.linear_model <span class="im">import</span> LinearRegression, SGDRegressor</span>
+<span id="cb8-2"><a href="#cb8-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb8-3"><a href="#cb8-3" aria-hidden="true" tabindex="-1"></a>X <span class="op">=</span> [[x] <span class="cf">for</span> x, y <span class="kw">in</span> inputs]</span>
+<span id="cb8-4"><a href="#cb8-4" aria-hidden="true" tabindex="-1"></a>y <span class="op">=</span> [y <span class="cf">for</span> x, y <span class="kw">in</span> inputs]</span>
+<span id="cb8-5"><a href="#cb8-5" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb8-6"><a href="#cb8-6" aria-hidden="true" tabindex="-1"></a><span class="co"># fórmula fechada (mínimos quadrados via álgebra linear)</span></span>
+<span id="cb8-7"><a href="#cb8-7" aria-hidden="true" tabindex="-1"></a>modelo_fechado <span class="op">=</span> LinearRegression().fit(X, y)</span>
+<span id="cb8-8"><a href="#cb8-8" aria-hidden="true" tabindex="-1"></a>modelo_fechado.coef_, modelo_fechado.intercept_</span>
+<span id="cb8-9"><a href="#cb8-9" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb8-10"><a href="#cb8-10" aria-hidden="true" tabindex="-1"></a><span class="co"># gradiente descendente estocástico, a mesma ideia da seção 5.6</span></span>
+<span id="cb8-11"><a href="#cb8-11" aria-hidden="true" tabindex="-1"></a>modelo_sgd <span class="op">=</span> SGDRegressor(max_iter<span class="op">=</span><span class="dv">1000</span>).fit(X, y)</span>
+<span id="cb8-12"><a href="#cb8-12" aria-hidden="true" tabindex="-1"></a>modelo_sgd.coef_</span></code></pre></div><button title="Copiar para a área de transferência" class="code-copy-button"><i class="bi"></i></button></div>
+<p><code>LinearRegression</code> não usa gradiente descendente — ela resolve o problema por álgebra linear direta (decomposição em valores singulares), o que é possível porque a regressão linear tem solução fechada. <code>SGDRegressor</code> é o que se aproxima do que construímos aqui: ela ajusta os parâmetros passo a passo, e é a opção que o <code>scikit-learn</code> recomenda quando o conjunto de dados é grande demais para caber em memória de uma vez, ou quando o modelo — diferente da regressão linear — não tem fórmula fechada. É exatamente esse segundo caso que justifica todo o resto deste capítulo.</p>
+</div>
 </div>
 </div>
 
@@ -1090,6 +1240,7 @@ Nota
 Grus, Joel. 2019. <em>Data Science from Scratch: First Principles with Python</em>. 2nd ed. O’Reilly Media.
 </div>
 </div>
+</section>
 
 </main> <!-- /main -->
 <script>
@@ -1620,7 +1771,7 @@ document.addEventListener('DOMContentLoaded', function () {
 </div>   
     <div class="nav-footer-center">
       &nbsp;
-    <div class="toc-actions"><ul><li><a href="https://github.com/BragaD/UnDF-Bases5-CienciaDeDados-202602/issues/new" class="toc-action"><i class="bi bi-github"></i>Criar uma issue</a></li></ul></div></div>
+    <div class="toc-actions d-sm-block d-md-none"><ul><li><a href="https://github.com/BragaD/UnDF-Bases5-CienciaDeDados-202602/issues/new" class="toc-action"><i class="bi bi-github"></i>Criar uma issue</a></li></ul></div></div>
     <div class="nav-footer-right">
       <ul class="footer-items list-unstyled">
     <li class="nav-item compact">

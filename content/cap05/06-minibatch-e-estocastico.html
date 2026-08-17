@@ -24,6 +24,41 @@ ul.task-list li input[type="checkbox"] {
   margin: 0 0.8em 0.2em -1em; /* quarto-specific, see https://github.com/quarto-dev/quarto-cli/issues/4556 */ 
   vertical-align: middle;
 }
+/* CSS for syntax highlighting */
+html { -webkit-text-size-adjust: 100%; }
+pre > code.sourceCode { white-space: pre; position: relative; }
+pre > code.sourceCode > span { display: inline-block; line-height: 1.25; }
+pre > code.sourceCode > span:empty { height: 1.2em; }
+.sourceCode { overflow: visible; }
+code.sourceCode > span { color: inherit; text-decoration: inherit; }
+div.sourceCode { margin: 1em 0; }
+pre.sourceCode { margin: 0; }
+@media screen {
+div.sourceCode { overflow: auto; }
+}
+@media print {
+pre > code.sourceCode { white-space: pre-wrap; }
+pre > code.sourceCode > span { text-indent: -5em; padding-left: 5em; }
+}
+pre.numberSource code
+  { counter-reset: source-line 0; }
+pre.numberSource code > span
+  { position: relative; left: -4em; counter-increment: source-line; }
+pre.numberSource code > span > a:first-child::before
+  { content: counter(source-line);
+    position: relative; left: -1em; text-align: right; vertical-align: baseline;
+    border: none; display: inline-block;
+    -webkit-touch-callout: none; -webkit-user-select: none;
+    -khtml-user-select: none; -moz-user-select: none;
+    -ms-user-select: none; user-select: none;
+    padding: 0 4px; width: 4em;
+  }
+pre.numberSource { margin-left: 3em;  padding-left: 4px; }
+div.sourceCode
+  {   }
+@media screen {
+pre > code.sourceCode > span > a:first-child::before { text-decoration: underline; }
+}
 /* CSS for citations */
 div.csl-bib-body { }
 div.csl-entry {
@@ -1025,8 +1060,19 @@ div.csl-indent {
 </nav>
 <div id="quarto-sidebar-glass" class="quarto-sidebar-collapse-item" data-bs-toggle="collapse" data-bs-target=".quarto-sidebar-collapse-item"></div>
 <!-- margin-sidebar -->
-    <div id="quarto-margin-sidebar" class="sidebar margin-sidebar zindex-bottom">
-        
+    <div id="quarto-margin-sidebar" class="sidebar margin-sidebar">
+        <nav id="TOC" role="doc-toc" class="toc-active">
+    <h2 id="toc-title">Nesta página</h2>
+   
+  <ul>
+  <li><a href="#minibatch" id="toc-minibatch" class="nav-link active" data-scroll-target="#minibatch">Minibatch</a>
+  <ul>
+  <li><a href="#o-que-cada-lote-realmente-contém" id="toc-o-que-cada-lote-realmente-contém" class="nav-link" data-scroll-target="#o-que-cada-lote-realmente-contém">O que cada lote realmente contém</a></li>
+  </ul></li>
+  <li><a href="#gradiente-estocástico" id="toc-gradiente-estocástico" class="nav-link" data-scroll-target="#gradiente-estocástico">Gradiente estocástico</a></li>
+  <li><a href="#comparando-os-três" id="toc-comparando-os-três" class="nav-link" data-scroll-target="#comparando-os-três">Comparando os três</a></li>
+  </ul>
+<div class="toc-actions"><ul><li><a href="https://github.com/BragaD/UnDF-Bases5-CienciaDeDados-202602/issues/new" class="toc-action"><i class="bi bi-github"></i>Criar uma issue</a></li></ul></div></nav>
     </div>
 <!-- main -->
 <main class="content" id="quarto-document-content">
@@ -1070,17 +1116,226 @@ Nota
 <p>Esta seção corresponde a <em>Minibatch and Stochastic Gradient Descent</em>, do capítulo 8 de <span class="citation" data-cites="grus2019">Grus (<a href="#ref-grus2019" role="doc-biblioref">2019</a>)</span>.</p>
 </div>
 </div>
+<p>Uma desvantagem da abordagem anterior é que tínhamos que avaliar os gradientes sobre o conjunto de dados <strong>inteiro</strong> antes de dar um único passo de gradiente e atualizar nossos parâmetros. Nesse caso, tudo bem, porque nosso conjunto de dados tinha só 100 pares e o cálculo do gradiente era barato.</p>
+<p>Na prática, porém, você vai trabalhar com conjuntos de dados grandes e gradientes caros de calcular. Nesse caso, você vai querer dar passos de gradiente com mais frequência.</p>
+<section id="minibatch" class="level2">
+<h2 class="anchored" data-anchor-id="minibatch">Minibatch</h2>
+<p>Podemos fazer isso usando uma técnica chamada <strong>gradiente descendente por minibatch</strong>, na qual calculamos o gradiente (e damos um passo de gradiente) com base num “minibatch” amostrado do conjunto de dados maior:</p>
+<div id="minibatches" class="cell" data-execution_count="1">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb1"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> typing <span class="im">import</span> TypeVar, List, Iterator</span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a>T <span class="op">=</span> TypeVar(<span class="st">'T'</span>)  <span class="co"># isso nos permite criar funções "genéricas"</span></span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> minibatches(dataset: List[T],</span>
+<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a>                batch_size: <span class="bu">int</span>,</span>
+<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a>                shuffle: <span class="bu">bool</span> <span class="op">=</span> <span class="va">True</span>) <span class="op">-&gt;</span> Iterator[List[T]]:</span>
+<span id="cb1-8"><a href="#cb1-8" aria-hidden="true" tabindex="-1"></a>    <span class="co">"""Gera minibatches de tamanho `batch_size` a partir do dataset"""</span></span>
+<span id="cb1-9"><a href="#cb1-9" aria-hidden="true" tabindex="-1"></a>    <span class="co"># Índices de início: 0, batch_size, 2 * batch_size, ...</span></span>
+<span id="cb1-10"><a href="#cb1-10" aria-hidden="true" tabindex="-1"></a>    batch_starts <span class="op">=</span> [start <span class="cf">for</span> start <span class="kw">in</span> <span class="bu">range</span>(<span class="dv">0</span>, <span class="bu">len</span>(dataset), batch_size)]</span>
+<span id="cb1-11"><a href="#cb1-11" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-12"><a href="#cb1-12" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> shuffle: random.shuffle(batch_starts)  <span class="co"># embaralha os lotes</span></span>
+<span id="cb1-13"><a href="#cb1-13" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-14"><a href="#cb1-14" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> start <span class="kw">in</span> batch_starts:</span>
+<span id="cb1-15"><a href="#cb1-15" aria-hidden="true" tabindex="-1"></a>        end <span class="op">=</span> start <span class="op">+</span> batch_size</span>
+<span id="cb1-16"><a href="#cb1-16" aria-hidden="true" tabindex="-1"></a>        <span class="cf">yield</span> dataset[start:end]</span></code></pre></div><button title="Copiar para a área de transferência" class="code-copy-button"><i class="bi"></i></button></div>
+</div>
+<p><code>TypeVar('T')</code> só existe para permitir que <code>minibatches</code> seja genérica: <code>dataset</code> pode ser uma lista de qualquer tipo, e a saída acompanha esse tipo. <code>minibatches</code> é o primeiro gerador que este livro usa para valer — se <code>yield</code> ainda não é intuitivo, a seção <a href="../../content/cap02/05-testes-classes-e-geradores.html">2.5</a> deste livro cobre geradores em detalhe.</p>
+<p><code>gradient_step</code> e <code>linear_gradient</code> já foram escritas nas seções <a href="../../content/cap05/03-usando-o-gradiente.html">5.3</a> e <a href="../../content/cap05/05-ajustando-modelos.html">5.5</a>; <code>vector_mean</code> vem do <a href="../../content/cap04/01-vetores.html">Capítulo 4</a>. Importamos as três, como a <a href="../../content/cap05/04-escolhendo-o-tamanho-do-passo.html">seção 5.4</a> explicou:</p>
+<div id="setup-treino" class="cell" data-execution_count="2">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb2"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> random</span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> scratch.gradient_descent <span class="im">import</span> gradient_step, linear_gradient</span>
+<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> scratch.linear_algebra <span class="im">import</span> Vector, vector_mean</span>
+<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-5"><a href="#cb2-5" aria-hidden="true" tabindex="-1"></a>inputs <span class="op">=</span> [(x, <span class="dv">20</span> <span class="op">*</span> x <span class="op">+</span> <span class="dv">5</span>) <span class="cf">for</span> x <span class="kw">in</span> <span class="bu">range</span>(<span class="op">-</span><span class="dv">50</span>, <span class="dv">50</span>)]</span>
+<span id="cb2-6"><a href="#cb2-6" aria-hidden="true" tabindex="-1"></a>learning_rate <span class="op">=</span> <span class="fl">0.001</span></span>
+<span id="cb2-7"><a href="#cb2-7" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-8"><a href="#cb2-8" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> mse(theta: Vector, dados) <span class="op">-&gt;</span> <span class="bu">float</span>:</span>
+<span id="cb2-9"><a href="#cb2-9" aria-hidden="true" tabindex="-1"></a>    slope, intercept <span class="op">=</span> theta</span>
+<span id="cb2-10"><a href="#cb2-10" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> <span class="bu">sum</span>((slope <span class="op">*</span> x <span class="op">+</span> intercept <span class="op">-</span> y) <span class="op">**</span> <span class="dv">2</span> <span class="cf">for</span> x, y <span class="kw">in</span> dados) <span class="op">/</span> <span class="bu">len</span>(dados)</span></code></pre></div><button title="Copiar para a área de transferência" class="code-copy-button"><i class="bi"></i></button></div>
+</div>
+<section id="o-que-cada-lote-realmente-contém" class="level3">
+<h3 class="anchored" data-anchor-id="o-que-cada-lote-realmente-contém">O que cada lote realmente contém</h3>
+<p>Antes de treinar, vale olhar o que cada lote de 20 pontos realmente contém. <code>theta = [0, 0]</code> é um bom ponto para medir: nele, o gradiente do conjunto de dados <strong>inteiro</strong> deveria refletir o dataset como um todo.</p>
+<div id="vies-dos-lotes" class="cell" data-execution_count="3">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb3"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a>theta0 <span class="op">=</span> [<span class="fl">0.0</span>, <span class="fl">0.0</span>]</span>
+<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> inicio <span class="kw">in</span> <span class="bu">range</span>(<span class="dv">0</span>, <span class="dv">100</span>, <span class="dv">20</span>):</span>
+<span id="cb3-4"><a href="#cb3-4" aria-hidden="true" tabindex="-1"></a>    lote <span class="op">=</span> inputs[inicio:inicio <span class="op">+</span> <span class="dv">20</span>]</span>
+<span id="cb3-5"><a href="#cb3-5" aria-hidden="true" tabindex="-1"></a>    grad_lote <span class="op">=</span> vector_mean([linear_gradient(x, y, theta0) <span class="cf">for</span> x, y <span class="kw">in</span> lote])</span>
+<span id="cb3-6"><a href="#cb3-6" aria-hidden="true" tabindex="-1"></a>    <span class="bu">print</span>(<span class="ss">f"lote x∈[</span><span class="sc">{</span>lote[<span class="dv">0</span>][<span class="dv">0</span>]<span class="sc">}</span><span class="ss">, </span><span class="sc">{</span>lote[<span class="op">-</span><span class="dv">1</span>][<span class="dv">0</span>]<span class="sc">}</span><span class="ss">]: gradiente = </span><span class="sc">{</span>grad_lote<span class="sc">}</span><span class="ss">"</span>)</span>
+<span id="cb3-7"><a href="#cb3-7" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-8"><a href="#cb3-8" aria-hidden="true" tabindex="-1"></a>grad_geral <span class="op">=</span> vector_mean([linear_gradient(x, y, theta0) <span class="cf">for</span> x, y <span class="kw">in</span> inputs])</span>
+<span id="cb3-9"><a href="#cb3-9" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="ss">f"dataset inteiro:    gradiente = </span><span class="sc">{</span>grad_geral<span class="sc">}</span><span class="ss">"</span>)</span></code></pre></div><button title="Copiar para a área de transferência" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>lote x∈[-50, -31]: gradiente = [-66535.0, 1610.0]
+lote x∈[-30, -11]: gradiente = [-17935.0, 810.0]
+lote x∈[-10, 9]: gradiente = [-1335.0, 10.0]
+lote x∈[10, 29]: gradiente = [-16735.0, -790.0]
+lote x∈[30, 49]: gradiente = [-64135.0, -1590.0]
+dataset inteiro:    gradiente = [-33335.0, 10.0]</code></pre>
+</div>
+</div>
 <div class="callout callout-style-default callout-warning callout-titled">
 <div class="callout-header d-flex align-content-center">
 <div class="callout-icon-container">
 <i class="callout-icon"></i>
 </div>
 <div class="callout-title-container flex-fill">
-<span class="screen-reader-only">Aviso</span>Em construção
+<span class="screen-reader-only">Aviso</span>Um <code>shuffle</code> que não embaralha
 </div>
 </div>
 <div class="callout-body-container callout-body">
-<p>O conteúdo desta seção ainda será escrito.</p>
+<p><code>minibatches</code> embaralha <code>batch_starts</code> — os <strong>índices de início</strong> dos lotes —, não os pontos do dataset. Como <code>inputs</code> está ordenado por <code>x</code>, cada lote é sempre a mesma fatia contígua: o primeiro é sempre “x de −50 a −31”, o último é sempre “x de 30 a 49”. Embaralhar a <em>ordem</em> em que essas cinco fatias fixas são processadas não muda o que cada fatia <em>é</em>.</p>
+<p>E o que cada fatia é, é uma amostra sistematicamente torta — não ruidosa, <strong>torta</strong>. Acima, o gradiente do dataset inteiro tem um termo de intercepto quase nulo (<code>10</code>), porque os erros positivos e negativos se cancelam quando você olha para todo <code>x</code>. Mas o termo de intercepto de cada lote isolado varia de <code>+1610</code> a <code>-1590</code> — o <strong>sinal inverte</strong> conforme a fatia está do lado negativo ou positivo de <code>x</code>. Cada lote empurra <code>theta</code> na direção que corrige <em>aquela fatia</em>, não na direção que corrige o dataset inteiro. Embaralhar a ordem dos cinco não desfaz o viés de nenhum deles.</p>
+<p>O conserto tem uma linha: embaralhar o <strong>dataset</strong>, de novo a cada epoch, antes de gerar os lotes — não os índices de início.</p>
+</div>
+</div>
+<div id="cell-minibatch-enviesado-vs-corrigido" class="cell" data-execution_count="4">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb5"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> treina_minibatch(embaralha_dataset: <span class="bu">bool</span>, seed: <span class="bu">int</span>, n_epochs: <span class="bu">int</span> <span class="op">=</span> <span class="dv">1000</span>):</span>
+<span id="cb5-2"><a href="#cb5-2" aria-hidden="true" tabindex="-1"></a>    random.seed(seed)</span>
+<span id="cb5-3"><a href="#cb5-3" aria-hidden="true" tabindex="-1"></a>    theta <span class="op">=</span> [random.uniform(<span class="op">-</span><span class="dv">1</span>, <span class="dv">1</span>), random.uniform(<span class="op">-</span><span class="dv">1</span>, <span class="dv">1</span>)]</span>
+<span id="cb5-4"><a href="#cb5-4" aria-hidden="true" tabindex="-1"></a>    dataset <span class="op">=</span> inputs[:]</span>
+<span id="cb5-5"><a href="#cb5-5" aria-hidden="true" tabindex="-1"></a>    erros <span class="op">=</span> [mse(theta, inputs)]</span>
+<span id="cb5-6"><a href="#cb5-6" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> epoch <span class="kw">in</span> <span class="bu">range</span>(<span class="dv">1</span>, n_epochs <span class="op">+</span> <span class="dv">1</span>):</span>
+<span id="cb5-7"><a href="#cb5-7" aria-hidden="true" tabindex="-1"></a>        <span class="cf">if</span> embaralha_dataset:</span>
+<span id="cb5-8"><a href="#cb5-8" aria-hidden="true" tabindex="-1"></a>            random.shuffle(dataset)  <span class="co"># &lt;-- o conserto de uma linha</span></span>
+<span id="cb5-9"><a href="#cb5-9" aria-hidden="true" tabindex="-1"></a>        <span class="cf">for</span> batch <span class="kw">in</span> minibatches(dataset, batch_size<span class="op">=</span><span class="dv">20</span>, shuffle<span class="op">=</span><span class="kw">not</span> embaralha_dataset):</span>
+<span id="cb5-10"><a href="#cb5-10" aria-hidden="true" tabindex="-1"></a>            grad <span class="op">=</span> vector_mean([linear_gradient(x, y, theta) <span class="cf">for</span> x, y <span class="kw">in</span> batch])</span>
+<span id="cb5-11"><a href="#cb5-11" aria-hidden="true" tabindex="-1"></a>            theta <span class="op">=</span> gradient_step(theta, grad, <span class="op">-</span>learning_rate)</span>
+<span id="cb5-12"><a href="#cb5-12" aria-hidden="true" tabindex="-1"></a>        <span class="cf">if</span> epoch <span class="op">%</span> <span class="dv">20</span> <span class="op">==</span> <span class="dv">0</span>:</span>
+<span id="cb5-13"><a href="#cb5-13" aria-hidden="true" tabindex="-1"></a>            erros.append(mse(theta, inputs))</span>
+<span id="cb5-14"><a href="#cb5-14" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> theta, erros</span>
+<span id="cb5-15"><a href="#cb5-15" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb5-16"><a href="#cb5-16" aria-hidden="true" tabindex="-1"></a>theta_enviesado, erros_enviesado <span class="op">=</span> treina_minibatch(embaralha_dataset<span class="op">=</span><span class="va">False</span>, seed<span class="op">=</span><span class="dv">1</span>)</span>
+<span id="cb5-17"><a href="#cb5-17" aria-hidden="true" tabindex="-1"></a>theta_corrigido, erros_corrigido <span class="op">=</span> treina_minibatch(embaralha_dataset<span class="op">=</span><span class="va">True</span>, seed<span class="op">=</span><span class="dv">1</span>)</span>
+<span id="cb5-18"><a href="#cb5-18" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb5-19"><a href="#cb5-19" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> subidas(erros):</span>
+<span id="cb5-20"><a href="#cb5-20" aria-hidden="true" tabindex="-1"></a>    <span class="co">"""Quantas vezes o erro sobe de um checkpoint para o outro."""</span></span>
+<span id="cb5-21"><a href="#cb5-21" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> <span class="bu">sum</span>(<span class="dv">1</span> <span class="cf">for</span> antes, depois <span class="kw">in</span> <span class="bu">zip</span>(erros, erros[<span class="dv">1</span>:]) <span class="cf">if</span> depois <span class="op">&gt;</span> antes)</span>
+<span id="cb5-22"><a href="#cb5-22" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb5-23"><a href="#cb5-23" aria-hidden="true" tabindex="-1"></a>subidas(erros_enviesado), subidas(erros_corrigido), <span class="bu">len</span>(erros_enviesado) <span class="op">-</span> <span class="dv">1</span></span></code></pre></div><button title="Copiar para a área de transferência" class="code-copy-button"><i class="bi"></i></button></div>
+<div id="minibatch-enviesado-vs-corrigido" class="cell-output cell-output-display" data-execution_count="4">
+<pre><code>(18, 7, 50)</code></pre>
+</div>
+</div>
+<p>Em 50 checkpoints ao longo de 1.000 epochs, a versão original sobe 18 vezes; a corrigida, 7. Não zera — um lote de 20 pontos, mesmo sorteado direito, ainda é uma amostra, e amostras têm variância —, mas a maior fonte de ruído, o viés sistemático das fatias fixas, desaparece. No epoch 100, por exemplo, o erro da versão original está em <code>55,8</code>; o da corrigida, em <code>2,6</code>. Daqui em diante, o resto desta seção usa a versão corrigida — embaralhando o dataset a cada epoch.</p>
+</section>
+</section>
+<section id="gradiente-estocástico" class="level2">
+<h2 class="anchored" data-anchor-id="gradiente-estocástico">Gradiente estocástico</h2>
+<p>Outra variação é o <strong>gradiente descendente estocástico</strong>, no qual você dá passos de gradiente com base em um único exemplo de treino por vez:</p>
+<div id="cell-estocastico" class="cell" data-execution_count="5">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb7"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb7-1"><a href="#cb7-1" aria-hidden="true" tabindex="-1"></a>random.seed(<span class="dv">2</span>)</span>
+<span id="cb7-2"><a href="#cb7-2" aria-hidden="true" tabindex="-1"></a>theta <span class="op">=</span> [random.uniform(<span class="op">-</span><span class="dv">1</span>, <span class="dv">1</span>), random.uniform(<span class="op">-</span><span class="dv">1</span>, <span class="dv">1</span>)]</span>
+<span id="cb7-3"><a href="#cb7-3" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb7-4"><a href="#cb7-4" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> epoch <span class="kw">in</span> <span class="bu">range</span>(<span class="dv">100</span>):</span>
+<span id="cb7-5"><a href="#cb7-5" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> x, y <span class="kw">in</span> inputs:</span>
+<span id="cb7-6"><a href="#cb7-6" aria-hidden="true" tabindex="-1"></a>        grad <span class="op">=</span> linear_gradient(x, y, theta)</span>
+<span id="cb7-7"><a href="#cb7-7" aria-hidden="true" tabindex="-1"></a>        theta <span class="op">=</span> gradient_step(theta, grad, <span class="op">-</span>learning_rate)</span>
+<span id="cb7-8"><a href="#cb7-8" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb7-9"><a href="#cb7-9" aria-hidden="true" tabindex="-1"></a>slope, intercept <span class="op">=</span> theta</span>
+<span id="cb7-10"><a href="#cb7-10" aria-hidden="true" tabindex="-1"></a><span class="cf">assert</span> <span class="fl">19.9</span> <span class="op">&lt;</span> slope <span class="op">&lt;</span> <span class="fl">20.1</span>,   <span class="st">"a inclinação deveria ser aproximadamente 20"</span></span>
+<span id="cb7-11"><a href="#cb7-11" aria-hidden="true" tabindex="-1"></a><span class="cf">assert</span> <span class="fl">4.9</span> <span class="op">&lt;</span> intercept <span class="op">&lt;</span> <span class="fl">5.1</span>, <span class="st">"o intercepto deveria ser aproximadamente 5"</span></span>
+<span id="cb7-12"><a href="#cb7-12" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb7-13"><a href="#cb7-13" aria-hidden="true" tabindex="-1"></a>slope, intercept</span></code></pre></div><button title="Copiar para a área de transferência" class="code-copy-button"><i class="bi"></i></button></div>
+<div id="estocastico" class="cell-output cell-output-display" data-execution_count="5">
+<pre><code>(20.001121847573497, 4.944162658006324)</code></pre>
+</div>
+</div>
+<p>Em 100 epochs — um décimo do minibatch, um cinquentavo do lote inteiro —, o estocástico também chega perto de <code>[20, 5]</code>.</p>
+</section>
+<section id="comparando-os-três" class="level2">
+<h2 class="anchored" data-anchor-id="comparando-os-três">Comparando os três</h2>
+<p>Só que “100 epochs” e “5.000 epochs” não medem a mesma coisa. Um epoch de lote inteiro dá 1 passo de gradiente; um epoch de minibatch (lotes de 20) dá 5; um epoch estocástico dá 100 — um por ponto. Comparar pelo número de epochs é comparar corridas com orçamentos de trabalho diferentes.</p>
+<div class="callout callout-style-default callout-note callout-titled">
+<div class="callout-header d-flex align-content-center">
+<div class="callout-icon-container">
+<i class="callout-icon"></i>
+</div>
+<div class="callout-title-container flex-fill">
+<span class="screen-reader-only">Nota</span>Quantas vezes <code>gradient_step</code> foi chamado
+</div>
+</div>
+<div class="callout-body-container callout-body">
+<p>Lote inteiro: <code>5.000 epochs × 1 passo = 5.000</code> chamadas. Minibatch: <code>1.000 epochs × 5 passos = 5.000</code> chamadas — o mesmo total, apesar de dez vezes menos epochs. Estocástico: <code>100 epochs × 100 passos = 10.000</code> chamadas — o dobro dos outros dois, apesar de ser o que “venceu” em epochs.</p>
+</div>
+</div>
+<p>A comparação justa é pelo número de chamadas a <code>gradient_step</code>, não pelo número de epochs:</p>
+<div id="cell-fig-comparacao-metodos" class="cell" data-execution_count="6">
+<div class="cell-output cell-output-display">
+<div id="fig-comparacao-metodos" class="quarto-float quarto-figure quarto-figure-center anchored">
+<figure class="quarto-float quarto-float-fig figure">
+<div aria-describedby="fig-comparacao-metodos-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<img src="06-minibatch-e-estocastico_files/figure-html/fig-comparacao-metodos-output-1.png" width="600" height="433" class="figure-img">
+</div>
+<figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-fig" id="fig-comparacao-metodos-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Figura&nbsp;26.1: Erro quadrático médio contra o número de chamadas a gradient_step, para lote inteiro, minibatch (corrigido) e estocástico (escala log-log) — repare no serrilhado da curva estocástica
+</figcaption>
+</figure>
+</div>
+</div>
+</div>
+<p>Repare primeiro nas curvas tracejada (lote inteiro) e fina (minibatch): a partir de umas poucas dezenas de chamadas, elas praticamente se sobrepõem, e a tracejada corre por baixo da fina pelo resto do gráfico. Isso não é um defeito da figura — é o próprio argumento desta seção: com o mesmo orçamento de chamadas a <code>gradient_step</code>, as duas chegam à mesma precisão.</p>
+<p>O que salta aos olhos é a linha verde: ela não desce, ela <strong>serrilha</strong>. Só o epoch 1 dispara acima de <code>10¹⁵</code> — para <code>6,9 × 10¹⁸</code>, bem acima do resto do gráfico —; os picos dos epochs seguintes, embora recorrentes, ficam sistematicamente abaixo dessa faixa, o maior deles (epoch 2) em <code>5,7 × 10¹⁴</code>. Não é ruído de plotagem — é <code>gradient_step</code> divergindo, ponto a ponto, exatamente como a caixa da <a href="../../content/cap05/04-escolhendo-o-tamanho-do-passo.html">seção 5.4</a> descreveu para um <code>v</code> inteiro.</p>
+<p><code>inputs</code> está ordenado por <code>x</code>, e o laço estocástico processa os pontos nessa ordem — começando sempre por <code>x = -50</code>. No início do primeiro epoch, com <code>theta</code> ainda longe do valor certo, o gradiente naquele único ponto já é enorme:</p>
+<div id="cascata-do-primeiro-epoch" class="cell" data-execution_count="7">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb9"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb9-1"><a href="#cb9-1" aria-hidden="true" tabindex="-1"></a>random.seed(<span class="dv">2</span>)</span>
+<span id="cb9-2"><a href="#cb9-2" aria-hidden="true" tabindex="-1"></a>theta_demo <span class="op">=</span> [random.uniform(<span class="op">-</span><span class="dv">1</span>, <span class="dv">1</span>), random.uniform(<span class="op">-</span><span class="dv">1</span>, <span class="dv">1</span>)]</span>
+<span id="cb9-3"><a href="#cb9-3" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> x, y <span class="kw">in</span> inputs[:<span class="dv">4</span>]:</span>
+<span id="cb9-4"><a href="#cb9-4" aria-hidden="true" tabindex="-1"></a>    grad <span class="op">=</span> linear_gradient(x, y, theta_demo)</span>
+<span id="cb9-5"><a href="#cb9-5" aria-hidden="true" tabindex="-1"></a>    theta_demo <span class="op">=</span> gradient_step(theta_demo, grad, <span class="op">-</span>learning_rate)</span>
+<span id="cb9-6"><a href="#cb9-6" aria-hidden="true" tabindex="-1"></a>    <span class="bu">print</span>(<span class="ss">f"x = </span><span class="sc">{</span>x<span class="sc">:4d}</span><span class="ss">  theta = </span><span class="sc">{</span>theta_demo<span class="sc">}</span><span class="ss">"</span>)</span></code></pre></div><button title="Copiar para a área de transferência" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>x =  -50  theta = [95.94129132229787, -1.0049294814516887]
+x =  -49  theta = [-269.3172726965588, 6.449326927096407]
+x =  -48  theta = [1063.9958552741857, -21.32802990562743]
+x =  -47  theta = [-3550.8526681382964, 76.86023654995728]</code></pre>
+</div>
+</div>
+<p><code>theta</code> pula de perto de <code>[0.9, 0.9]</code> para <code>[95.9, -1.0]</code> — passa direto pelo <code>20</code> certo —, e o próximo ponto (<code>x = -49</code>), vendo um erro ainda maior, supercorrige para o lado oposto, <code>[-269, 6.4]</code>. É a mesma cascata de supercorreção da seção 5.4, só que provocada por um único ponto extremo em vez de um <code>step_size</code> grande demais: o <code>learning_rate = 0.001</code>, perfeitamente estável para o gradiente <strong>médio</strong> do dataset inteiro, é grande demais para a curvatura de um ponto isolado com <code>x</code> perto de <code>±50</code>.</p>
+<p>A cascata se autocorrige — depois de processar os 100 pontos do epoch, com erros de sinais que se cancelam parcialmente, <code>theta</code> volta para perto do valor certo —, e o pico de cada epoch é menor que o do anterior: de <code>6,9 × 10¹⁸</code> no epoch 1 para <code>1,0 × 10¹¹</code> no epoch 100. Mas o padrão nunca desaparece de todo: a cada novo epoch, o primeiro ponto (<code>x = -50</code>) provoca um novo solavanco, cada vez menor, e é isso que o serrilhado da figura mostra do início ao fim.</p>
+<p>Medido só nas fronteiras de epoch — onde a cascata já se autocorrigiu — o quadro é mais parecido com o que se esperaria: no mesmo orçamento de <code>5.000</code> chamadas (fronteira do epoch 50), o estocástico está em <code>0,34</code>, contra <code>4,1 × 10⁻⁸</code> do lote inteiro e <code>3,8 × 10⁻⁸</code> do minibatch — sete ordens de grandeza pior, e isso sem contar os picos. Mesmo esgotando as <code>10.000</code> chamadas que de fato usou, chega só a <code>4,2 × 10⁻³</code>, ainda muito atrás da precisão que os outros dois atingem com metade do orçamento — e pagando o preço de uma trajetória bem mais instável para chegar lá.</p>
+<p>Isso não quer dizer que o estocástico seja inútil: ele chega aos parâmetros certos processando um ponto de cada vez, com cada atualização individual muito mais barata que a de um lote de 20 ou de 100 pontos. Mas “barata por chamada” não é “estável” — e é exatamente esse tipo de comportamento que se evita, na prática, reescalonando os atributos antes de treinar (para que nenhuma dimensão tenha curvatura muito maior que as outras — o assunto da seção <a href="../../content/cap07/06-reescalonamento.html">7.6</a>) ou usando um passo bem menor para atualizações de um ponto só.</p>
+<div class="conceito">
+<p>O tamanho do lote é um controle de compromisso, não uma escolha “certa” universal. Lotes maiores dão um gradiente mais fiel ao dataset inteiro — mais estável, mas mais caro por passo, e menos passos pelo mesmo custo de “passar pelos dados uma vez”. Lotes menores dão mais passos, cada um mais barato — mas cada um enxerga menos dado, e no limite (um ponto só) pode enxergar um ponto atípico o bastante para que o mesmo <code>learning_rate</code>, seguro para a média do dataset, vire grande demais para aquele ponto isolado.</p>
+</div>
+<p>Ao longo do livro, vamos experimentar para achar tamanhos de lote e de passo adequados a cada problema.</p>
+<div class="callout callout-style-default callout-note callout-titled">
+<div class="callout-header d-flex align-content-center">
+<div class="callout-icon-container">
+<i class="callout-icon"></i>
+</div>
+<div class="callout-title-container flex-fill">
+Nota
+</div>
+</div>
+<div class="callout-body-container callout-body">
+<p>A terminologia para as várias variantes de gradiente descendente não é uniforme. A abordagem “calcule o gradiente para o conjunto de dados inteiro” costuma ser chamada de <strong>gradiente descendente em lote</strong> (<em>batch gradient descent</em>), e algumas pessoas dizem <strong>gradiente descendente estocástico</strong> ao se referir à versão por minibatch (da qual a versão ponto a ponto é um caso especial).</p>
+</div>
+</div>
+<p>O laço que você escreveu nesta seção — dividir os dados em lotes, calcular o gradiente médio de cada lote, chamar <code>gradient_step</code>, repetir — não muda mais neste livro. O que muda, capítulo a capítulo, é só o gradiente que entra nele. Nos capítulos <a href="../../content/cap11/index.html">11</a> e <a href="../../content/cap12/index.html">12</a>, regressão linear simples e múltipla, é o gradiente do erro quadrático — o mesmo <code>linear_gradient</code> que você acabou de usar aqui, só que com mais coeficientes. No <a href="../../content/cap13/index.html">Capítulo 13</a>, regressão logística, é o gradiente da log-verossimilhança — outra função, mesma receita. Nos capítulos <a href="../../content/cap15/index.html">15</a> e <a href="../../content/cap16/index.html">16</a>, redes neurais e deep learning, é o gradiente calculado por retropropagação, uma rede inteira de derivadas encadeadas em vez de duas. Você não vai reescrever <code>gradient_step</code> nenhuma vez a mais — vai só trocar o que ele recebe.</p>
+<div class="callout callout-style-default callout-tip callout-titled">
+<div class="callout-header d-flex align-content-center collapsed" data-bs-toggle="collapse" data-bs-target=".callout-5-contents" aria-controls="callout-5" aria-expanded="false" aria-label="Toggle callout">
+<div class="callout-icon-container">
+<i class="callout-icon"></i>
+</div>
+<div class="callout-title-container flex-fill">
+<span class="screen-reader-only">Dica</span>Na prática: <code>batch_size</code> é um hiperparâmetro de verdade
+</div>
+<div class="callout-btn-toggle d-inline-block border-0 py-1 ps-1 pe-0 float-end"><i class="callout-toggle"></i></div>
+</div>
+<div id="callout-5" class="callout-5-contents callout-collapse collapse">
+<div class="callout-body-container callout-body">
+<p>Todo framework de deep learning expõe exatamente essa escolha, com esse nome:</p>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb11"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb11-1"><a href="#cb11-1" aria-hidden="true" tabindex="-1"></a><span class="co"># PyTorch</span></span>
+<span id="cb11-2"><a href="#cb11-2" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> torch.utils.data <span class="im">import</span> DataLoader</span>
+<span id="cb11-3"><a href="#cb11-3" aria-hidden="true" tabindex="-1"></a>DataLoader(dataset, batch_size<span class="op">=</span><span class="dv">32</span>, shuffle<span class="op">=</span><span class="va">True</span>)</span>
+<span id="cb11-4"><a href="#cb11-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb11-5"><a href="#cb11-5" aria-hidden="true" tabindex="-1"></a><span class="co"># Keras / TensorFlow</span></span>
+<span id="cb11-6"><a href="#cb11-6" aria-hidden="true" tabindex="-1"></a>modelo.fit(X_treino, y_treino, batch_size<span class="op">=</span><span class="dv">32</span>, epochs<span class="op">=</span><span class="dv">10</span>)</span></code></pre></div><button title="Copiar para a área de transferência" class="code-copy-button"><i class="bi"></i></button></div>
+<p>Hoje em dia, quando alguém diz “treinei com SGD”, quase sempre quer dizer gradiente descendente por minibatch — a ressalva de terminologia acima não é só uma curiosidade histórica, é como a maioria dos textos e das APIs usa o termo. <code>batch_size = 1</code> (o estocástico puro, ponto a ponto) é raro em produção, e a comparação acima mostra por quê: ele gasta mais chamadas para chegar à mesma precisão que lote inteiro ou minibatch. Se você não estivesse fazendo a sua álgebra linear do zero, a diferença seria ainda maior: bibliotecas como NumPy calculam o gradiente de um lote inteiro numa única operação vetorizada, em vez de somar as contribuições de cada ponto uma a uma em Python puro — outro motivo, além da precisão por chamada, pelo qual minibatches maiores costumam ganhar de exemplos únicos na prática.</p>
+<p>Os otimizadores que você vai encontrar nos capítulos sobre <a href="../../content/cap15/index.html">redes neurais</a> e <a href="../../content/cap16/index.html">deep learning</a> — Adam, RMSProp, SGD com momentum — são todos construídos <strong>em cima</strong> de gradiente descendente por minibatch, não no lugar dele: eles mudam como o tamanho do passo se adapta a cada minibatch, mas o laço externo — separar os dados em lotes, calcular o gradiente médio de cada lote, chamar o equivalente de <code>gradient_step</code> — é o mesmo que você acabou de escrever aqui.</p>
+</div>
 </div>
 </div>
 
@@ -1090,6 +1345,7 @@ Nota
 Grus, Joel. 2019. <em>Data Science from Scratch: First Principles with Python</em>. 2nd ed. O’Reilly Media.
 </div>
 </div>
+</section>
 
 </main> <!-- /main -->
 <script>
@@ -1620,7 +1876,7 @@ document.addEventListener('DOMContentLoaded', function () {
 </div>   
     <div class="nav-footer-center">
       &nbsp;
-    <div class="toc-actions"><ul><li><a href="https://github.com/BragaD/UnDF-Bases5-CienciaDeDados-202602/issues/new" class="toc-action"><i class="bi bi-github"></i>Criar uma issue</a></li></ul></div></div>
+    <div class="toc-actions d-sm-block d-md-none"><ul><li><a href="https://github.com/BragaD/UnDF-Bases5-CienciaDeDados-202602/issues/new" class="toc-action"><i class="bi bi-github"></i>Criar uma issue</a></li></ul></div></div>
     <div class="nav-footer-right">
       <ul class="footer-items list-unstyled">
     <li class="nav-item compact">

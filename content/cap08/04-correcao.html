@@ -1294,6 +1294,52 @@ Nota
 <p>Num filtro de spam, um falso positivo é um e-mail importante que some na caixa de lixo; um falso negativo é um anúncio na caixa de entrada. Aqui o desequilíbrio aponta para o outro lado, e o limiar deve pender para a precisão.</p>
 <p>Mesmo algoritmo, mesmas métricas, decisões opostas. Quem escolhe o limiar está fazendo uma escolha sobre quem paga o preço do erro — e vale saber que está fazendo isso.</p>
 </div>
+<div class="callout callout-style-default callout-tip callout-titled">
+<div class="callout-header d-flex align-content-center collapsed" data-bs-toggle="collapse" data-bs-target=".callout-4-contents" aria-controls="callout-4" aria-expanded="false" aria-label="Toggle callout">
+<div class="callout-icon-container">
+<i class="callout-icon"></i>
+</div>
+<div class="callout-title-container flex-fill">
+<span class="screen-reader-only">Dica</span>Na prática: <code>scikit-learn</code>
+</div>
+<div class="callout-btn-toggle d-inline-block border-0 py-1 ps-1 pe-0 float-end"><i class="callout-toggle"></i></div>
+</div>
+<div id="callout-4" class="callout-4-contents callout-collapse collapse">
+<div class="callout-body-container callout-body">
+<p>As métricas desta seção estão todas em <code>sklearn.metrics</code>, e recebem os rótulos em vez das quatro contagens:</p>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb9"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb9-1"><a href="#cb9-1" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> sklearn.metrics <span class="im">import</span> (accuracy_score, precision_score, recall_score,</span>
+<span id="cb9-2"><a href="#cb9-2" aria-hidden="true" tabindex="-1"></a>                             f1_score, confusion_matrix, classification_report)</span>
+<span id="cb9-3"><a href="#cb9-3" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb9-4"><a href="#cb9-4" aria-hidden="true" tabindex="-1"></a>accuracy_score(y_teste, previsto)    <span class="co"># 0.98114</span></span>
+<span id="cb9-5"><a href="#cb9-5" aria-hidden="true" tabindex="-1"></a>precision_score(y_teste, previsto)   <span class="co"># 0.014</span></span>
+<span id="cb9-6"><a href="#cb9-6" aria-hidden="true" tabindex="-1"></a>recall_score(y_teste, previsto)      <span class="co"># 0.005</span></span>
+<span id="cb9-7"><a href="#cb9-7" aria-hidden="true" tabindex="-1"></a>f1_score(y_teste, previsto)          <span class="co"># 0.007368421052631579</span></span></code></pre></div><button title="Copiar para a área de transferência" class="code-copy-button"><i class="bi"></i></button></div>
+<p>Reconstruindo o milhão de pessoas do teste do Luke, os quatro números saem idênticos aos que você calculou acima. Não há truque nenhum nessas funções — elas contam as mesmas quatro caixas. O que muda é tudo o que fica implícito.</p>
+<p><strong>O primeiro implícito é a orientação da matriz.</strong> A tabela desta seção põe as previsões nas <strong>linhas</strong>; o <code>confusion_matrix</code> do <code>scikit-learn</code> põe os valores <strong>reais</strong> nas linhas e as previsões nas colunas. É a transposta:</p>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb10"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb10-1"><a href="#cb10-1" aria-hidden="true" tabindex="-1"></a>confusion_matrix(y_teste, previsto)</span>
+<span id="cb10-2"><a href="#cb10-2" aria-hidden="true" tabindex="-1"></a><span class="co"># [[981070   4930]        linha 0 = sem leucemia (real)</span></span>
+<span id="cb10-3"><a href="#cb10-3" aria-hidden="true" tabindex="-1"></a><span class="co">#  [ 13930     70]]       linha 1 = com leucemia (real)</span></span>
+<span id="cb10-4"><a href="#cb10-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb10-5"><a href="#cb10-5" aria-hidden="true" tabindex="-1"></a>confusion_matrix(y_teste, previsto).ravel()</span>
+<span id="cb10-6"><a href="#cb10-6" aria-hidden="true" tabindex="-1"></a><span class="co"># [981070   4930  13930     70]   -&gt;  tn, fp, fn, tp</span></span></code></pre></div><button title="Copiar para a área de transferência" class="code-copy-button"><i class="bi"></i></button></div>
+<p>Repare na ordem que o <code>.ravel()</code> produz: <code>tn, fp, fn, tp</code>. É exatamente o <strong>inverso</strong> da ordem em que as nossas funções recebem os argumentos — <code>precision(tp, fp, fn, tn)</code>. Desempacotar uma na outra sem olhar produz um número plausível e errado, sem erro nenhum: o código roda, o resultado é um float entre 0 e 1, e nada avisa. É a mesma família de armadilha que a <a href="../../content/cap08/03-overfitting-e-underfitting.html">seção anterior</a> apontou ao embaralhar <code>xs</code> e <code>ys</code> separadamente — o programa não reclama, e o número que ele devolve não significa o que você acha que significa.</p>
+<p><strong>O segundo implícito é qual classe é a positiva.</strong> As nossas funções não têm essa dúvida: <code>tp</code> é o primeiro argumento e você decidiu o que colocar ali. As da biblioteca têm <code>pos_label=1</code> e <code>average='binary'</code> por padrão, e daí saem dois comportamentos diferentes:</p>
+<ul>
+<li>Se os rótulos forem texto, ela recusa: <code>ValueError: pos_label=1 is not a valid label. It should be one of ['ham' 'spam']</code>. Um erro barulhento, que se conserta passando <code>pos_label='spam'</code>.</li>
+<li>Se os rótulos forem <code>0</code> e <code>1</code>, ela <strong>não pergunta nada</strong> e mede a classe <code>1</code>. Quando a classe rara é a <code>0</code> — “não pagou”, “não converteu”, “peça defeituosa” codificada como zero —, você recebe a precisão e a revocação da classe errada, com aparência perfeita de resposta certa. Nesse caso, o número que interessa vem de <code>precision_score(y_teste, previsto, pos_label=0)</code>.</li>
+</ul>
+<p><strong>O terceiro implícito é a divisão por zero, e ele é o mais interessante.</strong> Um classificador que nunca prevê “positivo” tem <code>tp + fp == 0</code>, e a nossa <code>precision</code> estoura com <code>ZeroDivisionError</code> — o <a href="../../content/cap10/05-usando-o-modelo.html">Capítulo 10</a> mostra isso acontecendo com dados reais. A biblioteca não estoura:</p>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb11"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb11-1"><a href="#cb11-1" aria-hidden="true" tabindex="-1"></a>precision_score([<span class="dv">1</span>, <span class="dv">0</span>, <span class="dv">1</span>, <span class="dv">0</span>], [<span class="dv">0</span>, <span class="dv">0</span>, <span class="dv">0</span>, <span class="dv">0</span>])</span>
+<span id="cb11-2"><a href="#cb11-2" aria-hidden="true" tabindex="-1"></a><span class="co"># UndefinedMetricWarning: Precision is ill-defined and being set to 0.0</span></span>
+<span id="cb11-3"><a href="#cb11-3" aria-hidden="true" tabindex="-1"></a><span class="co"># due to no predicted samples. Use `zero_division` parameter to control</span></span>
+<span id="cb11-4"><a href="#cb11-4" aria-hidden="true" tabindex="-1"></a><span class="co"># this behavior.</span></span>
+<span id="cb11-5"><a href="#cb11-5" aria-hidden="true" tabindex="-1"></a><span class="co"># 0.0</span></span></code></pre></div><button title="Copiar para a área de transferência" class="code-copy-button"><i class="bi"></i></button></div>
+<p>O padrão é <code>zero_division="warn"</code>, que devolve <code>0.0</code> e emite um aviso — e aviso, ao contrário de exceção, não interrompe nada. Num laço que testa vinte modelos e imprime uma tabela no fim, essa <code>0.0</code> entra na tabela como se fosse uma medição, indistinguível de um modelo que aponta positivos e erra todos. <strong>São duas situações diferentes</strong>: um modelo com precisão 0,0 aponta e erra; um modelo com precisão indefinida não aponta nada. O <code>ZeroDivisionError</code> do nosso código distingue os dois casos ao preço de derrubar o programa; o <code>0.0</code> da biblioteca não os distingue, e não derruba nada.</p>
+<p>Os valores aceitos são <code>"warn"</code>, <code>0.0</code>, <code>1.0</code> e <code>np.nan</code>. O último é o mais honesto para uma tabela comparativa: <code>nan</code> propaga, aparece como buraco em vez de nota baixa, e é excluído das médias.</p>
+<p>Por fim, <code>classification_report(y_teste, previsto)</code> devolve precisão, revocação, F1 e o número de exemplos (<em>support</em>) <strong>para cada classe</strong>, mais as médias macro e ponderada. É a correção direta do hábito de olhar só um lado, e o formato em que essas métricas normalmente são reportadas.</p>
+</div>
+</div>
+</div>
 
 
 <div id="refs" class="references csl-bib-body hanging-indent" role="list">

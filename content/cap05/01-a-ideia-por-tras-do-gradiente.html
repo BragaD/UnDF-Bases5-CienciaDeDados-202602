@@ -24,6 +24,41 @@ ul.task-list li input[type="checkbox"] {
   margin: 0 0.8em 0.2em -1em; /* quarto-specific, see https://github.com/quarto-dev/quarto-cli/issues/4556 */ 
   vertical-align: middle;
 }
+/* CSS for syntax highlighting */
+html { -webkit-text-size-adjust: 100%; }
+pre > code.sourceCode { white-space: pre; position: relative; }
+pre > code.sourceCode > span { display: inline-block; line-height: 1.25; }
+pre > code.sourceCode > span:empty { height: 1.2em; }
+.sourceCode { overflow: visible; }
+code.sourceCode > span { color: inherit; text-decoration: inherit; }
+div.sourceCode { margin: 1em 0; }
+pre.sourceCode { margin: 0; }
+@media screen {
+div.sourceCode { overflow: auto; }
+}
+@media print {
+pre > code.sourceCode { white-space: pre-wrap; }
+pre > code.sourceCode > span { text-indent: -5em; padding-left: 5em; }
+}
+pre.numberSource code
+  { counter-reset: source-line 0; }
+pre.numberSource code > span
+  { position: relative; left: -4em; counter-increment: source-line; }
+pre.numberSource code > span > a:first-child::before
+  { content: counter(source-line);
+    position: relative; left: -1em; text-align: right; vertical-align: baseline;
+    border: none; display: inline-block;
+    -webkit-touch-callout: none; -webkit-user-select: none;
+    -khtml-user-select: none; -moz-user-select: none;
+    -ms-user-select: none; user-select: none;
+    padding: 0 4px; width: 4em;
+  }
+pre.numberSource { margin-left: 3em;  padding-left: 4px; }
+div.sourceCode
+  {   }
+@media screen {
+pre > code.sourceCode > span > a:first-child::before { text-decoration: underline; }
+}
 /* CSS for citations */
 div.csl-bib-body { }
 div.csl-entry {
@@ -97,6 +132,35 @@ div.csl-indent {
   }
 }</script>
 
+  <script src="https://cdnjs.cloudflare.com/polyfill/v3/polyfill.min.js?features=es6"></script>
+  <script defer="" src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-chtml-full.js" type="text/javascript"></script>
+
+<script type="text/javascript">
+const typesetMath = (el) => {
+  if (window.MathJax) {
+    // MathJax Typeset
+    window.MathJax.typeset([el]);
+  } else if (window.katex) {
+    // KaTeX Render
+    var mathElements = el.getElementsByClassName("math");
+    var macros = [];
+    for (var i = 0; i < mathElements.length; i++) {
+      var texText = mathElements[i].firstChild;
+      if (mathElements[i].tagName == "SPAN" && texText && texText.data) {
+        window.katex.render(texText.data, mathElements[i], {
+          displayMode: mathElements[i].classList.contains('display'),
+          throwOnError: false,
+          macros: macros,
+          fleqn: false
+        });
+      }
+    }
+  }
+}
+window.Quarto = {
+  typesetMath
+};
+</script>
 
 <link rel="stylesheet" href="../../styles.css">
 </head>
@@ -1025,8 +1089,14 @@ div.csl-indent {
 </nav>
 <div id="quarto-sidebar-glass" class="quarto-sidebar-collapse-item" data-bs-toggle="collapse" data-bs-target=".quarto-sidebar-collapse-item"></div>
 <!-- margin-sidebar -->
-    <div id="quarto-margin-sidebar" class="sidebar margin-sidebar zindex-bottom">
-        
+    <div id="quarto-margin-sidebar" class="sidebar margin-sidebar">
+        <nav id="TOC" role="doc-toc" class="toc-active">
+    <h2 id="toc-title">Nesta página</h2>
+   
+  <ul>
+  <li><a href="#o-procedimento" id="toc-o-procedimento" class="nav-link active" data-scroll-target="#o-procedimento">O procedimento</a></li>
+  </ul>
+<div class="toc-actions"><ul><li><a href="https://github.com/BragaD/UnDF-Bases5-CienciaDeDados-202602/issues/new" class="toc-action"><i class="bi bi-github"></i>Criar uma issue</a></li></ul></div></nav>
     </div>
 <!-- main -->
 <main class="content" id="quarto-document-content">
@@ -1070,19 +1140,64 @@ Nota
 <p>Esta seção corresponde a <em>The Idea Behind Gradient Descent</em>, do capítulo 8 de <span class="citation" data-cites="grus2019">Grus (<a href="#ref-grus2019" role="doc-biblioref">2019</a>)</span>.</p>
 </div>
 </div>
+<p>Em ciência de dados, resolver um problema frequentemente se resume a achar, para alguma função <span class="math inline">\(f\)</span>, o vetor de entrada que a minimiza ou maximiza. Isso significa resolver vários problemas de otimização sem chamar um otimizador pronto. A técnica que vamos usar, o <strong>gradiente descendente</strong>, é justamente a que melhor se presta a isso: cabe em poucas linhas e não esconde nada.</p>
+<p>Suponha que temos alguma função <span class="math inline">\(f\)</span> que recebe como entrada um vetor de números reais e devolve um único número real. Uma função simples desse tipo é a que já apareceu no <a href="../../content/cap04/index.html">Capítulo 4</a>:</p>
+<div id="cell-sum-of-squares" class="cell" data-execution_count="1">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb1"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> scratch.linear_algebra <span class="im">import</span> Vector, dot</span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> sum_of_squares(v: Vector) <span class="op">-&gt;</span> <span class="bu">float</span>:</span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a>    <span class="co">"""Calcula a soma dos elementos ao quadrado em v"""</span></span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> dot(v, v)</span>
+<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a>sum_of_squares([<span class="dv">1</span>, <span class="dv">2</span>, <span class="dv">3</span>])</span></code></pre></div><button title="Copiar para a área de transferência" class="code-copy-button"><i class="bi"></i></button></div>
+<div id="sum-of-squares" class="cell-output cell-output-display" data-execution_count="1">
+<pre><code>14</code></pre>
+</div>
+</div>
+<p>Frequentemente vamos precisar maximizar ou minimizar funções como essa — isto é, achar o <code>v</code> de entrada que produz o maior (ou o menor) valor possível.</p>
+<div class="conceito">
+<p>Para funções como a nossa, o <strong>gradiente</strong> — se você lembra do seu cálculo, é o vetor de derivadas parciais — aponta, no espaço de entrada, a direção em que a função cresce mais rápido.</p>
+<p>Uma forma de maximizar uma função é, então: escolher um ponto de partida aleatório, calcular o gradiente, dar um passo pequeno na direção do gradiente (a direção que faz a função crescer mais) e repetir a partir do novo ponto. Da mesma forma, dá para <em>minimizar</em> uma função dando passos pequenos na direção <strong>oposta</strong>.</p>
+</div>
+<section id="o-procedimento" class="level2">
+<h2 class="anchored" data-anchor-id="o-procedimento">O procedimento</h2>
+<p>O procedimento inteiro é este:</p>
+<ol type="1">
+<li>Escolha um ponto de partida qualquer.</li>
+<li>Calcule o gradiente nesse ponto.</li>
+<li>Dê um passo pequeno na direção oposta ao gradiente (se o objetivo é minimizar).</li>
+<li>Repita a partir do novo ponto.</li>
+</ol>
+<div id="cell-fig-ideia-gradiente" class="cell" data-execution_count="2">
+<div class="cell-output cell-output-display">
+<div id="fig-ideia-gradiente" class="quarto-float quarto-figure quarto-figure-center anchored">
+<figure class="quarto-float quarto-float-fig figure">
+<div aria-describedby="fig-ideia-gradiente-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<img src="01-a-ideia-por-tras-do-gradiente_files/figure-html/fig-ideia-gradiente-output-1.png" width="476" height="470" class="figure-img">
+</div>
+<figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-fig" id="fig-ideia-gradiente-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Figura&nbsp;21.1: Descida de gradiente sobre f(x, y) = x² + 5y²: as curvas de nível são elipses, e o caminho se curva para ficar perpendicular a cada uma delas
+</figcaption>
+</figure>
+</div>
+</div>
+</div>
+<p>As curvas de nível do gráfico são as curvas onde <code>f</code> vale o mesmo — elipses, não círculos: como o termo em <code>y</code> pesa cinco vezes mais que o termo em <code>x</code>, para manter <code>f</code> constante uma variação em <code>y</code> precisa ser bem menor que a variação equivalente em <code>x</code>. Isso faz a tigela ser mais íngreme na direção de <code>y</code> do que na de <code>x</code>.</p>
+<p>Repare no que isso faz com o caminho. Cada ponto vermelho ainda se move perpendicular à curva de nível em que está — essa regra não muda —, mas agora “perpendicular” não aponta para a origem: o passo inicial desce quase reto (a direção íngreme domina), e só depois de <code>y</code> encolher é que o caminho vira e passa a rastejar ao longo de <code>x</code>, a direção rasa. O caminho <strong>se curva</strong>. Numa tigela circular — o caso hipotético em que <code>x</code> e <code>y</code> pesassem igual, sem um termo dominando o outro —, isso seria invisível: direção radial e direção perpendicular à curva de nível coincidiriam por acaso. Aqui, não: a curvatura da função aparece no formato do caminho, e vai reaparecer, com números, quando a <a href="../../content/cap05/04-escolhendo-o-tamanho-do-passo.html">seção 5.4</a> explicar por que o tamanho certo do passo depende dela.</p>
 <div class="callout callout-style-default callout-warning callout-titled">
 <div class="callout-header d-flex align-content-center">
 <div class="callout-icon-container">
 <i class="callout-icon"></i>
 </div>
 <div class="callout-title-container flex-fill">
-<span class="screen-reader-only">Aviso</span>Em construção
+Aviso
 </div>
 </div>
 <div class="callout-body-container callout-body">
-<p>O conteúdo desta seção ainda será escrito.</p>
+<p>Uma ressalva do próprio <span class="citation" data-cites="grus2019">Grus (<a href="#ref-grus2019" role="doc-biblioref">2019</a>)</span>: se uma função tem um único mínimo global, este procedimento provavelmente o encontra. Se a função tem múltiplos mínimos <em>locais</em>, o procedimento pode “achar” o mínimo errado — nesse caso, você pode rodar o procedimento de novo a partir de pontos de partida diferentes. E se a função não tiver mínimo nenhum, é possível que o procedimento rode para sempre.</p>
 </div>
 </div>
+<p>Falta uma peça: como, exatamente, calculamos o gradiente de uma função? É isso que a próxima seção resolve.</p>
 
 
 <div id="refs" class="references csl-bib-body hanging-indent" role="list">
@@ -1090,6 +1205,7 @@ Nota
 Grus, Joel. 2019. <em>Data Science from Scratch: First Principles with Python</em>. 2nd ed. O’Reilly Media.
 </div>
 </div>
+</section>
 
 </main> <!-- /main -->
 <script>
@@ -1620,7 +1736,7 @@ document.addEventListener('DOMContentLoaded', function () {
 </div>   
     <div class="nav-footer-center">
       &nbsp;
-    <div class="toc-actions"><ul><li><a href="https://github.com/BragaD/UnDF-Bases5-CienciaDeDados-202602/issues/new" class="toc-action"><i class="bi bi-github"></i>Criar uma issue</a></li></ul></div></div>
+    <div class="toc-actions d-sm-block d-md-none"><ul><li><a href="https://github.com/BragaD/UnDF-Bases5-CienciaDeDados-202602/issues/new" class="toc-action"><i class="bi bi-github"></i>Criar uma issue</a></li></ul></div></div>
     <div class="nav-footer-right">
       <ul class="footer-items list-unstyled">
     <li class="nav-item compact">
