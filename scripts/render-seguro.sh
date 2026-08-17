@@ -105,6 +105,9 @@ for rodada in $(seq 1 "$MAX_RODADAS"); do
     # o render abortou antes, esse lixo trava o render seguinte.
     find content -name '*_files' -type d -exec rm -rf {} + 2>/dev/null || true
     find content -name '*.html' -type f -delete 2>/dev/null || true
+    # O motor Jupyter também deixa `.quarto_ipynb` — o notebook intermediário que
+    # ele gera de cada `.qmd`. Mesma família de lixo, mesmo tratamento.
+    find content -name '*.quarto_ipynb' -type f -delete 2>/dev/null || true
 
     # A raiz também recebe lixo: `index.qmd` é a capa do livro, então um render
     # abortado deixa `index.html` aqui. Mas a raiz também abriga `spoiler.html`,
