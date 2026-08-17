@@ -723,3 +723,32 @@ item a item, e o `pyproject.toml` para os pacotes ausentes.
 Duas vezes uma correção deixou o irmão vivo (uma linha acima; dois arquivos antes). Esta
 passagem buscou irmãos das três explicitamente e reportou o resultado — inclusive dois vizinhos
 de `cap16/07` que **estão certos** no escopo deles. É isso que faltava.
+
+### Sexta passagem: um defeito meu na correção, e as quatro epígrafes que faltavam
+
+**O defeito meu, e é o décimo da sessão — da mesma classe que eu estava corrigindo.** Ao dar
+escopo ao "este livro nunca passa de duas dimensões", escrevi um parêntese afirmando que um
+arranjo de três dimensões aparece "**uma vez** no livro". A §16.3 constrói um, **duas seções
+adiante no mesmo capítulo**: `assert shape(random_uniform(2, 3, 4)) == [2, 3, 4]`. Troquei um
+superlativo por outro, refutável na mesma página.
+
+A cura definitiva não foi contar: foi mudar o **eixo** da afirmação. O texto agora diz que
+nenhum arranjo de três dimensões **atravessa uma rede** — e cita os dois lugares onde eles
+existem. Deixou de ser uma contagem (frágil, e falsificável por qualquer capítulo novo) e virou
+uma propriedade do que a biblioteca do capítulo manipula.
+
+### O achado estrutural: quatro capítulos sem epígrafe
+
+O portão escolheu varrer **os 17 `index.qmd` lidos em sequência** — a espinha do livro, que
+nunca tinha sido lida assim — e conferiu por comando as 15 afirmações contáveis dos índices
+(as 168 de 259 funções do cap. 2, o `dot` em 11 módulos do cap. 4, o `gradient_step` de cinco
+linhas, os "próximos dezesseis capítulos" do cap. 1).
+
+Achou que **13 dos 17 índices trazem a epígrafe do Grus e 4 não**: os capítulos 1, 2, 3 e 9.
+São exatamente os escritos mais cedo — e o **9 é o modelo de estilo do livro**, justamente o que
+não tinha a convenção que os treze seguintes adotaram.
+
+As quatro foram extraídas do PDF verbatim e traduzidas preservando o trocadilho, que em três
+delas é o motivo da escolha: Michael Palin (do Monty Python) falando da linguagem; Harvey Mackay
+falando de visualização **mental** num capítulo sobre gráficos; e Pietro Aretino sobre irritar os
+**vizinhos**, num capítulo sobre k-vizinhos.
