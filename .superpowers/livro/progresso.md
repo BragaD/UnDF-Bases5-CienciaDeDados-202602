@@ -668,3 +668,25 @@ explicação é estrutural: são afirmações sobre o livro inteiro **escritas d
 capítulo**, por um agente que só via aquele capítulo — e portanto não verificáveis de onde
 foram escritas. Nenhuma revisão por capítulo as pega. **Só uma varredura do livro completo pega,
 e ela precisa ser por construção gramatical, não por assunto.**
+
+### Quarta passagem: duas varreduras limpas, uma com três achados
+
+**B (números em prosa) e C (referências cruzadas) voltaram LIMPAS.** B conferiu 340 números
+com vírgula decimal contra o `_freeze`, sinalizou 87, resolveu todos, e recalculou dois no
+container. C resolveu **664** links `.qmd`, com e sem âncora: zero arquivos ausentes, zero
+âncoras quebradas.
+
+**A (superlativos) achou mais três**, e um deles é instrutivo: `cap13/03:14` é **o gêmeo exato**
+do que a rodada anterior corrigiu em `cap13/05:291` — mesma afirmação, mesmo capítulo, dois
+arquivos antes. Consertar uma instância e não procurar as irmãs é o modo de falha desta classe.
+
+Os outros dois: `cap17/05:207` reivindicava ser "o capítulo em que o preço da transparência fica
+mais caro", contra os ~6 minutos do cap. 16 (o próprio cap. 16 diz ser o mais caro "com folga"),
+e `cap15/03:352` dizia "é a última vez neste livro" que os pesos contam uma história legível,
+enquanto a §16.5 lê os pesos da mesma rede XOR.
+
+**Catorze superlativos falsos no total.** O consumo por rodada não está caindo — o que sugere
+que a varredura por construção gramatical precisa ser **exaustiva de uma vez**, e não iterativa.
+
+**A cura das três frases foi a mesma: dar escopo.** Nenhuma perdeu o que queria dizer; todas
+trocaram uma afirmação sobre o livro por uma afirmação sobre onde ela vale.
