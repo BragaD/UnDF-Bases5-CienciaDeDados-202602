@@ -6,7 +6,7 @@ Esta seção corresponde a *Example: MNIST* e a *Saving and Loading Models*, do 
 
 O MNIST é um conjunto de dígitos manuscritos que todo mundo usa para aprender deep learning. São 70.000 imagens de 28 × 28 pixels em tons de cinza, cada uma com o dígito que ela representa: 60.000 para treino e 10.000 para teste.
 
-É a última coisa que este livro constrói, e ela usa **tudo**: os tensores, as camadas, a rede como sequência, a perda de entropia cruzada, o otimizador com momento e o dropout. O laço de treino é o mesmo desde a seção do XOR.
+É a última coisa que este capítulo constrói, e a mais completa: ela usa **tudo**: os tensores, as camadas, a rede como sequência, a perda de entropia cruzada, o otimizador com momento e o dropout. O laço de treino é o mesmo desde a seção do XOR.
 
 ## O arquivo binário, aberto à mão
 
@@ -79,7 +79,7 @@ print("teste :", shape(imagens_teste), " rótulos:", shape(rotulos_teste))
 print("dez primeiros rótulos:", rotulos_treino[:10])
 ```
 
-Setenta mil imagens em cerca de um segundo, sem `numpy` e sem rede. Os dez primeiros rótulos são `[5, 0, 4, 1, 9, 2, 1, 3, 1, 4]`, que são os canônicos do MNIST — se a leitura estivesse errada, essa sequência não bateria.
+Setenta mil imagens em menos de um segundo, sem `numpy` e sem rede. Os dez primeiros rótulos são `[5, 0, 4, 1, 9, 2, 1, 3, 1, 4]`, que são os canônicos do MNIST — se a leitura estivesse errada, essa sequência não bateria.
 
 E dá para conferir com os olhos, que é sempre melhor. As imagens estão achatadas, então precisamos dobrá-las de volta para desenhar:
 
@@ -139,6 +139,8 @@ Então o corte é este, e ele está escrito aqui em vez de disfarçado:
 | imagens de treino | 60.000 | **10.000** |
 | imagens de teste | 10.000 | **2.000** |
 | passadas pelo treino | 1 | **3** |
+
+Três passadas, e não duas, por um motivo que a tabela mais adiante deixa ver: **com duas passadas a rede profunda ainda perdia para a regressão logística** — 0,8595 contra 0,8620 no teste —, e a seção terminaria sugerindo que sete camadas não compram nada. A terceira passada custa mais um minuto de renderização e inverte o resultado. É o orçamento decidindo o que o capítulo consegue afirmar, que é exatamente a lição desta caixa.
 
 Isso é o assunto, não um contratempo. **A lentidão é o preço da transparência**, e este é, com folga, o capítulo mais caro do livro — o único em que esse preço aparece com unidade e valor medido. Uma biblioteca vetorizada rodando numa GPU faz esta mesma rede, sobre o conjunto inteiro, em segundos — e é exatamente por isso que GPUs existem. Um aluno que só chamou `.fit()` nunca teve como sentir a diferença entre "seis minutos" e "seis segundos" como consequência de uma escolha de representação.
 
@@ -287,6 +289,14 @@ print("total de parâmetros:",
           for p in modelo.params()))
 ```
 
+::: {.callout-note}
+## O `Dropout` está **antes** da ativação, e isso é incomum
+
+Repare na ordem: `Linear`, `Dropout`, `Tanh`. A posição usual é a outra — desligar neurônios depois da ativação —, e quem leu a [seção 16.7](07-softmax-e-dropout.qmd) vai estranhar. Aqui é o que o livro-texto escreve, e mantivemos.
+
+Com a `Tanh`, a diferença é pequena, e o motivo é que $\tanh(0) = 0$: zerar a pré-ativação e depois aplicar a `tanh` dá zero, e aplicar a `tanh` e depois zerar também dá zero. Com uma ativação que não passa pela origem — a sigmoide, em que $\sigma(0) = 1/2$ — as duas ordens dariam coisas diferentes, e esta seria a errada.
+:::
+
 Sete camadas, quase 24 mil parâmetros — e o laço de treino continua sendo o mesmo. A única complicação é ligar o dropout para treinar e desligá-lo para avaliar:
 
 ```{python}
@@ -322,7 +332,7 @@ Três leituras dessa tabela.
 
 **A rede profunda supera a regressão logística — por pouco.** Ao fim do terceiro epoch ela passa de 88% no teste, contra os cerca de 86% do modelo linear. Vale dizer com franqueza: são 2.000 imagens de teste, e uma diferença de dois pontos percentuais está no limite do que essa amostra distingue com segurança. O que a tabela mostra sem ambiguidade é a **tendência** — a rede profunda ainda estava melhorando de epoch para epoch quando o orçamento acabou, e o livro-texto, com o conjunto inteiro, relata mais de 92% para ela contra 89% do modelo linear.
 
-**O custo por imagem triplicou.** Cerca de 6 milissegundos contra pouco mais de 2 do modelo linear — e a rede profunda tem cerca de três vezes mais parâmetros. É aproximadamente proporcional, e é o que se espera: quase todo o tempo é gasto nas multiplicações da camada de 784 × 30, que sozinha responde por 23.520 dos 23.970 parâmetros.
+**O custo por imagem quase triplicou.** Cerca de 6 milissegundos contra pouco mais de 2 do modelo linear, o que dá cerca de 2,7 vezes — e a rede profunda tem cerca de três vezes mais parâmetros. É aproximadamente proporcional, e é o que se espera: quase todo o tempo é gasto nas multiplicações da camada de 784 × 30, que sozinha responde por 23.520 dos 23.970 parâmetros.
 
 ## O bug do dropout, medido
 
@@ -370,7 +380,7 @@ Os pares que aparecem no topo não são aleatórios: são os dígitos que **se p
 ::: {.callout-note}
 ## O que falta, e o nome disso
 
-Aquele "sem noção de vizinhança entre pixels" é a limitação central deste modelo. Para a nossa `Linear(784, 30)`, os pixels 100 e 101 — vizinhos na imagem — são tão relacionados quanto os pixels 3 e 700. Embaralhar as 784 colunas de todas as imagens da mesma forma produziria **exatamente** o mesmo resultado de treino.
+Aquele "sem noção de vizinhança entre pixels" é a limitação central deste modelo. Para a nossa `Linear(784, 30)`, os pixels 100 e 101 — vizinhos na imagem — são tão relacionados quanto os pixels 3 e 700. Embaralhar as 784 colunas de todas as imagens da mesma forma **não mudaria nada no que o modelo pode aprender**. Os números não sairiam idênticos — os pesos iniciais são sorteados numa ordem fixa e não acompanhariam a permutação, então a inicialização efetiva seria outra —, mas seriam estatisticamente equivalentes, e o resultado, igualmente bom. Para este modelo, a posição de um pixel na imagem simplesmente não é informação.
 
 Os modelos que dominam o MNIST usam **camadas convolucionais**, que aplicam o mesmo pequeno conjunto de pesos deslizando sobre a imagem, e portanto sabem que pixels vizinhos são vizinhos. Elas se encaixariam na `Layer` desta biblioteca sem alteração nenhuma na interface — só o `forward` e o `backward` seriam outros. O que impede não é a arquitetura, é o custo: uma convolução sobre listas aninhadas em Python puro seria muitas vezes mais lenta do que o que esta página já paga.
 
@@ -449,6 +459,8 @@ Nesta página, sete camadas e vinte e quatro mil parâmetros reconhecem dígitos
 É isso que uma abstração compra, e é isso que está do outro lado quando alguém escreve `Sequential([Linear(784, 30), Tanh(), Linear(30, 10)])` em qualquer framework. Não é mágica, não é um algoritmo escondido: são as oito seções deste capítulo, escritas em C e em CUDA em vez de em listas do Python.
 
 E a diferença entre as duas versões — a que você leu e a que roda em produção — é de velocidade, não de ideia. Esta página levou minutos para fazer o que uma GPU faz em segundos. **Você agora sabe exatamente o que aqueles segundos estão fazendo.**
+
+Falta um capítulo, e ele tira o chão de tudo isto. Da primeira página do livro até esta última tabela de confusões, sempre houve um gabarito contra o qual comparar: a flor era *setosa*, o e-mail era spam, o dígito era um 7 — e "funcionou" pôde sempre significar "acertou". O [Capítulo 17](../cap17/index.qmd) recebe dados sem rótulo nenhum e precisa descobrir que grupos existem neles. Sem gabarito não há acurácia, nem conjunto de teste, nem nada do vocabulário que o [Capítulo 8](../cap08/index.qmd) construiu para julgar um modelo. A pergunta que sobra é bem mais desconfortável, e bem mais parecida com o trabalho de verdade.
 :::
 
 ::: {.callout-tip collapse="true"}
