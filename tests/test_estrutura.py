@@ -236,3 +236,40 @@ def test_nenhum_chunk_comeca_com_linha_indentada():
         "chunk começando com linha indentada (bloco partido entre células, "
         "falha silenciosa): " + "; ".join(ofensores)
     )
+
+
+def test_modo_leitura_esta_ligado_de_ponta_a_ponta():
+    """O CSS e o script do modo leitura precisam existir E estar registrados.
+
+    Isto não é hipotético: por um tempo o `styles.css` deste livro já trazia
+    todas as regras de `.btn-modo-leitura` e de `html.modo-leitura`, herdadas
+    da cópia da infra do Bases 3 — mas sem o `modo-leitura.html` e sem o
+    `include-in-header` no `_quarto.yml`. Resultado: dezenas de linhas de CSS
+    válido para um botão que nunca era criado, e nenhum erro em lugar nenhum.
+
+    Uma peça de front-end só está entregue quando as três metades se encontram:
+    o CSS, o script que injeta o elemento, e o registro que manda o Quarto
+    incluir o script.
+    """
+    script = RAIZ / "modo-leitura.html"
+    css = (RAIZ / "styles.css").read_text(encoding="utf-8")
+    yml = QUARTO_YML.read_text(encoding="utf-8")
+
+    assert script.exists(), "modo-leitura.html não existe"
+    corpo = script.read_text(encoding="utf-8")
+
+    assert re.search(r"^\s*include-in-header:\s*modo-leitura\.html\s*$", yml, re.M), (
+        "modo-leitura.html não está em include-in-header — o script nunca "
+        "chega à página, e o CSS vira código morto"
+    )
+
+    # As duas pontas têm que concordar no nome das classes.
+    for classe in ("modo-leitura", "btn-modo-leitura"):
+        assert classe in corpo, f"o script não usa a classe {classe!r}"
+        assert classe in css, f"styles.css não estiliza a classe {classe!r}"
+
+    # O estado precisa sobreviver à troca de página, e a chave não pode
+    # colidir com a do Bases 3: os dois livros dividem o mesmo domínio,
+    # logo o mesmo localStorage.
+    assert "localStorage" in corpo
+    assert "bases5-" in corpo, "a chave do localStorage precisa ser própria deste livro"
