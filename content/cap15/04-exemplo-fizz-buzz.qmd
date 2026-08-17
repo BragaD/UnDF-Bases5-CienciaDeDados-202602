@@ -286,7 +286,56 @@ for i in [0, 13]:
 
 Onze números cada: os dez primeiros são os pesos dos dez bits, do menos significativo ao mais significativo, e o último é o viés. É a mesma leitura que na seção anterior devolveu "OU" e "E" — mesma estrutura de dados, mesmo código, e agora sem devolver frase nenhuma.
 
-Quem procurar com afinco acha fragmentos: os pesos dos bits 0, 4 e 8 saem quase iguais entre si nos dois vetores, e esses três bits são de fato intercambiáveis neste problema, porque $2^0$, $2^4$ e $2^8$ deixam o mesmo resto na divisão por 15. É informação real, e ainda assim não é uma resposta: saber que o neurônio trata três bits como equivalentes não diz o que ele responde, nem por quê.
+Quem procurar com afinco acha fragmentos. Nos dois vetores acima, os pesos dos bits 0, 4 e 8 saem quase iguais entre si: $-2{,}78$, $-2{,}69$ e $-2{,}73$ no primeiro; $-2{,}17$, $-2{,}23$ e $-2{,}29$ no segundo, enquanto os outros sete pesos de cada vetor se espalham por mais de vinte unidades. Isso não é coincidência — e dá para medir o quanto não é.
+
+### O que dá para achar nos pesos, se você souber a pergunta
+
+Comece pela aritmética, que é curta. Fizz buzz depende só de $n \bmod 15$, e o resíduo com que cada bit contribui para essa conta é $2^k \bmod 15$ — que **cicla com período 4**: $1, 2, 4, 8, 1, 2, 4, 8, 1, 2$. É a combinação dos dois ciclos da caixa *Ninguém vai contar à rede o que é divisibilidade*: o de período 2 da divisão por 3 e o de período 4 da divisão por 5. Consequência: **para esta tarefa, os bits 0, 4 e 8 carregam exatamente a mesma informação.** Trocar um pelo outro não muda a resposta certa. O mesmo vale para os bits 1, 5 e 9, para os bits 2 e 6, e para os bits 3 e 7.
+
+A rede não sabe disso. Mas, se por acaso tiver chegado lá sozinha, os 25 neurônios escondidos vão dar pesos parecidos aos bits de um mesmo grupo — e isso é uma pergunta que se responde com uma conta. Para cada par de bits, a distância média entre os pesos que os 25 neurônios lhes dão, expressa como fração da escala típica de um peso:
+
+```{python}
+#| label: simetria-bits-fizz-buzz
+oculta = network[0]
+
+def coluna(k):
+    """Os 25 pesos que os neurônios escondidos dão ao bit k."""
+    return [neuronio[k] for neuronio in oculta]
+
+def distancia(j, k):
+    """Distância média, neurônio a neurônio, entre os pesos dos bits j e k."""
+    return sum(abs(a - b) for a, b in zip(coluna(j), coluna(k))) / NUM_HIDDEN
+
+# escala típica de um peso, para as distâncias virarem fração dela
+escala = sum(abs(w) for k in range(10) for w in coluna(k)) / (10 * NUM_HIDDEN)
+
+# os bits se agrupam pelo resto que 2**k deixa na divisão por 15
+grupos = {}
+for k in range(10):
+    grupos.setdefault(2 ** k % 15, []).append(k)
+
+print(f"escala típica de um peso: {escala:.2f}\n")
+print("bits   resíduo   distância")
+
+for r in sorted(grupos):
+    for i, j in enumerate(grupos[r]):
+        for k in grupos[r][i + 1:]:
+            print(f"{j}-{k}    {r:5d}    {100 * distancia(j, k) / escala:7.0f}%")
+
+entre = [distancia(j, k) for j in range(10) for k in range(j + 1, 10)
+         if 2 ** j % 15 != 2 ** k % 15]
+print(f"\nos {len(entre)} pares de resíduos diferentes: "
+      f"média {100 * sum(entre) / len(entre) / escala:.0f}%, "
+      f"de {100 * min(entre) / escala:.0f}% a {100 * max(entre) / escala:.0f}%")
+```
+
+Um grupo salta da tabela. **Os bits 0, 4 e 8 estão a 2%, 4% e 3% de distância entre si** — o pior dos três pares fica mais de trinta vezes abaixo dos 138% que separam, em média, dois bits de resíduos diferentes. Ninguém contou à rede o que é divisibilidade, e ela terminou tratando como intercambiáveis exatamente os três bits que a teoria dos números diz que são intercambiáveis aqui.
+
+E aí a história para de ser bonita, que é o que a torna interessante. No grupo seguinte, a rede achou **metade**: o par 5–9 fica a 7%, mas os pares com o bit 1 ficam a 29% e 31% — bem abaixo da referência, e ainda assim sete vezes acima do pior par do primeiro grupo. Os outros dois grupos ela **não** achou: 95% para o par 2–6 e 150% para o par 3–7 caem dentro da faixa que pares sem parentesco nenhum já ocupam, de 90% a 200%. Há pares de resíduos *diferentes* mais próximos entre si do que o par 2–6.
+
+Uma das quatro simetrias com clareza, metade de outra, duas perdidas. É essa proporção que torna o achado crível: uma rede que tivesse encontrado as quatro seria uma anedota boa demais, e a primeira coisa a fazer com ela seria procurar o erro na medição. Esta é o que redes fazem — recuperam parte da estrutura do problema, do jeito irregular com que a descida do gradiente esbarra no que estava por perto.
+
+Repare, por fim, no que isso **não** é. Não é interpretabilidade, e não é o mesmo que ler um coeficiente. Os pesos continuam ilegíveis um a um; nada mudou nos dois vetores impressos acima, e o que se descobriu não é *como* o neurônio combina os bits, só quais bits ele se recusa a distinguir. Foi preciso ter a hipótese antes de encontrar a evidência: sem saber que $2^k \bmod 15$ tem período 4, não haveria o que medir, e a estrutura ficaria ali, invisível. É o inverso do que o [Capítulo 12](../cap12/index.qmd) oferece, onde o coeficiente já vem com o significado escrito nele.
 
 ::: {.conceito}
 Pergunte quais atributos a camada escondida inventou, e não há resposta.

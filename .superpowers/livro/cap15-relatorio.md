@@ -239,3 +239,55 @@ Consequências, e o que fiz:
 seções", ausência do callout da semente). Foram precisas **quatro** chamadas a `make render`: uma
 saiu por lock de outro agente e duas por orçamento de tempo (a corrida do bind mount), o que é
 esperado e não é falha de conteúdo.
+
+---
+
+# Adendo — rodada 3 (item único: a simetria dos bits)
+
+## O que eu medi
+
+Reproduzi o treino da página fora do render (mesma semente 0, mesmos 500 epochs) e confirmei a
+réplica pelos pesos publicados dos neurônios 0 e 13 — batem dígito a dígito. Métrica: para cada
+par de bits $(j,k)$, a distância média $\frac{1}{25}\sum_i |w_{ij} - w_{ik}|$ sobre os 25
+neurônios escondidos, dividida pela escala típica de um peso (média de $|w|$ sobre os 250 pesos
+de bit, **5,70**). Os valores publicados:
+
+| par | resíduo | distância |
+|---|---|---|
+| 0–4 / 0–8 / 4–8 | 1 | **2% / 4% / 3%** |
+| 1–5 / 1–9 / 5–9 | 2 | 29% / 31% / **7%** |
+| 2–6 | 4 | 95% |
+| 3–7 | 8 | 150% |
+| os 37 pares de resíduos diferentes | — | média **138%**, de **90%** a **200%** |
+
+Os seus números de referência conferem (3 / 22 / 95 / 150). O único que difere é o de fora do
+grupo: mediu-se **138%**, não 141% — a diferença deve estar em quais pares entram na média, e a
+minha é sobre os 37 pares de resíduos distintos. Publiquei par a par em vez de agregado por
+grupo: são só oito linhas, e assim nenhum número do texto depende de uma média que o leitor não
+vê. O acréscimo que a sua tabela não tinha é a **faixa** dos pares não relacionados, 90%–200%: é
+ela que impede ler os 95% do par 2–6 como simetria fraca — há pares de resíduos diferentes mais
+próximos que ele.
+
+## Onde ficou
+
+`content/cap15/04-exemplo-fizz-buzz.qmd`, subseção `###` **"O que dá para achar nos pesos, se
+você souber a pergunta"**, dentro de "O que a rede aprendeu, e por que não dá para saber":
+depois do parágrafo "Quem procurar com afinco…" e **antes** do `.conceito`, que não foi tocado.
+Encurtei aquele parágrafo — ele antecipava a conclusão inteira — deixando nele só a observação
+crua (os seis pesos, e os outros sete espalhados por mais de vinte unidades) e o gancho.
+
+## Preocupações
+
+1. **Tensão com o parágrafo que já estava lá**, o que diz que a rede montou "não necessariamente
+   a soma alternada nem o ciclo módulo 4". Não é contradição e não mexi nele, mas o texto novo
+   precisa carregar a distinção para o leitor não sentir o atrito: o que se mediu é *quais bits
+   o neurônio se recusa a distinguir*, não *como* ele os combina. Está dito explicitamente no
+   último parágrafo da subseção. Se você quiser tornar isso mais nítido, é ali.
+2. **O `.conceito` diz que nenhum neurônio corresponde "a coisa alguma que se diga em
+   português"** — e a subseção acaba de dizer uma coisa em português sobre os 25. Vale a mesma
+   distinção acima, e por isso a subseção fecha negando ser interpretabilidade antes de o
+   `.conceito` começar. É o ponto do capítulo em que eu olharia primeiro numa revisão.
+3. **A subseção depende da semente.** Ela é fixa (`random.seed(0)`) e o `_freeze` guarda a saída,
+   mas qualquer mexida no treino da §4 — epochs, `learning_rate`, `NUM_HIDDEN` — refaz esses oito
+   números e derruba cinco afirmações do texto de uma vez. Fica registrado aqui porque o próximo
+   a mexer no chunk de treino não tem como adivinhar.
