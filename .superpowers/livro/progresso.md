@@ -690,3 +690,36 @@ que a varredura por construção gramatical precisa ser **exaustiva de uma vez**
 
 **A cura das três frases foi a mesma: dar escopo.** Nenhuma perdeu o que queria dizer; todas
 trocaram uma afirmação sobre o livro por uma afirmação sobre onde ela vale.
+
+### Quinta passagem: a varredura exaustiva, e por que as anteriores não eram
+
+**885 ocorrências** das 22 construções, lidas com contexto. Classificação: **822** de escopo
+local, **60** afirmações verdadeiras sobre os 17 capítulos, **3** falsas.
+
+**O que fez esta passagem valer:** as 60 da classe verdadeira foram verificadas **por comando,
+nenhuma por leitura** — 417 `assert` contados no `scratch/`, os 21 sítios de chamada de
+`gradient_step` (20 negativos, 1 positivo → a nota do cap. 7 confirmada), `working_with_data`
+com zero importações, todo `.qmd` com `random.*` tendo `random.seed`, as enumerações conferidas
+item a item, e o `pyproject.toml` para os pacotes ausentes.
+
+**As anteriores eram amostragens.** A diferença não foi de esforço, foi de método: levantar por
+**construção gramatical**, contar, e justificar cada aprovação.
+
+**As três falsas, todas curadas com escopo:**
+- `cap16/01:9` — "este livro nunca passa de duas dimensões", contra a imagem colorida da §17.5
+  (altura × largura × canais), que é o maior objeto do livro.
+- `cap16/07:324` — "a única verificação defensiva de toda a biblioteca deste capítulo", contra o
+  `raise ValueError` da §16.3 e o `assert` de formas da §16.8.
+- `cap12/03:97` — "a primeira vez neste livro que você a encontra dentro de uma função", contra
+  a §7.8, que já punha `tqdm` dentro de `first_principal_component`. **Conferi a ressalva** ("que
+  alguém escreveu para você usar") e ela não salvava: a `least_squares_fit` é escrita ali mesmo,
+  na linha 68. A novidade real, que entrou no lugar, é que ela passa a ser **importada** por três
+  seções seguintes — verificado por grep.
+
+**Dezessete superlativos falsos no total.**
+
+### Ruling AC — a caça aos gêmeos vira parte do método
+
+Duas vezes uma correção deixou o irmão vivo (uma linha acima; dois arquivos antes). Esta
+passagem buscou irmãos das três explicitamente e reportou o resultado — inclusive dois vizinhos
+de `cap16/07` que **estão certos** no escopo deles. É isso que faltava.
