@@ -812,3 +812,40 @@ bloco nos 105 `.qmd`, e 88 seções auditadas:
 - Consequência registrada: as **88 linhas de código de biblioteca nos callouts são o único código
   do livro que o `quarto render` não verifica** — o que confirma, com número, por que as
   revisões que *rodaram* essas afirmações acharam a maioria dos erros da sessão.
+
+---
+
+## FECHOU — nona passagem, a primeira limpa
+
+**Veredito: FECHA.** Zero achados, e o ângulo foi o melhor da série.
+
+O portão escolheu **o `scratch/` contra o que os capítulos fazem dele**, com uma justificativa
+que ninguém tinha feito antes: o `freeze: auto` invalida o cache pelo `.qmd`, **não pelo
+`scratch/`**. Um import que deixou de resolver, ou uma cópia inline que derivou do pacote
+vendorizado, **sobrevive a renders sem aparecer** — e nenhum dos 24 testes cobre isso. É a única
+classe de defeito da lista que o `make render` não pega sozinho.
+
+**3.516 itens verificados por execução, dentro do container:**
+
+- **281** nomes importados de 14 módulos do `scratch/`, resolvidos por AST (não regex) nos 105
+  `.qmd` e checados com `importlib` + `hasattr`: **0 problemas**, e os 105 arquivos têm Python
+  sintaticamente válido.
+- **194** definições redefinidas inline, comparadas com o pacote por AST: **182 idênticas**. As
+  12 divergentes foram trianguladas uma a uma — comentários traduzidos, anotações de tipo
+  postas ou omitidas por ordem pedagógica, rótulos de eixo em português. **Nenhuma troca por
+  numpy, broadcasting ou sklearn**, que é a tese central do livro, agora medida e não presumida.
+- **3.041** nomes distintos em contexto de leitura, nos 82 arquivos com código: **um** nome livre
+  em todo o livro, `SomeKindOfModel`, que é pseudocódigo do Grus com `eval: false`. Correto.
+
+**Sexta varredura limpa consecutiva**, e a primeira a atacar o eixo que o cache esconde.
+
+### O que fechou a tarefa, e por quê
+
+Foram **nove passagens de portão**. As oito primeiras acharam defeito; a nona, não. O critério
+era esse, e ele só vale porque cada passagem **escolheu um eixo novo** em vez de repetir o
+anterior — e porque, a partir da quinta, passei a exigir que as aprovações fossem justificadas
+por comando, não por leitura.
+
+**O padrão que atravessa a sessão inteira:** as revisões que **rodaram** alguma coisa acharam
+quase todos os defeitos reais; as que só leram produziram os dois falsos positivos. Vale como
+regra para o próximo livro.
