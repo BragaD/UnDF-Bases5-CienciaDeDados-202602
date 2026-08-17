@@ -784,3 +784,31 @@ inventar *número* de seção do Grus, não confere título nem capítulo. Resul
   Nenhuma órfã.
 - De quebra: as **88 linhas de tabela dos 17 índices** casam texto por texto com o `#` de cada
   arquivo de seção, e os 88 alvos de link existem em disco.
+
+### Oitava passagem: um número, e a confirmação de que parar de enumerar funcionou
+
+O portão conferiu a quarta versão da frase nos três eixos e ela passa — mas o dado que interessa
+é outro: **o capítulo 15 constrói mais três listas aninhadas de três níveis** (`15.2:144`,
+`15.3:163`, `15.4:106`), que uma quinta enumeração teria perdido de novo. A cautela de não
+enumerar não era estilo; era o único jeito de a frase parar de quebrar.
+
+Único achado: "quatro seções antes" onde são três (otimizador na §16.5, imagens na §16.8).
+**Fiz só isso.** O portão apontou também uma redundância no mesmo parágrafo — a tese da camada
+afirmada duas vezes, cicatriz da terceira correção — e a classificou como "sem consequência,
+para você decidir". **Decidi não mexer:** é a frase que eu já quebrei três vezes, e mexer além
+do mínimo é exatamente onde a minha taxa de erro é mais alta. Fica registrado como aceito.
+
+### A varredura da Parte 2: a invariante que define o livro
+
+O portão escolheu a regra que o `CLAUDE.md` declara como identidade da disciplina — *o
+`scikit-learn` nunca aparece na implementação de uma seção, só no callout* — porque **nenhum dos
+24 testes a guarda** e ela é mecanicamente decidível. 262 ocorrências classificadas por tipo de
+bloco nos 105 `.qmd`, e 88 seções auditadas:
+
+- **Zero** menções a `sklearn` em chunk `{python}` executado, em lugar nenhum do livro.
+- **70 callouts de fechamento, 70 com o título "Na prática: …"** — zero desvio de forma.
+- **18 seções sem callout**, e todas as 18 são seções sem algoritmo (o cap. 2 é Python, o 3 é
+  matplotlib, e os demais são aberturas conceituais).
+- Consequência registrada: as **88 linhas de código de biblioteca nos callouts são o único código
+  do livro que o `quarto render` não verifica** — o que confirma, com número, por que as
+  revisões que *rodaram* essas afirmações acharam a maioria dos erros da sessão.
