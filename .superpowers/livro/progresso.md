@@ -752,3 +752,35 @@ As quatro foram extraídas do PDF verbatim e traduzidas preservando o trocadilho
 delas é o motivo da escolha: Michael Palin (do Monty Python) falando da linguagem; Harvey Mackay
 falando de visualização **mental** num capítulo sobre gráficos; e Pietro Aretino sobre irritar os
 **vizinhos**, num capítulo sobre k-vizinhos.
+
+### Sétima passagem: a mesma frase, o terceiro conserto — e a lição definitiva
+
+Corrigi a mesma frase **três vezes**, e cada correção foi um defeito da classe que eu estava
+consertando:
+
+1. "este livro nunca passa de duas dimensões" → falso (a imagem da §17.5).
+2. "um arranjo de três dimensões aparece **uma vez** no livro" → falso (a §16.3 constrói outro).
+3. "aparecem no livro — a §16.3 ... e a §17.5 ..." → **subcontagem**: há um terceiro, o
+   `xor_network` de forma `[2, 2, 3]`, **185 linhas abaixo, no mesmo arquivo**.
+
+**Ruling AD — o defeito não era a contagem, era enumerar.** As três versões erradas tinham a
+mesma forma: um inventário fechado sobre o livro, escrito de dentro de um capítulo. A quarta
+não enumera. Diz "aparecem aqui e ali", cita dois exemplos **sem se dar por exaustiva**, e
+carrega a afirmação verificável no lugar certo: nenhum deles **atravessa uma camada** — o que
+entra e sai de uma `Linear` é sempre vetor ou matriz.
+
+**Uma afirmação que precisa de inventário para ser verdadeira vai envelhecer.** Uma que fala de
+uma propriedade do que o código faz, não.
+
+### A varredura da Parte 2: os 88 callouts contra o sumário do PDF
+
+O portão escolheu o único invariante de citação que a suíte **não** cobre — o teste só proíbe
+inventar *número* de seção do Grus, não confere título nem capítulo. Resultado:
+
+- **114 títulos citados em itálico: todos existem literalmente no sumário do PDF**, e todos sob o
+  capítulo do Grus que o callout afirma. Zero inventados.
+- **88 números de capítulo do Grus** conferidos contra o mapa 1–4 → 1–4 e 5–17 → 8–20: zero erros.
+- **Direção inversa:** as **101** seções de topo do Grus dentro do escopo estão **todas** citadas.
+  Nenhuma órfã.
+- De quebra: as **88 linhas de tabela dos 17 índices** casam texto por texto com o `#` de cada
+  arquivo de seção, e os 88 alvos de link existem em disco.
