@@ -474,3 +474,24 @@ legenda, e a correção de proporção de eixos do PCA funcionou. O achado que i
 uma ironia: **o cap. 3 gasta uma figura inteira ensinando que gráfico sem rótulo de
 eixo é defeito, e 15 figuras dos caps. 7, 8 e 9 não têm rótulo nenhum.** Mais: `epoch`
 virando `época` só no cap. 13, contra a convenção que o cap. 5 estabelece.
+
+### Cap. 14 FECHA — e o braço que faltava mudou a conclusão
+
+O portão reproduziu tudo dígito a dígito. O experimento da §14.6 agora tem os
+braços podados: **árvore `max_depth=2` = 1,0000** (treino 0,8495), prof. 1 = 0,7728,
+prof. 3 = 0,9461, contra floresta 3-de-8 = 0,9284 e árvore sem poda 0,8239. O fecho
+foi reescrito: a troca "nem sempre precisa pagar", e aqui o modelo mais legível é o
+mais preciso.
+
+O I2 também foi medido: uma coluna de puro ruído ganha **0,131 bit em média, com zero
+sorteios nulos em 1.000**, contra 0,048 do `phd`. A frase "nenhum atributo é puro
+ruído aqui" era inferência inválida — ganho de informação é ≥ 0 por construção.
+
+**Ruling T — `max_depth` no corpo da §14.6 fica.** O M1 mandou tirar nome de API do
+`scikit-learn` do corpo (era o `oob_score`, gratuito). Aqui `max_depth` virou o
+**assunto** do braço novo, não uma menção de passagem; ancorá-lo uma vez ajuda. A
+regra continua valendo para menções gratuitas.
+
+**Ruling U — a §14.6 ficou com 9 callouts, e tudo bem.** O M16 pedia enxugar; o C1 e
+o I1 exigiram um callout novo cada. A §14.3 caiu de 7 para 6 como pedido. Densidade
+alta numa seção que agora carrega duas correções estruturais é troca aceitável.
