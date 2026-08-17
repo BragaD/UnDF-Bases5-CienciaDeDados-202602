@@ -595,3 +595,51 @@ sob contrato.
 **Consequência prática:** quando eu corrigir direto em vez de encomendar, o portão seguinte
 precisa saber disso explicitamente, para olhar o meu texto com o mesmo ceticismo que olharia o
 de um agente. Já venho pedindo isso ("não me poupe") — vale manter.
+
+---
+
+## Revisão geral do livro — quatro frentes sobre os 17 capítulos
+
+**Todos os 17 capítulos fecharam individualmente.** Esta rodada corrigiu o que só aparece
+olhando o livro inteiro. Quatro frentes: promessas cruzadas (2ª passada, 285 ligações), os 80
+callouts "Na prática" (2ª passada, ~45 afirmações executadas), as 63 figuras (2ª passada), e a
+deriva de terminologia — que nunca tinha rodado.
+
+### O padrão que a revisão geral revelou: superlativos
+
+**A classe de defeito mais produtiva do projeto inteiro** são afirmações sobre o livro todo
+escritas de dentro de um capítulo — e portanto **não verificáveis de lá**. Encontrados e
+corrigidos: "o único modelo que não passa por este capítulo" (eram quatro), "o único treino que
+demora o suficiente para o tqdm", "é a última coisa que este livro constrói", "o chunk mais caro
+deste livro", "o primeiro modelo que um humano lê", "o único que introduz uma técnica sem
+demonstrar que serve", "o único em que esse preço aparece medido", "o único fecho que não roda de
+fábrica", "a única seção cujo fecho não é o scikit-learn".
+
+**Nove.** E dois deles entraram *na rodada que corrigia os outros*.
+
+### Ruling AA — eu corrijo pior do que encomendo, e agora tem número
+
+Nesta sessão escrevi **sete** defeitos corrigindo direto, sem contrato e sem revisão prévia:
+
+1. o par 98,1%/1,4% do teste do Luke (contrato do cap. 10);
+2. o critério "distância" que não discriminava os casos que apresentava (cap. 15);
+3. um tempo piorado a partir de medição única sob carga (cap. 15);
+4. um parágrafo que duplicava a abertura do cap. 17 em sete de sete batidas (cap. 16);
+5. "pouco mais de um terço" quando 300/1000 = 0,30 é menos (cap. 16);
+6. "dez mil imagens de teste" quando o capítulo fixa duas mil (cap. 16);
+7. texto verde sobre barra verde, que apagou um número da figura (cap. 14).
+
+E o oitavo, que é o mais instrutivo: **corrigi um superlativo falso e deixei o gêmeo dele na
+linha imediatamente acima, no mesmo parágrafo.** Li a frase que o portão citou e não li a
+anterior.
+
+Nenhum passou de um portão. **A prática que funciona:** quando eu corrijo direto, o portão
+seguinte recebe a lista dos meus erros anteriores e a instrução de olhar o meu texto com mais
+ceticismo que o de um agente.
+
+### Ruling AB — "zero pixels de diferença" precisava de escopo
+
+Afirmei num commit que duas figuras eram idênticas com "zero pixels de diferença". O portão
+mediu: são idênticas **na área de plotagem**; a faixa do título difere por construção, porque os
+títulos são diferentes. A afirmação do livro ("podem ser sobrepostas") se sustenta; a minha, sem
+o escopo, era mais forte do que a medição.
