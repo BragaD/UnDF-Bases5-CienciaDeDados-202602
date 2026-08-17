@@ -8,7 +8,7 @@ O vice-presidente de Engenharia da DataSciencester quer entrevistar candidatos t
 
 > Imprima os números de 1 a 100, com estas exceções: se o número for divisível por 3, imprima `"fizz"`; se for divisível por 5, imprima `"buzz"`; e se for divisível por 15, imprima `"fizzbuzz"`.
 
-Ele acha que resolver isso demonstra habilidade extrema em programação. Você acha que o problema é tão simples que uma rede neural daria conta.
+Ele está convencido de que quem resolve isso é um programador excepcional. Você acha que o problema é tão simples que uma rede neural daria conta.
 
 O exercício, como está enunciado, transforma um inteiro numa string. Redes neurais recebem vetores e devolvem vetores. Então o primeiro trabalho — e o mais interessante desta seção — é **reformular o problema como um problema de vetores**.
 
@@ -160,6 +160,8 @@ with tqdm.trange(500) as t:
 
 Isso leva cerca de um minuto — 500 epochs sobre 923 exemplos, com uma passada para a frente e uma para trás em cada um, tudo em Python puro sobre listas. É de longe o chunk mais caro deste livro, e o preço é o mesmo de sempre: transparência.
 
+Uma ressalva sobre o `epoch_loss`: como o treino é estocástico, os pesos mudam a cada um dos 923 exemplos, e a soma acumulada mistura previsões de redes ligeiramente diferentes. Ela não é a perda de uma rede fixa, e sim um resumo do epoch — bom para acompanhar a tendência, e é também o que produz os pequenos solavancos no fim da curva abaixo, quando a queda já é menor que essa mistura.
+
 A perda caiu?
 
 ```{python}
@@ -237,9 +239,11 @@ print("erros:", erros)
 
 E não há sinal de sobreajuste: no conjunto de treino a rede terminou com 903 acertos em 923, isto é, 97,8%, contra 96% no teste. Menos de dois pontos separam os dois números.
 
-Repare no que está sendo lido aí, porque é fácil ler a coisa errada. Não é o acerto no treino: acertar muito — ou até tudo — no próprio treino não é, sozinho, sinal de nada, nem bom nem ruim. O que se lê é a **distância** entre treino e teste, e a [seção 14.6](../cap14/06-florestas-aleatorias.qmd) mostrou o caso extremo disso: lá a árvore sem poda acertava 99,7% dos exemplos com que se construiu e caía para 82,4% em dados novos, enquanto a árvore de profundidade 2, **pior** no treino com 85,0%, acertava 100% do teste. O modelo com o melhor número de treino era o pior dos dois.
+Repare no que está sendo lido aí, porque é fácil ler a coisa errada. Não é o acerto no treino: acertar muito — ou até tudo — no próprio treino não é, sozinho, sinal de nada, nem bom nem ruim. O que se lê é a **queda** do treino para o teste — aqui, 1,8 ponto.
 
-## Os quatro erros
+E é a queda, não a distância. A [seção 14.6](../cap14/06-florestas-aleatorias.qmd) tem os dois casos lado a lado: a árvore sem poda acertava 99,7% dos exemplos com que se construiu e **caía** 17,3 pontos em dados novos, para 82,4%; a árvore de profundidade 2, **pior** no treino com 85,0%, **subia** 15,0 pontos e acertava 100% do teste. As duas diferenças têm quase o mesmo tamanho e sentidos opostos, de modo que a distância entre os dois números não distingue os dois casos — o sinal distingue. E o modelo com o melhor número de treino era o pior dos dois.
+
+## Olhando os erros de perto
 
 Vale olhar os erros de perto, porque eles não são todos do mesmo tipo:
 
@@ -267,11 +271,20 @@ A correção existe e tem nome — a função **softmax**, que normaliza as quat
 
 O vice-presidente de Engenharia, diante da evidência, cede e troca o desafio da entrevista por "inverta uma árvore binária". A piada é do livro-texto e é boa, mas ela não é a lição.
 
-A lição é que **a rede construiu, a partir de dez bits, alguma coisa que faz o papel da divisibilidade por 3 e por 5 — sem que ninguém lhe dissesse que divisibilidade existe.** Ela viu 923 pares (padrão de bits, resposta) e montou, na camada escondida, alguma combinação desses bits que aproxima a soma alternada e o ciclo módulo 4 mencionados no início da seção.
+A lição é que **a rede construiu, a partir de dez bits, alguma coisa que faz o papel da divisibilidade por 3 e por 5 — sem que ninguém lhe dissesse que divisibilidade existe.** Ela viu 923 pares (padrão de bits, resposta) e montou, na camada escondida, alguma combinação desses bits que **funciona** — não necessariamente a soma alternada nem o ciclo módulo 4 de que a seção falou no início, apenas algo que acerta 96 dos 100.
 
 "Faz o papel", e não "é": quem soubesse a regra não erraria 70 e 100, que são múltiplos de 5 como tantos outros que ela acertou, nem chutaria "fizz" em 4 e em 34. O que a rede tem é uma aproximação boa em 96 dos 100 casos que nunca viu — o que já é muito mais do que o palpite preguiçoso, e ainda assim não é a regra.
 
-E aqui o capítulo cobra o preço que o índice anunciou:
+E aqui o capítulo cobra o preço que o índice anunciou. A [seção 15.3](03-retropropagacao.qmd) abriu os pesos da rede do XOR e leu, dentro deles, um OU e um E. Vamos fazer exatamente a mesma coisa aqui, com dois dos 25 neurônios escondidos:
+
+```{python}
+#| label: pesos-escondidos-fizz-buzz
+for i in [0, 13]:
+    pesos = ", ".join(f"{w:6.2f}" for w in network[0][i])
+    print(f"escondido {i:2d}  [{pesos}]")
+```
+
+Onze números cada: os dez primeiros são os pesos dos dez bits, do menos significativo ao mais significativo, e o último é o viés. É a mesma leitura que na seção anterior devolveu "OU" e "E" — feita sobre a mesma estrutura de dados, com o mesmo código, e agora sem devolver nada.
 
 ::: {.conceito}
 Pergunte quais atributos a camada escondida inventou, e não há resposta.
@@ -280,8 +293,12 @@ São 25 vetores de 11 números cada. Nenhum deles corresponde a "é múltiplo de
 
 Esse é o fim do arco que atravessa o livro. O [Capítulo 12](../cap12/index.qmd) deu coeficientes que se leem um a um. O [Capítulo 14](../cap14/index.qmd) deu uma árvore que se percorre com o dedo, e cuja leitura **é** a justificativa da previsão. Aqui os parâmetros não significam nada sozinhos — e o modelo resolve um problema que nenhum dos dois resolveria.
 
+Nenhum dos dois, e por motivos diferentes. Uma regressão sobre dez bits é uma soma ponderada de bits, e nenhuma soma ponderada de bits separa os múltiplos de 3: basta olhar 0, 1, 2 e 3, cujos dois primeiros bits são $[0,0]$, $[1,0]$, $[0,1]$ e $[1,1]$ — os dois múltiplos de 3 caem em cantos **opostos** do quadrado, que é exatamente a configuração que as quatro desigualdades da [seção 15.1](01-perceptrons.qmd) provaram impossível. Uma árvore, com dez atributos binários, tem dez perguntas para fazer e no fundo delas há uma folha por padrão de bits: a profundidade 10 é memorização, e nenhum dos cem padrões de 1 a 100 apareceu no treino.
+
 **Poder de representação e interpretabilidade andam em direções opostas.** Não é um defeito a ser consertado numa versão futura; é a troca que se faz ao escolher esta família de modelos. O que esta disciplina acrescenta é que você saiba que está fazendo a troca, e o que está entregando em cada direção.
 :::
+
+O [Capítulo 16](../cap16/index.qmd) recebe essa rede e a desmonta em camadas que se compõem, com a softmax e a entropia cruzada da caixa acima no lugar das quatro sigmoides independentes — e aí o mesmo maquinário passa a caber num problema em que 25 neurônios escondidos não bastariam.
 
 ::: {.callout-tip collapse="true"}
 ## Na prática: `scikit-learn`

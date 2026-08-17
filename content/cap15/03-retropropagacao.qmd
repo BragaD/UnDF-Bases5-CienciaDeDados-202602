@@ -90,7 +90,7 @@ As quatro seções da função são, na ordem, os três parágrafos acima mais a
 
 O livro-texto deixa a derivação como exercício. Ela cabe aqui, e não é difícil — só exige cuidado com os índices.
 
-**Cuidado com as letras.** Desta caixa em diante, $i$ numera os neurônios de **saída** e $h$, os **escondidos**. No parágrafo acima e no código, o `i` que percorre `hidden_outputs` é este $h$ — a mesma letra, papéis trocados.
+**Cuidado com as letras.** Desta caixa em diante, $i$ numera os neurônios de **saída** e $h$, os **escondidos**. O código não faz essa distinção: ele reaproveita a letra `i` nos dois papéis, porque cada compreensão de lista é um escopo local e ali não há ambiguidade. Em `output_grads`, o `i` de `output_deltas[i]` enumera os neurônios de **saída** — é o $i$ desta caixa. Em `hidden_deltas` e em `hidden_grads`, o `i` enumera os **escondidos** — é o $h$. E em `[n[i] for n in network[-1]]` os dois papéis convivem na mesma linha: `n` percorre os neurônios de saída (o $i$ daqui) e `n[i]` indexa, dentro de cada um, o peso da conexão que vem do escondido de índice `i` (o $h$ daqui). A matemática precisa de duas letras; o código não, e é essa a fonte da confusão.
 
 Escreva $z_h$ e $o_h = \sigma(z_h)$ para a pré-ativação e a saída do $h$-ésimo neurônio escondido, e $z_i$, $o_i$ para os do $i$-ésimo neurônio de saída, com alvo $t_i$. A perda de um exemplo é
 
@@ -172,17 +172,29 @@ network = [ # camada escondida: 2 entradas -> 2 saídas
 
 Nove números entre 0 e 1: três para cada um dos dois neurônios escondidos e três para o de saída, contando o viés de cada um. É só isso que a rede sabe antes de ver o primeiro exemplo. Guarde a ordem de grandeza — ao fim desta seção, esses mesmos nove números estarão nas unidades e nas dezenas, e vários terão trocado de sinal.
 
-::: {.callout-warning}
-## A semente não é opcional
+O `random.seed(0)` é a regra da casa, como em todo chunk aleatório deste livro. Mas aqui ele pesa mais do que em outros capítulos: o treino de uma rede depende do ponto de partida de um jeito que uma regressão não depende, e duas inicializações diferentes podem levar a **soluções diferentes**, não só a arredondamentos diferentes — a [seção 15.4](04-exemplo-fizz-buzz.qmd) mostra um caso em que a rede fica presa por dezenas de epochs antes de escapar.
 
-`random.seed(0)` fixa a inicialização dos pesos. Sem ela, cada renderização deste livro partiria de uma rede diferente, chegaria a pesos diferentes e imprimiria números diferentes dos que o texto abaixo comenta.
+Antes do treino, vale ver uma única passada para trás, sobre um exemplo só. A entrada $[1, 0]$ deveria produzir 1; a rede aleatória produz outra coisa, e daí sai a culpa de cada neurônio:
 
-Aqui a semente pesa mais do que em outros capítulos: o treino de uma rede neural depende do ponto de partida de um jeito que uma regressão não depende. Duas inicializações diferentes podem levar a **soluções diferentes**, não só a arredondamentos diferentes — e a próxima seção mostra um caso em que a rede fica presa por dezenas de epochs antes de escapar.
+```{python}
+#| label: uma-passada-para-tras
+hidden_outputs, outputs = feed_forward(network, [1., 0])
 
-Como sempre neste livro, é o `random` da biblioteca padrão, não o `numpy.random`.
-:::
+output_deltas = [o * (1 - o) * (o - t) for o, t in zip(outputs, [1.])]
+hidden_deltas = [h * (1 - h) * dot(output_deltas, [n[i] for n in network[-1]])
+                 for i, h in enumerate(hidden_outputs)]
 
-O treino é gradiente descendente comum. A única diferença em relação aos capítulos anteriores é que agora há **vários** vetores de parâmetros, cada um com o seu gradiente, então `gradient_step` é chamado uma vez por neurônio:
+print(f"saída       {outputs[0]:.4f}  (alvo 1)         culpa {output_deltas[0]:+.6f}")
+for i, (h, d) in enumerate(zip(hidden_outputs, hidden_deltas)):
+    print(f"escondido {i+1}  {h:.4f}   peso p/ a saída {network[-1][0][i]:.4f}"
+          f"   culpa {d:+.6f}")
+```
+
+Três coisas para ver aí, e é para vê-las que vale interromper o texto. A primeira: as três culpas são **negativas**, porque a rede respondeu abaixo do alvo, e é o mesmo erro sendo redistribuído — o sinal não se inverte no caminho de volta. A segunda: as culpas escondidas são uma ordem de grandeza menores que a da saída. Elas são o produto da culpa de trás por um peso menor que 1 e pela derivada da sigmoide, que vale no máximo 0,25 — a culpa **encolhe** a cada camada que atravessa, e essa é a versão em miniatura do problema que trava redes profundas.
+
+A terceira é a proporcionalidade da metáfora: o primeiro escondido manda o sinal à saída por um peso de cerca de 0,78 e o segundo por um de cerca de 0,30 — dois e meio para um —, e o primeiro recebe cerca do dobro da culpa do segundo. Não exatamente dois e meio, porque cada um ainda multiplica pela **própria** derivada, e o segundo, mais perto do meio da sigmoide, reage mais a um empurrão. Conexão forte, muita responsabilidade; conexão fraca, pouca — moderado pelo quanto cada neurônio consegue reagir.
+
+O treino é gradiente descendente **estocástico**: o laço interno percorre os exemplos um a um e dá um passo em cada, que é a variante batizada na [seção 5.6](../cap05/06-minibatch-e-estocastico.qmd). Vinte mil epochs sobre quatro exemplos são, portanto, 80.000 passos de gradiente, não 20.000. A outra diferença em relação aos capítulos anteriores é que agora há **vários** vetores de parâmetros, cada um com o seu gradiente, então `gradient_step` é chamado uma vez por neurônio a cada passo:
 
 ```{python}
 #| label: treino-xor
