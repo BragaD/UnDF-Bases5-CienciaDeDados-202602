@@ -575,3 +575,23 @@ Mesma lição que o projeto já tinha aprendido com a asserção sem semente do 
 ("1 em 3, medido em 5 rodadas" contra 25% em 20.000). **Vale explicitamente para medições de
 TEMPO, que são as mais sensíveis à carga da máquina — e este livro é escrito com cinco agentes
 rodando ao mesmo tempo.**
+
+### Ruling Z — eu erro mais quando corrijo direto do que quando encomendo
+
+Na correção do bloqueio do cap. 16 eu introduzi **dois** defeitos em duas frases:
+
+1. O parágrafo de handoff que mandei escrever reproduzia a abertura do cap. 17 em **sete de
+   sete batidas**. O portão citou o precedente do próprio projeto (commit `ade17fe`, onde eu
+   consertei exatamente isso no cap. 17) — e eu não percebi ao ler o relatório do corretor.
+2. Ao consertar, escrevi "Trezentos epochs custam **pouco mais** de um terço" de 1.000. É
+   300/1000 = 0,30, que é **menos** de um terço (0,333). Razão pura, independente de hardware:
+   conta errada, não medição frágil.
+
+Nenhum dos dois passou de uma passagem de portão. Mas os dois foram **meus**, escritos direto,
+sem contrato e sem revisão prévia — e é o padrão da sessão inteira: os erros que sobrevivem
+mais tempo são os que eu escrevo com pressa entre despachos, não os que os agentes escrevem
+sob contrato.
+
+**Consequência prática:** quando eu corrigir direto em vez de encomendar, o portão seguinte
+precisa saber disso explicitamente, para olhar o meu texto com o mesmo ceticismo que olharia o
+de um agente. Já venho pedindo isso ("não me poupe") — vale manter.
