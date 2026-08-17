@@ -144,3 +144,98 @@ Nada da seção "Não mexa nisto" foi tocado.
    `_freeze/` do cap. 15 (que é o que o próximo render reusa) está correto.
 3. M3 ficou como `~2 s` e a linha do `relu`/`adam` também diz `~2 s`. São duas medições
    independentes que calharam próximas, não um erro de cópia.
+
+---
+
+# Adendo — segunda rodada de correções (`cap15-correcoes-2.md`)
+
+**Status: 8 Importantes e 5 Menores aplicados. `render OK`, `make teste` 24/24.**
+
+## O que mudou, item a item
+
+- **I1** — `04`: "distância" → **queda**, com os quatro números conferidos contra
+  `content/cap14/06-florestas-aleatorias.qmd`: sem poda 99,7 → 82,4 (**cai** 17,3); profundidade 2
+  85,0 → 100 (**sobe** 15,0); a nossa rede 97,8 → 96,0 (cai 1,8). O parágrafo agora diz
+  explicitamente que as duas diferenças têm tamanho parecido e sentidos opostos, e que é o sinal
+  que separa os casos. A frase final ("o modelo com o melhor número de treino era o pior") ficou.
+- **I2** — `02`, logo após o `.conceito`: a regra do perceptron histórico ("a cada exemplo errado,
+  empurre os pesos na direção da entrada") não é gradiente descendente, existe porque o gradiente
+  não estava disponível, e só vale para um neurônio — com camadas escondidas ela não tem o que
+  dizer. Fecha a pergunta que `01` abria com "regra de treino própria".
+- **I3** — `03`: a nota de índice agora diz **qual `i` é qual** (`output_grads` → saída;
+  `hidden_deltas`/`hidden_grads` → escondido; `[n[i] for n in network[-1]]` com os dois papéis na
+  mesma linha) e nomeia o problema: o código reaproveita a letra, a matemática não.
+- **I4** — `03`, chunk `uma-passada-para-tras` entre a rede aleatória e o treino. Uma passada para
+  trás sobre `x = [1, 0]`, com três parágrafos lendo a saída.
+- **I5** — `04`, dentro do `.conceito`: a regressão não resolve porque uma soma ponderada de bits
+  não separa múltiplos de 3 — 0, 1, 2, 3 têm bits $[0,0]$, $[1,0]$, $[0,1]$, $[1,1]$ e os dois
+  múltiplos caem em cantos opostos, que é o argumento das quatro desigualdades da §1; a árvore não
+  resolve porque profundidade 10 é uma folha por padrão de bits, e nenhum dos padrões de 1 a 100
+  apareceu no treino.
+- **I6** — `04`, chunk `pesos-escondidos-fizz-buzz` logo antes do `.conceito`: dois dos 25 vetores.
+- **I7** — `04:270`: cortado o mecanismo. Agora "alguma combinação desses bits que **funciona** —
+  não necessariamente a soma alternada nem o ciclo módulo 4 (…), apenas algo que acerta 96 dos 100".
+- **I8** — `03`: o treino é nomeado **gradiente descendente estocástico**, ligado à
+  [seção 5.6](../cap05/06-minibatch-e-estocastico.qmd), com os 20.000 epochs × 4 exemplos =
+  **80.000 passos**.
+- **M1** — `04`: meia dúzia de linhas dizendo que `epoch_loss` soma previsões de redes que mudam
+  durante o epoch — não é a perda de uma rede fixa —, e que é isso que produz os solavancos do fim
+  da curva (conferidos no PNG antes de escrever).
+- **M2** — índice: "cada uma das **três primeiras** seções existe por causa de um limite da
+  anterior, e a quarta gasta tudo o que elas construíram num problema só".
+- **M3** — uma frase de passagem para o cap. 16 **depois** do `.conceito`, antes do "Na prática".
+  A frase de `:283` continua fechando o `.conceito`.
+- **M4** — as cinco: "programador excepcional"; "no lugar dela vamos aplicar"; `*n*` → `$n$`;
+  `## Olhando os erros de perto`; e o viés — `01` agora liga `bias` a "viés" e desarma a colisão
+  (parâmetro, não erro sistemático; nada a ver com viés-variância do cap. 8; o cap. 12 chamava de
+  *termo constante*).
+- **M5** — o callout "A semente não é opcional" virou prosa; sobrou só o específico (inicializações
+  diferentes → **soluções** diferentes). A §3 foi de nove caixas para oito.
+
+## Os números novos na página
+
+```
+saída       0.7838  (alvo 1)         culpa -0.036630
+escondido 1  0.7799   peso p/ a saída 0.7838   culpa -0.004929
+escondido 2  0.6601   peso p/ a saída 0.3033   culpa -0.002493
+
+escondido  0  [ -2.78,  -5.59, -11.34,  -9.80,  -2.69,  -6.25,   3.05, -19.00,  -2.73,  -5.97,  15.91]
+escondido 13  [ -2.17,  -3.63, -14.70,   3.28,  -2.23,  -3.88,   1.93,   2.95,  -2.29,  -3.73,   8.06]
+```
+
+Nada da seção "Não mexa nisto" foi tocado.
+
+## Preocupação — o I6 mostrou mais do que se esperava
+
+Ao conferir os pesos impressos antes de escrever a prosa, apareceu **estrutura visível** neles, e
+ela é real: os pesos dos bits **0, 4 e 8** saem quase idênticos em quase todos os 25 neurônios (e
+os de 1, 5, 9 entre si, e assim por diante), porque $2^k \bmod 15$ tem **período 4** — bits da
+mesma classe são literalmente intercambiáveis neste problema. Medi os 25 (script descartado):
+o espalhamento dentro dos grupos é uma fração do espalhamento total. E há casos mais fortes:
+o **neurônio 7** tem pesos alternando sinal a cada bit — que é a **soma alternada**, o critério de
+divisibilidade por 3 —, e o **neurônio 16** é quase perfeitamente periódico com período 4.
+
+Consequências, e o que fiz:
+
+1. A prosa do I6 **não** afirma que nada se lê. Ela mostra os dois vetores, registra o fragmento
+   (bits 0, 4 e 8; o resto módulo 15) e argumenta que isso não é uma resposta: saber que três bits
+   são tratados como equivalentes não diz o que o neurônio responde. Escrever "ilegível" ali seria
+   uma afirmação que um aluno derruba imprimindo os 25.
+2. O `.conceito` **continua verdadeiro** e não foi mexido: nenhum neurônio isolado corresponde a "é
+   múltiplo de 3", e não por acaso — divisibilidade não é monótona em soma ponderada nenhuma
+   (soma alternada de 0 a 3 mod 3 são valores intercalados), então uma sigmoide sozinha não a
+   calcula. A informação continua morando na combinação.
+3. **Fica para uma terceira rodada, se você quiser:** o I7 me mandou cortar "aproxima a soma
+   alternada e o ciclo módulo 4" por falta de sustentação, e a evidência dos pesos agora **sustenta**
+   essa afirmação. Cortei, como o contrato pediu. Mas há aqui material para uma caixa curta — a
+   rede reinventou o período 4 de $2^k \bmod 15$ — que seria um dos melhores momentos do capítulo
+   e que eu não escrevi por estar fora do contrato.
+
+## Verificação
+
+`make render` → `render OK`; `make teste` → **24 passed**. Conferi no HTML publicado
+(`_book/content/cap15/*.html`) as duas saídas novas e as marcas de texto de cada item (queda,
+"Olhando os erros de perto", 80.000 passos, "regra do perceptron histórico", "três primeiras
+seções", ausência do callout da semente). Foram precisas **quatro** chamadas a `make render`: uma
+saiu por lock de outro agente e duas por orçamento de tempo (a corrida do bind mount), o que é
+esperado e não é falha de conteúdo.
