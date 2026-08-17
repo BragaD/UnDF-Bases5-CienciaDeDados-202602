@@ -142,7 +142,7 @@ Então o corte é este, e ele está escrito aqui em vez de disfarçado:
 
 Três passadas, e não duas, por um motivo que a tabela mais adiante deixa ver: **com duas passadas a rede profunda ainda perdia para a regressão logística** — 0,8595 contra 0,8620 no teste —, e a seção terminaria sugerindo que sete camadas não compram nada. A terceira passada custa mais um minuto de renderização e inverte o resultado. É o orçamento decidindo o que o capítulo consegue afirmar, que é exatamente a lição desta caixa.
 
-Isso é o assunto, não um contratempo. **A lentidão é o preço da transparência**, e este é, com folga, o capítulo mais caro do livro — o único em que esse preço aparece com unidade e valor medido. Uma biblioteca vetorizada rodando numa GPU faz esta mesma rede, sobre o conjunto inteiro, em segundos — e é exatamente por isso que GPUs existem. Um aluno que só chamou `.fit()` nunca teve como sentir a diferença entre "seis minutos" e "seis segundos" como consequência de uma escolha de representação.
+Isso é o assunto, não um contratempo. **A lentidão é o preço da transparência**, e este é, com folga, o capítulo mais caro do livro. Outras páginas também cronometram os chunks pesados — seis segundos no [Capítulo 9](../cap09/03-a-maldicao-da-dimensionalidade.qmd), noventa no [Capítulo 12](../cap12/07-erros-padrao-dos-coeficientes.qmd) —, mas este é o único em que o preço **decide o que o capítulo consegue afirmar**, e não apenas quanto ele demora para renderizar. Uma biblioteca vetorizada rodando numa GPU faz esta mesma rede, sobre o conjunto inteiro, em segundos — e é exatamente por isso que GPUs existem. Um aluno que só chamou `.fit()` nunca teve como sentir a diferença entre "seis minutos" e "seis segundos" como consequência de uma escolha de representação.
 
 Fica como exercício o que o corte custou: rodar com as 60.000 imagens e mais passadas, e comparar com os 92% que o livro-texto relata para a mesma rede.
 :::
@@ -241,10 +241,10 @@ random.seed(0)
 
 modelo_linear = Linear(784, 10)
 loss = SoftmaxCrossEntropy()
-otimizador = Momentum(learning_rate=0.01, momentum=0.99)
+optimizer = Momentum(learning_rate=0.01, momentum=0.99)
 
 t0 = time.time()
-acc_treino, perda_treino = loop(modelo_linear, X_treino, y_treino, loss, otimizador)
+acc_treino, perda_treino = loop(modelo_linear, X_treino, y_treino, loss, optimizer)
 segundos = time.time() - t0
 
 acc_teste, perda_teste = loop(modelo_linear, X_teste, y_teste, loss)
@@ -302,14 +302,14 @@ Sete camadas, quase 24 mil parâmetros — e o laço de treino continua sendo o 
 ```{python}
 #| label: treino-profundo
 #| warning: false
-otimizador = Momentum(learning_rate=0.01, momentum=0.99)
+optimizer = Momentum(learning_rate=0.01, momentum=0.99)
 
 historico = []
 
 for epoch in range(3):
     dropout1.train = dropout2.train = True          # liga o dropout e treina
     t0 = time.time()
-    acc_treino, perda_treino = loop(modelo, X_treino, y_treino, loss, otimizador)
+    acc_treino, perda_treino = loop(modelo, X_treino, y_treino, loss, optimizer)
     segundos = time.time() - t0
 
     dropout1.train = dropout2.train = False         # desliga e avalia
@@ -460,7 +460,7 @@ Nesta página, sete camadas e vinte e quatro mil parâmetros reconhecem dígitos
 
 E a diferença entre as duas versões — a que você leu e a que roda em produção — é de velocidade, não de ideia. Esta página levou minutos para fazer o que uma GPU faz em segundos. **Você agora sabe exatamente o que aqueles segundos estão fazendo.**
 
-Falta um capítulo, e repare no que esta seção precisou para existir: a tabela de confusões acima só pôde ser montada porque, para cada uma das dez mil imagens de teste, alguém já tinha escrito qual dígito era. O [Capítulo 17](../cap17/index.qmd) trabalha sem essa coluna — e é a última coisa que este livro constrói.
+Falta um capítulo, e repare no que esta seção precisou para existir: a tabela de confusões acima só pôde ser montada porque, para cada uma das duas mil imagens de teste, alguém já tinha escrito qual dígito era. O [Capítulo 17](../cap17/index.qmd) trabalha sem essa coluna — e é a última coisa que este livro constrói.
 :::
 
 ::: {.callout-tip collapse="true"}
@@ -479,7 +479,7 @@ modelo = nn.Sequential(
 )
 
 perda = nn.CrossEntropyLoss()
-otimizador = torch.optim.SGD(modelo.parameters(), lr=0.01, momentum=0.99)
+otimizador = torch.optim.SGD(modelo.parameters(), lr=0.0001, momentum=0.99)
 
 for epoch in range(3):
     modelo.train()
@@ -489,7 +489,9 @@ for epoch in range(3):
         otimizador.step()
 ```
 
-A arquitetura é a mesma, linha por linha. Três diferenças no que está em volta dela:
+A arquitetura é a mesma, linha por linha. **A taxa de aprendizado não é**, e o desconto de cem vezes não é engano de digitação: é a conta da [seção 16.5](05-perda-e-otimizacao.qmd) aplicada a este $\mu$. O nosso `Momentum` acumula uma média móvel do gradiente, cujo limite é o próprio $g$; o `optim.SGD`, com o padrão `dampening=0`, acumula uma soma cujo limite é $g/(1-\mu)$. Com o $\mu = 0{,}9$ daquela seção isso valia dez vezes; com o $\mu = 0{,}99$ desta, vale **cem**. Traduzir `Momentum(learning_rate=0.01, momentum=0.99)` como `lr=0.01` daria um passo cem vezes maior que o nosso — e quanto mais perto de 1 fica o momento, mais cara sai a distração.
+
+Três diferenças no que está em volta dela:
 
 **Lotes.** O `carregador_de_treino` entrega 64 imagens de uma vez, e `modelo(X)` processa as 64 numa multiplicação de matriz só. O nosso laço faz uma imagem por vez, porque a nossa `Linear` não sabe fazer outra coisa. Sozinho, isso costuma valer uma ordem de grandeza.
 

@@ -33,6 +33,7 @@ plt.title("Localizações dos usuários")
 plt.xlabel("quarteirões a leste do centro")
 plt.ylabel("quarteirões ao norte do centro")
 plt.axis([-60, 40, -30, 40])
+plt.gca().set_aspect('equal')     # eixos na mesma escala: distância é o assunto
 plt.show()
 ```
 
@@ -68,6 +69,7 @@ Três grupos, centrados em torno de [−43,8; 5,4], [−15,9; −10,3] e [18,3; 
 #| label: fig-tres-grupos
 #| fig-cap: "Os usuários divididos em três grupos. O número preto marca o centro de cada um."
 #| warning: false
+import matplotlib.patheffects as pe
 from scratch.linear_algebra import vector_mean
 
 def desenha_grupos(grupos: List[List[Vector]], titulo: str) -> None:
@@ -85,20 +87,27 @@ def desenha_grupos(grupos: List[List[Vector]], titulo: str) -> None:
         xs, ys = zip(*grupo)
         plt.scatter(xs, ys, color=cor, marker=marca)
 
-        # e um número no centro do grupo
+        # e um número no centro do grupo, com contorno branco: o centro cai
+        # onde os pontos são densos, e sem o contorno o algarismo se perde
+        # em cima deles
         x, y = vector_mean(grupo)
-        plt.plot(x, y, marker='$' + str(i) + '$', color='black')
+        numero, = plt.plot(x, y, marker='$' + str(i) + '$',
+                           color='black', markersize=10)
+        numero.set_path_effects([pe.withStroke(linewidth=3, foreground='white')])
 
     plt.title(titulo)
     plt.xlabel("quarteirões a leste do centro")
     plt.ylabel("quarteirões ao norte do centro")
     plt.axis([-60, 40, -30, 40])
+    # a figura é de distância: um quarteirão no eixo x precisa medir o mesmo
+    # que um quarteirão no eixo y, senão a geometria dos grupos sai deformada
+    plt.gca().set_aspect('equal')
     plt.show()
 
 atribuicoes_3 = [clusterer.classify(ponto) for ponto in inputs]
 grupos_3 = [[p for p, a in zip(inputs, atribuicoes_3) if a == i] for i in range(3)]
 
-desenha_grupos(grupos_3, "Localizações -- 3 grupos")
+desenha_grupos(grupos_3, "Localizações — 3 grupos")
 ```
 
 ::: {.callout-warning}
@@ -133,7 +142,7 @@ Um dos encontros continua perto de [18,3; 19,8]; o outro passa a ficar em [−25
 atribuicoes_2 = [clusterer_2.classify(ponto) for ponto in inputs]
 grupos_2 = [[p for p, a in zip(inputs, atribuicoes_2) if a == i] for i in range(2)]
 
-desenha_grupos(grupos_2, "Localizações -- 2 grupos")
+desenha_grupos(grupos_2, "Localizações — 2 grupos")
 ```
 
 Comparando as duas figuras — a cor de cada grupo vem da posição dele no mapa, então elas são comparáveis a olho —, o grupo da direita ficou intacto, em vermelho nas duas, e os dois da esquerda viraram um só. Dá para conferir isso sem depender do olho, verificando se cada grupo da solução com *k* = 3 cabe inteiro dentro de algum grupo da solução com *k* = 2:
@@ -174,7 +183,7 @@ modelo.labels_             # o grupo de cada um dos 20 usuários
 modelo.inertia_            # a soma das distâncias ao quadrado
 ```
 
-Os centros não saem idênticos aos nossos, porque a inicialização é outra: o `scikit-learn` espalha os centros iniciais com `k-means++` e roda o algoritmo dez vezes, ficando com o melhor resultado, enquanto o nosso `train` aceita o primeiro ótimo local que encontrar — o callout da [seção 17.2](02-o-modelo.qmd) detalha os dois mecanismos.
+Os centros não saem idênticos aos nossos, porque a inicialização é outra: o `scikit-learn` espalha os centros iniciais com `k-means++`, enquanto o nosso `train` sorteia as atribuições iniciais uniformemente. O callout da [seção 17.2](02-o-modelo.qmd) detalha esse mecanismo e o outro que a biblioteca oferece, o `n_init` — que, atenção, **não** vem ligado por padrão.
 
 Com vinte pontos em duas dimensões, essa diferença não aparece: os três grupos são separados o suficiente para que quase qualquer inicialização chegue lá. Ela começa a pesar quando os grupos se tocam, e vira o assunto principal quando os pontos são centenas de milhares — o caso da [seção 17.5](05-exemplo-clustering-de-cores.qmd).
 :::

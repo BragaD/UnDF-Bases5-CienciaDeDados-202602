@@ -271,6 +271,79 @@ for x in xs:
 
 O primeiro neurônio escondido está perto de 1 nas três últimas linhas: ele calcula o **OU**. O segundo só chega perto de 1 na última: ele calcula o **E**. E o neurônio de saída, com pesos $[11, -12, -5]$, dispara quando o primeiro está ligado e o segundo não — "o primeiro mas não o segundo", ou seja, "ou, mas não e".
 
+## Duas retas, e não uma
+
+A [seção 15.1](01-perceptrons.qmd) desenhou exatamente estes quatro pontos e parou numa impossibilidade: nenhuma reta deixa os dois preenchidos de um lado e os dois vazios do outro. Cada neurônio escondido **é** uma reta — foi a primeira coisa que aquela seção estabeleceu —, então desenhar as duas que a rede acabou de aprender responde à pergunta que ela deixou em aberto:
+
+```{python}
+#| label: fig-duas-retas
+#| fig-cap: "As duas retas que a camada escondida aprendeu, sobre o mesmo quadrado das portas lógicas da seção 15.1. Cada reta é a fronteira de um neurônio escondido: de um lado ele fica perto de 0, do outro perto de 1. Na faixa cinza entre as duas, o 'ou' já disparou e o 'e' ainda não — é ali, e só ali, que a rede devolve 1. Preenchido = o XOR vale 1."
+#| echo: false
+from matplotlib import pyplot as plt
+
+# Confere qual escondido é qual, em vez de supor: para a entrada [0, 1],
+# o "ou" dispara e o "e" não.
+h_01, _ = feed_forward(network, [0., 1])
+assert h_01[0] > 0.5 > h_01[1], "1º escondido é o 'ou', 2º é o 'e'"
+
+def fronteira(neuron, xs):
+    """x2 tal que w1*x1 + w2*x2 + b = 0, para cada x1 em xs."""
+    w1, w2, b = neuron
+    return [-(w1 * x + b) / w2 for x in xs]
+
+grade = [-0.5 + i / 200 for i in range(401)]
+reta_ou = fronteira(network[0][0], grade)
+reta_e = fronteira(network[0][1], grade)
+
+fig, ax = plt.subplots(figsize=(5.0, 4.8))
+
+ax.fill_between(grade, reta_ou, reta_e, color='0.87')
+ax.plot(grade, reta_ou, color='0.35')
+ax.plot(grade, reta_e, color='0.35', linestyle='--')
+
+for (a, b) in [(0, 0), (0, 1), (1, 0), (1, 1)]:
+    ax.scatter([a], [b], s=130, zorder=3,
+               facecolors='black' if a != b else 'white',
+               edgecolors='black', linewidths=1.6)
+
+ax.text(0.5, 0.5, "a rede\ndevolve 1", ha='center', va='center',
+        fontsize=8.5, color='0.2')
+
+x_ou = 0.30
+ax.annotate("escondido 1: o \"ou\"",
+            xy=(x_ou, fronteira(network[0][0], [x_ou])[0]),
+            xytext=(0.05, -0.40), ha='center', fontsize=9, color='0.2',
+            arrowprops=dict(arrowstyle='->', color='0.35'))
+
+x_e = 0.85
+ax.annotate("escondido 2: o \"e\"",
+            xy=(x_e, fronteira(network[0][1], [x_e])[0]),
+            xytext=(0.95, 1.44), ha='center', fontsize=9, color='0.2',
+            arrowprops=dict(arrowstyle='->', color='0.35'))
+
+ax.set_xlim(-0.5, 1.5)
+ax.set_ylim(-0.5, 1.6)
+ax.set_xticks([0, 1])
+ax.set_yticks([0, 1])
+ax.set_xlabel("$x_1$")
+ax.set_ylabel("$x_2$")
+ax.set_aspect('equal')
+plt.tight_layout()
+plt.show()
+```
+
+As duas retas cortam o quadrado em três faixas, e a leitura vai de baixo para cima:
+
+- **Abaixo da reta cheia**, nenhum dos dois neurônios escondidos disparou. É onde mora $[0,0]$, e a rede devolve 0.
+- **Na faixa cinza**, o "ou" já disparou e o "e" ainda não. É onde moram $[0,1]$ e $[1,0]$, e a rede devolve 1.
+- **Acima da reta tracejada**, os dois dispararam. É onde mora $[1,1]$, e a rede devolve 0 de novo.
+
+Repare que as duas retas saíram quase **paralelas**. Não é acaso: os dois pesos de cada neurônio escondido são praticamente iguais entre si — 6,9535 e 6,9528 no primeiro, 5,1159 e 5,1154 no segundo —, e uma reta $w x_1 + w x_2 + b = 0$ com pesos iguais tem inclinação $-1$, seja qual for $w$. O que separa uma reta da outra é só o viés, que a empurra para mais longe da origem. É exatamente a observação que a [seção 15.1](01-perceptrons.qmd) fez ao passar da porta E para a porta OU mexendo apenas no viés — e a rede, sem que ninguém lhe dissesse nada, redescobriu aquele par de retas.
+
+E o neurônio de saída não faz mais nada além de **nomear a faixa do meio**. "Dispara quando o primeiro está ligado e o segundo não" é, geometricamente, "está acima da reta cheia e abaixo da tracejada".
+
+É esse o negócio que uma camada escondida oferece, na forma mais nua que este livro consegue mostrar: **a possibilidade de recortar uma região entre duas fronteiras, em vez de ter que escolher um lado de uma só.** Um perceptron sozinho tem uma reta e dois lados, e acabou. Dois neurônios escondidos têm duas retas, e o neurônio de saída pode pedir qualquer combinação dos pedaços que elas produzem — inclusive a faixa do meio, que não é "um lado" de reta nenhuma. Mais neurônios escondidos recortam regiões mais elaboradas; mais camadas passam a recortar regiões de regiões. A [seção 15.4](04-exemplo-fizz-buzz.qmd) vai usar 25 neurônios escondidos sobre dez dimensões, onde não há figura possível — e é justamente por isso que vale ter visto esta.
+
 ::: {.conceito}
 A rede treinada encontrou **os mesmos dois atributos** que escolhemos à mão na seção anterior — o "e" e o "ou" — mas na **ordem trocada**: lá o primeiro neurônio escondido era o "e", aqui é o "ou".
 
