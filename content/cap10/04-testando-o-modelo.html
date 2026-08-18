@@ -1152,23 +1152,9 @@ Nota
 <p>Esta seção corresponde a <em>Testing Our Model</em>, do capítulo 13 de <span class="citation" data-cites="grus2019">Grus (<a href="#ref-grus2019" role="doc-biblioref">2019</a>)</span>.</p>
 </div>
 </div>
-<p>Vamos garantir que o modelo funciona escrevendo alguns testes para ele — pequenos o bastante para que as contas caibam à mão.</p>
+<p>Vamos garantir que o modelo funciona escrevendo alguns testes para ele — pequenos o bastante para que as contas caibam à mão. <code>tokenize</code>, <code>Message</code> e <code>NaiveBayesClassifier</code> não são redefinidos aqui: vêm de <code>scratch.naive_bayes</code>, o mesmo código que você escreveu na <a href="../../content/cap10/03-implementacao.html">seção anterior</a>.</p>
 <div id="import-scratch" class="cell" data-execution_count="1">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb1"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> scratch.naive_bayes <span class="im">import</span> tokenize, Message, NaiveBayesClassifier</span></code></pre></div><button title="Copiar para a área de transferência" class="code-copy-button"><i class="bi"></i></button></div>
-</div>
-<div class="callout callout-style-default callout-note callout-titled">
-<div class="callout-header d-flex align-content-center">
-<div class="callout-icon-container">
-<i class="callout-icon"></i>
-</div>
-<div class="callout-title-container flex-fill">
-Nota
-</div>
-</div>
-<div class="callout-body-container callout-body">
-<p>Cada página deste livro roda num kernel próprio, então a classe <code>NaiveBayesClassifier</code> que você escreveu na <a href="../../content/cap10/03-implementacao.html">seção anterior</a> não existe mais aqui. Em vez de reescrevê-la, importamos de <code>scratch.naive_bayes</code> — o mesmo código, copiado literalmente do repositório do livro-texto (é o padrão já usado no <a href="../../content/cap09/02-exemplo-o-dataset-iris.html">Capítulo 9</a>).</p>
-<p>Há uma consequência a mais aqui, específica deste módulo: <code>scratch/naive_bayes.py</code> não tem só as definições. No corpo do arquivo, fora de qualquer função, ele treina um classificador de brinquedo e faz exatamente as afirmações que esta seção do livro descreve — inclusive a mais delicada delas, discutida no callout mais abaixo. Isso significa que o chunk acima, além de trazer os nomes para este kernel, também executa esse teste embutido como efeito colateral do <code>import</code>. Se ele falhasse, o <code>import</code> já teria estourado.</p>
-</div>
 </div>
 <p>Primeiro, conferimos se as contagens saíram certas:</p>
 <div id="mensagens-de-brinquedo" class="cell" data-execution_count="2">
@@ -1217,7 +1203,7 @@ Nota
 <pre><code>0.8350515463917525</code></pre>
 </div>
 </div>
-<p>O teste passa: nesta renderização, <code>model.predict(text)</code> dá aproximadamente 0,835. Olhando as probabilidades de verdade, os dois termos que dominam esse número são que a mensagem contém <em>spam</em> (o que a nossa única mensagem de spam de treino também continha) e não contém <em>ham</em> (o que as duas mensagens de ham continham).</p>
+<p>O teste passa: <code>model.predict(text)</code> dá aproximadamente 0,835. Olhando as probabilidades de verdade, os dois termos que dominam esse número são que a mensagem contém <em>spam</em> (o que a nossa única mensagem de spam de treino também continha) e não contém <em>ham</em> (o que as duas mensagens de ham continham).</p>
 <div class="callout callout-style-default callout-warning callout-titled">
 <div class="callout-header d-flex align-content-center">
 <div class="callout-icon-container">
@@ -1230,8 +1216,7 @@ Nota
 <div class="callout-body-container callout-body">
 <p>Repare no que a linha acima faz: <code>model.predict(text) == p_if_spam / (p_if_spam + p_if_ham)</code>. Não é uma comparação com tolerância — é igualdade <strong>exata</strong> de ponto flutuante entre dois cálculos que chegam ao mesmo valor por caminhos diferentes. Um deles soma logaritmos percorrendo <code>self.tokens</code>, um <code>Set[str]</code>; o outro soma uma lista já em ordem fixa. Como soma de ponto flutuante não é associativa, a ordem em que os termos são somados pode mudar o último bit do resultado.</p>
 <p>E a ordem de iteração de um <code>set</code> em Python não é a ordem de inserção — ela depende do hash de cada string, e o Python randomiza esse hash por processo, a menos que a variável de ambiente <code>PYTHONHASHSEED</code> esteja fixada. Sem ela, este mesmo <code>assert</code>, rodado de novo, pode somar os quatro termos em outra ordem, produzir um float ligeiramente diferente no último bit, e estourar — não porque o modelo esteja errado, mas porque <code>==</code> entre <code>float</code> é a pergunta errada.</p>
-<p>Isso já aconteceu neste projeto: medido neste ambiente, o <code>import scratch.naive_bayes</code> falhava em 2 de cada 15 sementes de hash testadas. A correção está no <code>Dockerfile</code>, que fixa <code>PYTHONHASHSEED=0</code> — não porque o código deste livro precise de aleatoriedade determinística (o <code>assert</code> não tem <code>random</code> nenhum), mas porque a ordem de iteração de um <code>set</code> de strings é, ela mesma, uma fonte de não determinismo que a suíte não podia herdar.</p>
-<p>É um erro instrutivo do próprio livro-texto, da mesma família de dois outros que este livro já assinalou: o <code>shuffle</code> que embaralha os índices de início dos lotes — não os pontos, deixando cada lote sempre com os mesmos exemplos — no <a href="../../content/cap05/06-minibatch-e-estocastico.html">Capítulo 5</a>, e a correlação sem semente que falha uma vez em cada quatro execuções no <a href="../../content/cap07/01-explorando-seus-dados.html">Capítulo 7</a>. Os três são a mesma lição com fachadas diferentes: uma afirmação escrita como se fosse determinística, sobre algo que não é. Comparar <code>float</code> por igualdade é, especificamente, o erro que <strong>você</strong> vai cometer algum dia — e aqui ele já está no livro-texto, pronto para ser reconhecido da próxima vez.</p>
+<p>É a terceira vez que esta mesma lição aparece, com fachadas diferentes: o <code>shuffle</code> que embaralha os índices de início dos lotes — não os pontos, deixando cada lote sempre com os mesmos exemplos — no <a href="../../content/cap05/06-minibatch-e-estocastico.html">Capítulo 5</a>, e a afirmação sobre correlação que só é reprodutível com a semente fixada, no <a href="../../content/cap07/01-explorando-seus-dados.html">Capítulo 7</a>. Nos três casos, uma afirmação escrita como se fosse determinística, sobre algo que não é. Comparar <code>float</code> por igualdade é, especificamente, o erro que <strong>você</strong> vai cometer algum dia; reconhecê-lo aqui é o que faz você desconfiar da próxima vez.</p>
 <p>A comparação certa usa tolerância, não igualdade exata: <code>math.isclose(model.predict(text), p_if_spam / (p_if_spam + p_if_ham))</code>. <code>math.isclose</code> está na biblioteca padrão desde o Python 3.5, e é a ferramenta certa sempre que dois cálculos de ponto flutuante deveriam chegar ao “mesmo” resultado por caminhos diferentes.</p>
 </div>
 </div>

@@ -1206,7 +1206,7 @@ Nota
 </div>
 </div>
 <div class="callout-body-container callout-body">
-<p><code>Merged.children</code> deveria ser anotado como <code>Tuple[Cluster, Cluster]</code>, mas os tipos recursivos não são aceitos pelo verificador <code>mypy</code> que o livro-texto usa, então fica <code>tuple</code> mesmo. É um dos poucos lugares do livro em que a anotação de tipo fica mais fraca do que a realidade — e o autor deixa isso registrado em vez de esconder.</p>
+<p><code>Merged.children</code> deveria ser anotado como <code>Tuple[Cluster, Cluster]</code>, mas <code>Cluster</code> é um tipo <strong>recursivo</strong> — ele aparece dentro da própria definição —, e o verificador <code>mypy</code> não aceita isso. Fica <code>tuple</code>, uma anotação mais fraca do que a realidade. Vale saber que acontece: nem sempre o sistema de tipos consegue escrever o que o código de fato faz.</p>
 </div>
 </div>
 <p>Um grupo pode conter outros grupos, então recuperar os valores dentro dele é uma recursão:</p>
@@ -1250,7 +1250,7 @@ Nota
 </section>
 <section id="o-algoritmo" class="level2">
 <h2 class="anchored" data-anchor-id="o-algoritmo">O algoritmo</h2>
-<p>Falta anotar a ordem das fusões. A convenção do livro-texto é que números <strong>menores</strong> representam fusões <strong>mais tardias</strong> — a última fusão de todas recebe ordem 0. Assim, “desfazer as fusões mais recentes” é percorrer as ordens da menor para a maior. Folhas nunca foram fundidas, então recebem infinito:</p>
+<p>Falta anotar a ordem das fusões. A convenção é que números <strong>menores</strong> representam fusões <strong>mais tardias</strong> — a última fusão de todas recebe ordem 0. Assim, “desfazer as fusões mais recentes” é percorrer as ordens da menor para a maior. Folhas nunca foram fundidas, então recebem infinito:</p>
 <div id="ordem-e-filhos" class="cell" data-execution_count="5">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb5"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> get_merge_order(cluster: Cluster) <span class="op">-&gt;</span> <span class="bu">float</span>:</span>
 <span id="cb5-2"><a href="#cb5-2" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> <span class="bu">isinstance</span>(cluster, Leaf):</span>
@@ -1438,7 +1438,7 @@ Figura&nbsp;105.2: Três grupos bottom-up com ligação máxima — sobre exatam
 </section>
 <section id="três-diferenças-práticas-em-relação-ao-k-means" class="level2">
 <h2 class="anchored" data-anchor-id="três-diferenças-práticas-em-relação-ao-k-means">Três diferenças práticas em relação ao k-means</h2>
-<p><strong>Não há semente.</strong> Repare que nenhum chunk desta seção fixa <code>random.seed</code> antes de agrupar — o único que fixa é o que treina o k-means, para comparação. O bottom-up é determinístico: dados os mesmos pontos e a mesma ligação, ele sempre devolve a mesma árvore. Depois de duas seções lidando com ótimos locais e execuções que discordam entre si, essa propriedade não é pouca coisa.</p>
+<p><strong>Não há semente.</strong> Repare que nenhum agrupamento desta seção precisou de <code>random.seed</code> — o único que fixa semente é o treino do k-means, para comparação. O bottom-up é determinístico: dados os mesmos pontos e a mesma ligação, ele sempre devolve a mesma árvore. Depois de duas seções lidando com ótimos locais e execuções que discordam entre si, essa propriedade não é pouca coisa.</p>
 <p><strong>A hierarquia é aninhada por construção.</strong> A <a href="../../content/cap17/03-exemplo-encontros.html">seção 17.3</a> avisou que a solução do k-means com <em>k</em> + 1 grupos não é necessariamente um refinamento da solução com <em>k</em>. Aqui é, e não por sorte: os três grupos saem de desfazer uma fusão a mais na mesma árvore que produziu os dois. É a mesma estrutura, cortada em outra altura.</p>
 <p><strong>E ele é caro.</strong> Muito caro. Dá para contar quantas distâncias ponto a ponto o algoritmo calcula, aproveitando que <code>distance_agg</code> recebe a lista inteira:</p>
 <div id="custo" class="cell" data-execution_count="12">
@@ -1455,14 +1455,14 @@ Figura&nbsp;105.2: Três grupos bottom-up com ligação máxima — sobre exatam
 <pre><code>distâncias ponto a ponto calculadas: 3089</code></pre>
 </div>
 </div>
-<p>Três mil distâncias para agrupar vinte pontos. Compare com o k-means: cada passagem dele compara os vinte pontos com as três médias, o que dá sessenta distâncias, e ele converge em pouquíssimas passagens — o total fica na casa da centena. A razão da diferença é que <code>cluster_distance</code> recalcula, a cada fusão, todas as distâncias entre todos os pares de pontos dos dois grupos — inclusive as que já haviam sido calculadas dezenas de vezes antes. O próprio autor do livro-texto chama a implementação de “assombrosamente ineficiente” e aponta a correção: pré-calcular a distância entre cada par de entradas uma única vez e consultar essa tabela dentro de <code>cluster_distance</code>; uma versão realmente eficiente ainda guardaria as distâncias entre grupos de um passo para o seguinte.</p>
+<p>Três mil distâncias para agrupar vinte pontos. Compare com o k-means: cada passagem dele compara os vinte pontos com as três médias, o que dá sessenta distâncias, e ele converge em pouquíssimas passagens — o total fica na casa da centena. A razão da diferença é que <code>cluster_distance</code> recalcula, a cada fusão, todas as distâncias entre todos os pares de pontos dos dois grupos — inclusive as que já haviam sido calculadas dezenas de vezes antes. É uma implementação assombrosamente ineficiente, e a correção é conhecida: pré-calcular a distância entre cada par de entradas uma única vez e consultar essa tabela dentro de <code>cluster_distance</code>. Uma versão realmente eficiente ainda guardaria as distâncias entre grupos de um passo para o seguinte.</p>
 <div class="callout callout-style-default callout-warning callout-titled">
 <div class="callout-header d-flex align-content-center">
 <div class="callout-icon-container">
 <i class="callout-icon"></i>
 </div>
 <div class="callout-title-container flex-fill">
-<span class="screen-reader-only">Aviso</span>Um defeito silencioso no código do livro-texto
+<span class="screen-reader-only">Aviso</span>Um defeito silencioso no <code>bottom_up_cluster</code>
 </div>
 </div>
 <div class="callout-body-container callout-body">

@@ -1175,7 +1175,7 @@ Nota
 <p>Num mundo perfeito, onde toda página web fosse marcada de forma semântica em nosso benefício, daria para extrair dado com regras do tipo “ache o elemento <code>&lt;p&gt;</code> cujo <code>id</code> é <code>subject</code> e devolva o texto que ele contém.” No mundo real, HTML raramente é bem formado, e quase nunca é anotado — então vamos precisar de ajuda para dar sentido a ele.</p>
 <p>Para isso usamos a biblioteca <strong>Beautiful Soup</strong>, que constrói uma árvore a partir dos elementos de uma página e oferece uma interface simples para acessá-los. E usamos a biblioteca <strong>Requests</strong>, um jeito bem mais agradável de fazer requisições HTTP do que qualquer coisa embutida em Python. O parser HTML embutido do Python não é muito tolerante com marcação malformada, então também usamos o parser <code>html5lib</code>.</p>
 <p>“Tolerante” aqui tem um sentido preciso. Um navegador, ao abrir uma página com uma tag não fechada ou aninhada errado, não trava — ele segue um <strong>algoritmo de recuperação de erros</strong> especificado (o algoritmo de parsing do padrão HTML5), que decide deterministicamente onde cada tag quebrada deveria ter fechado. O parser embutido do Python (<code>html.parser</code>) não implementa esse algoritmo, e o problema não é que ele trave: <code>BeautifulSoup(texto, "html.parser")</code> sobre uma tag <code>&lt;p&gt;</code> aninhada dentro de outra <code>&lt;p&gt;</code> não levanta exceção nenhuma — devolve uma árvore <strong>errada</strong>, em silêncio, sem avisar que a marcação estava quebrada. É a mesma classe de falha que a seção anterior ensinou a temer: nenhuma mensagem de erro, só uma resposta incorreta. O <code>html5lib</code> implementa o mesmo algoritmo que os navegadores usam, e por isso interpreta a mesma sopa de tags malformadas do jeito que um navegador interpretaria.</p>
-<p>No livro, o HTML vem de uma requisição — <code>html = requests.get(url).text</code> — antes de virar <code>soup = BeautifulSoup(html, 'html5lib')</code>. Este livro é renderizado com a rede desligada, de propósito, então trocamos a busca por um <code>open()</code>: o arquivo que o <code>requests.get(url)</code> do Grus buscaria já está vendorizado em <code>dados/getting-data.html</code>, commitado no repositório. O resultado do <code>BeautifulSoup</code> é idêntico, porque o conteúdo é idêntico — só a origem do texto muda.</p>
+<p>Na prática, o HTML viria de uma requisição — <code>html = requests.get(url).text</code> — antes de virar <code>soup = BeautifulSoup(html, 'html5lib')</code>. Aqui ele vem de uma cópia salva da mesma página, em <code>dados/getting-data.html</code>, para que o exemplo dê o mesmo resultado a cada execução. O <code>BeautifulSoup</code> recebe exatamente o mesmo texto nos dois casos: só a origem muda.</p>
 <div id="cell-le-html-vendorizado" class="cell" data-execution_count="1">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb2"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> bs4 <span class="im">import</span> BeautifulSoup</span>
 <span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a></span>
@@ -1269,7 +1269,7 @@ Nota
 <div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb16"><pre class="sourceCode html code-with-copy"><code class="sourceCode html"><span id="cb16-1"><a href="#cb16-1" aria-hidden="true" tabindex="-1"></a><span class="dt">&lt;</span><span class="kw">td</span><span class="dt">&gt;</span></span>
 <span id="cb16-2"><a href="#cb16-2" aria-hidden="true" tabindex="-1"></a>  <span class="dt">&lt;</span><span class="kw">a</span><span class="ot"> href</span><span class="op">=</span><span class="st">"https://jayapal.house.gov"</span><span class="dt">&gt;</span>Jayapal, Pramila<span class="dt">&lt;/</span><span class="kw">a</span><span class="dt">&gt;</span></span>
 <span id="cb16-3"><a href="#cb16-3" aria-hidden="true" tabindex="-1"></a><span class="dt">&lt;/</span><span class="kw">td</span><span class="dt">&gt;</span></span></code></pre></div><button title="Copiar para a área de transferência" class="code-copy-button"><i class="bi"></i></button></div>
-<p>A função abaixo — pura lógica sobre uma string de HTML, sem tocar a rede — verifica se algum <code>&lt;p&gt;</code> de um texto menciona uma palavra-chave. Ela não depende do site do Congresso, então roda de verdade:</p>
+<p>A função abaixo — pura lógica sobre uma string de HTML, sem tocar a rede — verifica se algum <code>&lt;p&gt;</code> de um texto menciona uma palavra-chave:</p>
 <div id="cell-paragraph-mentions" class="cell" data-execution_count="8">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb17"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb17-1"><a href="#cb17-1" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> paragraph_mentions(text: <span class="bu">str</span>, keyword: <span class="bu">str</span>) <span class="op">-&gt;</span> <span class="bu">bool</span>:</span>
 <span id="cb17-2"><a href="#cb17-2" aria-hidden="true" tabindex="-1"></a>    <span class="co">"""</span></span>
@@ -1290,7 +1290,7 @@ Nota
 <pre><code>True</code></pre>
 </div>
 </div>
-<p>O restante do fluxo — coletar os links da página de representantes, filtrar por regex os que terminam em <code>.house.gov</code>, visitar cada site, achar a página de comunicados de imprensa, e procurar “data” em cada um — depende do site do <code>house.gov</code> estar no ar e responder exatamente como respondia quando o Grus escreveu o capítulo:</p>
+<p>O restante do fluxo — coletar os links da página de representantes, filtrar por regex os que terminam em <code>.house.gov</code>, visitar cada site, achar a página de comunicados de imprensa, e procurar “data” em cada um — são dezenas a centenas de requisições HTTP encadeadas, todas dependendo de o <code>house.gov</code> estar no ar e responder exatamente como respondia quando o capítulo foi escrito:</p>
 <div id="raspagem-congresso" class="cell" data-execution_count="9">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb19"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb19-1"><a href="#cb19-1" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> bs4 <span class="im">import</span> BeautifulSoup</span>
 <span id="cb19-2"><a href="#cb19-2" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> requests</span>
@@ -1358,20 +1358,7 @@ Nota
 <span id="cb19-64"><a href="#cb19-64" aria-hidden="true" tabindex="-1"></a>            <span class="bu">print</span>(<span class="ss">f"</span><span class="sc">{</span>house_url<span class="sc">}</span><span class="ss">"</span>)</span>
 <span id="cb19-65"><a href="#cb19-65" aria-hidden="true" tabindex="-1"></a>            <span class="cf">break</span>  <span class="co"># termina com este house_url</span></span></code></pre></div><button title="Copiar para a área de transferência" class="code-copy-button"><i class="bi"></i></button></div>
 </div>
-<div class="callout callout-style-default callout-important callout-titled">
-<div class="callout-header d-flex align-content-center">
-<div class="callout-icon-container">
-<i class="callout-icon"></i>
-</div>
-<div class="callout-title-container flex-fill">
-<span class="screen-reader-only">Importante</span>Por que a raspagem do Congresso não roda aqui
-</div>
-</div>
-<div class="callout-body-container callout-body">
-<p>Este exemplo visita <code>house.gov</code>, depois <strong>cada um</strong> dos sites de centenas de representantes, e por fim cada link de comunicado de imprensa encontrado — dezenas a centenas de requisições HTTP encadeadas. É também o exemplo mais datado do capítulo: os números nos comentários (<code>965</code>, <code>862</code>, <code>431</code>) são os que o Grus obteve <strong>quando escreveu o livro</strong>, não uma constante do site — <code>house.gov</code> pode reformular a página, um representante pode trocar de site, e a lista de representantes muda a cada eleição.</p>
-<p>O código fica no livro porque a <em>técnica</em> — coletar links, filtrar com regex, visitar cada página, aplicar <code>paragraph_mentions</code> sobre o resultado — continua sendo o padrão real de raspagem em várias etapas. Só a execução contra a rede é que fica de fora.</p>
-</div>
-</div>
+<p>Este é o exemplo mais datado do capítulo, e vale reparar por quê: os números nos comentários (<code>965</code>, <code>862</code>, <code>431</code>) são o resultado de uma execução específica, não uma constante do site. O <code>house.gov</code> pode reformular a página, um representante pode trocar de site, e a lista de representantes muda a cada eleição. O que dura é a técnica — coletar links, filtrar com regex, visitar cada página, aplicar <code>paragraph_mentions</code> sobre o resultado —, não os números que ela devolve.</p>
 <div class="callout callout-style-default callout-note callout-titled">
 <div class="callout-header d-flex align-content-center">
 <div class="callout-icon-container">
@@ -1387,7 +1374,7 @@ Nota
 </div>
 <p>Vale registrar também uma limitação do exemplo: as páginas de “comunicados de imprensa” de verdade costumam ser paginadas, com só 5 ou 10 comunicados por página. O código acima recupera só os comunicados mais recentes de cada parlamentar — uma solução mais completa precisaria iterar sobre as páginas e recuperar o texto de cada comunicado.</p>
 <div class="callout callout-style-default callout-tip callout-titled">
-<div class="callout-header d-flex align-content-center collapsed" data-bs-toggle="collapse" data-bs-target=".callout-4-contents" aria-controls="callout-4" aria-expanded="false" aria-label="Toggle callout">
+<div class="callout-header d-flex align-content-center collapsed" data-bs-toggle="collapse" data-bs-target=".callout-3-contents" aria-controls="callout-3" aria-expanded="false" aria-label="Toggle callout">
 <div class="callout-icon-container">
 <i class="callout-icon"></i>
 </div>
@@ -1396,7 +1383,7 @@ Nota
 </div>
 <div class="callout-btn-toggle d-inline-block border-0 py-1 ps-1 pe-0 float-end"><i class="callout-toggle"></i></div>
 </div>
-<div id="callout-4" class="callout-4-contents callout-collapse collapse">
+<div id="callout-3" class="callout-3-contents callout-collapse collapse">
 <div class="callout-body-container callout-body">
 <p><code>BeautifulSoup</code> e <code>requests</code> cobrem o caso comum — HTML estático, já presente na resposta HTTP. Duas limitações reais que eles não resolvem:</p>
 <p>Primeiro, páginas que montam o conteúdo via JavaScript <strong>depois</strong> de carregadas: <code>requests.get</code> devolve o HTML que o servidor mandou, não o que o navegador constrói em cima dele. Para essas, é preciso um navegador de verdade automatizado — ferramentas como <strong>Selenium</strong> ou <strong>Playwright</strong> abrem um navegador (headless ou não), esperam o JavaScript rodar, e só então extraem o HTML resultante.</p>

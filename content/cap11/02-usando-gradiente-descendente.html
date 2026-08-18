@@ -1189,35 +1189,19 @@ Nota
 </div>
 </div>
 <p>A <a href="../../content/cap11/01-o-modelo.html">seção anterior</a> ajustou <span class="math inline">\(\alpha\)</span> e <span class="math inline">\(\beta\)</span> com uma fórmula fechada — duas médias, uma correlação, dois desvios padrão, sem laço nenhum. Isso só foi possível porque a regressão linear simples é um caso particularmente simples: derivar a soma dos erros ao quadrado à mão, igualar a zero e resolver o sistema dá conta do recado. Esta seção resolve o <strong>mesmo problema</strong>, com os <strong>mesmos dados</strong>, pelo caminho construído no <a href="../../content/cap05/index.html">Capítulo 5</a>: gradiente descendente. O objetivo não é achar uma resposta melhor — é mostrar que os dois caminhos, o direto e o iterativo, chegam ao mesmo lugar.</p>
-<p>Como cada <code>.qmd</code> deste livro roda num kernel próprio, os nomes definidos na seção anterior não existem aqui. Em vez de reescrever <code>error</code>, <code>sum_of_sqerrors</code> e o resultado já ajustado, importamos do mesmo pacote vendorizado que a seção anterior usou — é o mesmo código, só sem repetir:</p>
-<p><code>scratch/simple_linear_regression.py</code> roda, no próprio nível do módulo (não atrás de um <code>if __name__ == "__main__"</code>), os mesmos <code>assert</code> que a seção anterior escreveu à mão — inclusive o que calcula <code>alpha, beta = least_squares_fit(num_friends_good, daily_minutes_good)</code>. São esses <code>alpha</code> e <code>beta</code> — os valores de mínimos quadrados, já calculados — que importamos aqui como <code>alpha_fechada</code> e <code>beta_fechada</code>. Eles são o <strong>gabarito</strong> desta seção: o número que o gradiente descendente vai ter que encontrar sozinho, sem nunca vê-lo.</p>
+<p>Precisamos de três coisas da seção anterior: as funções <code>error</code> e <code>sum_of_sqerrors</code>, os dados da DataSciencester e o par <span class="math inline">\((\alpha, \beta)\)</span> que a fórmula fechada já devolveu. Tudo isso vem de <code>scratch/simple_linear_regression.py</code> — é o mesmo código, só sem repetir:</p>
+<p><code>alpha_fechada</code> e <code>beta_fechada</code> são os valores de mínimos quadrados que a seção anterior calculou com <code>least_squares_fit</code>. Eles são o <strong>gabarito</strong> desta seção: o número que o gradiente descendente vai ter que encontrar sozinho, sem nunca vê-lo.</p>
 <div id="cell-mostra-fechada" class="cell" data-execution_count="2">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb1"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a>alpha_fechada, beta_fechada</span></code></pre></div><button title="Copiar para a área de transferência" class="code-copy-button"><i class="bi"></i></button></div>
 <div id="mostra-fechada" class="cell-output cell-output-display" data-execution_count="2">
 <pre><code>(22.947552413468976, 0.9038659456058725)</code></pre>
 </div>
 </div>
-<div class="callout callout-style-default callout-note callout-titled">
-<div class="callout-header d-flex align-content-center collapsed" data-bs-toggle="collapse" data-bs-target=".callout-2-contents" aria-controls="callout-2" aria-expanded="false" aria-label="Toggle callout">
-<div class="callout-icon-container">
-<i class="callout-icon"></i>
-</div>
-<div class="callout-title-container flex-fill">
-<span class="screen-reader-only">Nota</span>Por que o chunk do <code>import</code> está escondido
-</div>
-<div class="callout-btn-toggle d-inline-block border-0 py-1 ps-1 pe-0 float-end"><i class="callout-toggle"></i></div>
-</div>
-<div id="callout-2" class="callout-2-contents callout-collapse collapse">
-<div class="callout-body-container callout-body">
-<p><code>scratch/simple_linear_regression.py</code> importa de <code>scratch.statistics</code> no próprio nível do módulo — o que dispara, por tabela, as cinco chamadas <code>plt.*</code> daquele módulo, documentadas na seção anterior. Daí o <code>#| include: false</code> e o <code>plt.close('all')</code>.</p>
-</div>
-</div>
-</div>
 <section id="o-gradiente-da-soma-dos-erros-ao-quadrado" class="level2">
 <h2 class="anchored" data-anchor-id="o-gradiente-da-soma-dos-erros-ao-quadrado">O gradiente da soma dos erros ao quadrado</h2>
-<p>Se escrevermos <code>theta = [alpha, beta]</code> — o vetor de parâmetros que a <a href="../../content/cap05/05-ajustando-modelos.html">seção 5.5</a> batizou assim, e que o código do livro-texto abaixo chama de <code>guess</code>, “o palpite” —, o problema é o mesmo que aquela seção já resolveu para uma reta com parâmetros conhecidos: minimizar o erro quadrático ajustando <code>theta</code> um passo de cada vez. O que muda é o dado — ali era uma reta perfeita, <code>y = 20x + 5</code>; aqui são os 203 pontos reais e ruidosos da DataSciencester.</p>
-<p>Duas coisas mudam além do dado, e nenhuma das duas muda o destino. O Grus escreve as duas derivadas parciais soltas no laço, em vez de embrulhá-las numa função <code>linear_gradient</code>; e soma os gradientes sobre os 203 pontos em vez de tirar a média deles. Somar em vez de tirar a média multiplica o gradiente inteiro por 203 — o que aponta exatamente para a mesma direção, só com comprimento outro, e por isso só pede uma taxa de aprendizado proporcionalmente menor. O fundo da tigela não se move.</p>
-<p>Aqui está o laço inteiro. A única mudança em relação ao código do livro-texto é a lista <code>perdas</code>: o Grus calcula a perda a cada epoch só para escrevê-la na barra de progresso e descartá-la em seguida; nós guardamos, porque essas dez mil perdas desenham a figura que fecha esta seção.</p>
+<p>Se escrevermos <code>theta = [alpha, beta]</code> — o vetor de parâmetros que a <a href="../../content/cap05/05-ajustando-modelos.html">seção 5.5</a> batizou assim, e que o código abaixo chama de <code>guess</code>, “o palpite” —, o problema é o mesmo que aquela seção já resolveu para uma reta com parâmetros conhecidos: minimizar o erro quadrático ajustando <code>theta</code> um passo de cada vez. O que muda é o dado — ali era uma reta perfeita, <code>y = 20x + 5</code>; aqui são os 203 pontos reais e ruidosos da DataSciencester.</p>
+<p>Muda também a forma de escrever o gradiente, e a mudança não move o destino: as duas derivadas parciais aparecem soltas dentro do laço, em vez de embrulhadas numa função <code>linear_gradient</code>, e os gradientes são <strong>somados</strong> sobre os 203 pontos em vez de terem a média tirada. Somar em vez de tirar a média multiplica o gradiente inteiro por 203 — o que aponta exatamente para a mesma direção, só com comprimento outro, e por isso só pede uma taxa de aprendizado proporcionalmente menor. O fundo da tigela não se move.</p>
+<p>Aqui está o laço inteiro. A perda de cada epoch vai para a barra de progresso e também para a lista <code>perdas</code> — são essas dez mil perdas que desenham a figura que fecha esta seção.</p>
 <div id="cell-treina-gradiente" class="cell" data-execution_count="3">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb3"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> random</span>
 <span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> tqdm</span>
@@ -1331,7 +1315,7 @@ Figura&nbsp;61.1: Soma dos erros ao quadrado a cada epoch do gradiente descenden
 </div>
 <p>Vale perguntar por que passar pelo caminho mais lento, já que a fórmula fechada existe e é exata. A resposta é que ela <strong>só</strong> existe porque este problema é simples o bastante: uma única variável explicativa e uma função de erro cuja derivada dá para igualar a zero e resolver à mão. A <a href="../../content/cap11/03-maxima-verossimilhanca.html">seção 11.3</a>, a seguir, explica de onde vem essa função de erro específica. E assim que o problema cresce um pouco — mais de uma variável explicativa, no <a href="../../content/cap12/index.html">Capítulo 12</a> — a álgebra ainda fecha, mas fica pesada o bastante para valer a pena revisitar. A regressão logística do <a href="../../content/cap13/index.html">Capítulo 13</a> e as redes neurais dos capítulos seguintes não têm fórmula fechada <strong>nenhuma</strong>: para elas, o gradiente descendente que você acabou de usar aqui não é uma alternativa mais lenta — é o único caminho que existe.</p>
 <div class="callout callout-style-default callout-tip callout-titled">
-<div class="callout-header d-flex align-content-center collapsed" data-bs-toggle="collapse" data-bs-target=".callout-4-contents" aria-controls="callout-4" aria-expanded="false" aria-label="Toggle callout">
+<div class="callout-header d-flex align-content-center collapsed" data-bs-toggle="collapse" data-bs-target=".callout-3-contents" aria-controls="callout-3" aria-expanded="false" aria-label="Toggle callout">
 <div class="callout-icon-container">
 <i class="callout-icon"></i>
 </div>
@@ -1340,7 +1324,7 @@ Figura&nbsp;61.1: Soma dos erros ao quadrado a cada epoch do gradiente descenden
 </div>
 <div class="callout-btn-toggle d-inline-block border-0 py-1 ps-1 pe-0 float-end"><i class="callout-toggle"></i></div>
 </div>
-<div id="callout-4" class="callout-4-contents callout-collapse collapse">
+<div id="callout-3" class="callout-3-contents callout-collapse collapse">
 <div class="callout-body-container callout-body">
 <p><code>grad_a</code> e <code>grad_b</code> acima foram derivadas à mão: alguém (o Grus, neste caso) pegou <code>sum_of_sqerrors</code>, aplicou a regra da cadeia em relação a cada parâmetro, e transcreveu o resultado em código. Para dois parâmetros isso é tedioso, mas viável. Para uma rede neural com milhares ou milhões de parâmetros — assunto dos capítulos <a href="../../content/cap15/index.html">15</a> e <a href="../../content/cap16/index.html">16</a> — é inviável.</p>
 <p>Bibliotecas como PyTorch e TensorFlow resolvem isso com <strong>diferenciação automática</strong> (<em>autodiff</em>): em vez de pedir a derivada pronta, elas registram cada operação aplicada aos parâmetros — multiplicação, soma, potência — e aplicam a regra da cadeia automaticamente, operação por operação, na volta. O nome técnico do caso que aparece em redes neurais é <em>backpropagation</em>, e é literalmente a mesma ideia que <code>grad_a</code> e <code>grad_b</code> calculam aqui, só que mecanizada para não depender de alguém derivar a função à mão a cada modelo novo.</p>
