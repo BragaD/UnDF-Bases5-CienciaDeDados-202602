@@ -88,6 +88,20 @@ notebooks-teste: ## Executa todos os notebooks de ponta a ponta (demora; não gr
 # abriu o Jupyter dentro da pasta e depende da célula de preparo achar a raiz.
 	$(RUN) python scripts/executar-notebooks.py
 
+atividade: ## Gera as duas versões de uma atividade: make atividade FONTE=atividades/lista-01-revisao.qmd
+# Uma fonte .qmd, dois PDFs: o do aluno e o do gabarito. As respostas ficam em
+# blocos `content-visible when-meta="gabarito"`, então a versão do aluno não as
+# contém — não é questão de estarem escondidas no arquivo.
+#
+# Saída em PDF via **typst**, que já vem embutido no Quarto. O container não tem
+# LaTeX, e instalar um TinyTeX inteiro para gerar duas listas por semestre não se
+# paga.
+#
+# ATENÇÃO: nem o fonte nem os PDFs são versionados — este repositório é público
+# (veja o bloco correspondente no .gitignore). Guarde-os fora daqui.
+	@test -n "$(FONTE)" || { echo "uso: make atividade FONTE=atividades/lista-01-revisao.qmd"; exit 1; }
+	@bash scripts/render-atividade.sh "$(FONTE)"
+
 teste: ## Roda a suíte de invariantes estruturais
 	$(RUN) pytest tests/ -v
 
@@ -118,4 +132,4 @@ clean: ## Remove artefatos de render (inclusive o lixo que um render abortado de
 	  [ -f "$${html%.html}.qmd" ] && rm -f "$$html"; \
 	done; true
 
-.PHONY: help build preview render refresh offline jupyter notebooks notebooks-teste teste shell check lock clean
+.PHONY: help build preview render refresh offline jupyter atividade notebooks notebooks-teste teste shell check lock clean
