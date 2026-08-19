@@ -21,14 +21,21 @@ DIR=$(dirname "$FONTE")
 BASE=$(basename "$FONTE" .qmd)
 RUN="docker compose run --rm --no-deps livro"
 
-echo "→ versão do aluno"
-$RUN quarto render "$FONTE" --to typst --quiet
-mv "$DIR/$BASE.pdf" "$DIR/$BASE-aluno.pdf"
+# A versão do aluno vai para `publico/`, que é o diretório servido no site.
+# O gabarito fica um nível acima, fora do que o `project.resources` publica.
+# A separação é de diretório, e não de nome de arquivo, porque um dia alguém
+# vai errar o nome — e aí o teste de invariante pega, mas o diretório errado
+# nunca chega a existir.
+mkdir -p "$DIR/publico"
 
-echo "→ gabarito"
+echo "→ versão do aluno  ($DIR/publico/)"
+$RUN quarto render "$FONTE" --to typst --quiet
+mv "$DIR/$BASE.pdf" "$DIR/publico/$BASE.pdf"
+
+echo "→ gabarito         ($DIR/, fora do site)"
 $RUN quarto render "$FONTE" --to typst -M gabarito:true --quiet
 mv "$DIR/$BASE.pdf" "$DIR/$BASE-gabarito.pdf"
 
 rm -rf "$DIR/.quarto" "$DIR/$BASE.typ"
 echo
-ls -lh "$DIR/$BASE-aluno.pdf" "$DIR/$BASE-gabarito.pdf" | awk '{print "  "$5"\t"$9}'
+ls -lh "$DIR/publico/$BASE.pdf" "$DIR/$BASE-gabarito.pdf" | awk '{print "  "$5"\t"$9}'
