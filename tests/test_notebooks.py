@@ -21,6 +21,7 @@ NOTEBOOKS = RAIZ / "notebooks"
 CERCA = re.compile(r"^(`{3,})(.*)$")
 
 
+
 def carregar_gerador():
     """Importa scripts/gerar-notebooks.py (o hífen impede um `import` normal)."""
     caminho = RAIZ / "scripts" / "gerar-notebooks.py"
@@ -117,30 +118,85 @@ def test_nenhum_notebook_guarda_saida():
             )
 
 
-def test_primeira_celula_de_codigo_acha_a_raiz():
-    """Sem o chdir, `from scratch...` e `dados/...` estouram fora da raiz."""
+def eh_preparo(src: str) -> bool:
+    return "_quarto.yml" in src and "os.chdir" in src
+
+
+def test_a_celula_de_preparo_vem_antes_de_quem_depende_dela():
+    """Sem o chdir, `from scratch...` e `dados/...` estouram fora da raiz.
+
+    Nos notebooks gerados o preparo é a primeira célula de código, sempre. No
+    de onboarding ele aparece depois da explicação do que ele faz — o que é
+    deliberado, e por isso o invariante checado aqui é o que de fato importa:
+    o preparo tem de vir **antes** da primeira célula que usa `scratch` ou
+    `dados/`. Exigir a primeira posição seria mais fácil de escrever e testaria
+    a convenção em vez da propriedade.
+    """
     for nome, nb in carregados().items():
-        codigo = [c for c in nb["cells"] if c["cell_type"] == "code"]
+        codigo = [fonte(c) for c in nb["cells"] if c["cell_type"] == "code"]
         assert codigo, f"{nome}: nenhuma célula de código"
-        preparo = fonte(codigo[0])
-        assert "_quarto.yml" in preparo and "os.chdir" in preparo, (
-            f"{nome}: a primeira célula de código não é a de preparo"
+
+        preparos = [i for i, src in enumerate(codigo) if eh_preparo(src)]
+        assert preparos, f"{nome}: não tem célula de preparo"
+
+        dependentes = [
+            i for i, src in enumerate(codigo)
+            if ("scratch" in src or "dados/" in src) and not eh_preparo(src)
+        ]
+        if dependentes:
+            assert preparos[0] < dependentes[0], (
+                f"{nome}: a célula {dependentes[0]} usa scratch/dados antes de "
+                f"o preparo rodar (preparo está em {preparos[0]})"
+            )
+
+        assert eh_preparo(codigo[0]), (
+            f"{nome}: o notebook tem de abrir com a célula de preparo"
         )
 
 
 def test_todo_chunk_executavel_do_livro_virou_celula():
-    """19 chunks que executam moram dentro de callouts; nenhum pode virar texto."""
+    """19 chunks que executam moram dentro de callouts; nenhum pode virar texto.
+
+    A contagem esperada é: os chunks do capítulo, mais a célula de preparo,
+    mais — só no capítulo do onboarding — os chunks do texto de onboarding.
+    Todas contadas por este arquivo, sem reusar o parser do gerador.
+    """
+    gerador = carregar_gerador()
     esperados = notebooks_esperados()
     carregado = carregados()
     for nome, cap in esperados.items():
         do_livro = sum(chunks_executaveis(RAIZ / href) for href in cap["arquivos"])
+        extras = 1  # a célula de preparo
+        if cap["numero"] == gerador.CAP_ONBOARDING:
+            extras += chunks_executaveis(gerador.ONBOARDING)
         no_notebook = sum(
             1 for c in carregado[nome]["cells"] if c["cell_type"] == "code"
         )
-        assert no_notebook == do_livro + 1, (
-            f"{nome}: {no_notebook - 1} células de código para {do_livro} chunks "
-            f"executáveis no livro (a mais é a de preparo)"
+        assert no_notebook == do_livro + extras, (
+            f"{nome}: {no_notebook} células de código para {do_livro} chunks "
+            f"do livro mais {extras} de infraestrutura"
         )
+
+
+def test_o_onboarding_esta_no_notebook_da_aula_2():
+    """O onboarding do Colab não existe no livro; se sumir daqui, some de tudo."""
+    gerador = carregar_gerador()
+    assert gerador.ONBOARDING.exists(), "scripts/onboarding-colab.md não existe"
+
+    cap = next(c for c in gerador.le_capitulos()
+               if c["numero"] == gerador.CAP_ONBOARDING)
+    nb = carregados()[gerador.nome_do_arquivo(cap)]
+    texto = "\n".join(fonte(c) for c in nb["cells"])
+    for marca in ("Shift + Enter", "Reiniciar sessão", "Salvar uma cópia no Drive"):
+        assert marca in texto, f"o onboarding perdeu a menção a {marca!r}"
+
+    # E não pode ter vazado para o livro: lá seria comentário sobre ferramenta.
+    livro = "\n".join(
+        f.read_text(encoding="utf-8") for f in (RAIZ / "content").rglob("*.qmd")
+    )
+    assert "Shift + Enter" not in livro, (
+        "instrução de Colab apareceu no livro; ela pertence só ao notebook"
+    )
 
 
 def test_nenhum_link_aponta_para_qmd():
@@ -164,6 +220,26 @@ def test_nenhuma_citacao_ficou_por_resolver():
                 continue
             pendentes = [c for c in chaves if f"@{c}" in fonte(celula)]
             assert not pendentes, f"{nome}: célula {i} tem citação crua {pendentes}"
+
+
+def test_todo_capitulo_tem_link_para_o_colab_e_nenhum_notebook_o_repete():
+    """O link mora no site, para levar ao notebook; dentro dele é redundante."""
+    gerador = carregar_gerador()
+    carregado = carregados()
+    for cap in gerador.le_capitulos():
+        idx = RAIZ / f"content/cap{cap['numero']:02d}/index.qmd"
+        texto = idx.read_text(encoding="utf-8")
+        nb = gerador.nome_do_arquivo(cap)
+        assert "colab.research.google.com" in texto, (
+            f"{idx.relative_to(RAIZ)} não tem link para o Colab"
+        )
+        assert nb in texto, (
+            f"{idx.relative_to(RAIZ)} liga para o Colab, mas não para {nb}"
+        )
+        dentro = "\n".join(fonte(c) for c in carregado[nb]["cells"])
+        assert "colab.research.google.com" not in dentro, (
+            f"{nb} repete o link do Colab; quem está lendo já está nele"
+        )
 
 
 def test_quarto_ignora_a_pasta_de_notebooks():

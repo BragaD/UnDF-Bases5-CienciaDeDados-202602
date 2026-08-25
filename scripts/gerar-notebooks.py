@@ -41,6 +41,13 @@ SITE = "https://bragad.github.io/UnDF-Bases5-CienciaDeDados-202602"
 
 TITULO_LEITURAS = "## Leituras adicionais"
 
+# O notebook do capítulo 2 é o da aula 2, a primeira em que a turma põe a mão
+# no ambiente. Ele abre com um onboarding do Colab que **não** existe no livro:
+# explicar Shift+Enter numa página HTML seria comentário sobre a ferramenta, e
+# não sobre o conteúdo. Ele mora aqui e entra só no notebook.
+ONBOARDING = RAIZ / "scripts" / "onboarding-colab.md"
+CAP_ONBOARDING = 2
+
 # Rótulo e ícone de cada div do livro. O Jupyter não conhece callouts do
 # Quarto; o blockquote com rótulo é o que mais se aproxima sem depender de
 # CSS que o notebook não carrega.
@@ -54,6 +61,9 @@ ROTULOS = {
 }
 
 CERCA = re.compile(r"^(`{3,})(.*)$")
+# A linha "abrir este capítulo no Colab", que o index.qmd traz para quem lê o
+# site, não faz sentido dentro do próprio notebook — o leitor já está nele.
+LINHA_COLAB = re.compile(r"^.*colab\.research\.google\.com.*$\n?", re.M)
 DIV_ABRE = re.compile(r"^::: *\{([^}]*)\}\s*$")
 DIV_FECHA = re.compile(r"^::: *$")
 TITULO_ATX = re.compile(r"^(#{1,5}) (.*)$")
@@ -61,21 +71,41 @@ LINK = re.compile(r"\[([^\]]*)\]\(([^)]+)\)")
 OPCAO = re.compile(r"^#\|\s*([a-z-]+):\s*(.*)$")
 
 CELULA_PREPARO = '''\
-# Põe o diretório de trabalho na raiz do projeto. É o que faz
-# `from scratch...` e os caminhos `dados/...` funcionarem daqui —
-# no livro isso vem do `execute-dir: project` do Quarto.
+# Põe o diretório de trabalho na raiz do projeto — é o que faz
+# `from scratch...` e os caminhos `dados/...` funcionarem. No livro isso vem
+# do `execute-dir: project` do Quarto; aqui é feito à mão.
+#
+# No Colab não existe cópia do projeto, então esta célula clona uma. É rápido
+# (clone raso) e acontece só na primeira execução da sessão.
 import os
+import subprocess
 import sys
 
-_raiz = os.path.abspath(os.getcwd())
-while not os.path.exists(os.path.join(_raiz, "_quarto.yml")):
-    _pai = os.path.dirname(_raiz)
-    if _pai == _raiz:
-        raise RuntimeError("raiz do projeto não encontrada (procurando _quarto.yml)")
-    _raiz = _pai
-os.chdir(_raiz)
-if _raiz not in sys.path:
-    sys.path.insert(0, _raiz)
+REPO = "https://github.com/BragaD/UnDF-Bases5-CienciaDeDados-202602.git"
+
+
+def raiz_do_projeto(inicio="."):
+    """Sobe os diretórios até achar o `_quarto.yml`. None se não houver."""
+    atual = os.path.abspath(inicio)
+    while not os.path.exists(os.path.join(atual, "_quarto.yml")):
+        pai = os.path.dirname(atual)
+        if pai == atual:
+            return None
+        atual = pai
+    return atual
+
+
+raiz = raiz_do_projeto()
+if raiz is None:
+    destino = "/content/bases5" if os.path.isdir("/content") else "bases5"
+    if not os.path.isdir(destino):
+        print("baixando o material da disciplina...")
+        subprocess.run(["git", "clone", "--depth", "1", REPO, destino], check=True)
+    raiz = raiz_do_projeto(destino)
+
+os.chdir(raiz)
+if raiz not in sys.path:
+    sys.path.insert(0, raiz)
 
 %matplotlib inline
 print("diretório de trabalho:", os.getcwd())'''
@@ -385,11 +415,16 @@ def monta_notebook(cap: dict, curtas: dict[str, str], entradas: dict) -> dict:
         celula_codigo(CELULA_PREPARO),
     ]
 
+    if numero == CAP_ONBOARDING:
+        celulas += converte(
+            ONBOARDING.read_text(encoding="utf-8"), "content/cap02", 0, curtas
+        )
+
     leituras: list[dict] = []
     for pos, href in enumerate(cap["arquivos"]):
         caminho = RAIZ / href
         dir_fonte = str(pathlib.Path(href).parent)
-        texto = caminho.read_text(encoding="utf-8")
+        texto = LINHA_COLAB.sub("", caminho.read_text(encoding="utf-8"))
         # O index abre o capítulo, então mantém os níveis de título. As
         # seções entram um nível abaixo, para o notebook ter uma hierarquia só.
         if pos == 0:
