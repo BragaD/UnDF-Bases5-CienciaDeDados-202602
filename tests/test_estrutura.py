@@ -159,7 +159,7 @@ def test_cada_capitulo_tem_index():
         assert (CONTENT / f"cap{n:02d}" / "index.qmd").is_file(), f"falta cap{n:02d}/index.qmd"
 
 
-def test_livro_completo_88_secoes_105_arquivos():
+def test_livro_completo_87_secoes_104_arquivos():
     """Nenhum outro teste deste arquivo detecta uma seção inteira sumindo.
 
     `test_todo_qmd_esta_registrado_no_quarto_yml` e
@@ -168,10 +168,10 @@ def test_livro_completo_88_secoes_105_arquivos():
     `_quarto.yml` no mesmo commit passa nos dois. `test_dezessete_capitulos`
     só conta diretórios; `test_cada_capitulo_tem_index` só confere o
     `index.qmd`. A fonte da verdade sobre o que o livro DEVE conter é o
-    `LIVRO` de `scripts/gerar-stubs.py` — foi dali que os 105 `.qmd` foram
+    `LIVRO` de `scripts/gerar-stubs.py` — foi dali que os 104 `.qmd` foram
     gerados —, então este teste confere, capítulo por capítulo, que cada
     arquivo esperado existe em disco E aparece no `_quarto.yml`, e fecha nos
-    totais (17 capítulos, 88 seções, 105 arquivos). Como fim de linha, também
+    totais (17 capítulos, 87 seções, 104 arquivos). Como fim de linha, também
     pega um arquivo de seção com nome digitado errado (por exemplo com um
     `_` no início, que `qmds_no_disco()` ignora de propósito): o nome exato
     esperado não existiria em nenhum dos dois lados.
@@ -199,8 +199,8 @@ def test_livro_completo_88_secoes_105_arquivos():
             total_arquivos += 1
             total_secoes += 1
 
-    assert total_secoes == 88, f"esperava 88 seções, achei {total_secoes}"
-    assert total_arquivos == 105, f"esperava 105 arquivos, achei {total_arquivos}"
+    assert total_secoes == 87, f"esperava 87 seções, achei {total_secoes}"
+    assert total_arquivos == 104, f"esperava 104 arquivos, achei {total_arquivos}"
 
 
 def test_nenhum_chunk_comeca_com_linha_indentada():

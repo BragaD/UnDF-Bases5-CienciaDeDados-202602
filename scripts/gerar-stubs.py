@@ -58,11 +58,10 @@ LIVRO = [
         ("06-minibatch-e-estocastico", "Minibatch e Gradiente Estocástico", "Minibatch and Stochastic Gradient Descent"),
     ]),
     (6, 9, "Obtendo Dados", "For Further Exploration", [
-        ("01-stdin-e-stdout", "stdin e stdout", "stdin and stdout"),
-        ("02-lendo-arquivos", "Lendo Arquivos", "Reading Files"),
-        ("03-raspando-a-web", "Raspando a Web", "Scraping the Web"),
-        ("04-usando-apis", "Usando APIs", "Using APIs"),
-        ("05-exemplo-apis-do-twitter", "Exemplo: As APIs do Twitter", "Example: Using the Twitter APIs"),
+        ("01-lendo-arquivos", "Lendo Arquivos", "Reading Files"),
+        ("02-raspando-a-web", "Raspando a Web", "Scraping the Web"),
+        ("03-usando-apis", "Usando APIs", "Using APIs"),
+        ("04-exemplo-apis-do-twitter", "Exemplo: As APIs do Twitter", "Example: Using the Twitter APIs"),
     ]),
     (7, 10, "Trabalhando com Dados", "For Further Exploration", [
         ("01-explorando-seus-dados", "Explorando Seus Dados", "Exploring Your Data"),

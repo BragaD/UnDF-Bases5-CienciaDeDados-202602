@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 O design está aprovado e escrito em `docs/superpowers/specs/2026-08-15-estrutura-livro-bases5-design.md` — **leia essa spec antes de mexer na estrutura.** Este arquivo é o resumo operacional; a spec é a fonte das decisões e das razões. A spec carrega algumas notas de correção pós-implementação — leia-as também; elas registram onde a decisão original mudou depois de escrita.
 
-**O livro está escrito e publicado.** 17 capítulos, 88 seções + 17 `index.qmd` = 105 `.qmd` (17.855 linhas), todos registrados em `_quarto.yml`. Nenhum stub restante. Container Docker (Quarto + `uv`), CI publicando em `gh-pages`, 41 testes (`make teste`) guardando os invariantes. O **capítulo 9 (k-Vizinhos Mais Próximos)** foi o primeiro escrito e segue sendo o **modelo de estilo** da casa: leia `content/cap09/` antes de mexer em qualquer capítulo, para o formato pegar (ver "Antes de escrever um capítulo", abaixo).
+**O livro está escrito e publicado.** 17 capítulos, 87 seções + 17 `index.qmd` = 104 `.qmd`, todos registrados em `_quarto.yml`. Nenhum stub restante. Container Docker (Quarto + `uv`), CI publicando em `gh-pages`, 41 testes (`make teste`) guardando os invariantes. O **capítulo 9 (k-Vizinhos Mais Próximos)** foi o primeiro escrito e segue sendo o **modelo de estilo** da casa: leia `content/cap09/` antes de mexer em qualquer capítulo, para o formato pegar (ver "Antes de escrever um capítulo", abaixo).
 
 Além do livro, `notebooks/` traz **um `.ipynb` por capítulo**, gerado a partir dos `.qmd` para executar ao vivo na aula (ver "Os notebooks de aula", abaixo), e `atividades/` guarda o PID da disciplina.
 
@@ -48,7 +48,7 @@ A numeração é **sequencial de 1 a 17**. Os capítulos 1–4 batem com os do G
 | 3 | 3 | Visualizando Dados | 4 |
 | 4 | 4 | Álgebra Linear | 2 |
 | 5 | 8 | Gradiente Descendente | 6 |
-| 6 | 9 | Obtendo Dados | 5 |
+| 6 | 9 | Obtendo Dados | 4 |
 | 7 | 10 | Trabalhando com Dados | 8 |
 | 8 | 11 | Machine Learning | 6 |
 | 9 | 12 | k-Vizinhos Mais Próximos | 3 |
@@ -63,7 +63,7 @@ A numeração é **sequencial de 1 a 17**. Os capítulos 1–4 batem com os do G
 
 **Regra de citação: o Grus não numera as seções — o sumário dele traz só títulos —, então nenhum callout pode inventar um número de seção do Grus.** O callout cita o **capítulo** do Grus e o **título** (em itálico) da seção, exatamente como o Capítulo 9 faz: `Esta seção corresponde a *The Model*, do capítulo 12 de @grus2019.` Nunca "seção 12.2 de @grus2019" — essa seção não existe no livro-texto, e `test_nenhuma_secao_inventa_numero_de_secao_do_grus` falha se um padrão desses aparecer perto de `@grus2019`. No sistema de arquivos vale o **nosso** número: `content/cap09/` é k-Vizinhos, e referências como "seção 9.2" são legítimas quando apontam para este livro, não para o Grus.
 
-**Total: 88 arquivos de seção + 17 `index.qmd` = 105 `.qmd`.**
+**Total: 87 arquivos de seção + 17 `index.qmd` = 104 `.qmd`.**
 
 Os capítulos 2 e 16 são os únicos que se afastam de "um `.qmd` por seção" — o 2 porque o Grus lista cada construção da linguagem como seção (27 delas, o que daria um sidebar maior que o resto do livro somado), o 16 porque metade das seções são exemplos que moram melhor junto do conceito que demonstram. Os agrupamentos exatos estão na spec. As seções do Grus viram `##` dentro dos arquivos agrupados, e o `toc-depth: 4` as mantém no índice lateral.
 
@@ -92,7 +92,7 @@ make lock             # regenera uv.lock após editar pyproject.toml
 make clean            # remove _book/, _freeze/, .quarto/ e o lixo de render abortado
 ```
 
-**`make teste` roda `pytest tests/`** — 41 testes em sete arquivos: `test_estrutura.py` (registro no `_quarto.yml`, caminhos de dados, citações, e os totais de 17 capítulos / 88 seções / 105 arquivos contra o `LIVRO` de `scripts/gerar-stubs.py`), `test_scratch.py` (o pacote vendorizado — inclusive um hash SHA-256 travando que `scratch/` continua verbatim upstream), `test_dados.py` (os seis conjuntos commitados), `test_freeze.py` (o cache envenenado), `test_gradiente.py` (toda subida de gradiente tem motivo registrado), `test_notebooks.py` (os notebooks de aula não podem defasar dos `.qmd`) e `test_atividades.py` (o gabarito não pode vazar para o site). É o que garante a regra "todo `.qmd` novo precisa ser registrado em `_quarto.yml`", abaixo — sem essa suíte, um arquivo esquecido no YAML só aparece quando alguém percebe a seção faltando no site publicado.
+**`make teste` roda `pytest tests/`** — 41 testes em sete arquivos: `test_estrutura.py` (registro no `_quarto.yml`, caminhos de dados, citações, e os totais de 17 capítulos / 87 seções / 104 arquivos contra o `LIVRO` de `scripts/gerar-stubs.py`), `test_scratch.py` (o pacote vendorizado — inclusive um hash SHA-256 travando que `scratch/` continua verbatim upstream), `test_dados.py` (os seis conjuntos commitados), `test_freeze.py` (o cache envenenado), `test_gradiente.py` (toda subida de gradiente tem motivo registrado), `test_notebooks.py` (os notebooks de aula não podem defasar dos `.qmd`) e `test_atividades.py` (o gabarito não pode vazar para o site). É o que garante a regra "todo `.qmd` novo precisa ser registrado em `_quarto.yml`", abaixo — sem essa suíte, um arquivo esquecido no YAML só aparece quando alguém percebe a seção faltando no site publicado.
 
 **Porta 4201, não 4200.** O `bases_3_estatistica` ocupa a 4200, e os dois livros são editados na mesma tarde.
 
