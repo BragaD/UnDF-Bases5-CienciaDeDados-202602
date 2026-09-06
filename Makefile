@@ -88,6 +88,13 @@ notebooks-teste: ## Executa todos os notebooks de ponta a ponta (demora; não gr
 # abriu o Jupyter dentro da pasta e depende da célula de preparo achar a raiz.
 	$(RUN) python scripts/executar-notebooks.py
 
+secoes: ## Executa cada .qmd de UM capítulo num kernel próprio: make secoes CAP=11
+# O análogo fiel do render para um capítulo, sem render: não toca em _freeze/
+# nem pega o lock. Pega o import que faltou numa seção porque foi feito na
+# anterior — o que o notebook de aula (um kernel só) deixa passar.
+	@test -n "$(CAP)" || { echo "uso: make secoes CAP=11"; exit 1; }
+	$(RUN) python scripts/executar-secoes.py $(CAP)
+
 atividade: ## Gera as duas versões de uma atividade: make atividade FONTE=atividades/lista-01-revisao.qmd
 # Uma fonte .qmd, dois PDFs: o do aluno e o do gabarito. As respostas ficam em
 # blocos `content-visible when-meta="gabarito"`, então a versão do aluno não as
@@ -132,4 +139,4 @@ clean: ## Remove artefatos de render (inclusive o lixo que um render abortado de
 	  [ -f "$${html%.html}.qmd" ] && rm -f "$$html"; \
 	done; true
 
-.PHONY: help build preview render refresh offline jupyter atividade notebooks notebooks-teste teste shell check lock clean
+.PHONY: help build preview render refresh offline jupyter atividade notebooks notebooks-teste secoes teste shell check lock clean
