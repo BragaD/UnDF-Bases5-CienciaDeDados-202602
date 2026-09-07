@@ -4,7 +4,7 @@
 Esta seção corresponde a *Implementation*, do capítulo 13 de @grus2019.
 :::
 
-Agora temos todas as peças para montar o classificador. Primeiro, uma função simples que transforma uma mensagem numa lista de palavras distintas: converte para minúsculas, usa uma expressão regular para extrair "palavras" (letras, números e apóstrofos), e usa um `set` para descartar as repetidas.
+Agora temos todas as peças para montar o classificador. Primeiro, uma função simples que transforma uma mensagem num conjunto de palavras distintas: converte para minúsculas, usa uma expressão regular para extrair "palavras" (letras, números e apóstrofos), e usa um `set` para descartar as repetidas.
 
 ```{python}
 #| label: tokenize
@@ -102,7 +102,7 @@ Quando o laço termina, o vocabulário está fechado, e a partir daí o tamanho 
 As duas `Counter` são locais ao `train` — elas somem quando ele retorna. O que fica no modelo são os três arrays e os dois inteiros. Também é por isso que `train` é para ser chamado uma vez, sobre o conjunto de treino inteiro: ele não acumula sobre uma chamada anterior.
 :::
 
-Falta o método que de fato decide: `predict`. Como prometido na [seção anterior](02-um-filtro-mais-sofisticado.qmd), a ausência de uma palavra é informação tanto quanto a presença — então a conta abaixo passa por **todo** o vocabulário visto no treino, não só pelas palavras da mensagem, e soma $\log(1 - P(\text{token}\mid\text{spam}))$ para cada token ausente. Ela não passa palavra por palavra, porém: `np.isin(self.tokens, list(tokenize(text)))` compara o vocabulário inteiro com os tokens da mensagem de uma vez e devolve uma **máscara** — um booleano por posição, `True` onde aquele token aparece na mensagem. É a máscara booleana da [seção 7.1](../cap07/01-explorando-seus-dados.qmd), agora sobre palavras em vez de números; e é ela, e não o texto, a representação que o modelo enxerga: uma mensagem é um vetor de milhares de sim-ou-não. O `np.where` escolhe, posição por posição, entre o log de ver a palavra e o log de não vê-la, e o `np.sum` reduz tudo a um número. E, como discutido na seção anterior, somamos log-probabilidades em vez de multiplicar probabilidades pequenas, para não sofrer *underflow*:
+Falta o método que de fato decide: `predict`. Como prometido na [seção anterior](02-um-filtro-mais-sofisticado.qmd), a ausência de uma palavra é informação tanto quanto a presença — então a conta abaixo passa por **todo** o vocabulário visto no treino, não só pelas palavras da mensagem, e soma $\log(1 - P(\text{token}\mid\text{spam}))$ para cada token ausente. Ela não passa palavra por palavra, porém: `np.isin(self.tokens, list(tokenize(text)))` compara o vocabulário inteiro com os tokens da mensagem de uma vez e devolve uma **máscara** — um booleano por posição, `True` onde aquele token aparece na mensagem. O `list()` não é enfeite: `np.isin` espera uma sequência de valores, e um `set` passado direto seria tratado como **um único elemento** — a máscara sairia toda `False`, sem erro nenhum. É a máscara booleana da [seção 7.1](../cap07/01-explorando-seus-dados.qmd), agora sobre palavras em vez de números; e é ela, e não o texto, a representação que o modelo enxerga: uma mensagem é um vetor de milhares de sim-ou-não. O `np.where` escolhe, posição por posição, entre o log de ver a palavra e o log de não vê-la, e o `np.sum` reduz tudo a um número. E, como discutido na seção anterior, somamos log-probabilidades em vez de multiplicar probabilidades pequenas, para não sofrer *underflow*:
 
 ```{python}
 #| label: naive-bayes-predict
