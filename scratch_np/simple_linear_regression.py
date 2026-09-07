@@ -51,7 +51,7 @@ def least_squares_fit(x: np.ndarray, y: np.ndarray) -> Tuple[float, float]:
     return float(alpha), float(beta)
 
 
-# Uma reta perfeita: y = 3x - 5. A igualdade é exata — ver o plano/seção 11.1.
+# Uma reta perfeita: y = 3x - 5. A igualdade é exata — ver a seção 11.1.
 _x = np.arange(-100, 110, 10)
 _y = 3 * _x - 5
 assert least_squares_fit(_x, _y) == (-5, 3)

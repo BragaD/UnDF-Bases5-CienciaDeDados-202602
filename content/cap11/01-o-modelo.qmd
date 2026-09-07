@@ -19,7 +19,7 @@ São dois arrays do mesmo tamanho, uma entrada por usuário: `num_friends_good` 
 
 ```{python}
 #| label: descreve-dados
-num_friends_good.size, float(num_friends_good.mean()), float(daily_minutes_good.mean())
+len(num_friends_good), float(num_friends_good.mean()), float(daily_minutes_good.mean())
 ```
 
 ```{python}
@@ -27,7 +27,7 @@ num_friends_good.size, float(num_friends_good.mean()), float(daily_minutes_good.
 np.corrcoef(num_friends_good, daily_minutes_good)
 ```
 
-São 203 usuários. Em média, cada um tem quase 7 amigos e passa cerca de 29 minutos por dia no site. Repare que `np.corrcoef` não devolve um número, e sim a **matriz de correlação** das variáveis que recebeu — 2 × 2 aqui, porque são duas. Na diagonal está a correlação de cada variável consigo mesma, que é 1 por construção; fora dela, repetida nos dois cantos porque correlação é simétrica, está a que interessa. `[0, 1]` é como se pega esse canto, e é assim que o resto da seção vai escrevê-la. Pouco mais de 0,57 diz que existe uma tendência real: mais amigos, mais tempo. Mas repare no que esse número **não** diz. Ele não diz se um amigo a mais vale, em média, 10 segundos ou 10 minutos a mais de uso. Ele não dá uma equação. Para isso, precisamos de outra coisa: um modelo.
+São 203 usuários. Em média, cada um tem quase 7 amigos e passa cerca de 29 minutos por dia no site. Como a [seção 7.1](../cap07/01-explorando-seus-dados.qmd) mostrou, `np.corrcoef` devolve a matriz 2 × 2 de correlações, e o elemento fora da diagonal, `[0, 1]`, é o que interessa — é assim que o resto da seção vai escrevê-la. Pouco mais de 0,57 diz que existe uma tendência real: mais amigos, mais tempo. Mas repare no que esse número **não** diz. Ele não diz se um amigo a mais vale, em média, 10 segundos ou 10 minutos a mais de uso. Ele não dá uma equação. Para isso, precisamos de outra coisa: um modelo.
 
 ::: {.callout-warning}
 ## Um ponto em 204 derruba a correlação a 43%
@@ -36,7 +36,7 @@ Os arrays crus — `num_friends` e `daily_minutes`, sem o sufixo — têm 204 us
 
 ```{python}
 #| label: correlacao-com-outlier
-num_friends.size, float(np.corrcoef(num_friends, daily_minutes)[0, 1])
+len(num_friends), float(np.corrcoef(num_friends, daily_minutes)[0, 1])
 ```
 
 Com ele dentro, 0,2474. Sem ele, 0,5737. **Um ponto em 204 derruba a correlação para 43% do valor** — porque ele fica no extremo direito do eixo `x`, onde cada ponto tem alavanca desproporcional, e aponta para baixo enquanto todo o resto aponta para cima.
@@ -89,7 +89,7 @@ def sum_of_sqerrors(alpha: float, beta: float,
     return float(np.sum(error(alpha, beta, x, y) ** 2))
 ```
 
-Três operações, nenhum laço: `error(alpha, beta, x, y)` devolve os 203 erros de uma vez, `** 2` eleva cada um ao quadrado e `np.sum` reduz tudo a um número. O `float()` no fim troca o escalar do `numpy` por um número do Python — só para a saída na tela ser `13196.6...`, e não `np.float64(13196.6...)`.
+Três operações, nenhum laço: `error(alpha, beta, x, y)` devolve os 203 erros de uma vez, `** 2` eleva cada um ao quadrado e `np.sum` reduz tudo a um número. O `float()` no fim troca o escalar do `numpy` por um número do Python — só para a saída na tela ser um número do Python — `13196.6...`, quando a seção 11.3 o imprimir —, e não `np.float64(...)`.
 
 A solução de **mínimos quadrados** é escolher o $\alpha$ e o $\beta$ que deixam `sum_of_sqerrors` a menor possível.
 
@@ -113,7 +113,7 @@ def least_squares_fit(x: np.ndarray, y: np.ndarray) -> Tuple[float, float]:
     return float(alpha), float(beta)
 ```
 
-O `ddof=1` pede o desvio padrão **amostral**, o de denominador $n - 1$ que a [seção 7.6](../cap07/06-reescalonamento.qmd) apresentou — a mesma fórmula que o livro-texto usa. Aqui ele não chega a mudar o resultado: `beta` é uma **razão** de desvios padrão, e o denominador cancela, seja ele $n$ ou $n - 1$. Escrevê-lo mesmo assim mantém a linha igual à fórmula que ela representa, e evita que alguém a copie para um lugar onde o cancelamento não aconteça.
+O `ddof=1` pede o desvio padrão **amostral**, o de denominador $n - 1$ que a [seção 7.6](../cap07/06-reescalonamento.qmd) apresentou — a mesma fórmula que o livro-texto usa. Aqui ele quase não muda o resultado: `beta` é uma **razão** de desvios padrão, e matematicamente o denominador cancela, seja ele $n$ ou $n - 1$ — na prática só o último bit muda. Escrevê-lo mesmo assim mantém a linha igual à fórmula que ela representa, e evita que alguém a copie para um lugar onde o cancelamento não aconteça.
 
 ::: {.conceito}
 Nada de laço, nada de `theta` inicial aleatório, nada de taxa de aprendizado. `least_squares_fit` calcula duas médias, uma correlação (que por baixo é uma covariância dividida por dois desvios padrão) e dois desvios padrão — e devolve a resposta exata. É exatamente o que a [seção 5.5](../cap05/05-ajustando-modelos.qmd) prometeu: **duas médias, uma covariância, uma variância, sem laço nenhum**.
@@ -224,7 +224,7 @@ modelo.intercept_, modelo.coef_[0]   # alpha, beta
 modelo.score(X, y)                    # R²
 ```
 
-Repare no que **não** há aqui: nenhuma linha para montar `X`. A biblioteca pede a mesma convenção deste livro — uma matriz `(n, d)`, uma linha por observação —, e o `reshape(-1, 1)` só diz que os 203 números são 203 linhas de uma coluna.
+Repare no que **não** há aqui: nenhum laço nem compreensão de lista para montar `X` — a biblioteca pede a mesma convenção deste livro, uma matriz `(n, d)`, e o `reshape(-1, 1)` só diz que os 203 números são 203 linhas de uma coluna.
 
 Vale rodar e comparar com o que as três funções desta seção devolveram, valor a valor:
 
