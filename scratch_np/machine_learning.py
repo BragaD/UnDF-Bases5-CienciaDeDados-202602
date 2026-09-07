@@ -4,18 +4,16 @@ O capítulo 8 escreve este código inline; os capítulos 9, 10 e 13 importam daq
 Toda função estocástica recebe o `rng` como parâmetro obrigatório: a semente é
 decisão visível de quem chama, nunca estado global.
 """
-from typing import Sequence, Tuple, TypeVar
+from typing import Tuple
 
 import numpy as np
-
-X = TypeVar("X")  # um ponto de dado qualquer
 
 
 def split_data(data, prob: float, rng: np.random.Generator):
     """Divide `data` nas frações [prob, 1 - prob], em ordem sorteada.
 
     Array -> dois arrays, fatiados pelas mesmas linhas.
-    Sequência qualquer (lista de mensagens, de pontos rotulados) -> duas listas.
+    Sequência qualquer (uma lista de mensagens) -> duas listas.
     """
     idx = rng.permutation(len(data))       # uma permutação dos índices...
     cut = int(len(data) * prob)            # ...cortada na proporção pedida
