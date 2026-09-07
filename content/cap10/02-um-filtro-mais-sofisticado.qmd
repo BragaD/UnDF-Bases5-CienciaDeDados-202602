@@ -49,35 +49,26 @@ $$
 Uma soma de logaritmos negativos nunca sofre *underflow* — um número muito negativo continua perfeitamente representável em `float`, ao contrário de um número muito próximo de zero pela direita, que eventualmente deixa de ser distinguível de zero. O `float` só corre risco na última etapa, o `exp` único, no fim de tudo — e só se a soma de logs já for extrema demais para qualquer probabilidade fazer sentido.
 
 ::: {.exemplo}
-O exemplo a seguir é sintético, só para tornar o problema visível — não são números do classificador real. Imagine duas hipóteses concorrentes, cada uma resultando de multiplicar centenas de probabilidades pequenas:
+O exemplo a seguir é sintético, só para tornar o problema visível — não são números do classificador real. Imagine duas hipóteses concorrentes, cada uma resultando de multiplicar centenas de probabilidades pequenas. `np.full(300, 0.01)` cria um array de 300 posições, todas iguais a 0,01; `np.prod` multiplica todos os elementos de um array entre si — é a redução irmã do `np.sum` da [seção 7.1](../cap07/01-explorando-seus-dados.qmd), com produto no lugar da soma —, e `float()` traz o resultado de volta como número do Python, só para a saída sair limpa:
 
 ```{python}
 #| label: underflow-demo
-import math
+import numpy as np
 
 # 300 palavras "raras" sob a hipótese spam, com 1% de chance cada
-probs_spam = [0.01] * 300
+probs_spam = np.full(300, 0.01)
 # 300 palavras "raras" sob a hipótese ham, ligeiramente menos raras
-probs_ham = [0.012] * 300
+probs_ham = np.full(300, 0.012)
 
-def produto_direto(probs):
-    p = 1.0
-    for x in probs:
-        p *= x
-    return p
-
-def soma_de_logs(probs):
-    return sum(math.log(x) for x in probs)
-
-produto_direto(probs_spam), produto_direto(probs_ham)
+float(np.prod(probs_spam)), float(np.prod(probs_ham))
 ```
 
 ```{python}
 #| label: underflow-log
-soma_de_logs(probs_spam), soma_de_logs(probs_ham)
+float(np.sum(np.log(probs_spam))), float(np.sum(np.log(probs_ham)))
 ```
 
-Multiplicando direto, as duas hipóteses colapsam para exatamente `0.0` — informação perdida, não dá mais para saber qual das duas era mais provável. Trabalhando em espaço de log, a diferença continua visível: a soma da hipótese `ham` é menos negativa, ou seja, mais provável. O `exp()` só entra no fim, uma vez, sobre esse resultado já calculado com segurança.
+Multiplicando direto, as duas hipóteses colapsam para exatamente `0.0` — informação perdida, não dá mais para saber qual das duas era mais provável. Trabalhando em espaço de log, a diferença continua visível: a soma da hipótese `ham` é menos negativa, ou seja, mais provável. Repare que o remédio não é o `numpy`: `np.prod` sobre este array devolve o mesmo zero que um laço multiplicando os 300 fatores devolveria, porque o problema é do `float`, não de quem faz a conta. O que resolve é mudar de espaço — e é por isso que a comparação entre as duas hipóteses acontece **em log**, antes de qualquer `exp`. Neste exemplo, extremo de propósito, nem o `exp` final sobreviveria: $e^{-1381{,}55}$ também é `0.0`. No classificador de verdade, com o vocabulário de alguns milhares de palavras da [seção 10.5](05-usando-o-modelo.qmd), essas somas ficam entre $-105$ e $-7$ — e aí o `exp` único do fim devolve um número perfeitamente representável.
 :::
 
 ## Estimando as probabilidades por palavra

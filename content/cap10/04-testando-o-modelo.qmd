@@ -4,11 +4,12 @@
 Esta seção corresponde a *Testing Our Model*, do capítulo 13 de @grus2019.
 :::
 
-Vamos garantir que o modelo funciona escrevendo alguns testes para ele — pequenos o bastante para que as contas caibam à mão. `tokenize`, `Message` e `NaiveBayesClassifier` não são redefinidos aqui: vêm de `scratch.naive_bayes`, o mesmo código que você escreveu na [seção anterior](03-implementacao.qmd).
+Vamos garantir que o modelo funciona escrevendo alguns testes para ele — pequenos o bastante para que as contas caibam à mão. `tokenize`, `Message` e `NaiveBayesClassifier` não são redefinidos aqui: vêm de `scratch_np.naive_bayes`, o mesmo código que você escreveu na [seção anterior](03-implementacao.qmd).
 
 ```{python}
 #| label: import-scratch
-from scratch.naive_bayes import tokenize, Message, NaiveBayesClassifier
+import numpy as np
+from scratch_np.naive_bayes import tokenize, Message, NaiveBayesClassifier
 ```
 
 Primeiro, conferimos se as contagens saíram certas:
@@ -22,42 +23,45 @@ messages = [Message("spam rules", is_spam=True),
 model = NaiveBayesClassifier(k=0.5)
 model.train(messages)
 
-assert model.tokens == {"spam", "ham", "rules", "hello"}
+assert np.array_equal(model.tokens, np.array(["ham", "hello", "rules", "spam"]))
 assert model.spam_messages == 1
 assert model.ham_messages == 2
-assert model.token_spam_counts == {"spam": 1, "rules": 1}
-assert model.token_ham_counts == {"ham": 2, "rules": 1, "hello": 1}
+assert np.array_equal(model.token_spam_counts, np.array([0, 0, 1, 1]))
+assert np.array_equal(model.token_ham_counts, np.array([2, 1, 1, 0]))
+
+{str(t): int(n) for t, n in zip(model.tokens, model.token_spam_counts)}
 ```
 
-Três mensagens de treino, quatro palavras distintas no vocabulário. `rules` aparece numa mensagem de spam e numa de ham; `spam` só na de spam; `ham` e `hello` só nas de ham.
+Três mensagens de treino, quatro palavras distintas no vocabulário — e o vocabulário está em ordem alfabética, porque foi assim que `train` o fechou. `rules` aparece numa mensagem de spam e numa de ham; `spam` só na de spam; `ham` e `hello` só nas de ham.
 
-Agora fazemos uma previsão. Vamos refazer a lógica do Naive Bayes na mão, e conferir que chegamos ao mesmo resultado que o método `predict`:
+Vale olhar o que os `assert` das contagens exigem. `token_spam_counts` é `[0, 0, 1, 1]`, com quatro posições — uma para cada palavra do vocabulário, inclusive as duas que nunca apareceram em spam. Um dicionário guardaria `{"spam": 1, "rules": 1}` e omitiria os zeros; o array não tem essa opção, porque é o alinhamento com `model.tokens` que dá sentido a cada posição. A última linha é o jeito de ler os dois arrays juntos: `zip` casa token com contagem, e o `str()`/`int()` converte os escalares do `numpy` de volta para tipos do Python — o mesmo cuidado do `float()` da [seção 9.2](../cap09/02-exemplo-o-dataset-iris.qmd), aqui só para a saída sair legível.
+
+Agora fazemos uma previsão. Vamos refazer a lógica do Naive Bayes na mão — nas quatro posições do vocabulário, na ordem em que elas estão no array — e conferir que chegamos ao mesmo resultado que o método `predict`:
 
 ```{python}
 #| label: predicao-manual
-import math
-
 text = "hello spam"
 
-probs_if_spam = [
-    (1 + 0.5) / (1 + 2 * 0.5),      # "spam"  (presente)
+# Na ordem do vocabulário: ham, hello, rules, spam.
+probs_if_spam = np.array([
     1 - (0 + 0.5) / (1 + 2 * 0.5),  # "ham"   (ausente)
+    (0 + 0.5) / (1 + 2 * 0.5),      # "hello" (presente)
     1 - (1 + 0.5) / (1 + 2 * 0.5),  # "rules" (ausente)
-    (0 + 0.5) / (1 + 2 * 0.5)       # "hello" (presente)
-]
+    (1 + 0.5) / (1 + 2 * 0.5),      # "spam"  (presente)
+])
 
-probs_if_ham = [
-    (0 + 0.5) / (2 + 2 * 0.5),      # "spam"  (presente)
+probs_if_ham = np.array([
     1 - (2 + 0.5) / (2 + 2 * 0.5),  # "ham"   (ausente)
-    1 - (1 + 0.5) / (2 + 2 * 0.5),  # "rules" (ausente)
     (1 + 0.5) / (2 + 2 * 0.5),      # "hello" (presente)
-]
+    1 - (1 + 0.5) / (2 + 2 * 0.5),  # "rules" (ausente)
+    (0 + 0.5) / (2 + 2 * 0.5),      # "spam"  (presente)
+])
 
-p_if_spam = math.exp(sum(math.log(p) for p in probs_if_spam))
-p_if_ham = math.exp(sum(math.log(p) for p in probs_if_ham))
+p_if_spam = np.exp(np.sum(np.log(probs_if_spam)))
+p_if_ham = np.exp(np.sum(np.log(probs_if_ham)))
 
 # Deve dar aproximadamente 0,83
-assert model.predict(text) == p_if_spam / (p_if_spam + p_if_ham)
+assert np.isclose(model.predict(text), p_if_spam / (p_if_spam + p_if_ham))
 
 model.predict(text)
 ```
@@ -67,13 +71,17 @@ O teste passa: `model.predict(text)` dá aproximadamente 0,835. Olhando as proba
 ::: {.callout-warning}
 ## Um `assert` que compara `float` por igualdade exata
 
-Repare no que a linha acima faz: `model.predict(text) == p_if_spam / (p_if_spam + p_if_ham)`. Não é uma comparação com tolerância — é igualdade **exata** de ponto flutuante entre dois cálculos que chegam ao mesmo valor por caminhos diferentes. Um deles soma logaritmos percorrendo `self.tokens`, um `Set[str]`; o outro soma uma lista já em ordem fixa. Como soma de ponto flutuante não é associativa, a ordem em que os termos são somados pode mudar o último bit do resultado.
+O @grus2019 escreve a linha acima assim: `model.predict(text) == p_if_spam / (p_if_spam + p_if_ham)`. Não é uma comparação com tolerância — é igualdade **exata** de ponto flutuante entre dois cálculos que chegam ao mesmo valor por caminhos diferentes. E soma de ponto flutuante não é associativa: a ordem em que os termos são somados pode mudar o último bit do resultado, o que basta para `==` responder `False`.
 
-E a ordem de iteração de um `set` em Python não é a ordem de inserção — ela depende do hash de cada string, e o Python randomiza esse hash por processo, a menos que a variável de ambiente `PYTHONHASHSEED` esteja fixada. Sem ela, este mesmo `assert`, rodado de novo, pode somar os quatro termos em outra ordem, produzir um float ligeiramente diferente no último bit, e estourar — não porque o modelo esteja errado, mas porque `==` entre `float` é a pergunta errada.
+No código do Grus a ordem era o problema declarado: o `predict` dele soma percorrendo `self.tokens`, que lá é um `Set[str]`, e a ordem de iteração de um `set` depende do hash de cada string — que o Python randomiza por processo, a menos que a variável de ambiente `PYTHONHASHSEED` esteja fixada. O mesmo `assert`, rodado de novo, podia somar em outra ordem e estourar.
 
-É a terceira vez que esta mesma lição aparece, com fachadas diferentes: o `shuffle` que embaralha os índices de início dos lotes — não os pontos, deixando cada lote sempre com os mesmos exemplos — no [Capítulo 5](../cap05/06-minibatch-e-estocastico.qmd), e a afirmação sobre correlação que só é reprodutível com a semente fixada, no [Capítulo 7](../cap07/01-explorando-seus-dados.qmd). Nos três casos, uma afirmação escrita como se fosse determinística, sobre algo que não é. Comparar `float` por igualdade é, especificamente, o erro que **você** vai cometer algum dia; reconhecê-lo aqui é o que faz você desconfiar da próxima vez.
+Aqui o vocabulário é um array ordenado, e essa causa some: a ordem da soma é sempre a mesma. Isso **não** conserta o `assert` — só troca o motivo pelo qual ele é frágil. `np.sum` não soma da esquerda para a direita: ele usa soma pareada, que quebra o array em blocos e soma os blocos entre si, justamente para acumular menos erro. O agrupamento depende do **tamanho** do array, então a mesma soma, sobre um vocabulário maior, é feita em outra ordem — e o último bit muda de novo. Escrever `==` continua sendo apostar num detalhe de implementação que ninguém prometeu.
 
-A comparação certa usa tolerância, não igualdade exata: `math.isclose(model.predict(text), p_if_spam / (p_if_spam + p_if_ham))`. `math.isclose` está na biblioteca padrão desde o Python 3.5, e é a ferramenta certa sempre que dois cálculos de ponto flutuante deveriam chegar ao "mesmo" resultado por caminhos diferentes.
+A medida: as previsões desta versão em arrays e as da versão em dicionários do @grus2019, sobre as 825 mensagens de teste da [seção 10.5](05-usando-o-modelo.qmd), coincidem até a décima segunda casa decimal e concordam em **todas** as 825 decisões — mas só **31 delas** são iguais bit a bit. Mesma matemática, ordens de soma diferentes.
+
+É a terceira vez que esta lição aparece, com fachadas diferentes: o `shuffle` que embaralha os índices de início dos lotes — não os pontos, deixando cada lote sempre com os mesmos exemplos — no [Capítulo 5](../cap05/06-minibatch-e-estocastico.qmd), e a afirmação sobre correlação que só é reprodutível com a semente fixada, no [Capítulo 7](../cap07/01-explorando-seus-dados.qmd). Nos três casos, uma afirmação escrita como se fosse determinística, sobre algo que não é. Comparar `float` por igualdade é, especificamente, o erro que **você** vai cometer algum dia; reconhecê-lo aqui é o que faz você desconfiar da próxima vez.
+
+Por isso o `assert` acima usa `np.isclose`, que compara com tolerância — `math.isclose`, da biblioteca padrão, faz o mesmo para dois números soltos, e `np.allclose` faz para arrays inteiros. É a ferramenta certa sempre que dois cálculos de ponto flutuante deveriam chegar ao "mesmo" resultado por caminhos diferentes.
 :::
 
 Agora vamos testar em dados de verdade.
