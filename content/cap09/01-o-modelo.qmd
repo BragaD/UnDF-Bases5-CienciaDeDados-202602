@@ -27,18 +27,16 @@ A primeira tentativa é direta:
 
 ```{python}
 #| label: votacao-bruta
-from typing import List
-from collections import Counter
+import numpy as np
 
-def raw_majority_vote(labels: List[str]) -> str:
-    votes = Counter(labels)
-    winner, _ = votes.most_common(1)[0]
-    return winner
+def raw_majority_vote(labels) -> str:
+    valores, contagens = np.unique(labels, return_counts=True)
+    return valores[np.argmax(contagens)]
 
 assert raw_majority_vote(['a', 'b', 'c', 'b']) == 'b'
 ```
 
-Só que ela não faz nada de inteligente com empates. Se estivéssemos classificando filmes e os cinco mais próximos fossem G, G, PG, PG e R, teríamos dois votos para G e dois para PG. Há três saídas possíveis:
+Só que ela não faz nada de inteligente com empates. `np.unique` devolve os rótulos em ordem alfabética e as contagens na mesma ordem; `np.argmax` fica com o **primeiro** máximo. Num empate, portanto, vence o rótulo alfabeticamente menor — e nada avisa que houve empate. Se estivéssemos classificando filmes e os cinco mais próximos fossem G, G, PG, PG e R, teríamos dois votos para G e dois para PG. Há três saídas possíveis:
 
 - Escolher um dos vencedores ao acaso
 - Ponderar os votos pela distância e pegar o vencedor ponderado
@@ -48,58 +46,54 @@ Vamos implementar a terceira:
 
 ```{python}
 #| label: votacao-majoritaria
-def majority_vote(labels: List[str]) -> str:
+def majority_vote(labels) -> str:
     """Assume que os rótulos estão ordenados do mais próximo ao mais distante."""
-    vote_counts = Counter(labels)
-    winner, winner_count = vote_counts.most_common(1)[0]
-    num_winners = len([count
-                       for count in vote_counts.values()
-                       if count == winner_count])
+    valores, contagens = np.unique(labels, return_counts=True)
+    vencedores = valores[contagens == contagens.max()]
 
-    if num_winners == 1:
-        return winner                     # vencedor único
+    if len(vencedores) == 1:
+        return vencedores[0]                # vencedor único
     else:
-        return majority_vote(labels[:-1])  # tenta de novo sem o mais distante
+        return majority_vote(labels[:-1])   # tenta de novo sem o mais distante
 
 # Empate: olha os 4 primeiros, então 'b'
 assert majority_vote(['a', 'b', 'c', 'b', 'a']) == 'b'
 ```
 
 ::: {.exemplo}
-A recursão sempre termina. No pior caso, descartamos um rótulo por vez até sobrar um só — e aí ele vence sozinho.
+`contagens == contagens.max()` é a máscara booleana da [seção 7.1](../cap07/01-explorando-seus-dados.qmd): ela marca todos os rótulos empatados no topo, e o tamanho da seleção é o que diz se houve empate. A recursão sempre termina. No pior caso, descartamos um rótulo por vez até sobrar um só — e aí ele vence sozinho.
 
-Repare que o argumento precisa estar **ordenado do mais próximo ao mais distante**. Descartar "o último" só faz sentido se o último for o vizinho menos relevante. Uma lista fora de ordem produz uma resposta errada sem erro nenhum.
+Repare que o argumento precisa estar **ordenado do mais próximo ao mais distante**. Descartar "o último" só faz sentido se o último for o vizinho menos relevante. Uma sequência fora de ordem produz uma resposta errada sem erro nenhum.
 :::
 
 ## O classificador
 
-Com a votação pronta, o classificador cabe em poucas linhas. A função `distance` vem do capítulo 4:
+Com a votação pronta, o classificador cabe em poucas linhas. A distância que o [Capítulo 4](../cap04/01-vetores.qmd) escreveu como um `sum` sobre um `zip` é agora `np.linalg.norm` — e ela não mede uma distância de cada vez. `X_train - new_point` subtrai o ponto novo de **cada linha** da matriz de treino (o broadcasting da [seção 7.1](../cap07/01-explorando-seus-dados.qmd)), e `axis=1` reduz cada linha do resultado a um número: as $n$ distâncias saem numa chamada só. `np.argsort` devolve os **índices** que ordenariam esse vetor, e é com eles que escolhemos os $k$ rótulos mais próximos:
 
 ```{python}
 #| label: knn-classificador
-from typing import NamedTuple
-from scratch.linear_algebra import Vector, distance
-
-class LabeledPoint(NamedTuple):
-    point: Vector
-    label: str
-
 def knn_classify(k: int,
-                 labeled_points: List[LabeledPoint],
-                 new_point: Vector) -> str:
+                 X_train: np.ndarray,
+                 y_train: np.ndarray,
+                 new_point: np.ndarray) -> str:
+    # A distância do ponto novo a cada linha de X_train, de uma vez.
+    dists = np.linalg.norm(X_train - new_point, axis=1)
 
-    # Ordena os pontos rotulados do mais próximo ao mais distante.
-    by_distance = sorted(labeled_points,
-                         key=lambda lp: distance(lp.point, new_point))
+    # Os índices que ordenam os pontos do mais próximo ao mais distante...
+    ordem = np.argsort(dists)
 
-    # Pega os rótulos dos k mais próximos...
-    k_nearest_labels = [lp.label for lp in by_distance[:k]]
+    # ...e os rótulos dos k primeiros votam.
+    return majority_vote(y_train[ordem[:k]])
 
-    # ...e deixa que votem.
-    return majority_vote(k_nearest_labels)
+# Dois pontos perto da origem, três longe dela.
+X_exemplo = np.array([[0.0, 0.0], [0.0, 1.0], [3.0, 3.0], [3.0, 4.0], [4.0, 3.0]])
+y_exemplo = np.array(['perto', 'perto', 'longe', 'longe', 'longe'])
+
+assert knn_classify(3, X_exemplo, y_exemplo, np.array([0.5, 0.5])) == 'perto'
+assert knn_classify(3, X_exemplo, y_exemplo, np.array([3.5, 3.5])) == 'longe'
 ```
 
-É isso: ordenar por distância, cortar em *k*, contar. Não há treino, não há parâmetros ajustados, não há otimização. O modelo *é* o conjunto de dados.
+É isso: medir todas as distâncias, ordenar, cortar em *k*, contar. Não há treino, não há parâmetros ajustados, não há otimização. O modelo *é* o conjunto de dados.
 
 ::: {.callout-tip collapse="true"}
 ## Na prática: `scikit-learn`
@@ -114,9 +108,9 @@ modelo.fit(X_treino, y_treino)
 modelo.predict(X_novo)
 ```
 
-Sobre o custo: o `knn_classify` acima ordena a lista inteira de pontos rotulados a cada consulta, e `sorted()` sobre $n$ pontos custa $O(n \log n)$ — isso além do $O(n \cdot d)$ de calcular as $n$ distâncias, cada uma envolvendo $d$ dimensões. Não precisávamos ordenar tudo: bastaria manter um heap com os $k$ mais próximos para cair para $O(n \log k)$. Não fizemos isso porque o objetivo aqui era clareza, não desempenho — mas é a otimização óbvia se este código fosse para produção.
+Sobre o custo: as $n$ distâncias saem numa chamada só, mas o trabalho continua sendo $O(n \cdot d)$ — o que o `numpy` tirou foi o interpretador do caminho, não a conta. Depois disso, `np.argsort` ordena **todas** as $n$ distâncias, a $O(n \log n)$, para usar só as $k$ primeiras. Não precisávamos ordenar tudo: `np.argpartition(dists, k)` separa os $k$ menores do resto em $O(n)$, sem ordenar nada, e bastaria ordenar esses $k$ depois — a ordem entre eles importa, porque é ela que o `majority_vote` consome ao descartar o mais distante no empate. Não fizemos isso porque o objetivo aqui era clareza, não desempenho — mas é a otimização óbvia se este código fosse para produção.
 
-Sobre o desempate: o `scikit-learn` não reduz *k* como fizemos. Ele toma a moda dos rótulos codificados, e como o atributo `classes_` fica ordenado, o desempate favorece o rótulo alfabeticamente menor — não é a mesma regra da nossa recursão, mas é igualmente arbitrária. Ele também aceita pesos por distância (`weights='distance'`).
+Sobre o desempate: o `scikit-learn` não reduz *k* como fizemos. Ele toma a moda dos rótulos codificados, e como o atributo `classes_` fica ordenado, o desempate favorece o rótulo alfabeticamente menor — exatamente o que o `np.argmax` do `raw_majority_vote` fazia, e que descartamos. Não é a regra da nossa recursão, mas é igualmente arbitrária. Ele também aceita pesos por distância (`weights='distance'`).
 
 Sobre a busca: por padrão (`algorithm='auto'`), o `scikit-learn` escolhe entre força bruta e estruturas de indexação como `KDTree` ou `BallTree`, que evitam comparar o ponto novo com todos os outros. Mas essas estruturas só ajudam em dimensão baixa — em dimensão alta elas degradam para força bruta, o mesmo custo que o nosso código sempre teve. O motivo é o assunto da seção 9.3: a partir de um certo número de dimensões, nem a distância nem a estrutura que a indexa continuam ajudando.
 

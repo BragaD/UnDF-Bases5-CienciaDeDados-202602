@@ -8,41 +8,41 @@ O k-vizinhos tem um problema sério em dimensões altas, e o nome dele é **mald
 
 Dá para ver isso experimentalmente. Vamos gerar pares de pontos aleatórios num "cubo unitário" de dimensão *d*, para vários valores de *d*, e medir as distâncias.
 
-Gerar pontos aleatórios já deve ser natural a esta altura:
+Gerar pontos aleatórios agora é uma linha: `rng.random((num_pairs, dim))` devolve uma matriz inteira de coordenadas sorteadas em $[0, 1)$ — uma linha por ponto, uma coluna por dimensão. Duas dessas matrizes são os dois lados de `num_pairs` pares; a subtração casa linha com linha, e `axis=1` reduz cada uma a uma distância:
 
 ```{python}
 #| label: pontos-aleatorios
-import random
-from typing import List
-from scratch.linear_algebra import Vector, distance
+import numpy as np
 
-def random_point(dim: int) -> Vector:
-    return [random.random() for _ in range(dim)]
-
-def random_distances(dim: int, num_pairs: int) -> List[float]:
-    return [distance(random_point(dim), random_point(dim))
-            for _ in range(num_pairs)]
+def random_distances(dim: int, num_pairs: int,
+                     rng: np.random.Generator) -> np.ndarray:
+    """Distâncias de `num_pairs` pares sorteados no cubo unitário de dimensão `dim`."""
+    return np.linalg.norm(rng.random((num_pairs, dim))
+                          - rng.random((num_pairs, dim)), axis=1)
 ```
+
+`random_distances` fica em `scratch_np.k_nearest_neighbors`, ao lado do classificador da [seção 9.1](01-o-modelo.qmd).
 
 Para cada dimensão de 1 a 100, calculamos 10.000 distâncias e guardamos a média e a mínima:
 
 ```{python}
 #| label: fig-maldicao-distancias
 #| fig-cap: "Distância média e mínima entre pontos aleatórios, por dimensão"
-#| warning: false
-import tqdm
 from matplotlib import pyplot as plt
 
 dimensions = range(1, 101)
+rng = np.random.default_rng(0)
 
 avg_distances = []
 min_distances = []
 
-random.seed(0)
-for dim in tqdm.tqdm(dimensions, desc="Maldição da dimensionalidade"):
-    distances = random_distances(dim, 10000)
-    avg_distances.append(sum(distances) / 10000)
-    min_distances.append(min(distances))
+for dim in dimensions:
+    distances = random_distances(dim, 10000, rng)   # 10.000 pares de uma vez
+    avg_distances.append(distances.mean())
+    min_distances.append(distances.min())
+
+avg_distances = np.array(avg_distances)
+min_distances = np.array(min_distances)
 
 plt.plot(dimensions, avg_distances, label='distância média')
 plt.plot(dimensions, min_distances, label='distância mínima')
@@ -53,15 +53,14 @@ plt.legend()
 plt.show()
 ```
 
-São um milhão de distâncias euclidianas calculadas em Python puro, e mesmo assim o laço termina em poucos segundos — o `tqdm.tqdm` está ali só para acompanhar o progresso enquanto ele roda. O `random.seed(0)` garante que a figura é a mesma toda vez que o experimento é repetido.
+São um milhão de distâncias euclidianas — 10.000 pares para cada uma das 100 dimensões —, mas o laço que sobrou percorre as **dimensões**, não os pares: cada iteração é uma chamada de `np.linalg.norm` sobre uma matriz de 10.000 linhas, e o experimento inteiro termina em menos de um segundo. Não há mais progresso que valha uma barra para acompanhar. O gerador é criado uma vez, com `np.random.default_rng(0)`, e atravessa as 100 chamadas: é o que garante que a figura seja a mesma toda vez que o experimento é repetido.
 
 A distância média entre dois pontos cresce com a dimensão, o que já era de esperar. O que incomoda é outra coisa: a **razão** entre a menor distância e a distância média.
 
 ```{python}
 #| label: fig-maldicao-razao
 #| fig-cap: "Razão entre a menor distância e a distância média"
-min_avg_ratio = [min_dist / avg_dist
-                 for min_dist, avg_dist in zip(min_distances, avg_distances)]
+min_avg_ratio = min_distances / avg_distances
 
 plt.plot(dimensions, min_avg_ratio)
 plt.xlabel("# de dimensões")
@@ -73,7 +72,7 @@ plt.show()
 ::: {.conceito}
 Em dimensão baixa, o ponto mais próximo está **muito** mais perto que a média — a razão fica perto de zero, e "vizinho mais próximo" significa alguma coisa.
 
-Conforme a dimensão cresce, a razão sobe assintoticamente em direção a 1: o ponto mais próximo fica cada vez mais parecido, em distância, com um ponto qualquer. No gráfico acima, com *d* indo só até 100, ela já passa de 0,75 e continua subindo — ainda não chegou perto de 1, mas a tendência é clara, e ela seguiria subindo se a dimensão continuasse crescendo. É esse limite, não o valor em *d* = 100, que importa: quando a razão está perto de 1, "vizinho mais próximo" deixa de significar coisa alguma.
+Conforme a dimensão cresce, a razão sobe assintoticamente em direção a 1: o ponto mais próximo fica cada vez mais parecido, em distância, com um ponto qualquer. No gráfico acima, com *d* indo só até 100, ela já ronda 0,75 — em *d* = 100 dá 0,75 — e a curva ainda sobe, agora em zigue-zague: a **menor** de 10.000 distâncias é uma estatística instável, e basta um par especialmente próximo para o mínimo daquela dimensão despencar. Ainda não chegou perto de 1, mas a tendência é clara, e ela seguiria subindo se a dimensão continuasse crescendo. É esse limite, não o valor em *d* = 100, que importa: quando a razão está perto de 1, "vizinho mais próximo" deixa de significar coisa alguma.
 :::
 
 A intuição por trás disso: dois pontos só estão próximos se estiverem próximos em **todas** as dimensões. Cada dimensão extra — mesmo que seja puro ruído — é mais uma oportunidade para dois pontos ficarem distantes um do outro. Com dimensão suficiente, todo mundo fica longe de todo mundo.
