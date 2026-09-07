@@ -6,7 +6,7 @@ Esta seção corresponde a *Reading Files*, do capítulo 9 de @grus2019.
 
 O primeiro degrau da escada é o mais firme: o seu próprio disco. Um arquivo está onde você o deixou, no formato que você conhece, e não deixa de existir porque um serviço de terceiros mudou de ideia. Ler e escrever arquivos diretamente no código é simples em Python, e é daqui que parte quase todo trabalho com dado.
 
-Os arquivos que aparecem abaixo (`email_addresses.txt`, `tab_delimited_stock_prices.txt` etc.) não existem de antemão: cada um é escrito na hora, num diretório temporário que é apagado no fim da seção.
+Os arquivos que aparecem abaixo (`email_addresses.txt`, `tab_delimited_stock_prices.txt` etc.) não existem de antemão: cada um é escrito na hora, num diretório temporário que é apagado no fim da seção. A única exceção é `dados/stocks.csv`, que já vem no repositório e entra no fim da seção, quando o arquivo deixa de ser de brinquedo.
 
 ```{python}
 #| label: prepara-diretorio-temporario
@@ -102,7 +102,7 @@ domain_counts
 
 O arquivo de e-mails tinha um endereço por linha. Mais frequentemente você vai lidar com arquivos que têm vários campos por linha, quase sempre separados por vírgula ou por tabulação — o formato em que o VP de Receita da DataSciencester manda a cotação diária de ações de outro time, por exemplo, sempre que precisa que alguém cruze aquilo com os números da casa.
 
-Em princípio dá para processar esses arquivos lendo linha a linha e cortando pelo separador, mas isso complica rápido quando algum campo contém o próprio caractere separador, ou uma quebra de linha. **Por essa razão, nunca faça o parsing na mão** — use o módulo `csv` da biblioteca padrão (ou o `pandas`, coberto no callout de fechamento desta seção).
+Em princípio dá para processar esses arquivos lendo linha a linha e cortando pelo separador, mas isso complica rápido quando algum campo contém o próprio caractere separador, ou uma quebra de linha. **Por essa razão, nunca faça o parsing na mão** — use o módulo `csv` da biblioteca padrão; o `pandas`, coberto no callout de fechamento desta seção; ou, quando o arquivo é uma tabela só de números, o `np.loadtxt` do `numpy`, apresentado logo adiante.
 
 Se o arquivo não tem cabeçalho, `csv.reader` itera sobre as linhas já divididas em listas:
 
@@ -133,7 +133,7 @@ with open(pasta / 'tab_delimited_stock_prices.txt') as f:
 "processado sem erro"
 ```
 
-É exatamente este `csv.reader`, com a mesma assinatura, que reaparece no [Capítulo 9](../cap09/02-exemplo-o-dataset-iris.qmd) lendo `dados/iris.data` linha a linha — o mesmo padrão, só que os campos são medidas de flor em vez de preços de ação.
+O `dados/iris.data` do [Capítulo 9](../cap09/02-exemplo-o-dataset-iris.qmd) tem exatamente este formato — quatro medidas por linha e um rótulo de texto no fim —, a mesma mistura de número e texto que este `csv.reader` resolve, só que os campos são medidas de flor em vez de preços de ação.
 
 ::: {.callout-warning}
 ## Linhas malformadas não avisam sozinhas
@@ -228,6 +228,72 @@ print((pasta / 'bad_csv.txt').read_text())
 Repare no que aconteceu: `"success, kind of"` tinha uma vírgula própria, e o arquivo resultante não tem como distinguir essa vírgula das que separam campos. Abrindo `bad_csv.txt` com qualquer leitor de CSV de verdade, a segunda linha vira **quatro** campos em vez de três — e não há mensagem de erro nenhuma avisando disso. É exatamente o tipo de bug silencioso que `csv.writer` existe para evitar.
 :::
 
+## Quando o arquivo é uma tabela de números: `np.loadtxt`
+
+Tudo o que o `csv` devolveu até aqui foi texto: cada linha, uma lista de strings, e a conversão para número — o `float(row[2])` — ficou por sua conta. É o certo quando a linha mistura data, símbolo e preço. Mas boa parte dos arquivos que este livro vai ler daqui em diante é outra coisa: uma **tabela em que tudo é número**. Para essa, o `numpy` tem um leitor que devolve a tabela pronta, já convertida, num único objeto — o *array* que o callout do [Capítulo 4](../cap04/01-vetores.qmd) mostrou de relance.
+
+O arquivo de tabulações de cima, lido de novo:
+
+```{python}
+#| label: loadtxt-coluna-numerica
+import numpy as np
+
+fechamentos = np.loadtxt(pasta / 'tab_delimited_stock_prices.txt',
+                         delimiter='\t', usecols=2)
+fechamentos
+```
+
+Uma chamada fez o que o laço com `csv.reader` e `float(...)` fez acima — mas repare no `usecols=2`. Um array guarda valores de **um único tipo**, e as duas primeiras colunas do arquivo são texto; sem o `usecols`, o `np.loadtxt` tentaria converter `6/20/2014` em número e pararia ali, com um `ValueError`. Ele não substitui o `csv`: é o leitor certo para a parte numérica de um arquivo, e só para ela.
+
+O mesmo leitor escala sem mudar de forma. `dados/stocks.csv` tem 23.105 linhas de cotações diárias de quatro ações, com cabeçalho e duas colunas de texto na frente:
+
+```
+Symbol,Date,Open,High,Low,Close,Adj Close,Volume
+AAPL,1980-12-12,0.513393,0.515625,0.513393,0.513393,0.023106,117258400
+```
+
+`skiprows=1` pula o cabeçalho e `usecols=range(2, 8)` fica com as seis colunas numéricas:
+
+```{python}
+#| label: loadtxt-stocks
+precos = np.loadtxt("dados/stocks.csv", delimiter=",",
+                    skiprows=1, usecols=range(2, 8))
+precos.shape, precos.dtype
+```
+
+`shape` diz o que chegou: 23.105 linhas por 6 colunas, uma matriz no sentido do Capítulo 4 — e `dtype` diz que tudo virou `float64`, inclusive o volume, que no arquivo era inteiro. A fatia `precos[:, 3]` pega a coluna do fechamento inteira — o `get_column` do [Capítulo 4](../cap04/02-matrizes.qmd), sem percorrer linha nenhuma:
+
+```{python}
+#| label: variacao-diaria-vetorizada
+abertura = precos[:, 0]      # Open
+fechamento = precos[:, 3]    # Close
+
+variacao_pct = (fechamento - abertura) / abertura * 100
+
+f"maior alta num pregão: {variacao_pct.max():.2f}%; maior queda: {variacao_pct.min():.2f}%"
+```
+
+Não há `for` em lugar nenhum: a subtração, a divisão e o `* 100` valem para as 23.105 linhas de uma vez. É o `subtract` e o `scalar_multiply` que você escreveu no Capítulo 4, agora sobre arrays — e é isso, mais do que a leitura do arquivo, que o `numpy` traz para o resto do livro.
+
+Falta o caso que esta seção já ensinou a temer. O `precos_com_erro.txt` de cima tem um `N/D` no lugar de um preço; o `np.loadtxt` se recusa a lê-lo, e o irmão mais tolerante, `np.genfromtxt`, lê — colocando `nan` (*not a number*) onde não conseguiu converter:
+
+```{python}
+#| label: genfromtxt-valor-ausente
+try:
+    np.loadtxt(pasta / 'precos_com_erro.txt', delimiter='\t', usecols=2)
+except ValueError as erro:
+    print(erro)
+
+precos_sujos = np.genfromtxt(pasta / 'precos_com_erro.txt', delimiter='\t', usecols=2)
+precos_sujos, precos_sujos.mean(), np.isnan(precos_sujos)
+```
+
+O `nan` não avisa: a média dos três valores sai `nan`, sem erro e sem mensagem, e qualquer conta que passe por ele devolve `nan` também. É a mesma classe de falha silenciosa do callout acima — lá o `try/except` era seu; aqui a tolerância é do `genfromtxt`, e o `np.isnan` é o que sobra para descobrir onde o buraco está. Na dúvida, prefira o leitor que reclama: um `ValueError` na leitura custa menos que um `nan` descoberto três capítulos depois.
+
+::: {.callout-note}
+Isto foi só o primeiro contato. O que um array é por dentro — `dtype`, fatias, máscaras booleanas, `axis`, *broadcasting* — é o assunto que abre o [Capítulo 7](../cap07/01-explorando-seus-dados.qmd), na seção *De listas a arrays*, e é lá que o `numpy` passa a ser a calculadora de todos os modelos deste livro. Aqui bastou saber que uma tabela de números entra numa chamada e sai com uma forma.
+:::
+
 ```{python}
 #| label: limpeza-arquivos-temporarios
 #| include: false
@@ -246,9 +312,11 @@ import pandas as pd
 precos = pd.read_csv('tab_delimited_stock_prices.txt',
                      sep='\t', header=None,
                      names=['date', 'symbol', 'closing_price'])
+
+acoes = pd.read_csv('dados/stocks.csv')   # Symbol fica texto, Close fica número
 ```
 
-Uma linha faz o que o `csv.reader` e o laço `for` acima fizeram juntos, e por padrão o `pandas` já tenta inferir o tipo de cada coluna — `closing_price` já sai como número, sem o `float(row[2])` manual.
+Uma linha faz o que o `csv.reader` e o laço `for` acima fizeram juntos, e por padrão o `pandas` já tenta inferir o tipo de cada coluna — `closing_price` já sai como número, sem o `float(row[2])` manual. E, diferente do `np.loadtxt`, um `DataFrame` aceita colunas de tipos diferentes lado a lado: é por isso que ele lê o `stocks.csv` inteiro sem `usecols`, e é o motivo de ser a ferramenta padrão fora deste livro. Por dentro, cada coluna numérica de um `DataFrame` *é* um array do `numpy`.
 
-O que essa conveniência esconde: a inferência de tipos é uma heurística, não uma garantia. Uma coluna de códigos postais que por acaso são todos numéricos vira `int` silenciosamente, perdendo os zeros à esquerda; uma coluna majoritariamente numérica com um punhado de valores ausentes ou "N/D" pode virar `float` com `NaN` no lugar do texto, sem avisar. O `csv.reader` que você acabou de usar é mais verboso, mas cada conversão de tipo é uma linha que você escreveu e pode inspecionar — o preço da transparência de que fala o restante deste livro.
+O que essa conveniência esconde: a inferência de tipos é uma heurística, não uma garantia. Uma coluna de códigos postais que por acaso são todos numéricos vira `int` silenciosamente, perdendo os zeros à esquerda; uma coluna majoritariamente numérica com um punhado de valores ausentes ou "N/D" pode virar `float` com `NaN` no lugar do texto, sem avisar — o mesmo `nan` do `genfromtxt`, pelo mesmo motivo. O `csv.reader` que você acabou de usar é mais verboso, mas cada conversão de tipo é uma linha que você escreveu e pode inspecionar; o `np.loadtxt` fica no meio do caminho — converte por você, mas para um tipo só, e para de ler quando não consegue. É a transparência que o restante deste livro cobra dos modelos: a conta pode ficar com o `numpy`; a decisão que importa continua sendo uma linha sua.
 :::
