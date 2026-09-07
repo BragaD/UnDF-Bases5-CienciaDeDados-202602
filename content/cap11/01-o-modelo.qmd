@@ -6,40 +6,37 @@ Esta seção corresponde a *The Model*, do capítulo 14 de @grus2019.
 
 Voltamos à rede social fictícia DataSciencester, que aparece em vários capítulos deste livro. A pergunta de negócio é simples de enunciar: existe relação entre quantos amigos um usuário tem e quanto tempo por dia ele passa no site? E se existe, dá para descrevê-la com números — não só "existe uma tendência", mas "cada amigo a mais vale, em média, tantos minutos a mais"?
 
-O primeiro passo, que você provavelmente já viu antes de chegar a este livro, é medir a **correlação**: um único número entre -1 e 1 que resume o quanto duas variáveis variam juntas. `scratch/statistics.py` já traz essa função pronta, junto com os dados da própria DataSciencester:
+O primeiro passo, que você provavelmente já viu antes de chegar a este livro, é medir a **correlação**: um único número entre -1 e 1 que resume o quanto duas variáveis variam juntas. O `numpy` já traz essa conta pronta, em `np.corrcoef`; os dados da própria DataSciencester vêm de `scratch_np/statistics.py`, que é onde as listas do livro-texto viram arrays:
 
 ```{python}
 #| label: importa-dados
-#| include: false
-from scratch.statistics import (num_friends, daily_minutes,
-                                num_friends_good, daily_minutes_good,
-                                mean, correlation)
-import matplotlib.pyplot as plt
-plt.close('all')
+import numpy as np
+from scratch_np.statistics import (num_friends, daily_minutes,
+                                   num_friends_good, daily_minutes_good)
 ```
 
-São duas listas paralelas, uma entrada por usuário: `num_friends_good` guarda quantos amigos cada um tem, `daily_minutes_good` guarda quantos minutos por dia ele passa no site. O sufixo `_good` marca a versão **limpa** dos dados — o livro-texto descartou um usuário antes de calcular qualquer coisa, e daqui a pouco vamos ver qual e por quê.
+São dois arrays do mesmo tamanho, uma entrada por usuário: `num_friends_good` guarda quantos amigos cada um tem, `daily_minutes_good` guarda quantos minutos por dia ele passa no site. O sufixo `_good` marca a versão **limpa** dos dados — o livro-texto descartou um usuário antes de calcular qualquer coisa, e daqui a pouco vamos ver qual e por quê.
 
 ```{python}
 #| label: descreve-dados
-len(num_friends_good), mean(num_friends_good), mean(daily_minutes_good)
+num_friends_good.size, float(num_friends_good.mean()), float(daily_minutes_good.mean())
 ```
 
 ```{python}
 #| label: correlacao-dados
-correlation(num_friends_good, daily_minutes_good)
+np.corrcoef(num_friends_good, daily_minutes_good)
 ```
 
-São 203 usuários. Em média, cada um tem quase 7 amigos e passa cerca de 29 minutos por dia no site. E a correlação — pouco mais de 0,57 — diz que existe uma tendência real: mais amigos, mais tempo. Mas repare no que esse número **não** diz. Ele não diz se um amigo a mais vale, em média, 10 segundos ou 10 minutos a mais de uso. Ele não dá uma equação. Para isso, precisamos de outra coisa: um modelo.
+São 203 usuários. Em média, cada um tem quase 7 amigos e passa cerca de 29 minutos por dia no site. Repare que `np.corrcoef` não devolve um número, e sim a **matriz de correlação** das variáveis que recebeu — 2 × 2 aqui, porque são duas. Na diagonal está a correlação de cada variável consigo mesma, que é 1 por construção; fora dela, repetida nos dois cantos porque correlação é simétrica, está a que interessa. `[0, 1]` é como se pega esse canto, e é assim que o resto da seção vai escrevê-la. Pouco mais de 0,57 diz que existe uma tendência real: mais amigos, mais tempo. Mas repare no que esse número **não** diz. Ele não diz se um amigo a mais vale, em média, 10 segundos ou 10 minutos a mais de uso. Ele não dá uma equação. Para isso, precisamos de outra coisa: um modelo.
 
 ::: {.callout-warning}
 ## Um ponto em 204 derruba a correlação a 43%
 
-As listas cruas — `num_friends` e `daily_minutes`, sem o sufixo — têm 204 usuários. O livro-texto descartou um deles: alguém que declarava **100 amigos** e passava **1 minuto por dia** no site. Cem amigos é mais que o dobro do segundo colocado (49), e um minuto por dia é o piso da amostra; a combinação das duas coisas é quase certamente uma conta de teste ou um erro de captura, não um usuário. Veja o que esse único ponto faz com a correlação:
+Os arrays crus — `num_friends` e `daily_minutes`, sem o sufixo — têm 204 usuários. O livro-texto descartou um deles: alguém que declarava **100 amigos** e passava **1 minuto por dia** no site. Cem amigos é mais que o dobro do segundo colocado (49), e um minuto por dia é o piso da amostra; a combinação das duas coisas é quase certamente uma conta de teste ou um erro de captura, não um usuário. Veja o que esse único ponto faz com a correlação:
 
 ```{python}
 #| label: correlacao-com-outlier
-len(num_friends), correlation(num_friends, daily_minutes)
+num_friends.size, float(np.corrcoef(num_friends, daily_minutes)[0, 1])
 ```
 
 Com ele dentro, 0,2474. Sem ele, 0,5737. **Um ponto em 204 derruba a correlação para 43% do valor** — porque ele fica no extremo direito do eixo `x`, onde cada ponto tem alavanca desproporcional, e aponta para baixo enquanto todo o resto aponta para cima.
@@ -69,27 +66,30 @@ Supondo que já sabemos escolher $\alpha$ e $\beta$, fazer previsões é imediat
 
 ```{python}
 #| label: predict-error
-def predict(alpha: float, beta: float, x_i: float) -> float:
-    return beta * x_i + alpha
+def predict(alpha: float, beta: float, x):
+    """beta * x + alpha. Escalar -> float; array -> array."""
+    return beta * x + alpha
 
-def error(alpha: float, beta: float, x_i: float, y_i: float) -> float:
+def error(alpha: float, beta: float, x, y):
     """
-    O erro ao prever beta * x_i + alpha
-    quando o valor real é y_i
+    O erro ao prever beta * x + alpha
+    quando o valor real é y
     """
-    return predict(alpha, beta, x_i) - y_i
+    return predict(alpha, beta, x) - y
 ```
 
-Como escolher $\alpha$ e $\beta$? Qualquer escolha das duas nos dá uma previsão para cada `x_i`. Como conhecemos o valor real `y_i`, podemos calcular o erro de cada par. O que gostaríamos de saber é o erro **total** sobre o conjunto de dados inteiro — mas somar os erros direto não serve: se a previsão para `x_1` está alta demais e a previsão para `x_2` está baixa demais na mesma proporção, os erros se cancelam e escondem um modelo ruim. A saída é somar os erros **ao quadrado**:
+Repare no nome do parâmetro: `x`, e não `x_i`. Nada nas duas funções pressupõe um único ponto — `beta * x + alpha` é a mesma linha para um número e para os 203 amigos de uma vez, por *broadcasting* ([seção 7.1](../cap07/01-explorando-seus-dados.qmd)). `predict(alpha, beta, 10)` responde por um usuário com dez amigos; `predict(alpha, beta, num_friends_good)` responde por todos, e devolve um array de 203 previsões. É essa propriedade que faz o resto do capítulo dispensar o laço sobre os pontos.
+
+Como escolher $\alpha$ e $\beta$? Qualquer escolha das duas nos dá uma previsão para cada $x_i$. Como conhecemos o valor real $y_i$, podemos calcular o erro de cada par. O que gostaríamos de saber é o erro **total** sobre o conjunto de dados inteiro — mas somar os erros direto não serve: se a previsão para $x_1$ está alta demais e a previsão para $x_2$ está baixa demais na mesma proporção, os erros se cancelam e escondem um modelo ruim. A saída é somar os erros **ao quadrado**:
 
 ```{python}
 #| label: sum-of-sqerrors
-from scratch.linear_algebra import Vector
-
-def sum_of_sqerrors(alpha: float, beta: float, x: Vector, y: Vector) -> float:
-    return sum(error(alpha, beta, x_i, y_i) ** 2
-               for x_i, y_i in zip(x, y))
+def sum_of_sqerrors(alpha: float, beta: float,
+                    x: np.ndarray, y: np.ndarray) -> float:
+    return float(np.sum(error(alpha, beta, x, y) ** 2))
 ```
+
+Três operações, nenhum laço: `error(alpha, beta, x, y)` devolve os 203 erros de uma vez, `** 2` eleva cada um ao quadrado e `np.sum` reduz tudo a um número. O `float()` no fim troca o escalar do `numpy` por um número do Python — só para a saída na tela ser `13196.6...`, e não `np.float64(13196.6...)`.
 
 A solução de **mínimos quadrados** é escolher o $\alpha$ e o $\beta$ que deixam `sum_of_sqerrors` a menor possível.
 
@@ -102,18 +102,18 @@ Usando cálculo (ou álgebra tediosa, nas palavras do próprio Grus), o $\alpha$
 ```{python}
 #| label: least-squares-fit
 from typing import Tuple
-from scratch.linear_algebra import Vector
-from scratch.statistics import correlation, standard_deviation, mean
 
-def least_squares_fit(x: Vector, y: Vector) -> Tuple[float, float]:
+def least_squares_fit(x: np.ndarray, y: np.ndarray) -> Tuple[float, float]:
     """
-    Dados dois vetores x e y,
+    Dados dois arrays x e y,
     encontra os valores de alpha e beta de mínimos quadrados
     """
-    beta = correlation(x, y) * standard_deviation(y) / standard_deviation(x)
-    alpha = mean(y) - beta * mean(x)
-    return alpha, beta
+    beta = np.corrcoef(x, y)[0, 1] * np.std(y, ddof=1) / np.std(x, ddof=1)
+    alpha = y.mean() - beta * x.mean()
+    return float(alpha), float(beta)
 ```
+
+O `ddof=1` pede o desvio padrão **amostral**, o de denominador $n - 1$ que a [seção 7.6](../cap07/06-reescalonamento.qmd) apresentou — a mesma fórmula que o livro-texto usa. Aqui ele não chega a mudar o resultado: `beta` é uma **razão** de desvios padrão, e o denominador cancela, seja ele $n$ ou $n - 1$. Escrevê-lo mesmo assim mantém a linha igual à fórmula que ela representa, e evita que alguém a copie para um lugar onde o cancelamento não aconteça.
 
 ::: {.conceito}
 Nada de laço, nada de `theta` inicial aleatório, nada de taxa de aprendizado. `least_squares_fit` calcula duas médias, uma correlação (que por baixo é uma covariância dividida por dois desvios padrão) e dois desvios padrão — e devolve a resposta exata. É exatamente o que a [seção 5.5](../cap05/05-ajustando-modelos.qmd) prometeu: **duas médias, uma covariância, uma variância, sem laço nenhum**.
@@ -121,18 +121,20 @@ Nada de laço, nada de `theta` inicial aleatório, nada de taxa de aprendizado. 
 Essa fórmula existe porque o problema é simples o bastante para ter solução fechada: derive `sum_of_sqerrors` em relação a $\alpha$ e a $\beta$, iguale as duas derivadas a zero, resolva o sistema — e o que sobra são só médias, variância e covariância. A [seção 11.2](02-usando-gradiente-descendente.qmd) resolve exatamente o mesmo problema pelo caminho do Capítulo 5, iterando em vez de calculando direto, e as duas respostas vão bater.
 :::
 
-Sem passar pela conta exata, vale pensar no porquê disso fazer sentido. A escolha de $\alpha$ diz que, ao ver o valor **médio** da variável explicativa `x`, prevemos o valor **médio** do alvo `y` — é por isso que `alpha = mean(y) - beta * mean(x)`. A escolha de $\beta$ diz que, a cada aumento de um desvio padrão em `x`, a previsão aumenta `correlation(x, y)` desvios padrão de `y` — de modo que correlação 1 devolve o aumento inteiro, correlação -1 devolve uma queda de mesmo tamanho, e correlação 0 zera `beta`, deixando a previsão insensível a `x`.
+Sem passar pela conta exata, vale pensar no porquê disso fazer sentido. A escolha de $\alpha$ diz que, ao ver o valor **médio** da variável explicativa `x`, prevemos o valor **médio** do alvo `y` — é por isso que `alpha = y.mean() - beta * x.mean()`. A escolha de $\beta$ diz que, a cada aumento de um desvio padrão em `x`, a previsão aumenta `np.corrcoef(x, y)[0, 1]` desvios padrão de `y` — de modo que correlação 1 devolve o aumento inteiro, correlação -1 devolve uma queda de mesmo tamanho, e correlação 0 zera `beta`, deixando a previsão insensível a `x`.
 
 Como sempre, escrevemos um teste rápido:
 
 ```{python}
 #| label: teste-least-squares
-x = [i for i in range(-100, 110, 10)]
-y = [3 * i - 5 for i in x]
+x = np.arange(-100, 110, 10)
+y = 3 * x - 5
 
 # Deveria encontrar que y = 3x - 5
 assert least_squares_fit(x, y) == (-5, 3)
 ```
+
+`np.arange(-100, 110, 10)` é a compreensão de lista do livro-texto escrita como array, e `3 * x - 5` aplica a reta aos 21 pontos de uma vez. Aqui a comparação é de **igualdade exata**, o que costuma ser má ideia com ponto flutuante — e neste caso específico funciona por um motivo que dá para apontar: `x` é simétrico em torno de zero, então `x.mean()` é exatamente `0.0` e `alpha` sai igual a `y.mean()`, que é `-5.0`; e a correlação de pontos perfeitamente colineares dá exatamente `1.0`, o que deixa `beta` igual à razão dos desvios padrão, `3.0` sem resto. Fora de um caso construído assim, o certo é comparar com `np.allclose`.
 
 Agora é fácil aplicar isso aos dados sem outlier que já carregamos:
 
@@ -154,10 +156,12 @@ Como o [Capítulo 3](../cap03/04-graficos-de-dispersao.qmd) mostrou, um gráfico
 ```{python}
 #| label: fig-regressao-amigos-minutos
 #| fig-cap: "Modelo de regressão linear simples sobre os dados da DataSciencester"
+from matplotlib import pyplot as plt
+
 plt.scatter(num_friends_good, daily_minutes_good)
 
-x_reta = [min(num_friends_good), max(num_friends_good)]
-y_reta = [predict(alpha, beta, x_i) for x_i in x_reta]
+x_reta = np.array([num_friends_good.min(), num_friends_good.max()])
+y_reta = predict(alpha, beta, x_reta)
 plt.plot(x_reta, y_reta, color='black')
 
 plt.title("Regressão linear simples")
@@ -166,7 +170,7 @@ plt.ylabel("minutos por dia")
 plt.show()
 ```
 
-A reta passa razoavelmente perto da nuvem de pontos, mas está longe de tocar a maioria deles — a dispersão vertical em torno da reta é grande, principalmente para valores baixos de `x`, onde a maior parte dos dados está concentrada.
+A reta passa razoavelmente perto da nuvem de pontos, mas está longe de tocar a maioria deles — a dispersão vertical em torno da reta é grande, principalmente para valores baixos de `x`, onde a maior parte dos dados está concentrada. A reta em si saiu de duas linhas: os dois extremos de `x` num array de dois elementos, e o mesmo `predict` que preveria um usuário aplicado aos dois de uma vez.
 
 ## Quão bom é o ajuste?
 
@@ -174,13 +178,12 @@ Olhar o gráfico dá uma impressão, mas "razoavelmente perto" não é uma métr
 
 ```{python}
 #| label: r-squared
-from scratch.statistics import de_mean
-
-def total_sum_of_squares(y: Vector) -> float:
+def total_sum_of_squares(y: np.ndarray) -> float:
     """a variação quadrática total dos y_i em torno da média deles"""
-    return sum(v ** 2 for v in de_mean(y))
+    return float(np.sum((y - y.mean()) ** 2))
 
-def r_squared(alpha: float, beta: float, x: Vector, y: Vector) -> float:
+def r_squared(alpha: float, beta: float,
+              x: np.ndarray, y: np.ndarray) -> float:
     """
     a fração da variação em y capturada pelo modelo, que é igual a
     1 menos a fração da variação em y NÃO capturada pelo modelo
@@ -194,7 +197,7 @@ assert 0.328 < rsq < 0.330
 rsq
 ```
 
-O R² dá cerca de 0,329. Para entender de onde vêm os limites dessa métrica, vale comparar com o modelo de referência mais simples possível: sempre prever a média de `y`, ignorando `x` completamente — o que corresponde a `alpha = mean(y)` e `beta = 0`. A soma dos erros ao quadrado desse modelo "vazio" é, por construção, exatamente igual a `total_sum_of_squares(y)`: sem informação nenhuma sobre `x`, o melhor palpite constante para cada ponto é a própria média. Isso dá R² = 0.
+`y - y.mean()` é o mesmo `de_mean` da [seção 7.8](../cap07/08-reducao-de-dimensionalidade.qmd) aplicado a um vetor só: subtrai a média de todos os elementos de uma vez, por *broadcasting*. O R² dá cerca de 0,329. Para entender de onde vêm os limites dessa métrica, vale comparar com o modelo de referência mais simples possível: sempre prever a média de `y`, ignorando `x` completamente — o que corresponde a `alpha = y.mean()` e `beta = 0`. A soma dos erros ao quadrado desse modelo "vazio" é, por construção, exatamente igual a `total_sum_of_squares(y)`: sem informação nenhuma sobre `x`, o melhor palpite constante para cada ponto é a própria média. Isso dá R² = 0.
 
 O modelo de mínimos quadrados precisa ser **pelo menos** tão bom quanto esse, porque ele é, por definição, a escolha de $\alpha$ e $\beta$ que minimiza a soma dos erros ao quadrado — e "sempre prever a média" é só mais uma escolha possível de $\alpha$ e $\beta$ entre todas as que ele considerou. Logo a soma dos erros ao quadrado do modelo ajustado é **no máximo** a soma dos erros ao quadrado do modelo vazio, o que trava o R² entre 0 e 1: quanto mais alto, melhor o ajuste.
 
@@ -212,7 +215,7 @@ O [Capítulo 8](../cap08/index.qmd) deu o vocabulário para julgar modelos de cl
 ```python
 from sklearn.linear_model import LinearRegression
 
-X = [[x] for x in num_friends_good]
+X = num_friends_good.reshape(-1, 1)   # (203, 1): uma linha por usuário
 y = daily_minutes_good
 
 modelo = LinearRegression().fit(X, y)
@@ -221,17 +224,19 @@ modelo.intercept_, modelo.coef_[0]   # alpha, beta
 modelo.score(X, y)                    # R²
 ```
 
+Repare no que **não** há aqui: nenhuma linha para montar `X`. A biblioteca pede a mesma convenção deste livro — uma matriz `(n, d)`, uma linha por observação —, e o `reshape(-1, 1)` só diz que os 203 números são 203 linhas de uma coluna.
+
 Vale rodar e comparar com o que as três funções desta seção devolveram, valor a valor:
 
 |  | à mão, nesta seção | `scikit-learn` 1.9 |
 |---|---|---|
 | $\alpha$ | `22.947552413468976` | `22.947552413468976` |
-| $\beta$ | `0.9038659456058725` | `0.9038659456058724` |
+| $\beta$ | `0.9038659456058725` | `0.9038659456058721` |
 | R² | `0.32910783778362984` | `0.32910783778362984` |
 
-$\alpha$ e o R² saem **idênticos**, bit a bit. O $\beta$ difere no último dígito da representação — um único bit de mantissa, a menor diferença que um `float64` sabe expressar, e nem sequer erro de método: é a ordem em que as somas de ponto flutuante foram feitas. As trinta e poucas linhas desta seção e a biblioteca que roda em produção no mundo inteiro estão calculando **a mesma coisa**.
+$\alpha$ e o R² saem **idênticos**, bit a bit. O $\beta$ só discorda a partir do décimo sexto dígito significativo — quatro unidades no último lugar da mantissa, uma discordância que só existe porque um `float64` tem um último lugar, e nem sequer erro de método: é a ordem em que as somas de ponto flutuante foram feitas. As três dezenas de linhas desta seção e a biblioteca que roda em produção no mundo inteiro estão calculando **a mesma coisa**.
 
-`LinearRegression` não itera e não pede taxa de aprendizado: ela resolve o sistema de mínimos quadrados por álgebra linear direta (decomposição em valores singulares), o equivalente industrial da fórmula fechada que você acabou de escrever à mão. `.score()` devolve o R² sem que você precise escrever `total_sum_of_squares` nem `r_squared` — mas é a mesma conta, e agora você sabe o que ela faz por dentro: soma de quadrados do modelo dividida pela soma de quadrados do modelo vazio, subtraída de 1.
+`LinearRegression` não itera e não pede taxa de aprendizado: ela resolve o sistema de mínimos quadrados por álgebra linear direta (decomposição em valores singulares), que é a mesma solução fechada que você acabou de escrever — só numa forma que continua valendo para qualquer número de variáveis explicativas, a forma de que o [Capítulo 12](../cap12/index.qmd) vai precisar. `.score()` devolve o R² sem que você precise escrever `total_sum_of_squares` nem `r_squared` — mas é a mesma conta, e agora você sabe o que ela faz por dentro: soma de quadrados do modelo dividida pela soma de quadrados do modelo vazio, subtraída de 1.
 
 Os números da tabela foram medidos rodando o código, não estimados.
 :::

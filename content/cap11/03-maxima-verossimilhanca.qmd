@@ -76,26 +76,22 @@ Sob a suposição de que os erros são normais, o $(\alpha, \beta)$ que **maximi
 
 ## Vendo isso nos dados
 
-O argumento acima é sobre a forma da função, não sobre nenhum $\sigma$ específico — o resultado vale para qualquer $\sigma$ fixo, porque $\sigma$ nunca aparece na comparação entre candidatos. Ainda assim, ajuda ver a diferença de escala em números concretos. A [seção 11.1](01-o-modelo.qmd) já comparou o modelo de mínimos quadrados com o modelo de referência mais simples possível — sempre prever a média de `y`, ignorando `x` — para calcular R². Vamos reaproveitar essa comparação aqui:
+O argumento acima é sobre a forma da função, não sobre nenhum $\sigma$ específico — o resultado vale para qualquer $\sigma$ fixo, porque $\sigma$ nunca aparece na comparação entre candidatos. Ainda assim, ajuda ver a diferença de escala em números concretos. A [seção 11.1](01-o-modelo.qmd) já comparou o modelo de mínimos quadrados com o modelo de referência mais simples possível — sempre prever a média de `y`, ignorando `x` — para calcular R². Vamos reaproveitar essa comparação aqui — o ajuste e as duas funções vêm do módulo da seção 11.1, sem repetir código:
 
 ```{python}
 #| label: importa-mle
-#| include: false
-from scratch.simple_linear_regression import (
+import numpy as np
+from scratch_np.simple_linear_regression import (
     error, sum_of_sqerrors, num_friends_good, daily_minutes_good,
     alpha, beta,
 )
-from scratch.statistics import mean
-import math
-import matplotlib.pyplot as plt
-plt.close('all')
 ```
 
 ```{python}
 #| label: compara-verossimilhancas
 S_minimos_quadrados = sum_of_sqerrors(alpha, beta,
                                       num_friends_good, daily_minutes_good)
-S_sempre_a_media = sum_of_sqerrors(mean(daily_minutes_good), 0,
+S_sempre_a_media = sum_of_sqerrors(daily_minutes_good.mean(), 0,
                                    num_friends_good, daily_minutes_good)
 
 S_minimos_quadrados, S_sempre_a_media
@@ -107,24 +103,21 @@ O modelo de mínimos quadrados soma cerca de 13.197 de erro ao quadrado; sempre 
 
 A álgebra acima passou do produto para a exponencial da soma em uma linha, como se as duas expressões fossem intercambiáveis. Elas são — no papel. Num computador, não.
 
-Escreva as duas versões e compare. A primeira multiplica as 203 densidades normais, uma por ponto, exatamente como a fórmula do produto manda. A segunda usa $\log(ab) = \log a + \log b$ para trocar o produto por uma soma de logaritmos, e é a **log-verossimilhança**. Repare que ela não calcula a densidade para depois tirar o log: como o log de uma exponencial é o próprio expoente, o termo de cada ponto sai direto como $-e_i^2/2\sigma^2 - \log(\sqrt{2\pi}\,\sigma)$. O número minúsculo nunca chega a existir na memória.
+Escreva as duas versões e compare. A primeira calcula as 203 densidades normais de uma vez e as multiplica com `np.prod`, exatamente como a fórmula do produto manda. Vetorizar não muda nada aqui: `np.prod` multiplica os 203 fatores um a um, na ordem em que estão, como o laço faria — o que a vetorização troca é o laço, não a aritmética, e é por isso que o problema que vem a seguir acontece exatamente do mesmo jeito. A segunda usa $\log(ab) = \log a + \log b$ para trocar o produto por uma soma de logaritmos, e é a **log-verossimilhança**. Repare que ela não calcula a densidade para depois tirar o log: como o log de uma exponencial é o próprio expoente, o termo de cada ponto sai direto como $-e_i^2/2\sigma^2 - \log(\sqrt{2\pi}\,\sigma)$. O número minúsculo nunca chega a existir na memória.
 
 ```{python}
 #| label: verossimilhanca-inline
 def verossimilhanca(alpha: float, beta: float, x, y, sigma: float) -> float:
     """L(alpha, beta | dados, sigma): o produto das densidades normais."""
-    produto = 1.0
-    for x_i, y_i in zip(x, y):
-        e = error(alpha, beta, x_i, y_i)
-        produto *= (math.exp(-e ** 2 / (2 * sigma ** 2))
-                    / (math.sqrt(2 * math.pi) * sigma))
-    return produto
+    e = error(alpha, beta, x, y)
+    return float(np.prod(np.exp(-e ** 2 / (2 * sigma ** 2))
+                         / (np.sqrt(2 * np.pi) * sigma)))
 
 def log_verossimilhanca(alpha: float, beta: float, x, y, sigma: float) -> float:
     """log L: a mesma conta, com a soma dos logs no lugar do produto."""
-    return sum(-error(alpha, beta, x_i, y_i) ** 2 / (2 * sigma ** 2)
-               - math.log(math.sqrt(2 * math.pi) * sigma)
-               for x_i, y_i in zip(x, y))
+    e = error(alpha, beta, x, y)
+    return float(np.sum(-e ** 2 / (2 * sigma ** 2)
+                        - np.log(np.sqrt(2 * np.pi) * sigma)))
 ```
 
 Agora avalie as duas nos mesmos dois modelos que acabamos de comparar. Qualquer $\sigma$ fixo serve para o argumento; usamos 8, que é aproximadamente o tamanho do resíduo típico deste ajuste:
@@ -132,7 +125,7 @@ Agora avalie as duas nos mesmos dois modelos que acabamos de comparar. Qualquer 
 ```{python}
 #| label: verossimilhanca-underflow
 sigma = 8.0
-media = mean(daily_minutes_good)
+media = daily_minutes_good.mean()
 
 L_ajustado = verossimilhanca(alpha, beta,
                              num_friends_good, daily_minutes_good, sigma)
