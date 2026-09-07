@@ -112,6 +112,21 @@ Repare: `try_parse_row` não rejeitou a linha da FB, e o ano da data dela é **3
 É o mesmo tipo de outlier que a [seção 7.1](01-explorando-seus-dados.qmd) existe para achar — por inspeção visual ou checagem *ad hoc* —, não algo que uma função de *parsing* bem escrita consegue capturar sozinha. Dado do mundo real tem casas decimais faltando, zeros a mais, erros de digitação e outros problemas do tipo — capturá-los é trabalho seu (talvez não seja oficialmente seu trabalho, mas quem mais vai fazer?).
 :::
 
+::: {.callout-note}
+## O mesmo arquivo pelo `np.genfromtxt`
+
+A [seção 6.1](../cap06/01-lendo-arquivos.qmd) mostrou o leitor tolerante do `numpy`. Sobre este arquivo, ele lê a coluna de preços assim:
+
+```{python}
+#| label: genfromtxt-csv-sujo
+import numpy as np
+
+np.genfromtxt("dados/comma_delimited_stock_prices.csv", delimiter=",", usecols=2)
+```
+
+O `n/a` virou `nan`, sem aviso — a linha que `try_parse_row` rejeitou em voz alta sobreviveu em silêncio. E o ano 3014 nem foi lido: `usecols=2` descartou a coluna da data antes de qualquer conferência. É o contraste inteiro desta seção: o array carrega os números; a decisão sobre o que é dado ruim continua sendo uma função sua.
+:::
+
 E então é preciso decidir o que fazer com as linhas inválidas. Em geral, as três opções são: descartá-las, voltar à fonte e tentar corrigir o dado ausente ou ruim, ou não fazer nada e torcer. Se é uma linha ruim entre milhões, provavelmente está tudo bem ignorá-la. Mas se metade das suas linhas têm dado ruim, isso é algo que precisa ser corrigido.
 
 ::: {.callout-tip collapse="true"}
@@ -119,5 +134,5 @@ E então é preciso decidir o que fazer com as linhas inválidas. Em geral, as t
 
 `try_parse_row` — com seu regex, seus dois `try/except` e seu `None` como sinal de "descarte isto" — é o que `pd.read_csv(..., parse_dates=["date"], na_values=["n/a"])` faz por baixo, mais `pd.to_numeric(coluna, errors='coerce')` para o resto.
 
-O que isso esconde, e vale saber que está sendo escondido: a coerção do `pandas` é **silenciosa**. Onde `try_parse_row` devolve `None` e a linha é descartada com um aviso impresso, `errors='coerce'` não descarta nada — ele converte o valor problemático em `NaN` (ou `NaT`, para data), e a linha *sobrevive* no `DataFrame`. Ela não aparece como "pulando linha inválida" em lugar nenhum; ela só aparece depois, quando alguém calcula uma média sem checar `.isna()` antes, e o resultado sai errado sem erro nenhum. É o mesmo tipo de problema que a linha da FB com ano 3014 ilustrou acima — só que lá o dado passou pelo filtro por ser sintaticamente válido; aqui ele passa porque o `pandas` foi instruído a deixar passar.
+O que isso esconde, e vale saber que está sendo escondido: a coerção do `pandas` é **silenciosa**. Onde `try_parse_row` devolve `None` e a linha é descartada com um aviso impresso, `errors='coerce'` não descarta nada — ele converte o valor problemático em `NaN` (ou `NaT`, para data), e a linha *sobrevive* no `DataFrame`. Ela não aparece como "pulando linha inválida" em lugar nenhum; ela só aparece depois, quando alguém calcula uma média sem checar `.isna()` antes, e o resultado sai errado sem erro nenhum. É o mesmo tipo de problema que a linha da FB com ano 3014 ilustrou acima — e o mesmo `nan` silencioso do `np.genfromtxt` no callout anterior — só que lá o dado passou pelo filtro por ser sintaticamente válido; aqui ele passa porque o `pandas` foi instruído a deixar passar.
 :::

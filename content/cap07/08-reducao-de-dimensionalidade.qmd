@@ -9,7 +9,9 @@ Esta seção corresponde a *Dimensionality Reduction*, do capítulo 10 de @grus2
 ```{python}
 #| label: pca-data
 #| echo: false
-pca_data = [
+import numpy as np
+
+pca_data = np.array([
 [20.9666776351559,-13.1138080189357],
 [22.7719907680008,-19.8890894944696],
 [25.6687103160153,-11.9956004517219],
@@ -109,8 +111,8 @@ pca_data = [
 [34.7042513789061,-6.9630753351114],
 [15.6563953929008,-17.2196961218915],
 [25.2049825789225,-14.1592086208169]
-]
-len(pca_data)
+])
+pca_data.shape
 ```
 
 Grande parte da variação dos dados parece estar ao longo de uma única dimensão, que não corresponde nem ao eixo $x$ nem ao eixo $y$:
@@ -120,9 +122,7 @@ Grande parte da variação dos dados parece estar ao longo de uma única dimens�
 #| fig-cap: "Dados com os eixos \"errados\""
 from matplotlib import pyplot as plt
 
-xs = [p[0] for p in pca_data]
-ys = [p[1] for p in pca_data]
-plt.scatter(xs, ys, s=15, color="darkblue")
+plt.scatter(pca_data[:, 0], pca_data[:, 1], s=15, color="darkblue")
 plt.xlabel("x")
 plt.ylabel("y")
 plt.title("Dados com os eixos \"errados\"")
@@ -137,7 +137,7 @@ Na prática, você não usaria essa técnica num conjunto de dados tão baixo-di
 :::
 
 ::: {.callout-note}
-Esta seção depende do gradiente descendente do [Capítulo 5](../cap05/index.qmd) — especificamente de `gradient_step`, a função de cinco linhas construída lá que treina praticamente todo modelo deste livro. Aqui ela não ajusta parâmetro de modelo nenhum; ajusta a **direção** que melhor explica a variação dos dados. Se `gradient_step` não estiver familiar, vale revisitar aquele capítulo antes de continuar.
+Esta seção depende do gradiente descendente do [Capítulo 5](../cap05/index.qmd) — especificamente de `gradient_step`, a função construída lá que treina praticamente todo modelo deste livro. Aqui ela vem de `scratch_np.gradient_descent`, em arrays: `v + step_size * gradient`, uma linha no lugar do `add(v, scalar_multiply(step_size, gradient))` do Capítulo 5, com a mesma convenção de sinal. Ela não ajusta parâmetro de modelo nenhum; ajusta a **direção** que melhor explica a variação dos dados. Se `gradient_step` não estiver familiar, vale revisitar aquele capítulo antes de continuar.
 :::
 
 ## Centralizando os dados
@@ -146,16 +146,17 @@ Como primeiro passo, precisamos transladar os dados para que cada dimensão tenh
 
 ```{python}
 #| label: de-mean
-from typing import List
-from scratch.linear_algebra import Vector, subtract, vector_mean
+import numpy as np
 
-def de_mean(data: List[Vector]) -> List[Vector]:
-    """Recentra os dados para que cada dimensão tenha média 0"""
-    mean = vector_mean(data)
-    return [subtract(vector, mean) for vector in data]
+def de_mean(X: np.ndarray) -> np.ndarray:
+    """Recentra os dados para que cada coluna tenha média 0"""
+    return X - X.mean(axis=0)
 
 de_meaned = de_mean(pca_data)
+assert np.allclose(de_meaned.mean(axis=0), 0)
 ```
+
+É a linha do *broadcasting* da [seção 7.1](01-explorando-seus-dados.qmd): a média de cada coluna, forma `(2,)`, subtraída de cada uma das 99 linhas. O `assert` confere com `np.allclose`, não com `== 0` — a média de floats recentrados fica na casa de 10⁻¹⁵, não em zero exato.
 
 (Se não fizermos isso, é bem provável que nossas técnicas identifiquem a própria média em vez da variação nos dados.)
 
@@ -164,9 +165,7 @@ Centralizar é a metade da [7.6](06-reescalonamento.qmd) que sobrou: mesma trans
 ```{python}
 #| label: fig-pca-demeaned
 #| fig-cap: "Dados depois de remover a média"
-xs2 = [p[0] for p in de_meaned]
-ys2 = [p[1] for p in de_meaned]
-plt.scatter(xs2, ys2, s=15, color="darkblue")
+plt.scatter(de_meaned[:, 0], de_meaned[:, 1], s=15, color="darkblue")
 plt.axhline(0, color="gray", linewidth=0.5)
 plt.axvline(0, color="gray", linewidth=0.5)
 plt.xlabel("x")
@@ -188,30 +187,27 @@ Por que variância, e não alguma outra medida de espalhamento? Porque projetar 
 A direção de maior variância é a direção em que os dados menos se parecem com um ponto só — o que sobra de informação depois de projetar tudo nela e aceitar não guardar mais nada. Reduzir dimensionalidade é escolher, de propósito, o que descartar primeiro: o que varia menos.
 :::
 
-Vale fixar também os dois sentidos da palavra **componente**, porque o restante desta seção usa os dois: primeiro, uma **componente principal** é uma *direção* — um vetor de magnitude 1, como o `fpc` que `first_principal_component` devolve daqui a pouco. Depois, quando um ponto é projetado nessa direção, o número que sai da projeção — o `dot(v, w)` que a seção "Projetando e removendo", adiante, vai calcular — também é chamado de "a componente" daquele ponto. A primeira é uma seta no espaço original; a segunda é uma coordenada nova, medida ao longo dela.
+Vale fixar também os dois sentidos da palavra **componente**, porque o restante desta seção usa os dois: primeiro, uma **componente principal** é uma *direção* — um vetor de magnitude 1, como o `fpc` que `first_principal_component` devolve daqui a pouco. Depois, quando um ponto é projetado nessa direção, o número que sai da projeção — o `v @ w` que a seção "Projetando e removendo", adiante, vai calcular — também é chamado de "a componente" daquele ponto. A primeira é uma seta no espaço original; a segunda é uma coordenada nova, medida ao longo dela.
 
-Especificamente, dada uma direção $d$ (um vetor de magnitude 1), a projeção de cada linha $x$ da matriz sobre $d$ tem comprimento `dot(x, d)` — é o quanto daquele ponto "cabe" naquela direção. E todo vetor $w$ não nulo determina uma direção, se o reescalonarmos para ter magnitude 1:
+Especificamente, dada uma direção $d$ (um vetor de magnitude 1), a projeção de cada linha $x$ da matriz sobre $d$ tem comprimento `x @ d` — é o quanto daquele ponto "cabe" naquela direção — e `X @ d` calcula os $n$ comprimentos de uma vez, um por linha. E todo vetor $w$ não nulo determina uma direção, se o reescalonarmos para ter magnitude 1:
 
 ```{python}
 #| label: direction
-from scratch.linear_algebra import magnitude
-
-def direction(w: Vector) -> Vector:
-    mag = magnitude(w)
-    return [w_i / mag for w_i in w]
+def direction(w: np.ndarray) -> np.ndarray:
+    return w / np.linalg.norm(w)
 ```
 
 Portanto, dado um vetor $w$ não nulo, podemos calcular a variância do nosso conjunto de dados na direção determinada por $w$:
 
 ```{python}
 #| label: directional-variance
-from scratch.linear_algebra import dot
-
-def directional_variance(data: List[Vector], w: Vector) -> float:
-    """Devolve a variância de x na direção de w"""
+def directional_variance(X: np.ndarray, w: np.ndarray) -> float:
+    """Devolve a variância de X na direção de w"""
     w_dir = direction(w)
-    return sum(dot(v, w_dir) ** 2 for v in data)
+    return np.sum((X @ w_dir) ** 2)
 ```
+
+`X @ w_dir` é o vetor de comprimentos de projeção, um por ponto; elevar ao quadrado e somar é a soma dos quadrados de todos eles.
 
 ::: {.callout-note}
 Apesar do nome e do *docstring*, `directional_variance` não divide por $n$: é uma **soma de quadrados**, não a variância no sentido em que o resto deste livro usa a palavra. Como os dados já passaram por `de_mean`, essa soma é proporcional à variância de verdade — dividir por $n$ mudaria a escala do número, mas não a direção $w$ que o maximiza, que é tudo que interessa aqui. Se você for comparar este valor contra a fórmula de variância que já conhece, é este o motivo do descompasso.
@@ -221,15 +217,14 @@ Gostaríamos de achar a direção que maximiza essa variância. Podemos fazer is
 
 ```{python}
 #| label: directional-variance-gradient
-def directional_variance_gradient(data: List[Vector], w: Vector) -> Vector:
+def directional_variance_gradient(X: np.ndarray, w: np.ndarray) -> np.ndarray:
     """O gradiente da variância direcional em relação a w"""
     w_dir = direction(w)
-    return [sum(2 * dot(v, w_dir) * v[i] for v in data)
-            for i in range(len(w))]
+    return 2 * (X @ w_dir) @ X
 ```
 
 ::: {.callout-note}
-Essa fórmula não é derivada aqui — vale aceitá-la como dada, mas com a razão de ela ser legítima: `directional_variance` soma termos $(v \cdot w_{dir})^2$, e a derivada de um quadrado como esse em relação a cada coordenada de $w$ é o dobro do produto interno vezes a coordenada correspondente de $v$ — exatamente o `2 * dot(v, w_dir) * v[i]` acima, somado sobre todos os pontos. É cálculo de uma variável aplicado termo a termo, não uma fórmula nova.
+Essa fórmula não é derivada aqui — vale aceitá-la como dada, mas com a razão de ela ser legítima: `directional_variance` soma termos $(v \cdot w_{dir})^2$, e a derivada de um quadrado como esse em relação a cada coordenada de $w$ é o dobro do produto interno vezes a coordenada correspondente de $v$, somado sobre todos os pontos. É o que `2 * (X @ w_dir) @ X` faz: `X @ w_dir` são os $n$ produtos internos; multiplicá-los por `X` pela esquerda pesa cada linha pelo seu produto e soma as linhas — a coordenada $i$ do resultado é $\sum_v 2\,(v \cdot w_{dir})\, v_i$. É cálculo de uma variável aplicado termo a termo, não uma fórmula nova.
 :::
 
 E agora a primeira componente principal é justamente a direção que maximiza a função `directional_variance`:
@@ -238,18 +233,18 @@ E agora a primeira componente principal é justamente a direção que maximiza a
 #| label: first-principal-component
 #| warning: false
 import tqdm
-from scratch.gradient_descent import gradient_step
+from scratch_np.gradient_descent import gradient_step
 
-def first_principal_component(data: List[Vector],
+def first_principal_component(X: np.ndarray,
                               n: int = 100,
-                              step_size: float = 0.1) -> Vector:
+                              step_size: float = 0.1) -> np.ndarray:
     # começa com um palpite aleatório
-    guess = [1.0 for _ in data[0]]
+    guess = np.ones(X.shape[1])
 
     with tqdm.trange(n) as t:
         for _ in t:
-            dv = directional_variance(data, guess)
-            gradient = directional_variance_gradient(data, guess)
+            dv = directional_variance(X, guess)
+            gradient = directional_variance_gradient(X, guess)
             guess = gradient_step(guess, gradient, step_size)
             t.set_description(f"dv: {dv:.3f}")
 
@@ -262,11 +257,11 @@ fpc
 ```
 
 ::: {.callout-important}
-Repare no sinal: `step_size` aqui é **positivo**. Todo o resto deste livro passa passo negativo para `gradient_step` — para andar *contra* o gradiente e minimizar algum erro, como o [Capítulo 5](../cap05/03-usando-o-gradiente.qmd) explica ao apresentar essa mesma função. Aqui não há erro para minimizar: queremos **maximizar** a variância direcional, então andamos **com** o gradiente. É o único uso ascendente do livro inteiro — e é o mesmo `gradient_step` de cinco linhas do Capítulo 5, usado ao contrário.
+Repare no sinal: `step_size` aqui é **positivo**. Todo o resto deste livro passa passo negativo para `gradient_step` — para andar *contra* o gradiente e minimizar algum erro, como o [Capítulo 5](../cap05/03-usando-o-gradiente.qmd) explica ao apresentar essa mesma função. Aqui não há erro para minimizar: queremos **maximizar** a variância direcional, então andamos **com** o gradiente. É o único uso ascendente do livro inteiro — e é o mesmo `gradient_step` do Capítulo 5, agora em arrays, usado ao contrário.
 :::
 
 ::: {.callout-note}
-O comentário diz "palpite aleatório", mas repare no código: `guess` começa sempre em `[1.0, 1.0]`. Não há aleatoriedade nenhuma aqui — o gradiente parte sempre do mesmo lugar e segue sempre o mesmo caminho, então o resultado é determinístico e os dois `assert` acima valem em qualquer execução, sem precisar de `random.seed`. Uma inicialização genuinamente aleatória — como a que o [Capítulo 15](../cap15/index.qmd) usa para os pesos de uma rede neural — exigiria a semente para valer o mesmo.
+O comentário diz "palpite aleatório", mas repare no código: `guess` começa sempre em `np.ones(2)` — `[1.0, 1.0]`. Não há aleatoriedade nenhuma aqui — o gradiente parte sempre do mesmo lugar e segue sempre o mesmo caminho, então o resultado é determinístico e os dois `assert` acima valem em qualquer execução, sem precisar de `default_rng`. Uma inicialização genuinamente aleatória — como a que o [Capítulo 15](../cap15/index.qmd) usa para os pesos de uma rede neural — exigiria a semente para valer o mesmo.
 :::
 
 No conjunto de dados centralizado, isso devolve a direção aproximadamente $(0{,}924,\ 0{,}383)$, que de fato parece capturar o eixo principal ao longo do qual nossos dados variam:
@@ -275,7 +270,7 @@ No conjunto de dados centralizado, isso devolve a direção aproximadamente $(0{
 #| label: fig-pca-primeiro-componente
 #| fig-cap: "Primeira componente principal"
 escala = 30
-plt.scatter(xs2, ys2, s=15, color="darkblue")
+plt.scatter(de_meaned[:, 0], de_meaned[:, 1], s=15, color="darkblue")
 plt.plot([-escala * fpc[0], escala * fpc[0]],
         [-escala * fpc[1], escala * fpc[1]],
         color="black", linewidth=1.5)
@@ -294,36 +289,36 @@ Uma vez achada a direção que é a primeira componente principal, podemos proje
 
 ```{python}
 #| label: project
-from scratch.linear_algebra import scalar_multiply
-
-def project(v: Vector, w: Vector) -> Vector:
+def project(v: np.ndarray, w: np.ndarray) -> np.ndarray:
     """devolve a projeção de v na direção w"""
-    projection_length = dot(v, w)
-    return scalar_multiply(projection_length, w)
+    projection_length = v @ w
+    return projection_length * w
 ```
 
 Se quisermos achar componentes adicionais, primeiro removemos as projeções dos dados:
 
 ```{python}
 #| label: remove-projection
-def remove_projection_from_vector(v: Vector, w: Vector) -> Vector:
+def remove_projection_from_vector(v: np.ndarray, w: np.ndarray) -> np.ndarray:
     """projeta v em w e subtrai o resultado de v"""
-    return subtract(v, project(v, w))
+    return v - project(v, w)
 
-def remove_projection(data: List[Vector], w: Vector) -> List[Vector]:
-    return [remove_projection_from_vector(v, w) for v in data]
+def remove_projection(X: np.ndarray, w: np.ndarray) -> np.ndarray:
+    """remove de cada linha de X a projeção dela em w"""
+    return X - np.outer(X @ w, w)
 
 residual = remove_projection(de_meaned, fpc)
+assert np.allclose(residual @ fpc, 0)
 ```
+
+`remove_projection_from_vector` é a versão de um ponto; `remove_projection` faz o mesmo para todas as linhas sem laço. `np.outer(a, w)` é o **produto externo**: a matriz cuja linha $i$ é `a[i] * w` — aqui, a projeção de cada linha de `X` em `w`, empilhadas. Subtraí-la de `X` é aplicar `remove_projection_from_vector` linha a linha de uma vez. O `assert` confere o que a figura seguinte mostra: não sobrou nada na direção de `fpc`.
 
 Como este conjunto de exemplo é só bidimensional, depois de removermos a primeira componente o que sobra é efetivamente unidimensional:
 
 ```{python}
 #| label: fig-pca-residual
 #| fig-cap: "Dados depois de remover a primeira componente principal"
-xs3 = [p[0] for p in residual]
-ys3 = [p[1] for p in residual]
-plt.scatter(xs3, ys3, s=15, color="darkblue")
+plt.scatter(residual[:, 0], residual[:, 1], s=15, color="darkblue")
 plt.xlabel("x")
 plt.ylabel("y")
 plt.title("Dados depois de remover a primeira componente principal")
@@ -339,31 +334,36 @@ Num conjunto de dados de maior dimensão, podemos achar quantas componentes quis
 
 ```{python}
 #| label: pca
-def pca(data: List[Vector], num_components: int) -> List[Vector]:
-    components: List[Vector] = []
+def pca(X: np.ndarray, num_components: int) -> np.ndarray:
+    """Devolve as componentes como linhas de uma matriz (num_components, d)"""
+    components = []
     for _ in range(num_components):
-        component = first_principal_component(data)
+        component = first_principal_component(X)
         components.append(component)
-        data = remove_projection(data, component)
+        X = remove_projection(X, component)
 
-    return components
+    return np.array(components)
 ```
+
+O laço fica: é o algoritmo — uma componente por vez, removendo a projeção antes de procurar a próxima. A única mudança é o retorno: uma matriz `(k, d)`, uma componente por linha, para que `transform` seja um produto.
 
 E então podemos **transformar** nossos dados para o espaço de dimensão menor gerado pelas componentes:
 
 ```{python}
 #| label: transform
 #| warning: false
-def transform_vector(v: Vector, components: List[Vector]) -> Vector:
-    return [dot(v, w) for w in components]
+def transform_vector(v: np.ndarray, components: np.ndarray) -> np.ndarray:
+    return components @ v
 
-def transform(data: List[Vector], components: List[Vector]) -> List[Vector]:
-    return [transform_vector(v, components) for v in data]
+def transform(X: np.ndarray, components: np.ndarray) -> np.ndarray:
+    return X @ components.T
 
 componentes = pca(de_meaned, 2)
 transformado = transform(de_meaned, componentes)
-transformado[:5]
+componentes, transformado[:5]
 ```
+
+`transform_vector` é `components @ v`: um produto interno por componente, os $k$ de uma vez. `transform` é o mesmo para todas as linhas, `X @ components.T` — forma `(n, d)` vezes `(d, k)`, que dá `(n, k)`: cada ponto reexpresso em $k$ coordenadas novas. A segunda componente saiu $(-0{,}383,\ 0{,}924)$, perpendicular à primeira — é a direção que a figura do resíduo prometia.
 
 Com as duas componentes deste exemplo bidimensional, `transform` só reexpressa cada ponto num novo par de eixos — não reduz nada. O ganho aparece quando `num_components` é bem menor que o número de dimensões originais: um conjunto de centenas de colunas pode virar um punhado de componentes que ainda capturam a maior parte da variação. É o problema que ficou em aberto na [seção 7.1](01-explorando-seus-dados.qmd): a matriz de dispersão é uma ferramenta de triagem que não escala além de um punhado de dimensões. PCA é a resposta para quando há dimensões demais até para desenhar essa matriz.
 
@@ -386,7 +386,7 @@ dados_transformados = modelo.transform(dados)
 modelo.explained_variance_ratio_  # quanto cada componente explica
 ```
 
-A diferença mais importante não é de interface, é de método. O que você construiu acima acha uma componente de cada vez, por gradiente descendente, e remove a projeção antes de achar a próxima — um processo iterativo e aproximado. O `scikit-learn` resolve para **todas** as componentes de uma vez, por decomposição em valores singulares (SVD), o que é ao mesmo tempo mais rápido e numericamente mais estável — sem depender de tamanho de passo, número de iterações ou um palpite inicial, como o seu `first_principal_component` depende.
+A diferença mais importante não é de interface, é de método. O que você construiu acima acha uma componente de cada vez, por gradiente descendente, e remove a projeção antes de achar a próxima — um processo iterativo e aproximado. O `scikit-learn` resolve para **todas** as componentes de uma vez, por decomposição em valores singulares (SVD), o que é ao mesmo tempo mais rápido e numericamente mais estável — sem depender de tamanho de passo, número de iterações ou um palpite inicial, como o seu `first_principal_component` depende. Trocar listas por arrays não mudou o método: `X @ w_dir` só faz de uma vez o que o laço fazia ponto a ponto; a subida do gradiente, com seus 100 passos e seu palpite inicial, é a mesma. O SVD é outro algoritmo.
 
 Duas pegadinhas que `PCA` do `scikit-learn` não avisa sozinho: primeiro, `fit` centraliza os dados automaticamente (o equivalente ao seu `de_mean`), mas **não** reescalona por desvio padrão — se as dimensões têm unidades muito diferentes, é preciso rodar `StandardScaler` (a [seção 7.6](06-reescalonamento.qmd)) antes de `PCA`, senão a dimensão de maior variância numérica domina as componentes só por causa da escala, não porque carregue mais informação de verdade. Segundo, o sinal de cada componente é **matematicamente** arbitrário: $(0{,}924,\ 0{,}383)$ e $(-0{,}924,\ -0{,}383)$ descrevem a mesma direção, e nenhuma das duas está "mais certa" que a outra — a sua implementação poderia devolver qualquer uma, dependendo do palpite inicial. O `scikit-learn`, porém, **não** deixa isso ao acaso: ele passa o resultado por `svd_flip`, que fixa o sinal por convenção. Rodando os quatro solvers de `PCA` sobre estes mesmos dados, todos devolvem $(0{,}924,\ 0{,}383)$, sempre.
 
