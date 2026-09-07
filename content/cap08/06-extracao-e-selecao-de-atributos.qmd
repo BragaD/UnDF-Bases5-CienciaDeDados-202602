@@ -70,29 +70,31 @@ Existe um módulo inteiro dedicado à metade *seleção* desta seção. Ele se d
 A diferença não é de sofisticação — é de **o que cada uma consegue enxergar**. Uma estatística univariada olha uma coluna de cada vez, então uma coluna que só significa alguma coisa *em combinação com outra* é invisível para ela. O caso mínimo tem três colunas: `a` e `b` sorteadas em $\{0, 1\}$, `ruído` uniforme, e o rótulo sendo `a XOR b`.
 
 ```python
-import random
+import numpy as np
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.feature_selection import SelectKBest, SelectFromModel, f_classif
 
-random.seed(0)
+rng = np.random.default_rng(7)
 n = 400
-a     = [random.randint(0, 1) for _ in range(n)]
-b     = [random.randint(0, 1) for _ in range(n)]
-ruido = [random.random() for _ in range(n)]
+a     = rng.integers(0, 2, size=n)
+b     = rng.integers(0, 2, size=n)
+ruido = rng.random(n)
 
-y = [ai ^ bi for ai, bi in zip(a, b)]   # y só existe na combinação de a e b
-X = [[float(ai), float(bi), r] for ai, bi, r in zip(a, b, ruido)]
+y = a ^ b                                     # y só existe na combinação de a e b
+X = np.column_stack([a, b, ruido]).astype(float)
 
 SelectKBest(f_classif, k=2).fit(X, y)
-# .scores_                            [0.170, 0.259, 0.258]   (a, b, ruído)
+# .scores_                            [0.165, 1.695, 1.160]   (a, b, ruído)
 # .get_support()                      [False,  True,  True]
 
 SelectFromModel(RandomForestClassifier(random_state=0), max_features=2).fit(X, y)
-# .estimator_.feature_importances_    [0.524, 0.415, 0.061]
+# .estimator_.feature_importances_    [0.524, 0.395, 0.081]
 # .get_support()                      [ True,  True, False]
 ```
 
-Olhe os `scores_`. As duas colunas que **determinam** o rótulo pontuam 0,170 e 0,259; a coluna de puro ruído pontua 0,258 — indistinguível delas. O `SelectKBest` então descarta `a`, uma das duas únicas colunas informativas, e mantém o ruído. O `SelectFromModel` com uma floresta acerta, porque a floresta usa `a` e `b` juntas dentro da mesma árvore e a importância registra isso.
+Olhe os `scores_`. A coluna `a` — que, junto com `b`, **determina** o rótulo — pontua 0,165; a coluna de puro ruído pontua 1,160, sete vezes mais. O `SelectKBest` então descarta `a`, uma das duas únicas colunas informativas, e mantém o ruído. O `SelectFromModel` com uma floresta acerta, porque a floresta usa `a` e `b` juntas dentro da mesma árvore e a importância registra isso.
+
+Os valores exatos mudam com o sorteio; a cegueira, não. Isolada, nem `a` nem `b` diz coisa alguma sobre `y` — a pontuação de cada uma é ruído amostral, e cai ora acima, ora abaixo da coluna que é ruído de verdade. Repetindo o experimento com 300 sementes diferentes, o `SelectKBest` ficou com as duas colunas informativas em 116 delas: pouco mais do que as 100 que sortear duas de três colunas daria.
 
 O XOR é o caso extremo, escolhido para deixar o efeito visível. Mas ele não é exótico: qualquer interação entre atributos — um limiar de renda que só vale para certa faixa etária, uma palavra que só indica spam quando o remetente é desconhecido — produz a mesma cegueira em grau menor.
 
@@ -109,8 +111,8 @@ from sklearn.model_selection import cross_val_score
 from sklearn.neighbors import KNeighborsClassifier
 from sklearn.pipeline import Pipeline
 
-X = [[random.gauss(0, 1) for _ in range(2000)] for _ in range(100)]
-y = [0, 1] * 50
+X = rng.normal(0, 1, size=(100, 2000))   # 100 linhas, 2.000 colunas de puro ruído
+y = np.array([0, 1] * 50)
 
 # ERRADO: escolhe as 10 melhores olhando tudo, depois valida
 X_sel = SelectKBest(f_classif, k=10).fit_transform(X, y)

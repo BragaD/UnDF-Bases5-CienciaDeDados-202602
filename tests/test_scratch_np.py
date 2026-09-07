@@ -24,7 +24,7 @@ CONTENT = RAIZ / "content"
 PACOTE = RAIZ / "scratch_np"
 
 # Capítulos já reescritos em numpy. Cresce a cada entrega; no fim, range(6, 18).
-CAPITULOS_NUMPY: set[int] = {6, 7}
+CAPITULOS_NUMPY: set[int] = {6, 7, 8}
 
 # "Python puro" só pode aparecer num capítulo reescrito quando é contraste
 # deliberado com os caps. 1–5. chave: "capNN/arquivo.qmd", valor: o motivo.

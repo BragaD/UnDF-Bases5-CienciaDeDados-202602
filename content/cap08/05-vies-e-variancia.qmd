@@ -27,48 +27,46 @@ Dá para ver isso diretamente. O gráfico abaixo repete o experimento dez vezes,
 #| label: fig-variancia
 #| fig-cap: "Dez conjuntos de treino diferentes, da mesma população. À esquerda, grau 1; à direita, grau 9."
 #| echo: false
-import random
+import numpy as np
 from matplotlib import pyplot as plt
 
-random.seed(7)
+rng = np.random.default_rng(7)
 
-def amostra(n=10):
-    xs = [2.5 + 0.65 * i for i in range(n)]
-    ys = [2 * x + random.gauss(0, 1.2) for x in xs]
+def amostra(rng, n=10):
+    xs = 2.5 + 0.65 * np.arange(n)
+    ys = 2 * xs + rng.normal(0, 1.2, size=xs.shape)
     return xs, ys
 
 def reta(xs, ys):
-    x_bar = sum(xs) / len(xs)
-    y_bar = sum(ys) / len(ys)
-    slope = (sum((x - x_bar) * (y - y_bar) for x, y in zip(xs, ys))
-             / sum((x - x_bar) ** 2 for x in xs))
-    return y_bar - slope * x_bar, slope
+    dx = xs - xs.mean()
+    dy = ys - ys.mean()
+    slope = (dx * dy).sum() / (dx ** 2).sum()
+    return ys.mean() - slope * xs.mean(), slope
 
 def lagrange(x, xs, ys):
-    total = 0.0
-    for i, (xi, yi) in enumerate(zip(xs, ys)):
-        termo = yi
-        for j, xj in enumerate(xs):
-            if i != j:
-                termo *= (x - xj) / (xi - xj)
-        total += termo
+    x = np.asarray(x, dtype=float)
+    total = np.zeros_like(x)
+    for i in range(len(xs)):
+        outros = np.arange(len(xs)) != i
+        base = np.prod((x[:, None] - xs[outros]) / (xs[i] - xs[outros]), axis=1)
+        total += ys[i] * base
     return total
 
-grade = [2.5 + (8.35 - 2.5) * k / 300 for k in range(301)]
+grade = np.linspace(2.5, 8.35, 301)
 
 fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(10, 4), sharey=True)
 
 for _ in range(10):
-    xs, ys = amostra()
+    xs, ys = amostra(rng)
     b, m = reta(xs, ys)
-    ax1.plot(grade, [b + m * x for x in grade], color="#2e7d32", alpha=0.6)
-    ax2.plot(grade, [lagrange(x, xs, ys) for x in grade], color="#c00000", alpha=0.6)
+    ax1.plot(grade, b + m * grade, color="#2e7d32", alpha=0.6)
+    ax2.plot(grade, lagrange(grade, xs, ys), color="#c00000", alpha=0.6)
 
 ax1.set_title("grau 1 — variância baixa")
 ax2.set_title("grau 9 — variância alta")
 ax1.set_ylabel("y")
 for ax in (ax1, ax2):
-    ax.plot(grade, [2 * x for x in grade], "k--", lw=1, label="relação verdadeira")
+    ax.plot(grade, 2 * grade, "k--", lw=1, label="relação verdadeira")
     ax.set_ylim(0, 22)
     ax.set_xlabel("x")
     ax.legend(fontsize=8)
@@ -92,17 +90,17 @@ O gráfico abaixo mostra o efeito de mais dados sobre a variância. É o mesmo e
 #| label: fig-mais-dados
 #| fig-cap: "Reduzindo a variância com mais dados: o mesmo modelo, ajustado a amostras de 10, 100 e 1000 pontos"
 #| echo: false
-random.seed(7)
+rng = np.random.default_rng(7)
 
 fig, axes = plt.subplots(1, 3, figsize=(11, 3.6), sharey=True)
 
 for ax, n in zip(axes, [10, 100, 1000]):
     for _ in range(10):
-        xs = [2.5 + 5.85 * random.random() for _ in range(n)]
-        ys = [2 * x + random.gauss(0, 1.2) for x in xs]
+        xs = 2.5 + 5.85 * rng.random(n)
+        ys = 2 * xs + rng.normal(0, 1.2, size=xs.shape)
         b, m = reta(xs, ys)
-        ax.plot(grade, [b + m * x for x in grade], color="#4472c4", alpha=0.6)
-    ax.plot(grade, [2 * x for x in grade], "k--", lw=1)
+        ax.plot(grade, b + m * grade, color="#4472c4", alpha=0.6)
+    ax.plot(grade, 2 * grade, "k--", lw=1)
     ax.set_title(f"N = {n}")
     ax.set_ylim(2, 20)
     ax.set_xlabel("x")

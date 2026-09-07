@@ -14,48 +14,47 @@ O gráfico abaixo ajusta três polinômios a uma amostra de dados. Não se preoc
 #| label: fig-overfitting
 #| fig-cap: "Overfitting e underfitting: polinômios de grau 0, 1 e 9 ajustados aos mesmos dez pontos"
 #| echo: false
-import random
-import math
+import numpy as np
 from matplotlib import pyplot as plt
 
-random.seed(12)
+rng = np.random.default_rng(12)
 
 # Dez pontos ao redor da reta y = 2x
-xs = [2.5 + 0.65 * i for i in range(10)]
-ys = [2 * x + random.gauss(0, 1.2) for x in xs]
+xs = 2.5 + 0.65 * np.arange(10)
+ys = 2 * xs + rng.normal(0, 1.2, size=xs.shape)
 
 # --- grau 0: a média ---
-media = sum(ys) / len(ys)
+media = ys.mean()
 
 # --- grau 1: mínimos quadrados, em duas fórmulas ---
-x_bar = sum(xs) / len(xs)
-y_bar = sum(ys) / len(ys)
-slope = (sum((x - x_bar) * (y - y_bar) for x, y in zip(xs, ys))
-         / sum((x - x_bar) ** 2 for x in xs))
-intercept = y_bar - slope * x_bar
+dx = xs - xs.mean()
+dy = ys - ys.mean()
+slope = (dx * dy).sum() / (dx ** 2).sum()
+intercept = ys.mean() - slope * xs.mean()
 
 # --- grau 9: o polinômio que passa exatamente pelos 10 pontos ---
 # Com n pontos distintos existe um único polinômio de grau n-1 que passa por
 # todos eles, e a forma de Lagrange o escreve diretamente — sem resolver sistema.
+# O laço percorre os n termos da soma, que é a fórmula; o produto sobre os
+# outros pontos e a avaliação em toda a grade são operações de array.
 def lagrange(x, xs, ys):
-    total = 0.0
-    for i, (xi, yi) in enumerate(zip(xs, ys)):
-        termo = yi
-        for j, xj in enumerate(xs):
-            if i != j:
-                termo *= (x - xj) / (xi - xj)
-        total += termo
+    x = np.asarray(x, dtype=float)
+    total = np.zeros_like(x)
+    for i in range(len(xs)):
+        outros = np.arange(len(xs)) != i           # máscara: todos menos o i
+        base = np.prod((x[:, None] - xs[outros]) / (xs[i] - xs[outros]), axis=1)
+        total += ys[i] * base
     return total
 
-grade = [xs[0] + (xs[-1] - xs[0]) * k / 400 for k in range(401)]
+grade = np.linspace(xs[0], xs[-1], 401)
 
 fig, ax = plt.subplots(figsize=(7.5, 4.5))
-ax.plot(grade, [media] * len(grade), "--", label="grau 0", color="#4472c4")
-ax.plot(grade, [intercept + slope * x for x in grade], "-", label="grau 1", color="#2e7d32")
-ax.plot(grade, [lagrange(x, xs, ys) for x in grade], ":", label="grau 9", color="#c00000")
+ax.plot(grade, np.full_like(grade, media), "--", label="grau 0", color="#4472c4")
+ax.plot(grade, intercept + slope * grade, "-", label="grau 1", color="#2e7d32")
+ax.plot(grade, lagrange(grade, xs, ys), ":", label="grau 9", color="#c00000")
 ax.scatter(xs, ys, color="#1f3864", zorder=5)
 
-ax.set_ylim(min(ys) - 6, max(ys) + 6)
+ax.set_ylim(ys.min() - 6, ys.max() + 6)
 ax.set_xlabel("x")
 ax.set_ylabel("y")
 ax.set_title("Melhores polinômios de vários graus")
@@ -68,9 +67,9 @@ A linha horizontal é o melhor polinômio de grau 0 — uma constante. Ela sofre
 
 O polinômio de grau 9, com dez parâmetros, passa **exatamente** por cada ponto de treino. E sofre de **overfitting** igualmente severo: se pegássemos alguns pontos a mais da mesma população, ele erraria por muito.
 
-Repare no formato dele. Entre os pontos, ele sobe e desce em ondas que não correspondem a nada — sobe até 7 antes do quarto ponto, mergulha depois do oitavo. Essas ondulações são o preço de ser obrigado a passar por todos os pontos: como o ruído de cada observação é diferente, a curva precisa se contorcer para alcançá-los um a um. **Ela está ajustando o ruído**, e ruído não se repete na próxima amostra.
+Repare no formato dele. Entre os pontos, ele sobe e desce em ondas que não correspondem a nada — sobe a 10 entre o segundo e o terceiro pontos, que valem 7,6 e 8,5, e a 13,3 entre o sétimo e o oitavo. Nas duas pontas ele nem cabe na figura: mergulha abaixo de zero logo depois do primeiro ponto e dispara acima de 28 antes do último. Essas ondulações são o preço de ser obrigado a passar por todos os pontos: como o ruído de cada observação é diferente, a curva precisa se contorcer para alcançá-los um a um. **Ela está ajustando o ruído**, e ruído não se repete na próxima amostra.
 
-(Na [seção sobre viés e variância](05-vies-e-variancia.qmd) você vai ver o que acontece quando se repete este ajuste com dez amostras diferentes: aí a curva de grau 9 chega a disparar para fora da escala.)
+(Na [seção sobre viés e variância](05-vies-e-variancia.qmd) você vai ver o que acontece quando se repete este ajuste com dez amostras diferentes: cada uma escapa da moldura num lugar diferente, e é essa discordância que dá nome à variância.)
 
 A reta de grau 1 acha um bom equilíbrio: fica razoavelmente perto de todos os pontos, e se estes dados forem representativos, ela provavelmente vai ficar perto de pontos novos também.
 
@@ -90,58 +89,78 @@ A forma mais simples de fazer isso é dividir o conjunto de dados, usando (por e
 
 ```{python}
 #| label: split-data
-import random
-from typing import TypeVar, List, Tuple
+from typing import Tuple, TypeVar
+
+import numpy as np
 
 X = TypeVar('X')  # tipo genérico para representar um ponto de dados
 
-def split_data(data: List[X], prob: float) -> Tuple[List[X], List[X]]:
-    """Divide os dados nas frações [prob, 1 - prob]"""
-    data = data[:]                    # Faz uma cópia rasa,
-    random.shuffle(data)              # porque shuffle modifica a lista.
-    cut = int(len(data) * prob)       # Usa prob para achar o ponto de corte
-    return data[:cut], data[cut:]     # e divide a lista embaralhada ali.
+def split_data(data, prob: float, rng: np.random.Generator):
+    """Divide `data` nas frações [prob, 1 - prob], em ordem sorteada.
 
-data = [n for n in range(1000)]
-train, test = split_data(data, 0.75)
+    Array -> dois arrays, fatiados pelas mesmas linhas.
+    Sequência qualquer (lista de mensagens, de pontos rotulados) -> duas listas.
+    """
+    idx = rng.permutation(len(data))       # uma permutação dos índices...
+    cut = int(len(data) * prob)            # ...cortada na proporção pedida
+    if isinstance(data, np.ndarray):
+        return data[idx[:cut]], data[idx[cut:]]
+    return [data[i] for i in idx[:cut]], [data[i] for i in idx[cut:]]
+
+data = np.arange(1000)
+train, test = split_data(data, 0.75, np.random.default_rng(0))
 
 # As proporções devem estar corretas
 assert len(train) == 750
 assert len(test) == 250
 
 # E os dados originais devem estar preservados (em alguma ordem)
-assert sorted(train + test) == data
+assert np.array_equal(np.sort(np.concatenate([train, test])), data)
+
+# O outro ramo: uma sequência qualquer devolve duas listas
+mensagens = list(range(1000))
+train_msg, test_msg = split_data(mensagens, 0.75, np.random.default_rng(0))
+assert len(train_msg) == 750
+assert sorted(train_msg + test_msg) == mensagens
 
 len(train), len(test)
 ```
 
-::: {.callout-note}
-Repare no `data = data[:]` da primeira linha. Sem essa cópia, `random.shuffle` embaralharia a lista **do chamador**, não uma cópia dela.
+O `isinstance` no meio da função existe porque nem todo conjunto de dados é um array. Quando `data` é uma matriz de medidas — as flores do [Capítulo 9](../cap09/index.qmd), as linhas de uma regressão —, `data[idx[:cut]]` é indexação por array: o `numpy` devolve de uma vez as linhas escolhidas, na ordem escolhida. Quando `data` é uma sequência de objetos que não cabem num array de números — a lista de mensagens de e-mail do [Capítulo 10](../cap10/index.qmd) —, a compreensão de lista faz o mesmo trabalho, índice a índice. As duas linhas dizem a mesma coisa em duas linguagens, e é por isso que um único `split_data` serve aos dois capítulos.
 
-Esse é o tipo de efeito colateral que não gera erro e aparece muito depois, quando alguém descobre que a ordem original dos dados sumiu. O `assert sorted(train + test) == data` no fim é o que prova que nada foi perdido nem duplicado — e ele só passa porque a cópia existe.
+::: {.callout-note}
+Repare no que a função **não** faz: ela não embaralha `data`. `rng.permutation(len(data))` devolve um array com os índices `0, 1, …, n-1` em ordem sorteada, e tanto `data[idx[:cut]]` quanto a compreensão de lista **copiam** as posições escolhidas para uma coleção nova. O que o chamador passou continua exatamente como estava.
+
+A versão em listas de @grus2019 precisa de uma cópia explícita antes de embaralhar, porque o `shuffle` da biblioteca padrão embaralha no lugar — e esquecer essa cópia é o tipo de efeito colateral que não gera erro e aparece muito depois, quando alguém descobre que a ordem original dos dados sumiu. Aqui a cópia é consequência da indexação, não uma linha que alguém precisa lembrar de escrever. O `assert` do fim — os mil números de volta, ordenados — é o que prova que nada foi perdido nem duplicado.
+:::
+
+::: {.callout-note}
+## A semente não é opcional
+
+`split_data` recebe o gerador como parâmetro **obrigatório**: não há valor padrão, e nenhum estado global é consultado. Quem chama precisa escrever `np.random.default_rng(0)`, e a semente fica visível ao lado da divisão que ela produziu.
+
+Sem isso, "o modelo acertou 93% no teste" seria uma afirmação sobre um sorteio que ninguém consegue repetir — nem você, na semana seguinte. Todo capítulo daqui em diante divide dados assim, com o gerador escrito no chunk.
 :::
 
 Muitas vezes teremos variáveis de entrada e de saída pareadas. Nesse caso é preciso garantir que os valores correspondentes fiquem juntos, seja no treino, seja no teste:
 
 ```{python}
 #| label: train-test-split
-Y = TypeVar('Y')  # tipo genérico para representar variáveis de saída
-
-def train_test_split(xs: List[X],
-                     ys: List[Y],
-                     test_pct: float) -> Tuple[List[X], List[X], List[Y], List[Y]]:
-    # Gera os índices e os divide
-    idxs = [i for i in range(len(xs))]
-    train_idxs, test_idxs = split_data(idxs, 1 - test_pct)
-
-    return ([xs[i] for i in train_idxs],  # x_train
-            [xs[i] for i in test_idxs],   # x_test
-            [ys[i] for i in train_idxs],  # y_train
-            [ys[i] for i in test_idxs])   # y_test
+def train_test_split(xs: np.ndarray,
+                     ys: np.ndarray,
+                     test_pct: float,
+                     rng: np.random.Generator
+                     ) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+    """-> (x_train, x_test, y_train, y_test), fatiados pelos MESMOS índices."""
+    xs = np.asarray(xs)
+    ys = np.asarray(ys)
+    assert len(xs) == len(ys), "xs e ys precisam ter o mesmo número de linhas"
+    train_idx, test_idx = split_data(np.arange(len(xs)), 1 - test_pct, rng)
+    return xs[train_idx], xs[test_idx], ys[train_idx], ys[test_idx]
 ```
 
 ::: {.exemplo}
-A função não embaralha `xs` e `ys` separadamente — ela embaralha os **índices** e usa os mesmos índices nas duas listas.
+A função não embaralha `xs` e `ys` separadamente — ela embaralha os **índices** e usa os mesmos índices nos dois arrays. `xs[train_idx]` é indexação por array: `train_idx` diz quais linhas, e em que ordem.
 
 Se embaralhasse cada uma por conta própria, cada entrada acabaria pareada com a saída de outra observação, e o modelo aprenderia a partir de pares aleatórios. Ele treinaria sem erro algum e produziria lixo.
 :::
@@ -150,27 +169,29 @@ Como sempre, queremos garantir que o código funciona:
 
 ```{python}
 #| label: verifica-split
-xs = [x for x in range(1000)]  # xs são 1 ... 1000
-ys = [2 * x for x in xs]       # cada y_i é o dobro de x_i
-x_train, x_test, y_train, y_test = train_test_split(xs, ys, 0.25)
+xs = np.arange(1000)           # xs são 0 ... 999
+ys = 2 * xs                    # cada y_i é o dobro de x_i
+x_train, x_test, y_train, y_test = train_test_split(xs, ys, 0.25, np.random.default_rng(0))
 
 # Verifica que as proporções estão corretas
 assert len(x_train) == len(y_train) == 750
 assert len(x_test) == len(y_test) == 250
 
 # Verifica que os pontos correspondentes estão pareados corretamente
-assert all(y == 2 * x for x, y in zip(x_train, y_train))
-assert all(y == 2 * x for x, y in zip(x_test, y_test))
+assert np.all(y_train == 2 * x_train)
+assert np.all(y_test == 2 * x_test)
 
 len(x_train), len(x_test)
 ```
+
+As duas funções ficam em `scratch_np.machine_learning`, exatamente como você as escreveu aqui — o módulo é o chunk salvo em arquivo. O [Capítulo 9](../cap09/index.qmd) importa `split_data` para separar as flores do Iris, o [Capítulo 10](../cap10/index.qmd) para separar mensagens de e-mail, e o [Capítulo 13](../cap13/index.qmd) importa `train_test_split`. Nenhum deles reescreve a divisão.
 
 Depois disso, você pode fazer algo assim:
 
 ```{python}
 #| eval: false
 model = SomeKindOfModel()
-x_train, x_test, y_train, y_test = train_test_split(xs, ys, 0.33)
+x_train, x_test, y_train, y_test = train_test_split(xs, ys, 0.33, np.random.default_rng(0))
 model.train(x_train, y_train)
 performance = model.test(x_test, y_test)
 ```
@@ -216,7 +237,7 @@ X_treino, X_teste, y_treino, y_teste = train_test_split(
 
 A assinatura é `train_test_split(*arrays, test_size=None, train_size=None, random_state=None, shuffle=True, stratify=None)`. Ela aceita quantos arrays você quiser e divide todos pelos mesmos índices — é o mesmo cuidado do nosso `train_test_split`, generalizado. Sem `test_size` nem `train_size`, o padrão é 25% para teste.
 
-**A primeira coisa que ela esconde é a semente.** O nosso `split_data` usa `random.shuffle` da biblioteca padrão, então um `random.seed(42)` antes da chamada basta para tornar a divisão reprodutível. O `scikit-learn` **não usa** o `random` da biblioteca padrão: ele tem o próprio gerador, controlado por `random_state`. Chamar `random.seed(42)` antes de `train_test_split` não torna a divisão reprodutível — duas chamadas seguidas devolvem conjuntos diferentes. Só `random_state=42` faz isso. E a regra vale para o pacote inteiro: todo objeto do `scikit-learn` que sorteia alguma coisa tem o seu próprio `random_state`, e nenhum deles escuta o `random.seed` da biblioteca padrão.
+**A primeira coisa que ela esconde é a semente — e vale dizer com cuidado o que "esconde" significa.** O nosso `split_data` recebe o gerador como parâmetro **obrigatório**: sem um `np.random.default_rng(42)` escrito na chamada, ele nem roda. O `train_test_split` da biblioteca tem `random_state=None` por padrão e, nesse caso, sorteia do gerador **global** do `numpy`: duas chamadas seguidas devolvem conjuntos diferentes, e criar um `np.random.default_rng(42)` antes não muda nada, porque o gerador que ela usa é outro. Só `random_state=42` torna a divisão reprodutível, e a regra vale para o pacote inteiro — todo objeto do `scikit-learn` que sorteia tem o seu próprio `random_state`. Os dois caminhos chegam ao mesmo lugar; a diferença é o padrão, e o dela deixa esquecer. O que ela esconde mesmo é a **permutação**: o nosso `split_data` monta `idx = rng.permutation(len(data))` e divide esse array, que dá para imprimir, guardar e conferir; o `train_test_split` devolve os pedaços e joga os índices fora. Para saber *quais* linhas foram para o teste — casar com um identificador, auditar uma divisão que deu resultado estranho —, o jeito é dividir um `np.arange(len(X))` junto com os dados, como se fosse mais uma variável, ou pedir os índices a `ShuffleSplit(n_splits=1, test_size=0.25, random_state=42).split(X)`.
 
 **A segunda é o embaralhamento.** `shuffle=True` é o padrão, e é o que o nosso `split_data` também faz — mas a família de validação cruzada não segue essa regra. `KFold(n_splits=5)` tem `shuffle=False` por padrão: ele corta a lista em cinco pedaços contíguos, na ordem em que os dados chegaram. Sobre um arquivo ordenado por classe, isso é catastrófico. O `dados/iris.data` do [Capítulo 9](../cap09/02-exemplo-o-dataset-iris.qmd) é exatamente assim — as 50 *setosa* primeiro, depois as 50 *versicolor*, depois as 50 *virginica*:
 
