@@ -148,7 +148,7 @@ def binary_encode(x: int) -> np.ndarray       # (10,) bits, do menos significati
 def fizz_buzz_encode(x: int) -> np.ndarray    # (4,) one-hot: [x, fizz, buzz, fizzbuzz]
 ```
 
-Ordem de implementação, ditada por essas dependências: **onda 1** — 8, 11, 14, 15; **onda 2** — 7, 9, 12, 16; **onda 3** — 6, 10, 13, 17. Os módulos do andaime existem antes da onda 1.
+Ordem de implementação: **sequencial, na ordem do livro (6, 7, 8, …, 17)**, um capítulo por vez — planejador, implementador e revisor de cada capítulo terminam antes de o próximo começar, para que cada capítulo aproveite as convenções e o código já entregues pelos anteriores (decisão do autor, 2026-09-07; a ordem do livro satisfaz todas as dependências acima). Os módulos do andaime existem antes do capítulo 6.
 
 ## Verificação sem render
 

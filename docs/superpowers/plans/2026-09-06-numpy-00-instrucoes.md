@@ -7,6 +7,7 @@ Leia **nesta ordem**, antes de qualquer coisa:
 3. `content/cap09/` inteiro — o modelo de estilo do livro (ainda em Python puro; o que se copia é a **forma**).
 4. O seu capítulo inteiro: `content/capNN/*.qmd`, e o módulo correspondente em `scratch/` (o código do Grus em listas, que a seção hoje espelha).
 5. `scratch_np/` — os módulos do andaime já existem (`gradient_descent`, `machine_learning`, `probability`, `statistics`); os contratos entre capítulos estão na spec.
+6. Os capítulos são reescritos **em sequência** (6, 7, 8, …). Se o seu capítulo não é o 6, leia também os capítulos já reescritos antes dele (`git log --oneline -- content/`, e os planos `2026-09-06-numpy-capNN.md` anteriores): o bloco "De listas a arrays" do cap. 7, o jeito de apresentar `rng`, `axis`, máscaras e `@` já foi decidido lá — reaproveite a forma e o vocabulário, e importe de `scratch_np/` o que já existe em vez de reescrever.
 
 Ambiente de verificação (host, sem Docker):
 
