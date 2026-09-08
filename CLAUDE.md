@@ -4,10 +4,11 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Estado atual
 
-Duas specs governam este repositório, e ambas precisam ser lidas antes de mexer na estrutura ou no código dos capítulos:
+Três specs governam este repositório, e as três precisam ser lidas antes de mexer na estrutura ou no código dos capítulos:
 
 - `docs/superpowers/specs/2026-08-15-estrutura-livro-bases5-design.md` — a **estrutura** do livro (escopo, numeração, dados, infra). Carrega notas de correção pós-implementação; leia-as também, elas registram onde a decisão original mudou depois de escrita.
 - `docs/superpowers/specs/2026-09-06-reescrita-numpy-design.md` — a **reescrita dos capítulos 6 a 17 em numpy**, decidida pelo autor e em curso na branch `reescrita-numpy`. Ela inverte, para esses capítulos, a decisão pedagógica original ("tudo em Python puro"). Ver "Pedagogia" e "A reescrita em numpy", abaixo.
+- `docs/superpowers/specs/2026-09-08-pandas-nos-dados-design.md` — **`pandas` no trabalho com dados**, decidida pelo autor e ainda **não implementada**. Tira o `pandas` dos callouts e o põe no corpo do texto onde o assunto é obter, limpar, agrupar e apresentar dado, aproximando o livro do uso real. Não afrouxa nada sobre os algoritmos. Ver "Pedagogia", abaixo.
 
 Este arquivo é o resumo operacional; as specs são a fonte das decisões e das razões.
 
@@ -92,6 +93,28 @@ O que muda de um capítulo para outro é a **calculadora**:
 - **Capítulos 6 a 17: numpy.** Vetores e matrizes são `np.ndarray`, produto escalar é `@`, somas sobre pontos viram reduções com `axis`, laços sobre os dados viram operações vetorizadas. O algoritmo continua sendo escrito por nós, linha a linha, no `.qmd`. O pacote `scratch_np/` (nosso, editável) é o desses capítulos.
 
 **A regra que decide cada dúvida: numpy é a calculadora, não o modelo.** Numpy entra para fazer álgebra linear, broadcasting, reduções, indexação booleana e sorteio. O que o capítulo existe para ensinar — a regra de atualização do gradiente, o critério de partição da árvore, a votação do k-NN, a verossimilhança do Naive Bayes, os passos do k-means, a retropropagação — continua escrito à mão.
+
+### `pandas` é a mesa de trabalho (spec de 2026-09-08, ainda não implementada)
+
+**Onde o assunto é *dado*, e não *modelo*, a ferramenta é o `pandas`** — ler arquivo, tipar, limpar, juntar, agrupar, resumir, apresentar. É o que se faz no trabalho real, e escrever um leitor de CSV à mão não ensina ciência de dados: ensina *parsing*, e mal. A caixa-preta que esta disciplina abre é a do **modelo**.
+
+O dado atravessa uma **fronteira explícita** para virar `ndarray` quando o modelo começa, e essa linha é conteúdo, não detalhe — é onde o aluno vê que o modelo não sabe o que é uma coluna chamada "amigos":
+
+```python
+X = df[["amigos", "horas_trabalho"]].to_numpy()   # a fronteira
+beta = least_squares_fit(X, y, rng)               # daqui para a frente, numpy
+```
+
+| `pandas` (mesa de trabalho) | `numpy` (calculadora) |
+|---|---|
+| `read_csv`, `read_html`, `json_normalize` | a matriz `X` e o vetor `y` do modelo |
+| `parse_dates`, `na_values`, `to_numeric(errors=...)`, `dropna` | toda a álgebra: `@`, `.T`, `solve`, `norm` |
+| `groupby`, `agg`, `merge`, `resample`, `pct_change` | reduções e máscaras dentro do algoritmo |
+| `describe`, `corr`, `value_counts`, as tabelas de resultado | o sorteio e os parâmetros ajustados |
+
+**`pandas` não entra em `scratch_np/`** (os módulos recebem e devolvem `ndarray`, sempre), nem no dado não tabular (MNIST binário, imagem), nem em nada que seja trabalho de modelo disfarçado. O teste de desempate: *isto é trabalho de dado ou trabalho de modelo?*
+
+Continuam proibidos na implementação, como sempre: `sklearn`, `scipy`, `np.polyfit` e `np.linalg.lstsq` (`np.linalg.solve` é permitido — mostra as equações normais em vez de escondê-las).
 
 | Pode e deve | Não pode |
 |---|---|
@@ -320,6 +343,8 @@ Contraparte em arrays do `scratch/`, e o oposto dele em quase tudo: é **nosso**
 
 Faltam os dos capítulos 14 a 17 (`decision_trees`, `neural_networks`, `deep_learning`, `clustering`), que entram com os capítulos.
 
+**`pandas` não entra aqui.** Os módulos recebem e devolvem `np.ndarray`, sempre — é o contrato dos capítulos entre si, e um `DataFrame` tornaria o algoritmo dependente de nomes de coluna. Os módulos que reexportam dados podem expor um `DataFrame` **ao lado** do array (o `DataFrame` é o que o capítulo mostra; o array é o que o modelo recebe).
+
 **Não existe `linear_algebra` aqui, de propósito:** ele *é* o numpy — `dot` é `@`, `distance` é `np.linalg.norm(a - b)`, `vector_mean` é `X.mean(axis=0)`.
 
 **A única importação permitida de `scratch/` é de DADOS, nunca de função.** As listas hard-coded do Grus (`statistics.num_friends`, `multiple_regression.inputs`, `logistic_regression.data`, `decision_trees.inputs`) são reexportadas como arrays pelo módulo correspondente; importar o módulo do Grus desenha figuras no nível do módulo, então o reexportador faz `plt.close("all")` em seguida. `REEXPORTA_DADOS`, em `tests/test_scratch_np.py`, exige o motivo escrito de cada uma dessas exceções — o mesmo padrão de `NAO_IMPORTAVEIS`.
@@ -381,7 +406,7 @@ Nos capítulos reescritos, o gerador é **explícito e passado adiante**: toda f
 
 Duas camadas travadas: `pyproject.toml` + `uv.lock` fixam as versões; o `Dockerfile` consome esse lock (`uv sync --frozen`) sobre um SO fixo com Quarto e locale `pt_BR.UTF-8`. O mesmo container renderiza local e no CI.
 
-Dependências (a lista completa e comentada está na spec): `jupyter`, `matplotlib`, `numpy`, `tqdm`, `requests`, `beautifulsoup4`, `html5lib`, `python-dateutil`, `pillow`, `scikit-learn` e `pytest`.
+Dependências (a lista completa e comentada está na spec): `jupyter`, `matplotlib`, `numpy`, `tqdm`, `requests`, `beautifulsoup4`, `html5lib`, `python-dateutil`, `pillow`, `scikit-learn` e `pytest`. **`pandas>=2,<3` entra com a spec de 2026-09-08**, e o teto `<3` não é burocracia: é o pandas 3 que quebrou dois exemplos do livro irmão sem levantar exceção.
 
 **`numpy` é dependência direta desde a reescrita dos capítulos 6 a 17**, e o teto é `<3`. Antes ele estava instalado assim mesmo, como dependência transitiva do matplotlib e do scikit-learn, mas ficava deliberadamente fora do `pyproject.toml` — a ausência era o sinal de que não era ferramenta da disciplina. Deixou de ser: a partir do capítulo 6 os modelos são construídos com arrays, e o pacote precisa estar declarado e travado como qualquer outro. Os capítulos 1 a 5 continuam sem ele.
 
