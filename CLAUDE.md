@@ -13,7 +13,7 @@ Este arquivo é o resumo operacional; as specs são a fonte das decisões e das 
 
 **O livro está escrito e publicado.** 17 capítulos, 87 seções + 17 `index.qmd` = 104 `.qmd`, todos registrados em `_quarto.yml`. Nenhum stub restante. Container Docker (Quarto + `uv`), CI publicando em `gh-pages`, 52 testes (`make teste`) guardando os invariantes. O **capítulo 9 (k-Vizinhos Mais Próximos)** foi o primeiro escrito e segue sendo o **modelo de estilo** da casa: leia `content/cap09/` antes de mexer em qualquer capítulo, para o formato pegar (ver "Antes de escrever um capítulo", abaixo).
 
-Além do livro, `notebooks/` traz **um `.ipynb` por capítulo**, gerado a partir dos `.qmd` para executar ao vivo na aula (ver "Os notebooks de aula", abaixo), e `atividades/` guarda o PID da disciplina.
+Além do livro, `notebooks/` traz **um `.ipynb` por capítulo**, gerado a partir dos `.qmd` para executar ao vivo na aula (ver "Os notebooks de aula", abaixo), `atividades/` guarda o PID da disciplina, e `apoio/` traz páginas HTML interativas para projetar em aula (ver "`apoio/`", abaixo).
 
 Os irmãos já prontos definiram o padrão da casa **na hora de montar o andaime**; agora servem como referência de convenção, não como fonte para copiar arquivo — a infra já existe aqui e já está adaptada:
 
@@ -258,6 +258,21 @@ O link é do site para o notebook e **não** o contrário: `LINHA_COLAB`, no ger
 **Verificação:** `make notebooks-teste` executa os 17 de ponta a ponta com o cwd em `notebooks/` — o caso mais apertado. É o análogo do `quarto render` para os notebooks, e pelo mesmo motivo: os módulos de `scratch/` têm `assert` no nível do módulo. Demora — medido: **~11 minutos no total**, dominado pelo cap. 16 (MNIST, 343 s) e pelo cap. 12 (bootstrap, 157 s). Não roda no CI por isso; é alvo deliberado.
 
 `notebooks/` está no **`.quartoignore`** — sem isso o Quarto trataria os `.ipynb` como conteúdo do livro.
+
+### `apoio/` — páginas interativas de aula, servidas junto do livro
+
+`apoio/` guarda páginas HTML autônomas para usar **ao vivo na aula**, ao lado do slide e do notebook. Hoje há uma: `gradiente-descendente.html`, do capítulo 5 — o aluno escolhe a função, mexe no tamanho do passo e vê, a cada iteração, a derivada, o passo e o rastro; em uma variável e em duas, com contorno e superfície 3D lado a lado.
+
+**São arquivos estáticos, não conteúdo do livro.** Um HTML só, sem build, sem dependência de rede, que abre com dois cliques e roda offline. Não têm `.qmd`, não entram no `book.chapters` e não aparecem no sidebar — o que os leva ao site é uma linha em `project.resources`, no `_quarto.yml`, que o Quarto copia para `_book/apoio/`. Sem essa linha, a página existe no repositório e **não** existe no site publicado.
+
+Quatro decisões que não são óbvias e custam tempo a redescobrir:
+
+- **O link no capítulo usa a URL absoluta do site, não um caminho relativo.** `reescreve_links`, em `scripts/gerar-notebooks.py`, só reescreve links que contenham `.qmd`; um `../../apoio/x.html` sobreviveria intacto até o notebook e quebraria lá dentro, porque de `notebooks/` aquele caminho não resolve. A URL absoluta funciona nos dois lugares — é a mesma saída que a linha do Colab já usava.
+- **`apoio/` não entra no `.quartoignore`**, e a tentação existe (`notebooks/` está lá). Aqui seria contraproducente: o `.quartoignore` tira arquivos do projeto, e é justamente o projeto que precisa enxergar `apoio/` para copiá-lo como recurso. A proteção que `notebooks/` precisa não se aplica — o Quarto só trata `.qmd`, `.md` e `.ipynb` como entrada, e não há nenhum desses aqui.
+- **`test_quarto_publica_apenas_o_diretorio_publico` não barra isto.** O teste casa só entradas de `resources` que começam com `atividades`, porque o que ele guarda é o gabarito. Recurso fora de `atividades/` passa — o que é o comportamento certo, mas parece proibido à primeira leitura do teste.
+- **Editar o `index.qmd` de um capítulo obriga a rodar `make notebooks`**, senão `test_notebooks_estao_atualizados` derruba a suíte. Vale para o link de `apoio/` como vale para qualquer outra linha.
+
+**Os números da página são conferidos contra o Python, não estimados.** A superfície de erro quadrático médio usa os dados da seção 5.5 (`inputs = [(x, 20*x + 5) for x in range(-50, 50)]`) em forma fechada — média(x) = −0,5 e média(x²) = 833,5 —, e a trajetória bate dígito a dígito com o laço do livro: no passo 5, inclinação 22,5464 e intercepto 0,5475. As faixas de α de cada função foram medidas antes de escrever a página, e é isso que faz os presets ensinarem o que prometem (o poço duplo fica preso até α ≈ 0,15, escapa entre 0,17 e 0,25, e não assenta acima de 0,29). Mexeu na função ou no passo? Meça de novo — um preset que não faz o que o rótulo diz é pior que preset nenhum.
 
 ### O pacote `scratch/` — vendorizado literalmente, nunca editado
 

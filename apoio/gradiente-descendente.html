@@ -1,0 +1,2067 @@
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Gradiente Passo a Passo</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans+Condensed:wght@600&family=IBM+Plex+Sans:wght@400;500&display=swap">
+
+<style>
+/* ------------------------------------------------------------------ *
+ * Tokens. O bloco :root nu carrega a paleta clara COMPLETA; os blocos
+ * seguintes só redefinem tokens, nunca componentes.
+ * ------------------------------------------------------------------ */
+:root{
+  color-scheme: light;
+
+  --paper:    #EFF1EC;   /* papel de mapa, verde-cinza pálido */
+  --paper-2:  #E5E9E1;   /* fundo de painel */
+  --panel:    #F7F8F4;   /* superfície de controle, elevada */
+  --ink:      #16211F;
+  --ink-2:    #5C6B66;
+  --ink-3:    #8A9791;
+  --rule:     #CFD6CD;
+  --grid:     #DEE3D9;
+
+  --contour:  #8FA69C;   /* curvas de nível / malha 3D */
+  --curve:    #2F4A52;   /* a curva de f, em 1 variável */
+  --descent:  #B4451F;   /* ponto atual, passo, rastro — o acento */
+  --grad:     #1B6773;   /* o vetor gradiente (tracejado, sobe) */
+
+  --ok:       #2F7D4F;
+  --warn:     #916310;
+  --bad:      #A8202F;
+
+  --sans: "IBM Plex Sans", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --cond: "IBM Plex Sans Condensed", "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+
+  --r: 3px;
+  --rail: 316px;
+}
+
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    color-scheme: dark;
+    --paper:   #121816;
+    --paper-2: #182220;
+    --panel:   #1E2926;
+    --ink:     #E7ECE7;
+    --ink-2:   #9BAAA3;
+    --ink-3:   #6C7C75;
+    --rule:    #2E3C38;
+    --grid:    #212D2A;
+    --contour: #4F6862;
+    --curve:   #A6C6C4;
+    --descent: #E8845C;
+    --grad:    #5DBFCB;
+    --ok:      #6BC08A;
+    --warn:    #D9A93C;
+    --bad:     #E8697A;
+  }
+}
+:root[data-theme="dark"]{
+  color-scheme: dark;
+  --paper:   #121816;
+  --paper-2: #182220;
+  --panel:   #1E2926;
+  --ink:     #E7ECE7;
+  --ink-2:   #9BAAA3;
+  --ink-3:   #6C7C75;
+  --rule:    #2E3C38;
+  --grid:    #212D2A;
+  --contour: #4F6862;
+  --curve:   #A6C6C4;
+  --descent: #E8845C;
+  --grad:    #5DBFCB;
+  --ok:      #6BC08A;
+  --warn:    #D9A93C;
+  --bad:     #E8697A;
+}
+
+*{ box-sizing: border-box; }
+[hidden]{ display: none !important; }
+
+body{
+  margin: 0;
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--sans);
+  font-size: 15px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+}
+
+:focus-visible{
+  outline: 2px solid var(--descent);
+  outline-offset: 2px;
+}
+
+/* --------------------------------- topo --------------------------------- */
+
+.app{
+  max-width: 1360px;
+  margin: 0 auto;
+  padding: 22px 24px 40px;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.topbar{
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 24px;
+  flex-wrap: wrap;
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--rule);
+}
+
+.eyebrow{
+  margin: 0 0 2px;
+  font-family: var(--cond);
+  font-size: 11.5px;
+  font-weight: 600;
+  letter-spacing: .14em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+}
+
+h1{
+  margin: 0;
+  font-family: var(--cond);
+  font-weight: 600;
+  font-size: clamp(26px, 3.4vw, 38px);
+  line-height: 1.04;
+  letter-spacing: -.005em;
+  text-wrap: balance;
+}
+
+.modes{
+  display: flex;
+  gap: 0;
+  border: 1px solid var(--rule);
+  border-radius: var(--r);
+  overflow: hidden;
+  background: var(--panel);
+}
+.modes button{
+  font-family: var(--cond);
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: .04em;
+  padding: 9px 18px;
+  border: 0;
+  background: transparent;
+  color: var(--ink-2);
+  cursor: pointer;
+}
+.modes button + button{ border-left: 1px solid var(--rule); }
+.modes button[aria-selected="true"]{
+  background: var(--descent);
+  color: var(--paper);
+}
+
+/* -------------------------------- palco --------------------------------- */
+
+.stage{
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) var(--rail);
+  gap: 20px;
+  align-items: start;
+}
+
+.plot{ display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+
+.plate{
+  position: relative;
+  background: var(--panel);
+  border: 1px solid var(--rule);
+  border-radius: var(--r);
+  overflow: hidden;
+}
+/* Um painel em 1 variável; dois lado a lado em 2, porque o mapa e o relevo
+   contam a mesma descida de dois jeitos e comparar os dois ao vivo é o
+   ponto. */
+.plates{ display: grid; gap: 12px; grid-template-columns: 1fr; }
+.plates.duplo{ grid-template-columns: 1fr 1fr; }
+
+#cv, #cv2{ display: block; width: 100%; height: 470px; touch-action: none; }
+#cv{ cursor: crosshair; }
+#cv2{ cursor: grab; }
+#cv2:active{ cursor: grabbing; }
+
+.tag{
+  position: absolute;
+  top: 9px; left: 12px;
+  font-family: var(--cond);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+  pointer-events: none;
+}
+
+.hint{
+  position: absolute;
+  left: 12px; bottom: 10px;
+  margin: 0;
+  font-family: var(--mono);
+  font-size: 11.5px;
+  color: var(--ink-3);
+  pointer-events: none;
+}
+
+/* ----------------------------- transporte ------------------------------- */
+
+.transport{
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+button.ctl{
+  font-family: var(--cond);
+  font-size: 13.5px;
+  font-weight: 600;
+  letter-spacing: .03em;
+  padding: 8px 14px;
+  border: 1px solid var(--rule);
+  border-radius: var(--r);
+  background: var(--panel);
+  color: var(--ink);
+  cursor: pointer;
+}
+button.ctl:hover{ border-color: var(--ink-3); }
+button.ctl:disabled{ opacity: .42; cursor: default; }
+button.ctl.primary{
+  background: var(--descent);
+  border-color: var(--descent);
+  color: var(--paper);
+}
+button.ctl.primary:hover{ filter: brightness(1.08); }
+
+.speed{
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-family: var(--cond);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: .07em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+}
+.speed input{ width: 92px; }
+
+/* --------------------------- linha de código ---------------------------- */
+
+.code{
+  margin: 0;
+  padding: 13px 15px;
+  background: var(--paper-2);
+  border: 1px solid var(--rule);
+  border-left: 3px solid var(--descent);
+  border-radius: var(--r);
+  font-family: var(--mono);
+  font-size: 12.5px;
+  line-height: 1.65;
+  color: var(--ink);
+  overflow-x: auto;
+  white-space: pre;
+  font-variant-ligatures: none;
+}
+.code .cm{ color: var(--ink-3); }
+
+/* ---------------------------- trilho lateral ---------------------------- */
+
+.rail{
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  border: 1px solid var(--rule);
+  border-radius: var(--r);
+  background: var(--panel);
+}
+.group{ padding: 15px 16px; }
+.group + .group{ border-top: 1px solid var(--rule); }
+
+.label{
+  margin: 0 0 9px;
+  font-family: var(--cond);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: .13em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 8px;
+}
+.label .sym{ font-family: var(--mono); text-transform: none; letter-spacing: 0; font-size: 12px; }
+
+select, input[type="text"]{
+  font-family: var(--sans);
+  font-size: 14px;
+  color: var(--ink);
+  background: var(--paper);
+  border: 1px solid var(--rule);
+  border-radius: var(--r);
+  padding: 7px 9px;
+  width: 100%;
+}
+input[type="text"]{ font-family: var(--mono); font-size: 13px; }
+
+.formula{
+  margin: 10px 0 0;
+  font-family: var(--mono);
+  font-size: 12.5px;
+  color: var(--ink);
+  white-space: normal;
+  overflow-wrap: anywhere;
+  line-height: 1.5;
+}
+.note{
+  margin: 8px 0 0;
+  font-size: 12.5px;
+  line-height: 1.45;
+  color: var(--ink-2);
+}
+
+.alpha-row{ display: grid; grid-template-columns: 1fr 92px; gap: 9px; align-items: center; }
+
+.start-row{ display: flex; flex-direction: column; gap: 7px; }
+.campo{
+  display: grid;
+  grid-template-columns: 1fr 122px;
+  gap: 9px;
+  align-items: center;
+  font-family: var(--mono);
+  font-size: 12.5px;
+  color: var(--ink-3);
+}
+.campo span{ overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+input[type="range"]{ width: 100%; accent-color: var(--descent); }
+
+.presets{ display: flex; flex-wrap: wrap; gap: 6px; margin-top: 11px; }
+.chip{
+  font-family: var(--mono);
+  font-size: 11px;
+  padding: 4px 8px;
+  border: 1px solid var(--rule);
+  border-radius: 999px;
+  background: var(--paper);
+  color: var(--ink-2);
+  cursor: pointer;
+  white-space: nowrap;
+}
+.chip:hover{ border-color: var(--descent); color: var(--ink); }
+
+dl.readout{
+  margin: 0;
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 3px 12px;
+  font-family: var(--mono);
+  font-size: 12.5px;
+  font-variant-numeric: tabular-nums;
+}
+dl.readout dt{ color: var(--ink-3); white-space: nowrap; }
+dl.readout dd{ margin: 0; text-align: right; }
+dl.readout dd.hi{ color: var(--descent); }
+dl.readout .novo{
+  border-top: 1px dashed var(--rule);
+  padding-top: 6px;
+  margin-top: 4px;
+}
+dl.readout dd.gr{ color: var(--grad); }
+
+.status{
+  margin: 12px 0 0;
+  font-family: var(--cond);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: .09em;
+  text-transform: uppercase;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+.status .dot{ width: 8px; height: 8px; border-radius: 50%; background: currentColor; flex: none; }
+.status.ok{ color: var(--ok); }
+.status.go{ color: var(--warn); }
+.status.osc{ color: var(--warn); }
+.status.bad{ color: var(--bad); }
+
+#spark, #fit{ display: block; width: 100%; height: 76px; }
+#fit{ height: 118px; }
+
+.layers{ display: flex; flex-direction: column; gap: 7px; font-size: 13px; }
+.layers label{ display: flex; align-items: center; gap: 8px; cursor: pointer; color: var(--ink-2); }
+.layers input{ accent-color: var(--descent); }
+.swatch{ width: 15px; height: 3px; border-radius: 2px; flex: none; }
+
+.multi-note{
+  margin: 10px 0 0;
+  font-size: 12.5px;
+  line-height: 1.45;
+  color: var(--ink-2);
+  border-left: 2px solid var(--descent);
+  padding-left: 9px;
+}
+
+/* --------------------------------- rodapé -------------------------------- */
+
+footer{
+  border-top: 1px solid var(--rule);
+  padding-top: 14px;
+  display: flex;
+  gap: 22px;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  font-size: 12.5px;
+  color: var(--ink-3);
+  line-height: 1.5;
+}
+footer p{ margin: 0; max-width: 62ch; }
+footer code{ font-family: var(--mono); font-size: 12px; color: var(--ink-2); }
+footer a{ color: var(--ink-2); }
+
+/* Dois painéis lado a lado só valem a pena com largura de sobra; abaixo
+   disso eles empilham, e cada um continua inteiro. */
+@media (max-width: 1180px){
+  .plates.duplo{ grid-template-columns: 1fr; }
+}
+
+@media (max-width: 940px){
+  .stage{ grid-template-columns: minmax(0, 1fr); }
+  .rail{ display: grid; grid-template-columns: repeat(auto-fit, minmax(228px, 1fr)); }
+  .group + .group{ border-top: 0; border-left: 1px solid var(--rule); }
+  #cv, #cv2{ height: 400px; }
+  .speed{ margin-left: 0; }
+}
+@media (max-width: 560px){
+  .app{ padding: 16px 14px 28px; }
+  .rail{ grid-template-columns: 1fr; }
+  .group + .group{ border-left: 0; border-top: 1px solid var(--rule); }
+  #cv, #cv2{ height: 320px; }
+}
+
+@media (prefers-reduced-motion: reduce){
+  *{ transition: none !important; }
+}
+</style>
+
+<div class="app">
+
+  <header class="topbar">
+    <div>
+      <p class="eyebrow">Bases 5 · Ciência de Dados · Capítulo 5</p>
+      <h1>Gradiente passo a passo</h1>
+    </div>
+    <div class="modes" role="tablist" aria-label="Número de variáveis">
+      <button class="mode" role="tab" data-mode="1d" aria-selected="true">1 variável</button>
+      <button class="mode" role="tab" data-mode="2d" aria-selected="false">2 variáveis</button>
+    </div>
+  </header>
+
+  <main class="stage">
+
+    <section class="plot">
+      <div class="plates" id="plates">
+        <div class="plate">
+          <canvas id="cv"></canvas>
+          <span class="tag" id="tag-a"></span>
+          <p class="hint" id="hint"></p>
+        </div>
+        <div class="plate" id="plate-3d" hidden>
+          <canvas id="cv2"></canvas>
+          <span class="tag">superfície</span>
+          <p class="hint">arraste para girar</p>
+        </div>
+      </div>
+
+      <div class="transport">
+        <button class="ctl" id="btn-reset">reiniciar</button>
+        <button class="ctl" id="btn-step">um passo</button>
+        <button class="ctl primary" id="btn-play">animar</button>
+        <button class="ctl" id="btn-fast">×100 passos</button>
+        <button class="ctl" id="btn-multi">vários inícios</button>
+        <label class="speed">velocidade
+          <input type="range" id="speed" min="0" max="100" value="55" aria-label="Velocidade da animação">
+        </label>
+      </div>
+
+      <pre class="code" id="code"></pre>
+    </section>
+
+    <aside class="rail">
+
+      <div class="group">
+        <h2 class="label">Função</h2>
+        <select id="fn" aria-label="Função a minimizar"></select>
+        <p class="formula" id="formula"></p>
+        <p class="note" id="fnnote"></p>
+      </div>
+
+      <div class="group">
+        <h2 class="label">Ponto de partida</h2>
+        <div class="start-row" id="start-row"></div>
+        <p class="note">Digite os valores, ou arraste o ponto no gráfico.</p>
+      </div>
+
+      <div class="group">
+        <h2 class="label">Tamanho do passo <span class="sym">α</span></h2>
+        <div class="alpha-row">
+          <input type="range" id="alpha-range" min="0" max="1000" value="500" aria-label="Tamanho do passo">
+          <input type="text" id="alpha-num" inputmode="decimal" aria-label="Tamanho do passo, valor exato">
+        </div>
+        <div class="presets" id="presets"></div>
+      </div>
+
+      <div class="group">
+        <h2 class="label">Leitura</h2>
+        <dl class="readout" id="readout"></dl>
+        <p class="status" id="status"><span class="dot"></span><span id="status-text"></span></p>
+      </div>
+
+      <div class="group">
+        <h2 class="label">Perda por passo <span class="sym" id="spark-scale"></span></h2>
+        <canvas id="spark"></canvas>
+      </div>
+
+      <div class="group" id="fitbox" hidden>
+        <h2 class="label">A reta ajustada</h2>
+        <canvas id="fit"></canvas>
+      </div>
+
+      <div class="group">
+        <h2 class="label">Camadas</h2>
+        <div class="layers">
+          <label><input type="checkbox" id="ly-trail" checked><span class="swatch" style="background:var(--descent);opacity:.45"></span> rastro dos passos</label>
+          <label><input type="checkbox" id="ly-tan" checked><span class="swatch" style="background:var(--curve)"></span> <span id="ly-tan-text">reta tangente</span></label>
+          <label><input type="checkbox" id="ly-grad" checked><span class="swatch" style="background:var(--grad)"></span> <span id="ly-grad-text">vetor gradiente ∇f</span></label>
+          <label><input type="checkbox" id="ly-min" checked><span class="swatch" style="background:var(--ink-3)"></span> mínimos da função</label>
+        </div>
+        <p class="multi-note" id="multi-note" hidden></p>
+      </div>
+
+    </aside>
+  </main>
+
+  <footer>
+    <p><strong>O sinal fica por conta de quem chama.</strong> O slider mostra α positivo; o código passa <code>-α</code>, como em <code>gradient_step(v, grad, -0.01)</code>. Bibliotecas de produção recebem um <code>learning_rate</code> positivo e embutem o <code>-1</code> por dentro — é o mesmo número.</p>
+    <p>Teclado: <code>espaço</code> anima · <code>→</code> um passo · <code>R</code> reinicia.<br>O ponto de partida se escolhe digitando no trilho à direita ou arrastando no gráfico; na superfície 3D, arrastar gira a vista.</p>
+  </footer>
+</div>
+
+<script>
+"use strict";
+
+/* ==================================================================== *
+ * Catálogo de funções.
+ *
+ * Cada entrada traz o que o desenho e a leitura precisam: a função, seu
+ * gradiente analítico, o domínio da janela, a faixa útil de α (que muda
+ * MUITO de uma função para outra — um slider único seria inútil), o
+ * ponto de partida e as sementes dos mínimos, refinadas numericamente
+ * no carregamento.
+ * ==================================================================== */
+
+const F1 = [
+  {
+    id: "quadratica",
+    nome: "x² — a tigela",
+    formula: "f(x) = x²",
+    grad: "sum_of_squares_gradient(v)",
+    nota: "O sum_of_squares do capítulo, com uma variável só. Convexa: existe um mínimo e o gradiente descendente sempre o encontra — desde que α não seja grande demais.",
+    f:  x => x * x,
+    df: x => 2 * x,
+    dom: [-5.5, 5.5],
+    a: [0.005, 1.3], a0: 0.1, x0: 4.4,
+    presets: [ [0.1, "0.1 converge"], [1, "1 oscila para sempre"], [1.05, "1.05 diverge"] ],
+    seeds: [0]
+  },
+  {
+    id: "poco",
+    nome: "poço duplo — um mínimo local e um global",
+    formula: "f(x) = 0.1x⁴ + 0.2x³ − 1.2x² + 0.2x",
+    grad: "[0.4*x**3 + 0.6*x**2 - 2.4*x + 0.2]",
+    nota: "Dois vales separados por uma barreira. Com passo pequeno a busca cai no vale mais próximo e fica lá. Com passo grande ela pula a barreira — por acidente, não por procura.",
+    f:  x => 0.1*x*x*x*x + 0.2*x*x*x - 1.2*x*x + 0.2*x,
+    df: x => 0.4*x*x*x + 0.6*x*x - 2.4*x + 0.2,
+    dom: [-4.6, 4.0],
+    a: [0.005, 0.4], a0: 0.05, x0: 3.8,
+    presets: [ [0.05, "0.05 fica preso"], [0.2, "0.2 escapa"], [0.35, "0.35 não assenta"] ],
+    seeds: [-3.34, 1.76]
+  },
+  {
+    id: "ondas",
+    nome: "sin(x) + 0.05x² — vários mínimos",
+    formula: "f(x) = sin(x) + 0.05x²",
+    grad: "[math.cos(x) + 0.1*x]",
+    nota: "Quatro vales de profundidades diferentes. Aqui o passo quase não decide o destino: quem decide é o ponto de partida. Use “vários inícios”.",
+    f:  x => Math.sin(x) + 0.05*x*x,
+    df: x => Math.cos(x) + 0.1*x,
+    dom: [-10, 10],
+    a: [0.02, 2.5], a0: 0.4, x0: 8.0,
+    presets: [ [0.4, "0.4"], [1.2, "1.2"], [2.2, "2.2 não assenta"] ],
+    seeds: [-7.07, -1.43, 4.27, 9.68]
+  }
+];
+
+// MSE do capítulo 5.5, em forma fechada. Os dados são inputs = [(x, 20x+5)
+// for x in range(-50, 50)], então média(x) = -0.5 e média(x²) = 833.5, e
+// tanto a perda quanto o gradiente saem exatos — conferidos contra o laço
+// do livro (mesmos valores até o último dígito).
+const MX = -0.5, MXX = 833.5;
+
+const F2 = [
+  {
+    id: "tigela",
+    nome: "x² + y² — a tigela",
+    formula: "f(x, y) = x² + y²",
+    grad: "sum_of_squares_gradient(v)",
+    nota: "O sum_of_squares do capítulo, em duas dimensões. As curvas de nível são círculos e o gradiente aponta direto para fora do centro: a descida é uma reta.",
+    vars: ["x", "y"], curto: ["x", "y"], dl: ["∂f/∂x", "∂f/∂y"], v: "v", aspecto: true,
+    f: (x, y) => x*x + y*y,
+    g: (x, y) => [2*x, 2*y],
+    dom: [-6, 6, -6, 6],
+    a: [0.005, 1.2], a0: 0.1, p0: [4.5, -3.6],
+    presets: [ [0.1, "0.1 converge"], [0.9, "0.9 vai e volta"], [1.02, "1.02 diverge"] ],
+    seeds: [[0, 0]]
+  },
+  {
+    id: "vale",
+    nome: "x² + 12y² — o vale estreito",
+    formula: "f(x, y) = x² + 12y²",
+    grad: "[2*x, 24*y]",
+    nota: "A curvatura em y é doze vezes a curvatura em x. Um α que serve para uma direção não serve para a outra: o ponto ziguezagueia atravessando o vale enquanto desliza devagar ao longo dele.",
+    vars: ["x", "y"], curto: ["x", "y"], dl: ["∂f/∂x", "∂f/∂y"], v: "v", aspecto: true,
+    f: (x, y) => x*x + 12*y*y,
+    g: (x, y) => [2*x, 24*y],
+    dom: [-6, 6, -3, 3],
+    a: [0.002, 0.12], a0: 0.075, p0: [5.2, 2.3],
+    presets: [ [0.02, "0.02 lento e liso"], [0.075, "0.075 ziguezague"], [0.0833, "1/12 oscila"], [0.1, "0.1 diverge em y"] ],
+    seeds: [[0, 0]]
+  },
+  {
+    id: "vales",
+    nome: "dois vales — um estreito, um largo",
+    formula: "f(x, y) = 0.05(x²+y²) − 3.4e^(−u) − 1.5e^(−v)",
+    grad: "gradiente(v)",
+    nota: "O vale da direita é raso e estreito; o da esquerda é fundo e largo. Passo pequeno assenta no estreito. Passo grande é instável ali dentro, é expulso, e só então encontra o largo — onde o mesmo α já é estável.",
+    vars: ["x", "y"], curto: ["x", "y"], dl: ["∂f/∂x", "∂f/∂y"], v: "v", aspecto: true,
+    f: (x, y) => {
+      const u = ((x+2.3)*(x+2.3) + (y+1.9)*(y+1.9)) / 7.0;
+      const w = ((x-2.3)*(x-2.3) + (y-1.9)*(y-1.9)) / 0.9;
+      return 0.05*(x*x + y*y) - 3.4*Math.exp(-u) - 1.5*Math.exp(-w);
+    },
+    g: (x, y) => {
+      const u = ((x+2.3)*(x+2.3) + (y+1.9)*(y+1.9)) / 7.0;
+      const w = ((x-2.3)*(x-2.3) + (y-1.9)*(y-1.9)) / 0.9;
+      const eu = Math.exp(-u), ew = Math.exp(-w);
+      return [
+        0.1*x + 3.4*2*(x+2.3)/7.0*eu + 1.5*2*(x-2.3)/0.9*ew,
+        0.1*y + 3.4*2*(y+1.9)/7.0*eu + 1.5*2*(y-1.9)/0.9*ew
+      ];
+    },
+    dom: [-6, 6, -6, 6],
+    a: [0.05, 2.0], a0: 0.35, p0: [4.6, 4.2],
+    presets: [ [0.35, "0.35 fica no estreito"], [0.9, "0.9 não assenta"], [1.5, "1.5 escapa para o largo"] ],
+    seeds: [[-2.3, -1.9], [2.3, 1.9]]
+  },
+  {
+    id: "mse",
+    nome: "erro quadrático médio — inclinação × intercepto",
+    formula: "f(θ) = média((inclinação·x + intercepto − y)²)",
+    grad: "vector_mean([linear_gradient(x, y, theta) for x, y in inputs])",
+    nota: "A seção 5.5 inteira, vista de cima: as duas variáveis são a inclinação e o intercepto de uma reta, e a altura é o erro no conjunto inputs = [(x, 20x + 5) for x in range(-50, 50)]. A resposta certa é (20, 5).",
+    vars: ["inclinação", "intercepto"], curto: ["incl.", "interc."], dl: ["∂f/∂incl.", "∂f/∂interc."], v: "theta",
+    logz: true,
+    f: (s, i) => { const a = s - 20, c = i - 5; return MXX*a*a + 2*MX*a*c + c*c; },
+    g: (s, i) => { const a = s - 20, c = i - 5; return [2*(MXX*a + MX*c), 2*(MX*a + c)]; },
+    dom: [-8, 48, -30, 40],
+    a: [0.00005, 0.002], a0: 0.001, p0: [0.6888437030500962, 0.515908805880605],
+    presets: [ [0.001, "0.001 — o do livro"], [0.0003, "0.0003 mais liso"], [0.0012, "0.0012 na borda"], [0.0015, "0.0015 diverge"] ],
+    seeds: [[20, 5]]
+  }
+];
+
+/* ==================================================================== *
+ * Refino dos mínimos: em vez de fixar coordenadas na mão, cada semente
+ * desce com passo pequeno até parar. Assim os mínimos desenhados são os
+ * da função de fato, e não um número decorado que pode envelhecer.
+ * ==================================================================== */
+
+for (const fn of F1){
+  fn.minima = fn.seeds.map(s => {
+    let x = s;
+    for (let k = 0; k < 4000; k++){
+      const d = fn.df(x);
+      if (Math.abs(d) < 1e-12) break;
+      x -= 0.01 * d;
+    }
+    return x;
+  });
+  fn.best = fn.minima.reduce((b, x) => fn.f(x) < fn.f(b) ? x : b, fn.minima[0]);
+}
+for (const fn of F2){
+  const passo = fn.id === "mse" ? 0.0005 : 0.02;
+  fn.minima = fn.seeds.map(s => {
+    let [x, y] = s;
+    for (let k = 0; k < 6000; k++){
+      const [gx, gy] = fn.g(x, y);
+      if (Math.hypot(gx, gy) < 1e-10) break;
+      x -= passo * gx; y -= passo * gy;
+    }
+    return [x, y];
+  });
+  fn.best = fn.minima.reduce((b, p) => fn.f(p[0], p[1]) < fn.f(b[0], b[1]) ? p : b, fn.minima[0]);
+}
+
+/* ==================================================================== *
+ * Estado
+ * ==================================================================== */
+
+const S = {
+  mode: "1d",
+  fn: F1[0],
+  alpha: F1[0].a0,
+  start: [F1[0].x0],
+  path: [],          // pontos já dados; cada um é um array de 1 ou 2 números
+  anim: null,        // { de, para, t } enquanto um passo está em curso
+  playing: false,
+  multi: null,       // { trilhas: [...], contagem: "..." }
+  az: -0.62, el: 0.52,
+  malha: null,       // malha 3d já rasterizada (ver malha3d)
+  camadas: { rastro: true, tangente: true, grad: true, minimos: true },
+  cache: null,       // grade + isolinhas da função 2d atual
+  sujo: true         // há algo novo para redesenhar?
+};
+
+const EPS = 1e-7;
+
+function dims(){ return S.mode === "1d" ? 1 : 2; }
+function valor(p){ return S.mode === "1d" ? S.fn.f(p[0]) : S.fn.f(p[0], p[1]); }
+function gradiente(p){ return S.mode === "1d" ? [S.fn.df(p[0])] : S.fn.g(p[0], p[1]); }
+
+function passoDe(p){
+  const g = gradiente(p);
+  return p.map((c, i) => c - S.alpha * g[i]);
+}
+
+function foraDaTela(p){
+  const d = S.fn.dom;
+  const lx = Math.abs(d[1] - d[0]), ly = S.mode === "2d" ? Math.abs(d[3] - d[2]) : lx;
+  if (!p.every(Number.isFinite)) return true;
+  if (Math.abs(p[0]) > Math.abs(d[0]) + Math.abs(d[1]) + 30 * lx) return true;
+  if (S.mode === "2d" && Math.abs(p[1]) > Math.abs(d[2]) + Math.abs(d[3]) + 30 * ly) return true;
+  return false;
+}
+
+// Um ciclo de período 2 (ida e volta sobre o mesmo par de pontos) não é
+// convergência nem divergência: é o caso de fronteira α·f'' = 2, e vale a
+// pena nomeá-lo na tela em vez de deixar o aluno esperando o ponto parar.
+function oscilando(){
+  const n = S.path.length;
+  if (n < 7) return false;
+  const esc = Math.abs(S.fn.dom[1] - S.fn.dom[0]);
+  for (let k = 0; k < 4; k++){
+    const a = S.path[n - 1 - k], b = S.path[n - 3 - k], c = S.path[n - 2 - k];
+    const d02 = Math.hypot(...a.map((v, i) => v - b[i]));
+    const d01 = Math.hypot(...a.map((v, i) => v - c[i]));
+    if (!(d01 > 1e-4 * esc && d02 < 0.02 * d01)) return false;
+  }
+  return true;
+}
+
+function situacao(){
+  const p = S.path[S.path.length - 1];
+  if (foraDaTela(p)) return "bad";
+  const g = gradiente(p);
+  if (!g.every(Number.isFinite)) return "bad";
+  if (Math.hypot(...g) < EPS) return "ok";
+  if (oscilando()) return "osc";
+  return "go";
+}
+
+const TEXTO_SITUACAO = {
+  ok:  "convergiu — o gradiente zerou",
+  go:  "descendo",
+  osc: "oscila — não converge",
+  bad: "divergiu — saiu da tela"
+};
+
+function reiniciar(manterMulti){
+  S.path = [S.start.slice()];
+  S.anim = null;
+  S.playing = false;
+  if (!manterMulti){ S.multi = null; document.getElementById("multi-note").hidden = true; }
+  atualizar();
+}
+
+function darUmPasso(){
+  const p = S.path[S.path.length - 1];
+  const s = situacao();
+  if (s === "ok" || s === "bad") return false;
+  S.path.push(passoDe(p));
+  return true;
+}
+
+/* ==================================================================== *
+ * Utilidades de desenho
+ * ==================================================================== */
+
+const cvA = document.getElementById("cv");    // 1 variável, ou o contorno
+const cvB = document.getElementById("cv2");   // a superfície, só em 2 variáveis
+let ctx = cvA.getContext("2d");
+let W = 0, H = 0;
+
+// Todo desenho fala com `ctx`, `W` e `H`; isto escolhe em qual painel.
+function usar(c){
+  const [w, h] = ajustarCanvas(c);
+  ctx = c.getContext("2d");
+  W = w; H = h;
+}
+
+function css(nome){
+  return getComputedStyle(document.documentElement).getPropertyValue(nome).trim();
+}
+
+function ajustarCanvas(c, alturaCss){
+  const r = c.getBoundingClientRect();
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  const w = Math.max(1, Math.round(r.width)), h = Math.max(1, Math.round(alturaCss || r.height));
+  if (c.width !== Math.round(w * dpr) || c.height !== Math.round(h * dpr)){
+    c.width = Math.round(w * dpr);
+    c.height = Math.round(h * dpr);
+  }
+  const g = c.getContext("2d");
+  g.setTransform(dpr, 0, 0, dpr, 0, 0);
+  return [w, h];
+}
+
+function seta(g, x1, y1, x2, y2, cor, opc){
+  const o = opc || {};
+  const dx = x2 - x1, dy = y2 - y1, L = Math.hypot(dx, dy);
+  if (L < 0.6) return;
+  const cab = Math.min(o.cabeca || 9, L * 0.42);
+  const ux = dx / L, uy = dy / L;
+  g.save();
+  g.strokeStyle = cor; g.fillStyle = cor;
+  g.lineWidth = o.largura || 2;
+  g.lineCap = "round";
+  if (o.tracejado) g.setLineDash(o.tracejado);
+  g.beginPath();
+  g.moveTo(x1, y1);
+  g.lineTo(x2 - ux * cab * 0.75, y2 - uy * cab * 0.75);
+  g.stroke();
+  g.setLineDash([]);
+  g.beginPath();
+  g.moveTo(x2, y2);
+  g.lineTo(x2 - ux * cab - uy * cab * 0.42, y2 - uy * cab + ux * cab * 0.42);
+  g.lineTo(x2 - ux * cab + uy * cab * 0.42, y2 - uy * cab - ux * cab * 0.42);
+  g.closePath();
+  g.fill();
+  g.restore();
+}
+
+function rotulo(g, txt, x, y, cor, opc){
+  const o = opc || {};
+  g.save();
+  g.font = (o.font || "500 12px " + css("--mono"));
+  g.textAlign = o.align || "left";
+  g.textBaseline = o.baseline || "alphabetic";
+  g.lineWidth = 3.5;
+  g.strokeStyle = css("--panel");
+  g.lineJoin = "round";
+  g.strokeText(txt, x, y);
+  g.fillStyle = cor;
+  g.fillText(txt, x, y);
+  g.restore();
+}
+
+function mistura(c1, c2, t){
+  const p = s => {
+    const m = s.match(/#?([0-9a-f]{6})/i);
+    const v = parseInt(m[1], 16);
+    return [v >> 16 & 255, v >> 8 & 255, v & 255];
+  };
+  const a = p(c1), b = p(c2);
+  return [
+    Math.round(a[0] + (b[0] - a[0]) * t),
+    Math.round(a[1] + (b[1] - a[1]) * t),
+    Math.round(a[2] + (b[2] - a[2]) * t)
+  ];
+}
+function rgba(c, al){ return "rgba(" + c[0] + "," + c[1] + "," + c[2] + "," + al + ")"; }
+
+function ticks(min, max, alvo){
+  const bruto = (max - min) / alvo;
+  const mag = Math.pow(10, Math.floor(Math.log10(bruto)));
+  const n = bruto / mag;
+  const passo = (n >= 5 ? 10 : n >= 2 ? 5 : n >= 1 ? 2 : 1) * mag;
+  const saida = [];
+  for (let v = Math.ceil(min / passo) * passo; v <= max + 1e-9; v += passo) saida.push(v);
+  return { vals: saida, passo };
+}
+
+function fmt(v, casas){
+  if (!Number.isFinite(v)) return "—";
+  const a = Math.abs(v);
+  if (a !== 0 && (a < 1e-4 || a >= 1e6)) return v.toExponential(3);
+  return v.toFixed(casas === undefined ? 4 : casas);
+}
+
+/* ==================================================================== *
+ * Uma variável
+ * ==================================================================== */
+
+function desenhar1d(){
+  const fn = S.fn;
+  const [xa, xb] = fn.dom;
+  const M = { e: 58, d: 22, c: 24, b: 44 };
+  const pw = W - M.e - M.d, ph = H - M.c - M.b;
+
+  // faixa de y a partir da própria função, com folga
+  let ymin = Infinity, ymax = -Infinity;
+  for (let i = 0; i <= 400; i++){
+    const v = fn.f(xa + (xb - xa) * i / 400);
+    if (Number.isFinite(v)){ ymin = Math.min(ymin, v); ymax = Math.max(ymax, v); }
+  }
+  const folga = (ymax - ymin) * 0.1;
+  ymin -= folga; ymax += folga;
+
+  const X = x => M.e + (x - xa) / (xb - xa) * pw;
+  const Y = y => M.c + (1 - (y - ymin) / (ymax - ymin)) * ph;
+
+  const C = {
+    grid: css("--grid"), rule: css("--rule"), ink: css("--ink"),
+    ink2: css("--ink-2"), ink3: css("--ink-3"), curva: css("--curve"),
+    desc: css("--descent"), grad: css("--grad"), panel: css("--panel")
+  };
+
+  ctx.fillStyle = C.panel;
+  ctx.fillRect(0, 0, W, H);
+
+  // grade e eixos
+  const tx = ticks(xa, xb, 9), ty = ticks(ymin, ymax, 6);
+  ctx.strokeStyle = C.grid; ctx.lineWidth = 1;
+  ctx.beginPath();
+  for (const v of tx.vals){ ctx.moveTo(Math.round(X(v)) + .5, M.c); ctx.lineTo(Math.round(X(v)) + .5, M.c + ph); }
+  for (const v of ty.vals){ ctx.moveTo(M.e, Math.round(Y(v)) + .5); ctx.lineTo(M.e + pw, Math.round(Y(v)) + .5); }
+  ctx.stroke();
+
+  const y0 = Math.max(M.c, Math.min(M.c + ph, Y(0)));
+  ctx.strokeStyle = C.rule; ctx.lineWidth = 1.4;
+  ctx.beginPath();
+  ctx.moveTo(M.e, Math.round(y0) + .5); ctx.lineTo(M.e + pw, Math.round(y0) + .5);
+  if (xa < 0 && xb > 0){ ctx.moveTo(Math.round(X(0)) + .5, M.c); ctx.lineTo(Math.round(X(0)) + .5, M.c + ph); }
+  ctx.stroke();
+
+  ctx.font = "400 11px " + css("--mono");
+  ctx.fillStyle = C.ink3;
+  ctx.textAlign = "center"; ctx.textBaseline = "top";
+  for (const v of tx.vals) ctx.fillText(fmt(v, Math.abs(tx.passo) < 1 ? 1 : 0), X(v), M.c + ph + 7);
+  ctx.textAlign = "right"; ctx.textBaseline = "middle";
+  for (const v of ty.vals) ctx.fillText(fmt(v, Math.abs(ty.passo) < 1 ? 1 : 0), M.e - 8, Y(v));
+  ctx.textAlign = "left"; ctx.textBaseline = "alphabetic";
+  ctx.fillText("x", M.e + pw - 4, M.c + ph + 30);
+  ctx.fillText("f(x)", M.e - 50, M.c + 10);
+
+  // mínimos
+  if (S.camadas.minimos){
+    for (const m of fn.minima){
+      if (m < xa || m > xb) continue;
+      const global = Math.abs(m - fn.best) < 1e-6;
+      ctx.strokeStyle = C.ink3;
+      ctx.lineWidth = global ? 1.6 : 1.1;
+      ctx.setLineDash([3, 3]);
+      ctx.beginPath(); ctx.moveTo(X(m), Y(fn.f(m))); ctx.lineTo(X(m), M.c + ph); ctx.stroke();
+      ctx.setLineDash([]);
+      const ry = Math.min(M.c + ph - 6, Y(fn.f(m)) + 15);
+      rotulo(ctx, global ? "mínimo global" : "mínimo local", X(m), ry,
+             C.ink3, { align: "center", font: "600 10.5px " + css("--cond") });
+    }
+  }
+
+  // a curva
+  ctx.strokeStyle = C.curva; ctx.lineWidth = 2;
+  ctx.beginPath();
+  for (let i = 0; i <= 700; i++){
+    const x = xa + (xb - xa) * i / 700, y = fn.f(x);
+    const px = X(x), py = Y(y);
+    if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
+  }
+  ctx.stroke();
+
+  // trilhas de vários inícios
+  if (S.multi){
+    for (const t of S.multi.trilhas){
+      ctx.strokeStyle = rgba(mistura(C.ink3, C.panel, 0.35), 0.5);
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      t.forEach((x, i) => { const px = X(x), py = Y(fn.f(x)); i ? ctx.lineTo(px, py) : ctx.moveTo(px, py); });
+      ctx.stroke();
+      const fim = t[t.length - 1];
+      ctx.fillStyle = rgba(mistura(C.desc, C.panel, 0.25), 0.75);
+      ctx.beginPath(); ctx.arc(X(fim), Y(fn.f(fim)), 3.4, 0, 7); ctx.fill();
+    }
+  }
+
+  // rastro
+  const n = S.path.length;
+  if (S.camadas.rastro && n > 1){
+    ctx.lineWidth = 1.4;
+    for (let i = 1; i < n; i++){
+      const t = i / (n - 1);
+      ctx.strokeStyle = rgba(mistura(C.panel, C.desc, 0.14 + 0.78 * t), 1);
+      ctx.beginPath();
+      ctx.moveTo(X(S.path[i - 1][0]), Y(fn.f(S.path[i - 1][0])));
+      ctx.lineTo(X(S.path[i][0]), Y(fn.f(S.path[i][0])));
+      ctx.stroke();
+    }
+    for (let i = 0; i < n - 1; i++){
+      const t = n > 2 ? i / (n - 2) : 0;
+      const x = S.path[i][0];
+      ctx.fillStyle = rgba(mistura(C.panel, C.desc, 0.16 + 0.76 * t), 1);
+      ctx.beginPath(); ctx.arc(X(x), Y(fn.f(x)), 3.2, 0, 7); ctx.fill();
+      // marca do x visitado, no eixo
+      ctx.fillRect(X(x) - 0.5, y0 - 4, 1, 8);
+    }
+  }
+
+  // ponto atual (interpolado durante a animação)
+  const atual = S.path[n - 1][0];
+  const proximo = S.anim ? S.anim.para[0] : null;
+  const desenhoX = S.anim ? S.anim.de[0] + (S.anim.para[0] - S.anim.de[0]) * facil(S.anim.t) : atual;
+  const base = S.anim ? S.anim.de[0] : atual;
+  const d = fn.df(base);
+  const alvo = base - S.alpha * d;
+
+  // tangente no ponto de onde o passo parte
+  if (S.camadas.tangente && Number.isFinite(d)){
+    const meia = (xb - xa) * 0.16;
+    const yBase = fn.f(base);
+    ctx.strokeStyle = C.curva; ctx.lineWidth = 1.4; ctx.setLineDash([6, 4]);
+    ctx.beginPath();
+    ctx.moveTo(X(base - meia), Y(yBase - d * meia));
+    ctx.lineTo(X(base + meia), Y(yBase + d * meia));
+    ctx.stroke();
+    ctx.setLineDash([]);
+    rotulo(ctx, "f'(x) = " + fmt(d), X(base + meia) + 6, Y(yBase + d * meia), C.curva);
+  }
+
+  // queda até o eixo + a seta do passo, sobre o eixo
+  const yb = fn.f(base);
+  ctx.strokeStyle = rgba(mistura(C.panel, C.desc, 0.55), 1);
+  ctx.lineWidth = 1; ctx.setLineDash([2, 3]);
+  ctx.beginPath(); ctx.moveTo(X(base), Y(yb)); ctx.lineTo(X(base), y0); ctx.stroke();
+  ctx.setLineDash([]);
+
+  if (S.camadas.grad && Number.isFinite(alvo)){
+    const px1 = X(base), px2 = Math.max(M.e - 10, Math.min(M.e + pw + 10, X(alvo)));
+    seta(ctx, px1, y0, px2, y0, C.desc, { largura: 2.4, cabeca: 10 });
+    const passo = -S.alpha * d;
+    rotulo(ctx, "−α·f'(x) = " + fmt(passo), (px1 + px2) / 2, y0 - 17,
+           C.desc, { align: "center" });
+  }
+
+  // o ponto
+  const py = Y(fn.f(desenhoX));
+  ctx.fillStyle = C.panel;
+  ctx.beginPath(); ctx.arc(X(desenhoX), py, 7.5, 0, 7); ctx.fill();
+  ctx.fillStyle = C.desc;
+  ctx.beginPath(); ctx.arc(X(desenhoX), py, 5.2, 0, 7); ctx.fill();
+
+  if (proximo !== null && S.anim.t < 0.999){
+    ctx.strokeStyle = rgba(mistura(C.panel, C.desc, 0.5), 1);
+    ctx.lineWidth = 1.2; ctx.setLineDash([3, 3]);
+    ctx.beginPath(); ctx.arc(X(proximo), Y(fn.f(proximo)), 5.2, 0, 7); ctx.stroke();
+    ctx.setLineDash([]);
+  }
+}
+
+function facil(t){ return t < 0.5 ? 2*t*t : 1 - Math.pow(-2*t + 2, 2) / 2; }
+
+/* ==================================================================== *
+ * Duas variáveis: grade, isolinhas (marching squares) e preenchimento
+ * ==================================================================== */
+
+const M2 = { e: 62, d: 22, c: 34, b: 46 };
+
+// A caixa de desenho do contorno. Quando as duas variáveis são a mesma
+// espécie de coisa (x e y), a escala precisa ser a mesma nos dois eixos,
+// senão as curvas de nível de x²+y² viram elipses e o texto que promete
+// círculos passa a mentir. No MSE não: inclinação e intercepto não se
+// comparam, e forçar aspecto só desperdiçaria painel.
+function caixa2d(w, h){
+  const fn = S.fn;
+  let e = M2.e, c = M2.c;
+  let pw = w - M2.e - M2.d, ph = h - M2.c - M2.b;
+  if (fn.aspecto){
+    const rx = fn.dom[1] - fn.dom[0], ry = fn.dom[3] - fn.dom[2];
+    const k = Math.min(pw / rx, ph / ry);
+    e += (pw - rx * k) / 2;
+    c += (ph - ry * k) / 2;
+    pw = rx * k; ph = ry * k;
+  }
+  return { e, c, pw, ph };
+}
+
+const NG = 181;   // resolução da grade de valores
+const CASOS = [
+  [], [[3,0]], [[0,1]], [[3,1]], [[1,2]], [[3,0],[1,2]], [[0,2]], [[3,2]],
+  [[2,3]], [[2,0]], [[0,1],[2,3]], [[2,1]], [[1,3]], [[1,0]], [[0,3]], []
+];
+
+function construirCache(){
+  const fn = S.fn;
+  const [xa, xb, ya, yb] = fn.dom;
+  const G = new Float64Array(NG * NG);
+  let vmin = Infinity, vmax = -Infinity;
+  for (let j = 0; j < NG; j++){
+    const y = ya + (yb - ya) * j / (NG - 1);
+    for (let i = 0; i < NG; i++){
+      const x = xa + (xb - xa) * i / (NG - 1);
+      const v = fn.f(x, y);
+      G[j * NG + i] = v;
+      if (Number.isFinite(v)){ if (v < vmin) vmin = v; if (v > vmax) vmax = v; }
+    }
+  }
+
+  // Níveis por quantil: garante curvas de nível bem distribuídas tanto na
+  // tigela (valores quase uniformes) quanto no MSE (cinco ordens de
+  // grandeza entre o fundo e a borda).
+  const amostra = [];
+  for (let k = 0; k < G.length; k += 7) if (Number.isFinite(G[k])) amostra.push(G[k]);
+  amostra.sort((a, b) => a - b);
+  const NL = 16, niveis = [];
+  if (fn.logz){
+    for (let k = 1; k <= NL; k++){
+      const v = vmax * Math.pow(10, -5 * (NL - k) / NL);
+      if (v > vmin && (!niveis.length || v > niveis[niveis.length - 1])) niveis.push(v);
+    }
+  } else {
+    for (let k = 1; k <= NL; k++){
+      const v = amostra[Math.min(amostra.length - 1, Math.floor(amostra.length * k / (NL + 1)))];
+      if (!niveis.length || v > niveis[niveis.length - 1]) niveis.push(v);
+    }
+  }
+
+  const dx = (xb - xa) / (NG - 1), dy = (yb - ya) / (NG - 1);
+  const linhas = niveis.map(nivel => {
+    const segs = [];
+    for (let j = 0; j < NG - 1; j++){
+      for (let i = 0; i < NG - 1; i++){
+        const a = G[j*NG + i], b = G[j*NG + i + 1], c = G[(j+1)*NG + i + 1], d = G[(j+1)*NG + i];
+        const idx = (a > nivel ? 1 : 0) | (b > nivel ? 2 : 0) | (c > nivel ? 4 : 0) | (d > nivel ? 8 : 0);
+        const casos = CASOS[idx];
+        if (!casos.length) continue;
+        const X0 = xa + i * dx, Y0 = ya + j * dy;
+        const it = (p, q) => (nivel - p) / (q - p);
+        const pt = e =>
+          e === 0 ? [X0 + dx * it(a, b), Y0] :
+          e === 1 ? [X0 + dx, Y0 + dy * it(b, c)] :
+          e === 2 ? [X0 + dx * it(d, c), Y0 + dy] :
+                    [X0, Y0 + dy * it(a, d)];
+        for (const [e1, e2] of casos){
+          const p1 = pt(e1), p2 = pt(e2);
+          if (p1.every(Number.isFinite) && p2.every(Number.isFinite)) segs.push(p1[0], p1[1], p2[0], p2[1]);
+        }
+      }
+    }
+    return { nivel, segs: Float32Array.from(segs) };
+  });
+
+  // altura normalizada, com compressão logarítmica onde a faixa é enorme
+  const T = new Float32Array(NG * NG);
+  for (let k = 0; k < G.length; k++){
+    let t = (G[k] - vmin) / (vmax - vmin || 1);
+    if (fn.logz) t = Math.log10(1 + 999 * t) / 3;
+    T[k] = Number.isFinite(t) ? t : 0;
+  }
+
+  S.cache = { id: fn.id, G, T, vmin, vmax, niveis, linhas, tema: null, fundo: null };
+}
+
+function construirFundo(){
+  const c = S.cache;
+  const off = document.createElement("canvas");
+  off.width = NG; off.height = NG;
+  const g = off.getContext("2d");
+  const img = g.createImageData(NG, NG);
+  const a = mistura(css("--panel"), css("--paper-2"), 1);
+  const b = mistura(css("--contour"), css("--ink"), 0.18);
+  for (let j = 0; j < NG; j++){
+    for (let i = 0; i < NG; i++){
+      const t = c.T[(NG - 1 - j) * NG + i];   // linha 0 da imagem = topo = y máximo
+      const col = mistura("#" + a.map(v => v.toString(16).padStart(2, "0")).join(""),
+                          "#" + b.map(v => v.toString(16).padStart(2, "0")).join(""), t * 0.72);
+      const k = (j * NG + i) * 4;
+      img.data[k] = col[0]; img.data[k+1] = col[1]; img.data[k+2] = col[2]; img.data[k+3] = 255;
+    }
+  }
+  g.putImageData(img, 0, 0);
+  c.fundo = off;
+  c.tema = css("--panel") + css("--contour");
+}
+
+function desenharContorno(){
+  const fn = S.fn, c = S.cache;
+  const [xa, xb, ya, yb] = fn.dom;
+  const M = caixa2d(W, H);
+  const pw = M.pw, ph = M.ph;
+  const X = x => M.e + (x - xa) / (xb - xa) * pw;
+  const Y = y => M.c + (1 - (y - ya) / (yb - ya)) * ph;
+
+  const C = {
+    grid: css("--grid"), rule: css("--rule"), ink3: css("--ink-3"),
+    cont: css("--contour"), desc: css("--descent"), grad: css("--grad"), panel: css("--panel")
+  };
+
+  ctx.fillStyle = C.panel;
+  ctx.fillRect(0, 0, W, H);
+
+  ctx.save();
+  ctx.beginPath(); ctx.rect(M.e, M.c, pw, ph); ctx.clip();
+  ctx.imageSmoothingEnabled = true;
+  ctx.globalAlpha = 0.9;
+  ctx.drawImage(c.fundo, M.e, M.c, pw, ph);
+  ctx.globalAlpha = 1;
+
+  // isolinhas
+  c.linhas.forEach((L, k) => {
+    ctx.strokeStyle = rgba(mistura(C.panel, C.cont, k % 4 === 0 ? 0.95 : 0.6), 1);
+    ctx.lineWidth = k % 4 === 0 ? 1.3 : 0.85;
+    ctx.beginPath();
+    for (let i = 0; i < L.segs.length; i += 4){
+      ctx.moveTo(X(L.segs[i]), Y(L.segs[i + 1]));
+      ctx.lineTo(X(L.segs[i + 2]), Y(L.segs[i + 3]));
+    }
+    ctx.stroke();
+  });
+
+  // mínimos
+  if (S.camadas.minimos){
+    for (const m of fn.minima){
+      const global = fn.f(m[0], m[1]) <= fn.f(fn.best[0], fn.best[1]) + 1e-9;
+      const px = X(m[0]), py = Y(m[1]);
+      ctx.strokeStyle = C.ink3; ctx.lineWidth = global ? 1.8 : 1.2;
+      ctx.beginPath();
+      ctx.moveTo(px - 6, py - 6); ctx.lineTo(px + 6, py + 6);
+      ctx.moveTo(px + 6, py - 6); ctx.lineTo(px - 6, py + 6);
+      ctx.stroke();
+      rotulo(ctx, global ? "mínimo global" : "mínimo local", px, py - 11, C.ink3,
+             { align: "center", font: "600 10.5px " + css("--cond") });
+    }
+  }
+
+  // vários inícios
+  if (S.multi){
+    for (const t of S.multi.trilhas){
+      ctx.strokeStyle = rgba(mistura(C.panel, C.ink3, 0.7), 0.55);
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      t.forEach((p, i) => i ? ctx.lineTo(X(p[0]), Y(p[1])) : ctx.moveTo(X(p[0]), Y(p[1])));
+      ctx.stroke();
+      const fim = t[t.length - 1];
+      ctx.fillStyle = rgba(mistura(C.panel, C.desc, 0.7), 0.8);
+      ctx.beginPath(); ctx.arc(X(fim[0]), Y(fim[1]), 3.2, 0, 7); ctx.fill();
+    }
+  }
+
+  // rastro
+  const n = S.path.length;
+  if (S.camadas.rastro && n > 1){
+    for (let i = 1; i < n; i++){
+      const t = i / (n - 1);
+      ctx.strokeStyle = rgba(mistura(C.panel, C.desc, 0.14 + 0.78 * t), 1);
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.moveTo(X(S.path[i-1][0]), Y(S.path[i-1][1]));
+      ctx.lineTo(X(S.path[i][0]), Y(S.path[i][1]));
+      ctx.stroke();
+    }
+    for (let i = 0; i < n - 1; i++){
+      const t = n > 2 ? i / (n - 2) : 0;
+      ctx.fillStyle = rgba(mistura(C.panel, C.desc, 0.16 + 0.76 * t), 1);
+      ctx.beginPath(); ctx.arc(X(S.path[i][0]), Y(S.path[i][1]), 3, 0, 7); ctx.fill();
+    }
+  }
+
+  const base = S.anim ? S.anim.de : S.path[n - 1];
+  const g = fn.g(base[0], base[1]);
+  const alvo = [base[0] - S.alpha * g[0], base[1] - S.alpha * g[1]];
+  const ponto = S.anim
+    ? [base[0] + (S.anim.para[0] - base[0]) * facil(S.anim.t),
+       base[1] + (S.anim.para[1] - base[1]) * facil(S.anim.t)]
+    : base;
+
+  // vetor gradiente: comprimento fixo (a magnitude vive na leitura, não na
+  // tela — no MSE ela passa de 30.000 e a seta sairia do país)
+  if (S.camadas.grad && Number.isFinite(g[0]) && Number.isFinite(g[1])){
+    const L = Math.hypot(g[0], g[1]);
+    if (L > 0){
+      const R = Math.min(pw, ph) * 0.13;
+      seta(ctx, X(base[0]), Y(base[1]),
+           X(base[0]) + g[0] / L * R, Y(base[1]) - g[1] / L * R,
+           C.grad, { largura: 1.8, tracejado: [5, 4], cabeca: 9 });
+      rotulo(ctx, "∇f", X(base[0]) + g[0] / L * R + 5, Y(base[1]) - g[1] / L * R - 4, C.grad);
+    }
+  }
+
+  // o passo, em escala verdadeira
+  if (S.camadas.tangente && Number.isFinite(alvo[0]) && Number.isFinite(alvo[1])){
+    seta(ctx, X(base[0]), Y(base[1]), X(alvo[0]), Y(alvo[1]), C.desc, { largura: 2.4, cabeca: 10 });
+  }
+
+  ctx.fillStyle = C.panel;
+  ctx.beginPath(); ctx.arc(X(ponto[0]), Y(ponto[1]), 7.5, 0, 7); ctx.fill();
+  ctx.fillStyle = C.desc;
+  ctx.beginPath(); ctx.arc(X(ponto[0]), Y(ponto[1]), 5.2, 0, 7); ctx.fill();
+
+  ctx.restore();
+
+  // moldura, marcas e nomes de eixo
+  ctx.strokeStyle = C.rule; ctx.lineWidth = 1;
+  ctx.strokeRect(M.e + .5, M.c + .5, pw - 1, ph - 1);
+  const tx = ticks(xa, xb, 8), ty = ticks(ya, yb, 6);
+  ctx.font = "400 11px " + css("--mono");
+  ctx.fillStyle = C.ink3;
+  ctx.textAlign = "center"; ctx.textBaseline = "top";
+  for (const v of tx.vals) ctx.fillText(fmt(v, Math.abs(tx.passo) < 1 ? 1 : 0), X(v), M.c + ph + 7);
+  ctx.textAlign = "right"; ctx.textBaseline = "middle";
+  for (const v of ty.vals) ctx.fillText(fmt(v, Math.abs(ty.passo) < 1 ? 1 : 0), M.e - 8, Y(v));
+  ctx.font = "600 11.5px " + css("--cond");
+  ctx.textAlign = "right"; ctx.textBaseline = "alphabetic";
+  ctx.fillText(fn.vars[0], M.e + pw, H - 8);
+  ctx.textAlign = "center";
+  ctx.save();
+  ctx.translate(15, M.c + ph / 2); ctx.rotate(-Math.PI / 2);
+  ctx.fillText(fn.vars[1], 0, 0);
+  ctx.restore();
+}
+
+/* ---------------------------- superfície 3D ---------------------------- */
+
+const NM = 64;   // malha da superfície
+
+// A malha e a projeção só dependem da função, da rotação, do tamanho do
+// painel e do tema — nunca do passo atual. Agora que os dois painéis
+// desenham juntos, reordenar 4.096 quadriláteros a cada quadro da animação
+// seria desperdício: a malha vai para um canvas fora de tela e é reusada
+// enquanto nada disso muda. Girar a vista a reconstrói, que é o certo.
+function malha3d(){
+  const fn = S.fn, c = S.cache;
+  const [xa, xb, ya, yb] = fn.dom;
+  const C = { panel: css("--panel"), cont: css("--contour") };
+  const chave = [fn.id, S.az.toFixed(4), S.el.toFixed(4), W, H, C.panel, C.cont].join("|");
+  if (S.malha && S.malha.chave === chave) return S.malha;
+
+  const ca = Math.cos(S.az), sa = Math.sin(S.az);
+  const ce = Math.cos(S.el), se = Math.sin(S.el);
+
+  const altura = (x, y) => {
+    let t = (fn.f(x, y) - c.vmin) / (c.vmax - c.vmin || 1);
+    if (fn.logz) t = Math.log10(1 + 999 * Math.max(0, t)) / 3;
+    return Number.isFinite(t) ? Math.max(0, Math.min(1.15, t)) : 0;
+  };
+
+  const proj = (x, y, z) => {
+    const u = ((x - (xa + xb) / 2) / (xb - xa)) * 2;
+    const w = ((y - (ya + yb) / 2) / (yb - ya)) * 2;
+    const ur = u * ca - w * sa, wr = u * sa + w * ca;
+    const Z = z * 0.9;
+    return [ur, -Z * ce + wr * se, wr * ce + Z * se];
+  };
+
+  // extensão em tela, para caber com folga
+  let minx = Infinity, maxx = -Infinity, miny = Infinity, maxy = -Infinity;
+  for (let j = 0; j <= NM; j++){
+    for (let i = 0; i <= NM; i++){
+      const x = xa + (xb - xa) * i / NM, y = ya + (yb - ya) * j / NM;
+      const p = proj(x, y, altura(x, y));
+      minx = Math.min(minx, p[0]); maxx = Math.max(maxx, p[0]);
+      miny = Math.min(miny, p[1]); maxy = Math.max(maxy, p[1]);
+    }
+  }
+  const pad = 42;
+  const k = Math.min((W - 2 * pad) / (maxx - minx || 1), (H - 2 * pad) / (maxy - miny || 1));
+  const ox = W / 2 - (minx + maxx) / 2 * k, oy = H / 2 - (miny + maxy) / 2 * k;
+  const tela = (x, y, z) => { const p = proj(x, y, z); return [ox + p[0] * k, oy + p[1] * k, p[2]]; };
+
+  const off = document.createElement("canvas");
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  off.width = Math.round(W * dpr); off.height = Math.round(H * dpr);
+  const g = off.getContext("2d");
+  g.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+  // quads, do mais distante para o mais próximo
+  const quads = [];
+  for (let j = 0; j < NM; j++){
+    for (let i = 0; i < NM; i++){
+      const x1 = xa + (xb - xa) * i / NM, x2 = xa + (xb - xa) * (i + 1) / NM;
+      const y1 = ya + (yb - ya) * j / NM, y2 = ya + (yb - ya) * (j + 1) / NM;
+      const h = [altura(x1, y1), altura(x2, y1), altura(x2, y2), altura(x1, y2)];
+      const p = [tela(x1, y1, h[0]), tela(x2, y1, h[1]), tela(x2, y2, h[2]), tela(x1, y2, h[3])];
+      quads.push({ p, t: (h[0] + h[1] + h[2] + h[3]) / 4, d: (p[0][2] + p[1][2] + p[2][2] + p[3][2]) / 4 });
+    }
+  }
+  quads.sort((a, b) => b.d - a.d);
+
+  const baixo = mistura(C.panel, C.cont, 0.28);
+  const alto  = mistura(C.cont, css("--ink"), 0.35);
+  for (const q of quads){
+    // inclinação da face na tela: faces mais “de lado” escurecem um pouco
+    const ax = q.p[1][0] - q.p[0][0], ay = q.p[1][1] - q.p[0][1];
+    const bx = q.p[3][0] - q.p[0][0], by = q.p[3][1] - q.p[0][1];
+    const area = Math.abs(ax * by - ay * bx);
+    const luz = Math.min(1, area / ((W / NM) * (H / NM) * 2.4));
+    const col = mistura("#" + baixo.map(v => v.toString(16).padStart(2, "0")).join(""),
+                        "#" + alto.map(v => v.toString(16).padStart(2, "0")).join(""),
+                        Math.max(0, Math.min(1, q.t)));
+    g.fillStyle = rgba(col, 0.55 + 0.45 * luz);
+    g.strokeStyle = rgba(col, 0.9);
+    g.lineWidth = 0.4;
+    g.beginPath();
+    g.moveTo(q.p[0][0], q.p[0][1]);
+    g.lineTo(q.p[1][0], q.p[1][1]);
+    g.lineTo(q.p[2][0], q.p[2][1]);
+    g.lineTo(q.p[3][0], q.p[3][1]);
+    g.closePath();
+    g.fill(); g.stroke();
+  }
+
+  S.malha = { chave, canvas: off, tela, altura };
+  return S.malha;
+}
+
+function desenharSuperficie(){
+  const fn = S.fn;
+  const [xa, xb, ya, yb] = fn.dom;
+  const C = { panel: css("--panel"), cont: css("--contour"), ink3: css("--ink-3"),
+              desc: css("--descent"), grad: css("--grad"), rule: css("--rule") };
+
+  ctx.fillStyle = C.panel;
+  ctx.fillRect(0, 0, W, H);
+
+  const m = malha3d();
+  ctx.drawImage(m.canvas, 0, 0, W, H);
+  const tela = m.tela, altura = m.altura;
+
+  const dentro = p => p[0] >= xa && p[0] <= xb && p[1] >= ya && p[1] <= yb;
+  const elevar = 0.035;
+
+  if (S.multi){
+    ctx.strokeStyle = rgba(mistura(C.panel, C.ink3, 0.8), 0.5);
+    ctx.lineWidth = 1;
+    for (const t of S.multi.trilhas){
+      ctx.beginPath();
+      let comecou = false;
+      for (const p of t){
+        if (!dentro(p)) { comecou = false; continue; }
+        const s = tela(p[0], p[1], altura(p[0], p[1]) + elevar);
+        comecou ? ctx.lineTo(s[0], s[1]) : ctx.moveTo(s[0], s[1]);
+        comecou = true;
+      }
+      ctx.stroke();
+    }
+  }
+
+  if (S.camadas.minimos){
+    for (const m of fn.minima){
+      const s = tela(m[0], m[1], altura(m[0], m[1]) + elevar);
+      const global = fn.f(m[0], m[1]) <= fn.f(fn.best[0], fn.best[1]) + 1e-9;
+      ctx.strokeStyle = C.ink3; ctx.lineWidth = global ? 1.8 : 1.2;
+      ctx.beginPath();
+      ctx.moveTo(s[0] - 5, s[1] - 5); ctx.lineTo(s[0] + 5, s[1] + 5);
+      ctx.moveTo(s[0] + 5, s[1] - 5); ctx.lineTo(s[0] - 5, s[1] + 5);
+      ctx.stroke();
+    }
+  }
+
+  const n = S.path.length;
+  if (S.camadas.rastro && n > 1){
+    for (let i = 1; i < n; i++){
+      const A = S.path[i - 1], B = S.path[i];
+      if (!dentro(A) || !dentro(B)) continue;
+      const sa1 = tela(A[0], A[1], altura(A[0], A[1]) + elevar);
+      const sb1 = tela(B[0], B[1], altura(B[0], B[1]) + elevar);
+      ctx.strokeStyle = rgba(mistura(C.panel, C.desc, 0.18 + 0.76 * (i / (n - 1))), 1);
+      ctx.lineWidth = 1.8;
+      ctx.beginPath(); ctx.moveTo(sa1[0], sa1[1]); ctx.lineTo(sb1[0], sb1[1]); ctx.stroke();
+      ctx.fillStyle = ctx.strokeStyle;
+      ctx.beginPath(); ctx.arc(sa1[0], sa1[1], 2.6, 0, 7); ctx.fill();
+    }
+  }
+
+  const base = S.anim ? S.anim.de : S.path[n - 1];
+  const ponto = S.anim
+    ? [base[0] + (S.anim.para[0] - base[0]) * facil(S.anim.t),
+       base[1] + (S.anim.para[1] - base[1]) * facil(S.anim.t)]
+    : base;
+
+  if (dentro(ponto)){
+    const h = altura(ponto[0], ponto[1]);
+    const s = tela(ponto[0], ponto[1], h + elevar);
+    const pe = tela(ponto[0], ponto[1], 0);
+    ctx.strokeStyle = rgba(mistura(C.panel, C.desc, 0.45), 1);
+    ctx.lineWidth = 1; ctx.setLineDash([3, 3]);
+    ctx.beginPath(); ctx.moveTo(s[0], s[1]); ctx.lineTo(pe[0], pe[1]); ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.fillStyle = C.panel;
+    ctx.beginPath(); ctx.arc(s[0], s[1], 7.5, 0, 7); ctx.fill();
+    ctx.fillStyle = C.desc;
+    ctx.beginPath(); ctx.arc(s[0], s[1], 5.2, 0, 7); ctx.fill();
+  }
+
+  rotulo(ctx, "altura = f(" + fn.vars[0] + ", " + fn.vars[1] + ")"
+              + (fn.logz ? ", em escala log" : ""),
+         W - 14, 24, C.ink3, { align: "right", font: "400 11px " + css("--mono") });
+}
+
+/* ==================================================================== *
+ * Painéis do trilho: faísca da perda e a reta ajustada
+ * ==================================================================== */
+
+function desenharFaisca(){
+  const c = document.getElementById("spark");
+  const [w, h] = ajustarCanvas(c, 76);
+  const g = c.getContext("2d");
+  g.clearRect(0, 0, w, h);
+
+  const vals = S.path.map(valor).filter(Number.isFinite);
+  const rot = document.getElementById("spark-scale");
+  if (vals.length < 2){ rot.textContent = ""; return; }
+
+  const positivos = vals.every(v => v > 0);
+  const faixa = Math.max(...vals) / Math.max(1e-300, Math.min(...vals));
+  const log = positivos && faixa > 50;
+  rot.textContent = log ? "escala log" : "";
+
+  const t = vals.map(v => log ? Math.log10(v) : v);
+  let lo = Math.min(...t), hi = Math.max(...t);
+  if (hi - lo < 1e-12){ hi = lo + 1; }
+  const pad = 6;
+  const X = i => pad + i / (t.length - 1) * (w - 2 * pad);
+  const Y = v => h - pad - (v - lo) / (hi - lo) * (h - 2 * pad);
+
+  g.strokeStyle = css("--rule"); g.lineWidth = 1;
+  g.beginPath(); g.moveTo(pad, h - pad + .5); g.lineTo(w - pad, h - pad + .5); g.stroke();
+
+  g.strokeStyle = css("--descent"); g.lineWidth = 1.8;
+  g.beginPath();
+  t.forEach((v, i) => i ? g.lineTo(X(i), Y(v)) : g.moveTo(X(i), Y(v)));
+  g.stroke();
+  g.fillStyle = css("--descent");
+  g.beginPath(); g.arc(X(t.length - 1), Y(t[t.length - 1]), 3, 0, 7); g.fill();
+
+  g.font = "400 10px " + css("--mono");
+  g.fillStyle = css("--ink-3");
+  g.strokeStyle = css("--panel");
+  g.lineWidth = 3;
+  g.lineJoin = "round";
+  g.textBaseline = "top";
+  g.textAlign = "left";
+  g.strokeText(fmt(vals[0], 3), pad, 2);
+  g.fillText(fmt(vals[0], 3), pad, 2);
+  g.textAlign = "right";
+  g.strokeText(fmt(vals[vals.length - 1], 3), w - pad, 2);
+  g.fillText(fmt(vals[vals.length - 1], 3), w - pad, 2);
+}
+
+// os dados da seção 5.5: inputs = [(x, 20x + 5) for x in range(-50, 50)]
+const DADOS = [];
+for (let x = -50; x < 50; x++) DADOS.push([x, 20 * x + 5]);
+
+function desenharAjuste(){
+  const box = document.getElementById("fitbox");
+  const mostrar = S.mode === "2d" && S.fn.id === "mse";
+  box.hidden = !mostrar;
+  if (!mostrar) return;
+
+  const c = document.getElementById("fit");
+  const [w, h] = ajustarCanvas(c, 118);
+  const g = c.getContext("2d");
+  g.clearRect(0, 0, w, h);
+
+  const p = S.path[S.path.length - 1];
+  const pad = 8;
+  const xa = -52, xb = 52, ya = -1100, yb = 1100;
+  const X = x => pad + (x - xa) / (xb - xa) * (w - 2 * pad);
+  const Y = y => h - pad - (y - ya) / (yb - ya) * (h - 2 * pad);
+
+  g.strokeStyle = css("--rule"); g.lineWidth = 1;
+  g.beginPath();
+  g.moveTo(pad, Math.round(Y(0)) + .5); g.lineTo(w - pad, Math.round(Y(0)) + .5);
+  g.moveTo(Math.round(X(0)) + .5, pad); g.lineTo(Math.round(X(0)) + .5, h - pad);
+  g.stroke();
+
+  g.fillStyle = css("--curve");
+  for (let i = 0; i < DADOS.length; i += 2){
+    g.beginPath(); g.arc(X(DADOS[i][0]), Y(DADOS[i][1]), 1.4, 0, 7); g.fill();
+  }
+
+  if (Number.isFinite(p[0]) && Number.isFinite(p[1])){
+    g.save();
+    g.beginPath(); g.rect(pad, pad, w - 2 * pad, h - 2 * pad); g.clip();
+    g.strokeStyle = css("--descent"); g.lineWidth = 2;
+    g.beginPath();
+    g.moveTo(X(xa), Y(p[0] * xa + p[1]));
+    g.lineTo(X(xb), Y(p[0] * xb + p[1]));
+    g.stroke();
+    g.restore();
+  }
+
+  g.font = "400 10px " + css("--mono");
+  g.fillStyle = css("--ink-3");
+  g.textBaseline = "top";
+  g.textAlign = "left";
+  g.strokeStyle = css("--panel");
+  g.lineWidth = 3;
+  g.lineJoin = "round";
+  g.strokeText("y = " + fmt(p[0], 2) + "x + " + fmt(p[1], 2), pad + 2, 2);
+  g.fillText("y = " + fmt(p[0], 2) + "x + " + fmt(p[1], 2), pad + 2, 2);
+}
+
+/* ==================================================================== *
+ * Leitura, código e situação
+ * ==================================================================== */
+
+// -α como o livro escreve: sem zeros pendurados, e sem comer um zero
+// significativo de um número inteiro (que /0+$/ sozinho faria com 100).
+function sinal(){
+  let t = (-S.alpha).toPrecision(3);
+  if (t.indexOf(".") >= 0) t = t.replace(/0+$/, "").replace(/\.$/, "");
+  return t;
+}
+
+function atualizarLeitura(){
+  const fn = S.fn;
+  const p = S.path[S.path.length - 1];
+  const g = gradiente(p);
+  const dl = document.getElementById("readout");
+  const linhas = [];
+
+  const prox = passoDe(p);
+
+  linhas.push(["passo (i)", String(S.path.length - 1), ""]);
+
+  if (S.mode === "1d"){
+    linhas.push(["x", fmt(p[0]), "hi"]);
+    linhas.push(["f(x)", fmt(fn.f(p[0])), ""]);
+    linhas.push(["f'(x)", fmt(g[0]), "gr"]);
+    linhas.push(["−α·f'(x)", fmt(-S.alpha * g[0]), "hi"]);
+    // o que o passo produz: x - α·f'(x)
+    linhas.push(["x(i+1)", fmt(prox[0]), "hi novo"]);
+  } else {
+    const c = fn.curto;
+    linhas.push([c[0], fmt(p[0]), "hi"]);
+    linhas.push([c[1], fmt(p[1]), "hi"]);
+    linhas.push(["f", fmt(fn.f(p[0], p[1]))]);
+    linhas.push([fn.dl[0], fmt(g[0]), "gr"]);
+    linhas.push([fn.dl[1], fmt(g[1]), "gr"]);
+    linhas.push(["‖∇f‖", fmt(Math.hypot(g[0], g[1])), "gr"]);
+    linhas.push([c[0] + "(i+1)", fmt(prox[0]), "hi novo"]);
+    linhas.push([c[1] + "(i+1)", fmt(prox[1]), "hi"]);
+  }
+
+  dl.innerHTML = linhas.map(([k, v, cl]) => {
+    const cls = (cl || "").split(" ").filter(Boolean);
+    const dtCls = cls.includes("novo") ? ' class="novo"' : "";
+    return "<dt" + dtCls + ">" + k + "</dt>" +
+           "<dd" + (cls.length ? ' class="' + cls.join(" ") + '"' : "") + ">" + v + "</dd>";
+  }).join("");
+
+  const s = situacao();
+  const el = document.getElementById("status");
+  el.className = "status " + s;
+  document.getElementById("status-text").textContent = TEXTO_SITUACAO[s];
+
+  // a linha de código, com os números de agora
+  const nome = S.mode === "2d" ? S.fn.v : "v";
+  const vet = a => "[" + a.map(v => fmt(v, 3)).join(", ") + "]";
+  const cm = t => '<span class="cm">' + t + "</span>";
+  document.getElementById("code").innerHTML =
+    "grad  = " + fn.grad + "\n" +
+    cm("        # " + vet(g)) + "\n" +
+    nome + (nome.length < 5 ? " ".repeat(5 - nome.length) : "") + " = gradient_step(" + nome + ", grad, " +
+      sinal() + ")\n" +
+    cm("        # " + vet(p) + "  →  " + vet(prox));
+}
+
+/* ==================================================================== *
+ * Laço de animação
+ * ==================================================================== */
+
+let ultimo = 0;
+const semMovimento = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+function duracaoPasso(){
+  const v = +document.getElementById("speed").value;
+  return 900 - v * 8;   // 900 ms (lento) → 100 ms (rápido)
+}
+
+function quadro(t){
+  const dt = ultimo ? t - ultimo : 16;
+  ultimo = t;
+
+  if (S.playing && !S.anim){
+    const s = situacao();
+    if (s === "ok" || s === "bad"){
+      S.playing = false;
+      sincronizarBotoes();
+    } else {
+      S.anim = { de: S.path[S.path.length - 1], para: passoDe(S.path[S.path.length - 1]), t: 0 };
+    }
+  }
+
+  if (S.anim){
+    S.anim.t += semMovimento ? 1 : dt / duracaoPasso();
+    if (S.anim.t >= 1){
+      S.path.push(S.anim.para);
+      S.anim = null;
+      atualizarLeitura();
+      desenharFaisca();
+      desenharAjuste();
+      if (!S.playing) sincronizarBotoes();
+    }
+  }
+
+  if (S.anim || S.playing || S.sujo){ desenhar(); S.sujo = false; }
+  requestAnimationFrame(quadro);
+}
+
+function desenhar(){
+  if (S.mode === "1d"){
+    usar(cvA);
+    desenhar1d();
+    return;
+  }
+  if (!S.cache || S.cache.id !== S.fn.id) construirCache();
+  if (S.cache.tema !== css("--panel") + css("--contour")) construirFundo();
+  usar(cvA); desenharContorno();
+  usar(cvB); desenharSuperficie();
+}
+
+/* ==================================================================== *
+ * Interface
+ * ==================================================================== */
+
+const el = id => document.getElementById(id);
+
+function alphaParaSlider(a){
+  const [lo, hi] = S.fn.a;
+  return Math.round(1000 * Math.log(a / lo) / Math.log(hi / lo));
+}
+function sliderParaAlpha(v){
+  const [lo, hi] = S.fn.a;
+  return lo * Math.pow(hi / lo, v / 1000);
+}
+function mostrarAlpha(){
+  const a = S.alpha;
+  return a < 0.001 ? a.toPrecision(2) : String(+a.toPrecision(4));
+}
+
+// Limites de cada coordenada do ponto de partida: em uma variável só há o
+// domínio em x; em duas, x e y têm faixas próprias (o vale estreito é
+// -6..6 por -3..3, e o MSE nem começa perto de zero).
+function faixaInicio(i){
+  const d = S.fn.dom;
+  return S.mode === "1d" ? [d[0], d[1]] : (i === 0 ? [d[0], d[1]] : [d[2], d[3]]);
+}
+
+function fmtInicio(v){ return String(+v.toFixed(4)); }
+
+function montarInicio(){
+  const nomes = S.mode === "1d" ? ["x₀"] : S.fn.vars;
+  el("start-row").innerHTML = nomes.map((n, i) =>
+    '<label class="campo"><span title="' + n + '">' + n + '</span>' +
+    '<input type="text" inputmode="decimal" data-i="' + i +
+    '" aria-label="Valor inicial de ' + n + '" value="' + fmtInicio(S.start[i]) + '"></label>'
+  ).join("");
+}
+
+// Só reescreve os valores — nunca o HTML —, para não arrancar o foco de
+// quem está digitando nem perder a posição do cursor.
+function sincronizarInicio(){
+  for (const inp of document.querySelectorAll("#start-row input")){
+    if (inp === document.activeElement) continue;
+    inp.value = fmtInicio(S.start[+inp.dataset.i]);
+  }
+}
+
+function trocarFuncao(fn){
+  S.fn = fn;
+  S.alpha = fn.a0;
+  S.start = S.mode === "1d" ? [fn.x0] : fn.p0.slice();
+  S.cache = null;
+  S.malha = null;
+  S.multi = null;
+  montarPresets();
+  montarInicio();
+  el("formula").textContent = fn.formula;
+  el("fnnote").textContent = fn.nota;
+  el("alpha-range").value = alphaParaSlider(S.alpha);
+  el("alpha-num").value = mostrarAlpha();
+  reiniciar();
+}
+
+function montarSelect(){
+  const sel = el("fn");
+  const lista = S.mode === "1d" ? F1 : F2;
+  sel.innerHTML = lista.map(f => '<option value="' + f.id + '">' + f.nome + "</option>").join("");
+  sel.value = S.fn.id;
+}
+
+function montarPresets(){
+  el("presets").innerHTML = S.fn.presets
+    .map(([a, txt]) => '<button class="chip" data-a="' + a + '">α = ' + txt + "</button>").join("");
+}
+
+function montarCamadas(){
+  const d2 = S.mode === "2d";
+  el("ly-tan-text").textContent = d2 ? "seta do passo −α·∇f" : "reta tangente";
+  el("ly-grad-text").textContent = d2 ? "vetor gradiente ∇f" : "seta do passo −α·f'(x)";
+  el("hint").textContent = "arraste para mover o ponto de partida";
+  el("tag-a").textContent = d2 ? "contorno" : "";
+  el("plates").classList.toggle("duplo", d2);
+  el("plate-3d").hidden = !d2;
+}
+
+function sincronizarBotoes(){
+  const s = situacao();
+  const fim = s === "ok" || s === "bad";
+  el("btn-play").textContent = S.playing ? "pausar" : "animar";
+  el("btn-step").disabled = fim;
+  el("btn-fast").disabled = fim;
+  el("btn-play").disabled = fim && !S.playing;
+}
+
+function atualizar(){
+  S.sujo = true;
+  sincronizarInicio();
+  atualizarLeitura();
+  desenharFaisca();
+  desenharAjuste();
+  sincronizarBotoes();
+  montarCamadas();
+}
+
+/* ------------------------------- eventos ------------------------------- */
+
+for (const b of document.querySelectorAll(".mode")){
+  b.addEventListener("click", () => {
+    if (b.dataset.mode === S.mode) return;
+    S.mode = b.dataset.mode;
+    for (const o of document.querySelectorAll(".mode"))
+      o.setAttribute("aria-selected", String(o === b));
+    S.malha = null;
+    trocarFuncao(S.mode === "1d" ? F1[0] : F2[0]);
+    montarSelect();
+    preRodar();
+  });
+}
+
+el("fn").addEventListener("change", e => {
+  const lista = S.mode === "1d" ? F1 : F2;
+  trocarFuncao(lista.find(f => f.id === e.target.value));
+  preRodar();
+});
+
+el("alpha-range").addEventListener("input", e => {
+  S.alpha = sliderParaAlpha(+e.target.value);
+  el("alpha-num").value = mostrarAlpha();
+  reiniciar();
+  preRodar();
+});
+
+el("alpha-num").addEventListener("change", e => {
+  const v = parseFloat(e.target.value.replace(",", "."));
+  if (Number.isFinite(v) && v > 0){
+    S.alpha = Math.max(S.fn.a[0], Math.min(S.fn.a[1], v));
+    el("alpha-range").value = alphaParaSlider(S.alpha);
+  }
+  el("alpha-num").value = mostrarAlpha();
+  reiniciar();
+  preRodar();
+});
+
+el("presets").addEventListener("click", e => {
+  const b = e.target.closest(".chip");
+  if (!b) return;
+  S.alpha = Math.max(S.fn.a[0], Math.min(S.fn.a[1], parseFloat(b.dataset.a)));
+  el("alpha-range").value = alphaParaSlider(S.alpha);
+  el("alpha-num").value = mostrarAlpha();
+  reiniciar();
+  preRodar();
+});
+
+el("start-row").addEventListener("change", e => {
+  const inp = e.target.closest("input");
+  if (!inp) return;
+  const i = +inp.dataset.i;
+  const v = parseFloat(inp.value.replace(",", "."));
+  if (Number.isFinite(v)){
+    const [lo, hi] = faixaInicio(i);
+    S.start[i] = Math.max(lo, Math.min(hi, v));
+  }
+  inp.value = fmtInicio(S.start[i]);
+  reiniciar(true);
+  preRodar();
+});
+
+// Enter confirma sem precisar sair do campo — é como um professor usa isto
+// no meio da aula.
+el("start-row").addEventListener("keydown", e => {
+  if (e.key === "Enter"){ e.preventDefault(); e.target.blur(); }
+});
+
+el("btn-reset").addEventListener("click", () => reiniciar());
+el("btn-step").addEventListener("click", () => {
+  if (S.anim) return;
+  S.playing = false;
+  const p = S.path[S.path.length - 1];
+  if (situacao() === "ok" || situacao() === "bad") return;
+  S.anim = { de: p, para: passoDe(p), t: 0 };
+  sincronizarBotoes();
+});
+el("btn-play").addEventListener("click", () => {
+  S.playing = !S.playing;
+  sincronizarBotoes();
+});
+el("btn-fast").addEventListener("click", () => {
+  S.playing = false; S.anim = null;
+  for (let i = 0; i < 100; i++) if (!darUmPasso()) break;
+  atualizar();
+});
+
+el("btn-multi").addEventListener("click", () => {
+  const fn = S.fn;
+  const N = 12;
+  const trilhas = [];
+  // sementes fixas: a mesma demonstração todas as vezes, como o livro exige
+  // de todo trecho estocástico
+  let semente = 20260908;
+  const rnd = () => { semente = (semente * 1103515245 + 12345) & 0x7fffffff; return semente / 0x7fffffff; };
+  for (let k = 0; k < N; k++){
+    let p;
+    if (S.mode === "1d"){
+      p = [fn.dom[0] + (fn.dom[1] - fn.dom[0]) * rnd()];
+    } else {
+      p = [fn.dom[0] + (fn.dom[1] - fn.dom[0]) * rnd(),
+           fn.dom[2] + (fn.dom[3] - fn.dom[2]) * rnd()];
+    }
+    const t = [S.mode === "1d" ? p[0] : p.slice()];
+    for (let i = 0; i < 3000; i++){
+      const g = S.mode === "1d" ? [fn.df(p[0])] : fn.g(p[0], p[1]);
+      if (!g.every(Number.isFinite) || Math.hypot(...g) < EPS) break;
+      p = p.map((c, ix) => c - S.alpha * g[ix]);
+      if (!p.every(Number.isFinite) || Math.abs(p[0]) > 1e6) break;
+      if (i % 2 === 0) t.push(S.mode === "1d" ? p[0] : p.slice());
+    }
+    trilhas.push(t);
+  }
+
+  // quantos acharam o melhor mínimo?
+  const dist = p => S.mode === "1d"
+    ? Math.abs(p - fn.best)
+    : Math.hypot(p[0] - fn.best[0], p[1] - fn.best[1]);
+  const escala = Math.abs(fn.dom[1] - fn.dom[0]) * 0.06;
+  const bons = trilhas.filter(t => dist(t[t.length - 1]) < escala).length;
+
+  S.multi = {
+    trilhas,
+    contagem: bons + " de " + N + " inícios aleatórios chegaram ao mínimo global, com α = " +
+              mostrarAlpha() + ". Os outros pararam onde calharam de cair."
+  };
+  const nota = el("multi-note");
+  nota.hidden = false;
+  nota.textContent = S.multi.contagem;
+});
+
+for (const [id, chave] of [["ly-trail", "rastro"], ["ly-tan", "tangente"], ["ly-grad", "grad"], ["ly-min", "minimos"]]){
+  el(id).addEventListener("change", e => { S.camadas[chave] = e.target.checked; S.sujo = true; });
+}
+
+/* ------------------------- arrastar no gráfico ------------------------- */
+
+let arrastando = false, ultimoPtr = null;
+
+for (const c of [cvA, cvB]){
+  c.addEventListener("pointerdown", e => {
+    c.setPointerCapture(e.pointerId);
+    arrastando = c;
+    const r = c.getBoundingClientRect();
+    ultimoPtr = [e.clientX - r.left, e.clientY - r.top];
+    aplicarArrasto(e, c, true);
+  });
+  c.addEventListener("pointermove", e => { if (arrastando === c) aplicarArrasto(e, c, false); });
+  c.addEventListener("pointerup", () => { arrastando = false; });
+  c.addEventListener("pointercancel", () => { arrastando = false; });
+}
+
+function aplicarArrasto(e, alvo, inicio){
+  const r = alvo.getBoundingClientRect();
+  const px = e.clientX - r.left, py = e.clientY - r.top;
+
+  // No painel da superfície, arrastar gira a câmera; no outro, escolhe de
+  // onde a busca parte.
+  if (alvo === cvB){
+    if (!inicio && ultimoPtr){
+      S.az -= (px - ultimoPtr[0]) * 0.008;
+      S.el = Math.max(0.12, Math.min(1.35, S.el + (py - ultimoPtr[1]) * 0.006));
+    }
+    ultimoPtr = [px, py];
+    S.sujo = true;
+    return;
+  }
+
+  const fn = S.fn, w = r.width, h = r.height;
+  if (S.mode === "1d"){
+    const e0 = 58, pw = w - e0 - 22;
+    const x = fn.dom[0] + (px - e0) / pw * (fn.dom[1] - fn.dom[0]);
+    S.start = [Math.max(fn.dom[0], Math.min(fn.dom[1], x))];
+  } else {
+    const M = caixa2d(w, h);
+    const x = fn.dom[0] + (px - M.e) / M.pw * (fn.dom[1] - fn.dom[0]);
+    const y = fn.dom[2] + (1 - (py - M.c) / M.ph) * (fn.dom[3] - fn.dom[2]);
+    S.start = [Math.max(fn.dom[0], Math.min(fn.dom[1], x)),
+               Math.max(fn.dom[2], Math.min(fn.dom[3], y))];
+  }
+  reiniciar(true);
+  preRodar();
+}
+
+/* -------------------------------- teclado ------------------------------ */
+
+document.addEventListener("keydown", e => {
+  if (/^(INPUT|SELECT|TEXTAREA)$/.test(e.target.tagName)) return;
+  if (e.code === "Space"){ e.preventDefault(); el("btn-play").click(); }
+  else if (e.key === "ArrowRight"){ e.preventDefault(); el("btn-step").click(); }
+  else if (e.key === "r" || e.key === "R"){ el("btn-reset").click(); }
+});
+
+window.addEventListener("resize", () => { S.sujo = true; desenharFaisca(); desenharAjuste(); });
+
+/* --------------------------------- início ------------------------------ */
+
+function preRodar(){
+  // A página abre com alguns passos já dados: o primeiro quadro mostra o
+  // rastro, a tangente, a seta e a leitura preenchida — e não uma tela
+  // vazia esperando um clique.
+  for (let i = 0; i < 5; i++) if (!darUmPasso()) break;
+  atualizar();
+}
+
+montarSelect();
+trocarFuncao(F1[0]);
+preRodar();
+requestAnimationFrame(quadro);
+</script>
