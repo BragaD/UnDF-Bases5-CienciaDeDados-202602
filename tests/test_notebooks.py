@@ -242,6 +242,34 @@ def test_todo_capitulo_tem_link_para_o_colab_e_nenhum_notebook_o_repete():
         )
 
 
+def test_link_de_apoio_e_relativo_no_qmd_e_absoluto_no_notebook():
+    """As duas pontas pedem coisas opostas, e as duas falham em silêncio.
+
+    No `.qmd` o link precisa ser **relativo**: com a URL absoluta, `make
+    preview` manda o leitor para o site publicado em vez da cópia local que
+    ele está olhando — e ninguém percebe, porque a página abre normalmente.
+    No notebook precisa ser **absoluto**: de dentro de `notebooks/`, e mais
+    ainda no Colab, nenhum caminho relativo do livro resolve. Quem traduz é
+    `reescreve_links`; este teste guarda os dois lados.
+    """
+    gerador = carregar_gerador()
+    qmd = RAIZ / "content/cap05/index.qmd"
+    texto = qmd.read_text(encoding="utf-8")
+    assert "](../../apoio/gradiente-descendente.html)" in texto, (
+        "o link de apoio do cap. 5 não é relativo — no `make preview` ele "
+        "levaria ao site publicado, e não à cópia local"
+    )
+    assert f"{gerador.SITE}/apoio/" not in texto, (
+        "o cap. 5 aponta para apoio/ pela URL absoluta do site"
+    )
+    nb = carregados()["cap05-gradiente-descendente.ipynb"]
+    dentro = "\n".join(fonte(c) for c in nb["cells"])
+    assert f"{gerador.SITE}/apoio/gradiente-descendente.html" in dentro, (
+        "o notebook do cap. 5 não carrega a URL absoluta de apoio/ — um "
+        "caminho relativo não resolve de dentro de notebooks/"
+    )
+
+
 def test_quarto_ignora_a_pasta_de_notebooks():
     """Sem isto, o Quarto tentaria publicar os notebooks como páginas do livro."""
     ignore = RAIZ / ".quartoignore"

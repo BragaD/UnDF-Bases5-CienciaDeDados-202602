@@ -201,17 +201,29 @@ def apelido(titulo: str) -> str:
 # --------------------------------------------------------------------------
 
 def reescreve_links(texto: str, dir_fonte: str) -> str:
-    """Troca links entre .qmd por URLs do site publicado."""
+    """Troca links relativos do livro por URLs do site publicado.
+
+    De dentro de `notebooks/` — e mais ainda no Colab — nenhum caminho
+    relativo do livro resolve: nem o `../cap05/index.qmd` de um capítulo, nem
+    o `../../apoio/x.html` de uma página de apoio. Por isso a reescrita vale
+    para todo link relativo, e não só para os `.qmd`; o que é específico do
+    `.qmd` é apenas trocar a extensão, porque no site publicado ele é `.html`.
+
+    O outro lado disto importa igual: no `.qmd` o link fica **relativo**, para
+    que `make preview` leve à cópia local que o autor está olhando, e não ao
+    site publicado.
+    """
 
     def troca(m: re.Match) -> str:
         rotulo, alvo = m.group(1), m.group(2)
-        if alvo.startswith(("http://", "https://", "#", "mailto:")):
-            return m.group(0)
-        if ".qmd" not in alvo:
+        if alvo.startswith(("http://", "https://", "#", "mailto:", "data:")):
             return m.group(0)
         caminho, _, ancora = alvo.partition("#")
+        if not caminho:
+            return m.group(0)
         destino = os.path.normpath(os.path.join(dir_fonte, caminho))
-        destino = destino[: -len(".qmd")] + ".html"
+        if destino.endswith(".qmd"):
+            destino = destino[: -len(".qmd")] + ".html"
         url = f"{SITE}/{destino}"
         if ancora:
             url += f"#{ancora}"
