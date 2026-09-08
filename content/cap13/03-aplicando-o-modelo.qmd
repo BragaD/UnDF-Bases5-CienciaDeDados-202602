@@ -15,23 +15,19 @@ Aqui a situação muda de natureza. A condição de otimalidade da regressão lo
 :::
 
 ```{python}
-#| label: importa-statistics
-#| include: false
-from scratch.statistics import standard_deviation
-import matplotlib.pyplot as plt
-plt.close('all')
-```
-
-```{python}
 #| label: importa
-from scratch.logistic_regression import (
-    xs, ys, logistic, negative_log_likelihood, negative_log_gradient,
+import numpy as np
+from matplotlib import pyplot as plt
+
+from scratch_np.logistic_regression import (
+    xs, ys, logistic, _negative_log_likelihood,
+    negative_log_likelihood, negative_log_gradient,
 )
 
-len(xs), xs[0], ys[0]
+xs.shape, xs[0], ys[0]
 ```
 
-São o mesmo `logistic`, o mesmo `negative_log_likelihood` e o mesmo `negative_log_gradient` que a [seção anterior](02-a-funcao-logistica.qmd) construiu, agora junto com os dados.
+São o mesmo `logistic`, o mesmo `negative_log_likelihood` e o mesmo `negative_log_gradient` que a [seção anterior](02-a-funcao-logistica.qmd) construiu, agora junto com os dados — e também o `_negative_log_likelihood`, a versão de um ponto só, que vai ser útil daqui a pouco.
 
 ## O que acontece se você simplesmente ajustar
 
@@ -39,118 +35,143 @@ O gradiente descendente precisa de um ponto de partida. Como sempre, um chute al
 
 ```{python}
 #| label: chute-inicial
-import random
+rng = np.random.default_rng(0)
+beta = rng.random(3)
 
-random.seed(0)
-beta = [random.random() for _ in range(3)]
 beta
 ```
 
-Antes de gastar 5.000 passos, vale avaliar a perda uma vez, nesse ponto de partida. É a conta mais barata do capítulo: `negative_log_likelihood(xs, ys, beta)`.
+Antes de gastar 5.000 passos, vale avaliar a perda uma vez, nesse ponto de partida. É a conta mais barata do capítulo: `negative_log_likelihood(xs, ys, beta)`. Capturamos os avisos de propósito, para imprimi-los junto com o resultado. Fora de um livro eles iriam para o stderr, misturados com o resto — e a razão de estarem aqui, em destaque, é que eles são a **única** coisa que o programa vai dizer sobre o que acabou de acontecer.
 
 ```{python}
 #| label: estouro
-try:
+import warnings
+
+with warnings.catch_warnings(record=True) as avisos:
+    warnings.simplefilter("always")
     perda = negative_log_likelihood(xs, ys, beta)
-    print(f"perda inicial: {perda}")
-except ValueError as e:
-    print(f"{type(e).__name__}: {e}")
+
+print(f"perda inicial: {perda}")
+for aviso in avisos:
+    print(f"   {aviso.category.__name__}: {aviso.message}")
 ```
 
-Não houve ajuste ruim, convergência lenta nem coeficiente estranho. **O programa quebrou antes do primeiro passo.** Vale rastrear exatamente onde.
+Não houve ajuste ruim, convergência lenta nem coeficiente estranho. Também não houve exceção, mensagem de erro ou parada. **A perda não é um número** — é `nan`, o valor que o `float64` reserva para "isto não faz sentido" — e o programa seguiu em frente sem se importar. Vale rastrear exatamente onde.
 
 ```{python}
 #| label: dissecando
-from scratch.linear_algebra import dot
-
 for i in [0, 1]:
-    d = dot(xs[i], beta)
-    print(f"ponto {i}: x = {xs[i]}, y = {ys[i]}")
-    print(f"   dot(x, beta) = {d:.2f}")
-    print(f"   logistic(...) = {logistic(d)!r}")
-    print(f"   1 - logistic(...) = {1 - logistic(d)!r}")
+    d = xs[i] @ beta
+    print(f"ponto {i}: x = {xs[i]}, y = {ys[i]:.0f}")
+    print(f"   x @ beta = {d:.2f}")
+    print(f"   logistic(...) = {float(logistic(d))!r}")
+    print(f"   1 - logistic(...) = {float(1 - logistic(d))!r}")
 ```
 
-O culpado é o **salário**. O primeiro usuário tem 48.000, e o coeficiente inicial sorteado para essa coluna foi 0,42 — o produto escalar dá 20.188,81, dominado inteiramente por aquela parcela. A experiência, que vale 0,7, contribui com 0,53; o termo constante, com 0,84. As outras duas colunas simplesmente não participam da conta.
+O culpado é o **salário**. O primeiro usuário tem 48.000, e o coeficiente inicial sorteado para essa coluna foi 0,041 — o produto escalar dá 1.967,55, dominado inteiramente por aquela parcela, que sozinha vale 1.966,73. A experiência, que vale 0,7, contribui com 0,19; o termo constante, com 0,64. As outras duas colunas simplesmente não participam da conta.
 
-E `logistic(20188.81)` é `1.0`, exato, pela razão que a [seção anterior](02-a-funcao-logistica.qmd) mediu: qualquer entrada acima de 36,74 satura.
+E `logistic(1967.55)` é `1.0`, exato, pela razão que a [seção anterior](02-a-funcao-logistica.qmd) mediu: qualquer entrada acima de 36,74 satura. Não faltou pouco: sobrou por um fator de mais de cinquenta.
 
-Repare no que acontece com os dois primeiros pontos, porque eles falham de maneiras diferentes:
+Repare no que acontece com os dois primeiros pontos, porque eles falham de maneiras diferentes. Usamos aqui a versão de um ponto só, `_negative_log_likelihood`, porque ela tem o `if` que separa os dois casos. A versão em array não tem, e é essa a diferença:
 
 ```{python}
 #| label: dois-modos-de-falhar
-from scratch.logistic_regression import _negative_log_likelihood
+with warnings.catch_warnings(record=True) as avisos:
+    warnings.simplefilter("always")
+    for i in [0, 1]:
+        perda_i = _negative_log_likelihood(xs[i], ys[i], beta)
+        print(f"ponto {i} (y = {ys[i]:.0f}): perda = {perda_i!r}")
 
-for i in [0, 1]:
-    try:
-        print(f"ponto {i} (y = {ys[i]}): perda = {_negative_log_likelihood(xs[i], ys[i], beta)!r}")
-    except ValueError as e:
-        print(f"ponto {i} (y = {ys[i]}): {type(e).__name__}: {e}")
+for aviso in avisos:
+    print(f"   {aviso.category.__name__}: {aviso.message}")
 ```
 
 ::: {.callout-warning}
-## Duas falhas, e a silenciosa é a pior
+## Três números, e nenhum deles interrompe o programa
 
-O ponto 0 tem `y = 1`, então a perda dele é `-math.log(logistic(...))`, que é `-log(1.0)`, que é **`-0.0`**. Nenhum erro: o modelo declara certeza absoluta de que este usuário paga, e a perda registra zero — perfeição — para um $\beta$ que foi **sorteado ao acaso segundos atrás**. Se todos os rótulos fossem 1, este ajuste reportaria perda zero e ninguém veria problema nenhum.
+O ponto 0 tem `y = 1`, então a perda dele é `-np.log(logistic(...))`, que é `-log(1.0)`, que é **`-0.0`**. Nenhum erro: o modelo declara certeza absoluta de que este usuário paga, e a perda registra zero — perfeição — para um $\beta$ que foi **sorteado ao acaso segundos atrás**.
 
-O ponto 1 tem `y = 0`. A perda dele é `-math.log(1 - logistic(...))`, e `1 - 1.0` é `0.0`. Aí sim: `ValueError: math domain error`.
+O ponto 1 tem `y = 0`. A perda dele é `-np.log(1 - logistic(...))`, e `1 - 1.0` é `0.0`. `np.log(0.0)` é `-inf`, então a perda deste ponto é **`inf`**. Um infinito é um mau resultado honesto: ele diz "este ponto é impossível sob o seu modelo", e diria a mesma coisa somado a qualquer outra perda finita.
 
-A falha barulhenta é a sorte deste conjunto de dados — 148 dos 200 usuários têm `y = 0`, então o erro aparece no segundo ponto e é impossível de ignorar. A falha silenciosa é a que deveria assustar mais: ela não interrompe nada e produz um número que parece ótimo.
+Já a perda do conjunto, calculada pela versão em array, é **`nan`** — e é o pior dos três. Ela não vem do ponto 1; vem do ponto **0**. A fórmula vetorizada calcula as duas parcelas para todos os pontos e depois zera a que não vale: no ponto 0, `(1 - y)` é 0 e `np.log(1 - p)` é `-inf`, e `0 * -inf` é `nan`. Foi o ponto **bem classificado** que envenenou a soma. E `nan` é contagioso: qualquer conta que o toque devolve `nan`, e qualquer comparação com ele é falsa — inclusive `nan > 1000`, inclusive `nan == nan`.
+
+Nenhum dos três interrompe nada. O código de @grus2019, com `math.log`, receberia um `ValueError: math domain error` no ponto 1 e pararia ali: barulhento, feio e **impossível de ignorar**. Em `numpy` a mesma conta produz três avisos e segue. Trocar a exceção pelo aviso é o preço da vetorização, e é um preço que quase todo código científico paga sem perceber que pagou.
 :::
+
+Com o `math.log` do @grus2019 a história terminaria aqui, com uma exceção na tela. Em `numpy` ela continua — e é a continuação que interessa. O gradiente `X.T @ (logistic(X @ beta) - y)` **nunca** é `nan`: `logistic` devolve um número entre 0 e 1 mesmo saturada, e a subtração de `y` é finita. É só a *perda* que virou `nan`, e a perda não entra no cálculo do passo. Então o treino roda.
+
+Os avisos deste chunk estão escondidos, e vale dizer o que se esconde: os 5.000 passos emitem alguns **milhares** de avisos, de três tipos que você já conhece — o `divide by zero` e o `invalid value` da célula acima, e o `overflow encountered in exp` que a [seção anterior](02-a-funcao-logistica.qmd) previu. Mas essa supressão quase não muda o que apareceria na tela, porque o Python imprime cada aviso **uma vez por linha de código** e cala as repetições: sem esconder nada, o treino inteiro deixaria três linhas, no meio de qualquer outra saída.
+
+```{python}
+#| label: treino-envenenado
+#| warning: false
+from scratch_np.gradient_descent import gradient_step
+
+beta_cru = beta.copy()          # o mesmo chute inicial de cima
+for _ in range(5000):
+    beta_cru = gradient_step(beta_cru, negative_log_gradient(xs, ys, beta_cru), -0.01)
+
+print(f"beta 'ajustado': {beta_cru.round(2)}")
+print(f"perda final:     {negative_log_likelihood(xs, ys, beta_cru)}")
+
+previsto = logistic(xs @ beta_cru) >= 0.5
+print(f"acertos: {np.sum(previsto == (ys == 1))} de {len(ys)}")
+print(f"quantos usuários o modelo classifica como pagantes: {np.sum(previsto)}")
+```
+
+Cinco mil passos, nenhuma exceção, um vetor de coeficientes no fim. E o modelo que ele descreve atribui probabilidade `0.0` a **todos** os 200 usuários: a saturação virou para o outro lado, e o classificador prevê "não paga" para a base inteira. Os 148 acertos são exatamente os 148 usuários que não pagam — é o mesmo desempenho de responder "não" sem olhar dado nenhum, que a [seção 8.4](../cap08/04-correcao.qmd) usou como piso.
+
+Some a exceção, some o aviso na hora certa, e o que sobra é um vetor de três números com cara de resposta. Se você tivesse impresso só `beta_cru`, não haveria nada na tela indicando que o ajuste inteiro é lixo.
 
 Vale parar aqui, porque este é o ponto do capítulo que sobrevive depois que o assunto "regressão logística" for esquecido.
 
-`LogisticRegression().fit(X, y)` não teria produzido **nenhuma** das duas falhas. Nem o `ValueError`: a biblioteca calcula a perda por rotinas numericamente estáveis, que nunca chegam a formar `1 - 1.0`. Nem o `-0.0`: ela sequer expõe a perda de um ponto isolado — devolve coeficientes, previsões e um `score`, e mais nada. Os dois números que você acabou de ver **só são visíveis de dentro**. De fora, o mesmo ajuste teria rodado até o fim, sem uma linha de aviso, e devolvido um vetor de coeficientes com cara de resposta.
+`LogisticRegression().fit(X, y)` não teria produzido **nenhum** dos três números. Nem o `nan`, nem o `inf`: a biblioteca calcula a perda por rotinas numericamente estáveis, que nunca chegam a formar `1 - 1.0`. Nem o `-0.0`: ela sequer expõe a perda de um ponto isolado — devolve coeficientes, previsões e um `score`, e mais nada. Os números que você acabou de ver **só são visíveis de dentro**. De fora, o mesmo ajuste teria rodado até o fim, sem uma linha de aviso, e devolvido um vetor de coeficientes com cara de resposta.
 
 Generalize, porque a lição não é sobre a função logística: **o número na sua tela pode ser mentira, e a tela não tem como avisar.** Uma perda de zero é o que você esperaria de um modelo perfeito e é também o que sai de um $\beta$ sorteado ao acaso quando a aritmética satura. Os dois casos produzem o mesmo `0.0`, indistinguíveis. Quem só chama a função não tem de onde tirar a diferença; quem sabe que a logística tem um teto em `float64` e que a perda vira `-log(1.0)` sabe onde olhar. É por isso que esta disciplina constrói o código do zero, e é o motivo de esta seção ser a mais importante do capítulo.
 
 ## O conserto
 
-O conserto é o mesmo passo que a [seção 13.1](01-o-problema.qmd) já tinha dado por higiene, e que aqui é a diferença entre existir um modelo e o programa quebrar: **reescalonar**. A função é a da [seção 7.6](../cap07/06-reescalonamento.qmd):
+O conserto é o mesmo passo que a [seção 13.1](01-o-problema.qmd) já tinha dado por higiene, e que aqui é a diferença entre existir um modelo e existir um vetor de números que finge ser um: **reescalonar**. A função é a da [seção 7.6](../cap07/06-reescalonamento.qmd), repetida porque esta página é um kernel próprio — o mesmo código da [seção 13.1](01-o-problema.qmd):
 
 ```{python}
 #| label: rescale
-from typing import List, Tuple
-from scratch.linear_algebra import Vector, vector_mean
-from scratch.statistics import standard_deviation
+from typing import Tuple
 
-def scale(data: List[Vector]) -> Tuple[Vector, Vector]:
-    """devolve a média e o desvio padrão de cada posição"""
-    dim = len(data[0])
-    means = vector_mean(data)
-    stdevs = [standard_deviation([vector[i] for vector in data])
-              for i in range(dim)]
-    return means, stdevs
+def scale(X: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
+    """devolve a média e o desvio padrão de cada coluna"""
+    X = np.asarray(X, dtype=float)
+    return X.mean(axis=0), X.std(axis=0, ddof=1)
 
-def rescale(data: List[Vector]) -> List[Vector]:
-    """cada posição passa a ter média 0 e desvio padrão 1"""
-    dim = len(data[0])
-    means, stdevs = scale(data)
-    rescaled = [v[:] for v in data]
-    for v in rescaled:
-        for i in range(dim):
-            if stdevs[i] > 0:
-                v[i] = (v[i] - means[i]) / stdevs[i]
+def rescale(X: np.ndarray) -> np.ndarray:
+    """cada coluna passa a ter média 0 e desvio padrão 1"""
+    X = np.asarray(X, dtype=float)
+    means, stdevs = scale(X)
+
+    rescaled = X.copy()
+    varia = stdevs > 0                  # máscara sobre as colunas
+    rescaled[:, varia] = (X[:, varia] - means[varia]) / stdevs[varia]
     return rescaled
 
 rescaled_xs = rescale(xs)
-[round(v, 4) for v in rescaled_xs[0]]
+rescaled_xs[0].round(4)
 ```
 
 O mesmo primeiro ponto, o mesmo $\beta$ sorteado, agora sem drama:
 
 ```{python}
 #| label: ponto-inofensivo
-d = dot(rescaled_xs[0], beta)
-print(f"dot(x, beta) = {d:.4f}")
-print(f"logistic(...) = {logistic(d):.4f}")
+d = rescaled_xs[0] @ beta
+print(f"x @ beta = {d:.4f}")
+print(f"logistic(...) = {float(logistic(d)):.4f}")
 print(f"perda no conjunto todo = {negative_log_likelihood(rescaled_xs, ys, beta):.4f}")
 ```
 
 ::: {.conceito}
-De 20.188,81 para −0,8059. Nada mudou no modelo, no otimizador ou nos dados — a mesma pessoa, com a mesma experiência e o mesmo salário, continua ali. O que mudou foi a **unidade**: salário deixou de ser medido em reais e passou a ser medido em desvios padrão a partir da média.
+De 1.967,55 para 0,1804. Nada mudou no modelo, no otimizador ou nos dados — a mesma pessoa, com a mesma experiência e o mesmo salário, continua ali. O que mudou foi a **unidade**: salário deixou de ser medido em reais e passou a ser medido em desvios padrão a partir da média.
 
 Vale enunciar por que a diferença é tão violenta aqui e era só incômoda na regressão linear. Um modelo linear não tem teto: se o produto escalar der 20.000, a previsão é 20.000 — um número absurdo, mas um número, e o gradiente ainda aponta para algum lugar. A logística tem teto, e o alcance útil dela é aproximadamente $[-37, 37]$. Fora dessa janela, a função é **constante** em `float64`: derivada zero, gradiente zero, nenhuma informação sobre para onde ir. Reescalonar não é uma otimização de desempenho; é o que coloca os dados dentro da faixa em que a função ainda tem inclinação.
+
+E a perda do conjunto virou um número: 176,21. Alta — são 200 pontos e um $\beta$ aleatório —, mas finita, comparável e capaz de descer.
 :::
 
 ## O ajuste
@@ -159,47 +180,55 @@ Separamos treino e teste com o `train_test_split` do [Capítulo 8](../cap08/inde
 
 ```{python}
 #| label: divide
-from scratch.machine_learning import train_test_split
+from scratch_np.machine_learning import train_test_split
 
-random.seed(0)
-x_train, x_test, y_train, y_test = train_test_split(rescaled_xs, ys, 0.33)
+rng = np.random.default_rng(0)
+x_train, x_test, y_train, y_test = train_test_split(rescaled_xs, ys, 0.33, rng)
 
 len(x_train), len(x_test)
 ```
 
-134 pontos de treino, 66 de teste. Agora o laço, que é o gradiente descendente em lote completo do [Capítulo 5](../cap05/03-usando-o-gradiente.qmd) — sem minibatches, porque com 134 pontos e três parâmetros não há razão para complicar:
+::: {.callout-warning}
+## A semente não é opcional
+
+`np.random.default_rng(0)` aparece pela segunda vez nesta página, e não é descuido. O gerador do começo da seção já tinha sorteado o chute que usamos para dissecar a saturação; se a divisão treino/teste saísse **dele**, ela dependeria de quantos diagnósticos rodamos antes — acrescentar uma célula de investigação mudaria o conjunto de teste, o que é a última coisa que se quer. Recriar o gerador com a mesma semente torna esta célula independente de tudo o que veio acima. É o que @grus2019 faz, chamando `random.seed(0)` uma segunda vez no mesmo trecho.
+
+Daqui para baixo, porém, o gerador é **um só**: `train_test_split` consome dele a permutação que separa treino e teste, e o `beta` do ajuste é sorteado a seguir, do gerador já avançado. Por isso ele não é o `[0.637, 0.270, 0.041]` de cima — é o próximo sorteio da mesma sequência, `[0.6526, 0.2738, 0.7027]`.
+
+Duas consequências, e as duas importam nesta página. A semente decide **quem** vai para o teste, e com 66 pontos isso move a matriz de confusão da [seção 13.4](04-qualidade-do-ajuste.qmd) mais do que a maioria das decisões de modelagem que você vai tomar. E decide de onde o gradiente parte — o que aqui quase não muda o destino, porque a log-verossimilhança negativa da regressão logística é convexa e tem um mínimo só.
+
+A semente está escrita no chunk, ao lado do sorteio que ela produz, e não num estado global algumas células acima. É por isso que `train_test_split` exige o gerador como argumento em vez de criar um por conta própria.
+:::
+
+134 pontos de treino, 66 de teste. Agora o laço, que é o gradiente descendente em lote completo do [Capítulo 5](../cap05/03-usando-o-gradiente.qmd) — sem minibatches, porque com 134 pontos e três parâmetros não há razão para complicar. O laço percorre os **passos**, que são o algoritmo; os 134 pontos não aparecem nele. Eles estão dentro do `X.T @ (...)` do gradiente, somados de uma vez:
 
 ```{python}
 #| label: ajusta
-#| warning: false
-import tqdm
-from scratch.gradient_descent import gradient_step
-
 learning_rate = 0.01
 
 # ponto de partida aleatório, sorteado depois da divisão
-beta = [random.random() for _ in range(3)]
+beta = rng.random(3)
 perdas = []
 betas = []          # guardamos o caminho inteiro; ele reaparece mais abaixo
 
-with tqdm.trange(5000) as t:
-    for epoch in t:
-        gradient = negative_log_gradient(x_train, y_train, beta)
-        beta = gradient_step(beta, gradient, -learning_rate)
-        loss = negative_log_likelihood(x_train, y_train, beta)
-        perdas.append(loss)
-        betas.append(beta)
-        t.set_description(f"loss: {loss:.3f} beta: {beta}")
+for epoch in range(5000):
+    gradient = negative_log_gradient(x_train, y_train, beta)
+    beta = gradient_step(beta, gradient, -learning_rate)
+    perdas.append(negative_log_likelihood(x_train, y_train, beta))
+    betas.append(beta)
 
-[round(b, 4) for b in beta], round(perdas[-1], 4)
+perdas = np.array(perdas)
+betas = np.array(betas)
+
+beta.round(4), round(perdas[-1], 4)
 ```
 
-O $\beta$ ajustado é aproximadamente `[-2.02, 4.69, -4.47]`, com perda final de 39,96 no conjunto de treino. Vale ver como a perda chegou lá:
+O $\beta$ ajustado é aproximadamente `[-2.35, 4.14, -4.07]`, com perda final de 39,78 no conjunto de treino. `betas` sai do laço como uma lista de 5.000 vetores e vira uma matriz `(5000, 3)` — uma linha por epoch, uma coluna por coeficiente. Vale ver como a perda chegou lá:
 
 ```{python}
 #| label: fig-perda
 #| fig-cap: "Log-verossimilhança negativa no conjunto de treino, por epoch (escala logarítmica no eixo x)"
-plt.plot(range(1, len(perdas) + 1), perdas)
+plt.plot(np.arange(1, len(perdas) + 1), perdas)
 plt.xscale('log')
 plt.xlabel("epoch (escala logarítmica)")
 plt.ylabel("log-verossimilhança negativa")
@@ -213,7 +242,7 @@ for e in [1, 10, 100, 1000, 5000]:
     print(f"epoch {e:>5}: perda = {perdas[e - 1]:.4f}")
 ```
 
-A queda é quase toda no começo. Depois do primeiro epoch a perda está em 113,07; no décimo já caiu para 61,76; no centésimo, 41,22 — a menos de 4% do valor final. No milésimo o número já é 39,9635, e os 4.000 epochs restantes movem a perda da sexta casa decimal para baixo: de 39,96350015 para 39,96349522, uma diferença de $4{,}9 \times 10^{-6}$. Quem ainda se mexe na terceira casa é o $\beta$, de 4,6903 para 4,6930 na segunda coordenada. É o padrão que a [seção 5.3](../cap05/03-usando-o-gradiente.qmd) descreveu — queda rápida no início, cada vez mais lenta perto do mínimo — e é por isso que 5.000 passos aqui são generosidade, não necessidade.
+A queda é quase toda no começo. Depois do primeiro epoch a perda está em 102,70; no décimo já caiu para 58,35; no centésimo, 40,77 — a 2,5% do valor final. No milésimo o número já é 39,7766, e os 4.000 epochs restantes movem a perda da sétima casa decimal para baixo: de 39,77661775 para 39,77661701, uma diferença de $7{,}4 \times 10^{-7}$. Quem ainda se mexe na terceira casa é o $\beta$, de 4,1401 para 4,1411 na segunda coordenada. É o padrão que a [seção 5.3](../cap05/03-usando-o-gradiente.qmd) descreveu — queda rápida no início, cada vez mais lenta perto do mínimo — e é por isso que 5.000 passos aqui são generosidade, não necessidade.
 
 ## Voltando às unidades originais
 
@@ -223,38 +252,38 @@ Os coeficientes acima valem para os dados reescalonados. Dá para convertê-los 
 #| label: desescalona
 means, stdevs = scale(xs)
 
-beta_unscaled = [(beta[0]
-                  - beta[1] * means[1] / stdevs[1]
-                  - beta[2] * means[2] / stdevs[2]),
-                 beta[1] / stdevs[1],
-                 beta[2] / stdevs[2]]
+beta_unscaled = np.array([beta[0]
+                          - beta[1] * means[1] / stdevs[1]
+                          - beta[2] * means[2] / stdevs[2],
+                          beta[1] / stdevs[1],
+                          beta[2] / stdevs[2]])
 
 beta_unscaled
 ```
 
-E dá para verificar que os dois vetores descrevem o **mesmo** modelo, comparando a verossimilhança que cada um atribui ao conjunto completo. É o que @grus2019 faz, com um `assert`:
+E dá para verificar que os dois vetores descrevem o **mesmo** modelo, comparando a verossimilhança que cada um atribui ao conjunto completo. @grus2019 faz isso com um `assert` de igualdade exata entre dois `float`. **Aqui ele não passa** — e por isso o nosso pede tolerância:
 
 ```{python}
 #| label: mesma-verossimilhanca
-assert (negative_log_likelihood(xs, ys, beta_unscaled) ==
-        negative_log_likelihood(rescaled_xs, ys, beta))
+esquerda = negative_log_likelihood(xs, ys, beta_unscaled)
+direita = negative_log_likelihood(rescaled_xs, ys, beta)
 
-negative_log_likelihood(xs, ys, beta_unscaled)
+assert np.isclose(esquerda, direita)
+
+esquerda, direita, esquerda == direita
 ```
 
-O `assert` passa. Antes de concluir qualquer coisa disso, vale rodar a mesma comparação com outros $\beta$ — os do meio do treino, que ficaram guardados em `betas`:
+Os dois números diferem no último dígito, e `==` devolve `False`. Antes de concluir qualquer coisa disso, vale rodar a mesma comparação com outros $\beta$ — os do meio do treino, que ficaram guardados em `betas`:
 
 ```{python}
 #| label: assert-por-sorte
-import math
-
-def desescalonar(b: Vector) -> Vector:
+def desescalonar(b: np.ndarray) -> np.ndarray:
     """a mesma conversão de cima, para um beta qualquer"""
-    return [b[0] - b[1] * means[1] / stdevs[1] - b[2] * means[2] / stdevs[2],
-            b[1] / stdevs[1],
-            b[2] / stdevs[2]]
+    return np.array([b[0] - b[1] * means[1] / stdevs[1] - b[2] * means[2] / stdevs[2],
+                     b[1] / stdevs[1],
+                     b[2] / stdevs[2]])
 
-def as_duas_perdas(b: Vector) -> Tuple[float, float]:
+def as_duas_perdas(b: np.ndarray) -> Tuple[float, float]:
     """a perda no conjunto completo, calculada nas duas escalas"""
     return (negative_log_likelihood(xs, ys, desescalonar(b)),
             negative_log_likelihood(rescaled_xs, ys, b))
@@ -264,43 +293,43 @@ for e in [100, 500, 1000, 2000, 3000, 4000, 5000]:
     print(f"epoch {e:>5}: {esquerda!r:<19} {direita!r:<19} "
           f"iguais? {esquerda == direita}")
 
-pares = [as_duas_perdas(b) for b in betas]
+pares = np.array([as_duas_perdas(b) for b in betas])
 print(f"\nnos 5.000 epochs deste treino, comparando as duas escalas:")
-print(f"   ==            vale em {sum(1 for a, c in pares if a == c)}")
-print(f"   math.isclose  vale em {sum(1 for a, c in pares if math.isclose(a, c))}")
+print(f"   ==          vale em {np.sum(pares[:, 0] == pares[:, 1])}")
+print(f"   np.isclose  vale em {np.sum(np.isclose(pares[:, 0], pares[:, 1]))}")
 ```
 
 ::: {.callout-warning}
-## O `assert` passa, e passa por sorte
+## O `assert` do livro-texto não passa aqui — e não é defeito nosso
 
-Aquele `assert` compara dois `float` por **igualdade exata**, e passa — para este $\beta$. Com o $\beta$ do epoch 500 do mesmo treino, os mesmos 200 pontos e a mesma conversão de escala, ele estouraria: 57,67164046623943 de um lado contra 57,67164046623944 do outro. Ao longo dos 5.000 epochs ele passaria em menos da metade delas. **É cara ou coroa**, e o $\beta$ final caiu do lado da cara.
+Aquele `assert` compara dois `float` por **igualdade exata**. No @grus2019 ele passa; no nosso ajuste, com outro sorteio e outra ordem de operações, ele falha por uma unidade na última casa: 58,827241891663306 de um lado, 58,8272418916633 do outro. Sete dos sete epochs da tabela acima falham igual, e no treino inteiro a igualdade vale em **921 dos 5.000** — menos de um em cinco. **É cara ou coroa**, e o Grus tirou cara.
 
-O motivo é que as duas contas **não** se cancelam ponto a ponto. Tome o $\beta$ final e compare `dot(x, beta_unscaled)` com o produto escalar na escala reescalonada, usuário por usuário: só **8** dos 200 pares saem bit a bit idênticos. Os outros 192 diferem na última casa — nada maior que $4{,}4 \times 10^{-15}$, mas diferem. A conversão é linear no papel; em `float64` ela é uma sequência **diferente** de multiplicações e subtrações, e duas sequências com o mesmo valor exato não têm por que produzir o mesmo valor arredondado.
+O motivo é que as duas contas **não** se cancelam ponto a ponto. Tome o $\beta$ final e compare `xs @ beta_unscaled` com o produto escalar na escala reescalonada, usuário por usuário: só **33** dos 200 pares saem bit a bit idênticos. Os outros 167 diferem na última casa — nada maior que $5{,}3 \times 10^{-15}$, mas diferem. A conversão é linear no papel; em `float64` ela é uma sequência **diferente** de multiplicações e subtrações, e duas sequências com o mesmo valor exato não têm por que produzir o mesmo valor arredondado.
 
-A igualdade que se vê aparece só **na soma final**, e por arredondamento: somados 200 termos com erros de última casa, o total às vezes cai no mesmo `float64` e às vezes cai no vizinho. Quando cai no vizinho, o `assert` quebra — sem nada de errado com o modelo, com a conversão ou com os dados.
+A soma final às vezes salva a aparência e às vezes não: somados 200 termos com erros de última casa, o total cai no mesmo `float64` em 921 dos 5.000 casos e no vizinho nos outros 4.079. Nenhum dos 5.000 tem nada de errado com o modelo, com a conversão ou com os dados.
 
-É o mesmo construto que a [seção 10.4](../cap10/04-testando-o-modelo.qmd) já tinha exibido. Lá o não determinismo vinha da ordem de iteração de um `set`; aqui vem da ordem das operações aritméticas. É a mesma lição com outra fachada: **`==` entre `float` é a pergunta errada.** A pergunta certa tem tolerância, e a linha de cima mostra o placar dela — `math.isclose` vale nos 5.000 epochs, sem exceção.
+É o mesmo construto que a [seção 10.4](../cap10/04-testando-o-modelo.qmd) já tinha exibido. Lá o não determinismo vinha da ordem de iteração de um `set`; aqui vem da ordem das operações aritméticas. É a mesma lição com outra fachada: **`==` entre `float` é a pergunta errada.** A pergunta certa tem tolerância, e a linha de cima mostra o placar dela — `np.isclose` vale nos 5.000 epochs, sem exceção.
 
-Fica também um aviso sobre `assert` em geral. Este passa sempre que a semente é a mesma, porque aí o $\beta$ final também é; um `assert` que passa **sempre** e um `assert` que passa **por construção** são coisas diferentes, e só a segunda é um teste.
+Fica também um aviso sobre `assert` em geral, e ele ficou mais afiado do que estava. Aquele `assert` do livro-texto passa **sempre** que a semente é a mesma, porque aí o $\beta$ final também é. Isso não faz dele um teste: um `assert` que passa por construção e um `assert` que passa porque o sorteio caiu bem são coisas diferentes, e só a diferença de semente entre este livro e o do Grus foi suficiente para separar as duas.
 :::
 
 ## Interpretando os coeficientes
 
 Infelizmente, estes coeficientes não são tão fáceis de ler quanto os de uma regressão linear. Mantendo tudo o mais constante:
 
-- um ano a mais de experiência **adiciona 1,65 à entrada** da função logística;
-- dez mil a mais de salário **subtrai 2,88 da entrada** da função logística.
+- um ano a mais de experiência **adiciona 1,45 à entrada** da função logística;
+- dez mil a mais de salário **subtrai 2,62 da entrada** da função logística.
 
-O impacto disso na *saída*, porém, depende de onde a entrada já estava. Se `dot(beta, x_i)` já é grande — probabilidade perto de 1 —, aumentá-lo ainda mais quase não muda nada; se está perto de zero, um empurrão pequeno muda bastante. É a curva em S da seção anterior aparecendo na interpretação: **o mesmo aumento no argumento vale coisas diferentes em pontos diferentes**.
+O impacto disso na *saída*, porém, depende de onde a entrada já estava. Se `x_i @ beta` já é grande — probabilidade perto de 1 —, aumentá-lo ainda mais quase não muda nada; se está perto de zero, um empurrão pequeno muda bastante. É a curva em S da seção anterior aparecendo na interpretação: **o mesmo aumento no argumento vale coisas diferentes em pontos diferentes**.
 
 ```{python}
 #| label: perfis
-for exp, sal in [(2.0, 60000), (5.0, 66700), (8.0, 60000), (8.0, 100000)]:
-    p = logistic(dot(beta_unscaled, [1.0, exp, sal]))
+for exp, sal in [(2.0, 60000), (5.0, 57800), (8.0, 60000), (8.0, 100000)]:
+    p = logistic(np.array([1.0, exp, sal]) @ beta_unscaled)
     print(f"{exp:4.1f} anos de experiência, salário {sal:>6} -> P(paga) = {p:.4f}")
 ```
 
-O que dá para afirmar com segurança é o sinal: mantendo tudo o mais constante, **mais experiência aumenta** a chance de pagar, e **salário maior diminui**. O segundo sinal parece estranho até você lembrar do gráfico da [seção 13.1](01-o-problema.qmd), em que os pagantes se concentravam embaixo à direita. Com 8 anos de experiência, um salário de 60.000 dá 99,22% de chance de conta paga; o mesmo profissional ganhando 100.000 cai para 0,13%.
+O que dá para afirmar com segurança é o sinal: mantendo tudo o mais constante, **mais experiência aumenta** a chance de pagar, e **salário maior diminui**. O segundo sinal parece estranho até você lembrar do gráfico da [seção 13.1](01-o-problema.qmd), em que os pagantes se concentravam embaixo à direita. Com 8 anos de experiência, um salário de 60.000 dá 97,76% de chance de conta paga; o mesmo profissional ganhando 100.000 cai para 0,12%.
 
 ::: {.callout-warning}
 Nada disso é uma afirmação causal. O modelo não diz que aumentar o salário de alguém faria a pessoa cancelar a assinatura. Ele diz que, **nestes 200 usuários**, quem ganha mais tende a não assinar — e a explicação plausível (quem tem experiência e ganha pouco está procurando emprego) é uma história que nós contamos, não algo que o ajuste tenha demonstrado. É a mesma advertência da [seção 12.4](../cap12/04-interpretando-o-modelo.qmd), e ela não fica mais fraca porque a saída agora é uma probabilidade.
@@ -312,7 +341,7 @@ Nada disso é uma afirmação causal. O modelo não diz que aumentar o salário 
 ```python
 from sklearn.linear_model import LogisticRegression
 
-X = [x[1:] for x in xs]          # sem a coluna de 1
+X = xs[:, 1:]                    # sem a coluna de 1
 modelo = LogisticRegression().fit(X, ys)
 
 modelo.intercept_, modelo.coef_
@@ -320,11 +349,11 @@ modelo.intercept_, modelo.coef_
 
 Três coisas que vale saber, agora que você viu o código por dentro.
 
-**A biblioteca não quebra com os dados brutos — e também não teria mostrado a falha silenciosa.** Rodar o código acima nos `xs` sem reescalonar funciona: ela devolve intercepto 8,41 e coeficientes 1,51 e −0,00027, na mesma vizinhança do nosso `beta_unscaled` — `[8.93, 1.65, -0.000288]`. Isso não contradiz nada do que esta seção mostrou; é o resultado de um trabalho de engenharia que a implementação faz e a nossa não. O otimizador padrão (`lbfgs`) usa curvatura de segunda ordem, e por isso não sofre com colunas de escalas diferentes do jeito que um passo fixo sofre; e a perda é calculada por rotinas numericamente estáveis, que nunca formam `1 - 1.0`. A saturação em `float64` continua existindo — ela é uma propriedade do tipo, não do código —, mas nenhuma linha do seu programa a encontra.
+**A biblioteca não quebra com os dados brutos — e também não teria mostrado a falha silenciosa.** Rodar o código acima nos `xs` sem reescalonar funciona: ela devolve intercepto 8,41 e coeficientes 1,51 e −0,00027, na mesma vizinhança do nosso `beta_unscaled` — `[7.87, 1.45, -0.000262]`. Isso não contradiz nada do que esta seção mostrou; é o resultado de um trabalho de engenharia que a implementação faz e a nossa não. O otimizador padrão (`lbfgs`) usa curvatura de segunda ordem, e por isso não sofre com colunas de escalas diferentes do jeito que um passo fixo sofre; e a perda é calculada por rotinas numericamente estáveis, que nunca formam `1 - 1.0`. A saturação em `float64` continua existindo — ela é uma propriedade do tipo, não do código —, mas nenhuma linha do seu programa a encontra.
 
-Repare que isso vale para as **duas** falhas, e não só para a barulhenta. O `ValueError` some porque a perda é calculada de outro jeito; o `-0.0` some porque a interface não tem onde exibi-lo — `LogisticRegression` devolve coeficientes, previsões e um `score`, nunca a perda de um ponto isolado. Nenhum dos dois números do começo desta seção existe do lado de fora. O `ValueError` é, literalmente, o que você paga para ver o mecanismo; e o `-0.0` é o que você **só** vê se pagar.
+Repare que isso vale para os **três** números. O `nan` e o `inf` somem porque a perda é calculada de outro jeito, por rotinas que nunca formam `1 - 1.0`; o `-0.0` some porque a interface não tem onde exibi-lo — `LogisticRegression` devolve coeficientes, previsões e um `score`, nunca a perda de um ponto isolado. Nenhum dos três existe do lado de fora, e nem os avisos existem: com o otimizador da biblioteca o treino sem reescalonar converge, em vez de sair passeando até `-29999`. Os três números são, literalmente, o que você paga para ver o mecanismo.
 
-**Ela regulariza por padrão, e você não pediu.** `LogisticRegression` aplica penalidade L2 com `C=1.0` a menos que você diga o contrário — a mesma regularização *ridge* da [seção 12.8](../cap12/08-regularizacao.qmd), aqui ligada de fábrica. É por isso que os coeficientes dela saem um pouco encolhidos em relação aos nossos. Aumentar `C` afrouxa a penalidade; com ela praticamente desligada e os dados reescalonados, a biblioteca devolve `[-2.11, 4.53, -4.40]` contra os nossos `[-2.02, 4.69, -4.47]`, e a diferença que sobra é a distância entre um otimizador que converge de verdade e 5.000 passos de tamanho fixo.
+**Ela regulariza por padrão, e você não pediu.** `LogisticRegression` aplica penalidade L2 com `C=1.0` a menos que você diga o contrário — a mesma regularização *ridge* da [seção 12.8](../cap12/08-regularizacao.qmd), aqui ligada de fábrica. É por isso que os coeficientes dela saem um pouco encolhidos em relação aos nossos. Aumentar `C` afrouxa a penalidade; com ela praticamente desligada (`C=1e6`) e os mesmos 134 pontos de treino reescalonados, a biblioteca devolve `[-2.34845, 4.14020, -4.07182]` contra os nossos `[-2.34854, 4.14109, -4.07339]`: iguais até a segunda casa decimal. Aqui os 5.000 passos de tamanho fixo chegaram onde o otimizador de segunda ordem chega, e não é coincidência — a log-verossimilhança negativa é convexa, tem um mínimo só, e nada além de paciência separa os dois métodos dele.
 
-**Reescalonar continua sendo boa ideia mesmo assim** — não pelo `ValueError`, que a biblioteca não tem, mas pela penalidade. Uma penalidade que soma quadrados de coeficientes trata todas as colunas com o mesmo rigor, e um coeficiente medido em "por real de salário" é numericamente minúsculo perto de um medido em "por ano de experiência". Sem reescalonar, a regularização pune as duas colunas de forma desigual por um motivo que não tem nada a ver com o problema. O `StandardScaler` da [seção 7.6](../cap07/06-reescalonamento.qmd) é a resposta.
+**Reescalonar continua sendo boa ideia mesmo assim** — não pelo `nan`, que a biblioteca não produz, mas pela penalidade. Uma penalidade que soma quadrados de coeficientes trata todas as colunas com o mesmo rigor, e um coeficiente medido em "por real de salário" é numericamente minúsculo perto de um medido em "por ano de experiência". Sem reescalonar, a regularização pune as duas colunas de forma desigual por um motivo que não tem nada a ver com o problema. O `StandardScaler` da [seção 7.6](../cap07/06-reescalonamento.qmd) é a resposta.
 :::

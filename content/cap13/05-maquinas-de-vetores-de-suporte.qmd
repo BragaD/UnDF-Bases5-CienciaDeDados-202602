@@ -4,83 +4,71 @@
 Esta seção corresponde a *Support Vector Machines*, do capítulo 16 de @grus2019.
 :::
 
-O conjunto de pontos onde `dot(beta, x_i)` vale exatamente 0 é a **fronteira** entre as nossas duas classes: ali a função logística devolve 0,5, e a decisão vira cara ou coroa. De um lado prevemos "paga", do outro "não paga". Vale desenhar essa fronteira para ver com clareza o que o modelo está fazendo.
-
-```{python}
-#| label: importa-statistics
-#| include: false
-from scratch.statistics import standard_deviation
-import matplotlib.pyplot as plt
-plt.close('all')
-```
+O conjunto de pontos onde `x_i @ beta` vale exatamente 0 é a **fronteira** entre as nossas duas classes: ali a função logística devolve 0,5, e a decisão vira cara ou coroa. De um lado prevemos "paga", do outro "não paga". Vale desenhar essa fronteira para ver com clareza o que o modelo está fazendo.
 
 Os coeficientes abaixo são o `beta_unscaled` da [seção 13.3](03-aplicando-o-modelo.qmd) — o mesmo ajuste, com a escala desfeita no fim, medido em anos e em reais. É a forma de que precisamos para desenhar a fronteira no plano do gráfico.
 
 ```{python}
 #| label: refaz-ajuste
 #| echo: false
-import random
-from typing import List, Tuple
-from scratch.linear_algebra import Vector, dot, vector_mean
-from scratch.logistic_regression import xs, ys, negative_log_gradient
-from scratch.gradient_descent import gradient_step
-from scratch.machine_learning import train_test_split
+import numpy as np
+from typing import Tuple
+from matplotlib import pyplot as plt
 
-def scale(data: List[Vector]) -> Tuple[Vector, Vector]:
-    dim = len(data[0])
-    return (vector_mean(data),
-            [standard_deviation([v[i] for v in data]) for i in range(dim)])
+from scratch_np.logistic_regression import (
+    xs, ys, logistic, negative_log_likelihood, negative_log_gradient,
+)
+from scratch_np.gradient_descent import gradient_step
+from scratch_np.machine_learning import train_test_split
 
-def rescale(data: List[Vector]) -> List[Vector]:
-    dim = len(data[0])
-    means, stdevs = scale(data)
-    rescaled = [v[:] for v in data]
-    for v in rescaled:
-        for i in range(dim):
-            if stdevs[i] > 0:
-                v[i] = (v[i] - means[i]) / stdevs[i]
+def scale(X: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
+    X = np.asarray(X, dtype=float)
+    return X.mean(axis=0), X.std(axis=0, ddof=1)
+
+def rescale(X: np.ndarray) -> np.ndarray:
+    X = np.asarray(X, dtype=float)
+    means, stdevs = scale(X)
+    rescaled = X.copy()
+    varia = stdevs > 0
+    rescaled[:, varia] = (X[:, varia] - means[varia]) / stdevs[varia]
     return rescaled
 
 rescaled_xs = rescale(xs)
 
-random.seed(0)
-x_train, x_test, y_train, y_test = train_test_split(rescaled_xs, ys, 0.33)
-beta = [random.random() for _ in range(3)]
+rng = np.random.default_rng(0)
+x_train, x_test, y_train, y_test = train_test_split(rescaled_xs, ys, 0.33, rng)
+
+beta = rng.random(3)
 for _ in range(5000):
     beta = gradient_step(beta, negative_log_gradient(x_train, y_train, beta), -0.01)
 
 means, stdevs = scale(xs)
-beta_unscaled = [(beta[0]
-                  - beta[1] * means[1] / stdevs[1]
-                  - beta[2] * means[2] / stdevs[2]),
-                 beta[1] / stdevs[1],
-                 beta[2] / stdevs[2]]
+beta_unscaled = np.array([beta[0]
+                          - beta[1] * means[1] / stdevs[1]
+                          - beta[2] * means[2] / stdevs[2],
+                          beta[1] / stdevs[1],
+                          beta[2] / stdevs[2]])
 
 beta_unscaled
 ```
 
-A fronteira é `beta_unscaled[0] + beta_unscaled[1] * experiência + beta_unscaled[2] * salário = 0`. Isolando o salário, ela vira uma reta no plano do gráfico da [seção 13.1](01-o-problema.qmd):
+A fronteira é `beta_unscaled[0] + beta_unscaled[1] * experiência + beta_unscaled[2] * salário = 0`. Isolando o salário, ela vira uma reta no plano do gráfico da [seção 13.1](01-o-problema.qmd) — e `salario_na_fronteira` recebe a `grade` inteira de uma vez, em vez de ser chamada uma vez por ponto:
 
 ```{python}
 #| label: fig-fronteira
 #| fig-cap: "Usuários pagantes e não pagantes, com a fronteira de decisão"
 b0, b1, b2 = beta_unscaled
 
-def salario_na_fronteira(experiencia: float) -> float:
+def salario_na_fronteira(experiencia):
     return -(b0 + b1 * experiencia) / b2
 
-experiencia = [x[1] for x in xs]
-salario = [x[2] for x in xs]
+paga = ys == 1
 
-plt.scatter([e for e, y in zip(experiencia, ys) if y == 1],
-            [s for s, y in zip(salario, ys) if y == 1],
-            marker='+', label='paga')
-plt.scatter([e for e, y in zip(experiencia, ys) if y == 0],
-            [s for s, y in zip(salario, ys) if y == 0],
-            marker='.', label='não paga')
+plt.scatter(xs[paga, 1], xs[paga, 2], marker='+', label='paga')
+plt.scatter(xs[~paga, 1], xs[~paga, 2], marker='.', label='não paga')
 
-grade = [0, 10]
-plt.plot(grade, [salario_na_fronteira(e) for e in grade],
+grade = np.array([0.0, 10.0])
+plt.plot(grade, salario_na_fronteira(grade),
          color='black', label='fronteira de decisão')
 
 plt.xlabel("anos de experiência")
@@ -90,15 +78,16 @@ plt.title("Fronteira de decisão")
 plt.show()
 ```
 
+`xs @ beta_unscaled >= 0` é a decisão do modelo para os 200 usuários de uma vez, e compará-la com `ys == 1` dá a máscara dos erros:
+
 ```{python}
 #| label: erros-na-fronteira
-errados = sum(1 for x, y in zip(xs, ys)
-              if (dot(beta_unscaled, x) >= 0) != (y == 1))
+errados = np.sum((xs @ beta_unscaled >= 0) != (ys == 1))
 
 print(f"{errados} dos {len(xs)} usuários ficam do lado errado da fronteira")
 ```
 
-A reta atravessa a nuvem na diagonal, subindo da esquerda para a direita: abaixo dela fica quase todo mundo que paga, acima quase todo mundo que não paga. É a região de "experiência alta, salário baixo" que a seção 13.1 já tinha identificado a olho nu, agora com um contorno. Vinte e um dos 200 usuários ficam do lado errado dela.
+A reta atravessa a nuvem na diagonal, subindo da esquerda para a direita: abaixo dela quase todo mundo paga — 33 dos 38 usuários que caem ali —, e acima dela quase todo mundo não paga: 143 dos 162. É a região de "experiência alta, salário baixo" que a seção 13.1 já tinha identificado a olho nu, agora com um contorno. Vinte e quatro dos 200 usuários ficam do lado errado dela — e agora, ao contrário do conjunto de teste da [seção anterior](04-qualidade-do-ajuste.qmd), há erros dos dois tipos: 19 pagantes acima da reta e cinco não pagantes abaixo dela.
 
 ::: {.conceito}
 Essa fronteira é um **hiperplano** que corta o **espaço de atributos** em dois semiespaços — em duas dimensões, uma reta; em três, um plano; em mais, algo que não dá para desenhar mas que se comporta igual.
@@ -130,23 +119,23 @@ Por que isso é um critério, e não só uma preferência estética? Porque, qua
 ```{python}
 #| label: fig-margem
 #| fig-cap: "Quatro retas que separam perfeitamente o mesmo treino; só uma maximiza a margem"
-classe_a = [(-2.0, -1.0), (-1.0, -2.0), (-1.5, -1.5), (-2.5, -0.5), (-3.0, -1.8)]
-classe_b = [(2.0, 1.0), (1.0, 2.0), (1.5, 1.5), (2.5, 0.5), (3.0, 1.8)]
+classe_a = np.array([[-2.0, -1.0], [-1.0, -2.0], [-1.5, -1.5], [-2.5, -0.5], [-3.0, -1.8]])
+classe_b = np.array([[2.0, 1.0], [1.0, 2.0], [1.5, 1.5], [2.5, 0.5], [3.0, 1.8]])
 
 fig, ax = plt.subplots(figsize=(6, 5))
-ax.scatter([p[0] for p in classe_a], [p[1] for p in classe_a], marker='.', s=90)
-ax.scatter([p[0] for p in classe_b], [p[1] for p in classe_b], marker='+', s=90)
+ax.scatter(classe_a[:, 0], classe_a[:, 1], marker='.', s=90)
+ax.scatter(classe_b[:, 0], classe_b[:, 1], marker='+', s=90)
 
-grade = [-4.0, 4.0]
+grade = np.array([-4.0, 4.0])
 
 # três separadoras válidas, mas desnecessariamente próximas de algum ponto
 for a, b in [(-1.0, -2.0), (-1.0, 2.0), (-0.5, -1.0)]:
-    ax.plot(grade, [a * x + b for x in grade], ':', color='gray')
+    ax.plot(grade, a * grade + b, ':', color='gray')
 
 # a de margem máxima, com as duas linhas que a margem toca
-ax.plot(grade, [-x for x in grade], '-', color='black', linewidth=2)
-ax.plot(grade, [-x - 3 for x in grade], '--', color='black', linewidth=0.8)
-ax.plot(grade, [-x + 3 for x in grade], '--', color='black', linewidth=0.8)
+ax.plot(grade, -grade, '-', color='black', linewidth=2)
+ax.plot(grade, -grade - 3, '--', color='black', linewidth=0.8)
+ax.plot(grade, -grade + 3, '--', color='black', linewidth=0.8)
 
 ax.set_xlim(-4, 4)
 ax.set_ylim(-4, 4)
@@ -171,25 +160,24 @@ Dá para ver isso acontecendo — nos mesmos pontos da figura acima, menos o mai
 
 ```{python}
 #| label: divergencia
-import math
-from scratch.logistic_regression import negative_log_likelihood
+xs_sep = np.array([[1.0, -2.0, -1.0], [1.0, -1.0, -2.0], [1.0, -1.5, -1.5], [1.0, -2.5, -0.5],
+                   [1.0,  2.0,  1.0], [1.0,  1.0,  2.0], [1.0,  1.5,  1.5], [1.0,  2.5,  0.5]])
+ys_sep = np.array([0.0, 0.0, 0.0, 0.0, 1.0, 1.0, 1.0, 1.0])
 
-xs_sep = [[1.0, -2.0, -1.0], [1.0, -1.0, -2.0], [1.0, -1.5, -1.5], [1.0, -2.5, -0.5],
-          [1.0,  2.0,  1.0], [1.0,  1.0,  2.0], [1.0,  1.5,  1.5], [1.0,  2.5,  0.5]]
-ys_sep = [0, 0, 0, 0, 1, 1, 1, 1]
-
-random.seed(0)
-beta_sep = [random.random() for _ in range(3)]
+rng_sep = np.random.default_rng(0)
+beta_sep = rng_sep.random(3)
 marcos = [1, 10, 100, 1000, 10000, 50000]
 
 for epoch in range(1, max(marcos) + 1):
     gradiente = negative_log_gradient(xs_sep, ys_sep, beta_sep)
     beta_sep = gradient_step(beta_sep, gradiente, -0.01)
     if epoch in marcos:
-        norma = math.sqrt(dot(beta_sep, beta_sep))
+        norma = np.linalg.norm(beta_sep)
         perda = negative_log_likelihood(xs_sep, ys_sep, beta_sep)
         print(f"epoch {epoch:>6}: |beta| = {norma:8.4f}   perda = {perda:.6f}")
 ```
+
+`np.linalg.norm` é o comprimento do vetor — a função `magnitude` do [Capítulo 4](../cap04/01-vetores.qmd), que era `math.sqrt(sum_of_squares(v))`, numa chamada só —, e o `rng_sep` é um gerador próprio porque este conjunto é inventado aqui e não tem nada a ver com a divisão treino/teste do resto do capítulo.
 
 O comprimento de $\beta$ cresce sem parar e a perda desce em direção a zero sem nunca chegar. O gradiente descendente não "converge" aqui — ele apenas anda cada vez mais devagar, e para onde estava quando você mandou parar. **O modelo que você obtém é uma função de quantos epochs você teve paciência de rodar**, o que é uma forma desconfortável de escolher um modelo.
 
@@ -204,27 +192,23 @@ Mas há um problema anterior e mais interessante: **um hiperplano separador pode
 
 ```{python}
 #| label: separabilidade
-def separavel(pontos, rotulos) -> bool:
+def separavel(pontos: np.ndarray, rotulos: np.ndarray) -> bool:
     """Existe alguma reta que separe perfeitamente as duas classes?"""
-    n = len(pontos)
-    for i in range(n):
-        ax, ay = pontos[i]
-        for j in range(i + 1, n):
-            bx, by = pontos[j]
-            dx, dy = bx - ax, by - ay
-            # direção do segmento, e a perpendicular a ele
-            for wx, wy in [(dx, dy), (dy, -dx)]:
-                if wx == 0 and wy == 0:
-                    continue
-                proj0 = [wx * px + wy * py
-                         for (px, py), r in zip(pontos, rotulos) if r == 0]
-                proj1 = [wx * px + wy * py
-                         for (px, py), r in zip(pontos, rotulos) if r == 1]
-                if max(proj0) < min(proj1) or max(proj1) < min(proj0):
-                    return True
-    return False
+    i, j = np.triu_indices(len(pontos), k=1)
+    segmentos = pontos[j] - pontos[i]                 # a direção de cada par
 
-pontos = [(x[1], x[2]) for x in xs]
+    # a direção do segmento, e a perpendicular a ela
+    direcoes = np.vstack([segmentos,
+                          np.column_stack([segmentos[:, 1], -segmentos[:, 0]])])
+    direcoes = direcoes[np.any(direcoes != 0, axis=1)]
+
+    proj0 = direcoes @ pontos[rotulos == 0].T         # (direções, não pagantes)
+    proj1 = direcoes @ pontos[rotulos == 1].T         # (direções, pagantes)
+
+    return bool(np.any((proj0.max(axis=1) < proj1.min(axis=1)) |
+                       (proj1.max(axis=1) < proj0.min(axis=1))))
+
+pontos = xs[:, 1:]
 
 if separavel(pontos, ys):
     print("Existe uma reta que separa pagantes de não pagantes.")
@@ -232,8 +216,10 @@ else:
     print("Nenhuma reta separa estes dados.")
 ```
 
+Vale ver o que aconteceu com os dois laços aninhados. `np.triu_indices` produz os índices dos 19.900 pares sem repetir nenhum, e `pontos[j] - pontos[i]` calcula as 19.900 direções de uma vez. `direcoes @ pontos.T` projeta **todos** os pontos sobre **todas** as direções numa multiplicação de matrizes: o resultado tem uma linha por direção e uma coluna por ponto, e a pergunta "as duas classes se separam nesta direção?" vira uma comparação entre os máximos e os mínimos de cada linha, com `axis=1`. Nenhum `for` sobrou — o que era um laço duplo sobre 200 pontos é uma conta de quase 40 mil por 200 que o `numpy` faz em centésimos de segundo.
+
 ::: {.callout-note}
-Por que testar só direções ligadas a **pares de pontos** basta, e a busca é exaustiva apesar de finita: se as duas classes são separáveis no plano, os fechos convexos delas são disjuntos, e o segmento mais curto entre os dois fechos define a direção de separação. Esse segmento ou liga dois vértices — um de cada classe, e a direção é a do próprio segmento — ou liga um vértice a uma aresta, e aí a direção é perpendicular a essa aresta, que por sua vez liga dois pontos da mesma classe. Percorrer todos os pares nas duas formas cobre os dois casos. São 19.900 pares e menos de um segundo de execução.
+Por que testar só direções ligadas a **pares de pontos** basta, e a busca é exaustiva apesar de finita: se as duas classes são separáveis no plano, os fechos convexos delas são disjuntos, e o segmento mais curto entre os dois fechos define a direção de separação. Esse segmento ou liga dois vértices — um de cada classe, e a direção é a do próprio segmento — ou liga um vértice a uma aresta, e aí a direção é perpendicular a essa aresta, que por sua vez liga dois pontos da mesma classe. Percorrer todos os pares nas duas formas cobre os dois casos. São 19.900 pares e 39.794 direções — seriam 39.800, mas três pares de usuários têm exatamente a mesma experiência e o mesmo salário, e os seis vetores nulos que eles produzem saem da conta —, tudo em centésimos de segundo. A matriz de projeções ocupa cerca de 60 MB, que é o preço de fazer tudo de uma vez.
 :::
 
 Não há reta nenhuma que separe pagantes de não pagantes neste conjunto. A SVM, na forma acima, não teria o que devolver.
@@ -245,16 +231,15 @@ Não há reta nenhuma que separe pagantes de não pagantes neste conjunto. A SVM
 ```{python}
 #| label: fig-kernel
 #| fig-cap: "À esquerda, um conjunto unidimensional não separável; à direita, o mesmo conjunto depois do mapa x → (x, x²)"
-valores = [-3.0, -2.5, -2.0, -1.0, -0.5, 0.0, 0.5, 1.0, 2.0, 2.5, 3.0]
-rotulos = [1 if abs(v) >= 2 else 0 for v in valores]
+valores = np.array([-3.0, -2.5, -2.0, -1.0, -0.5, 0.0, 0.5, 1.0, 2.0, 2.5, 3.0])
+rotulos = (np.abs(valores) >= 2).astype(int)
 
 fig, (esquerda, direita) = plt.subplots(1, 2, figsize=(10, 4))
 
 for marcador, classe in [('+', 1), ('.', 0)]:
-    selecionados = [v for v, r in zip(valores, rotulos) if r == classe]
-    esquerda.scatter(selecionados, [0] * len(selecionados), marker=marcador, s=90)
-    direita.scatter(selecionados, [v ** 2 for v in selecionados],
-                    marker=marcador, s=90)
+    selecionados = valores[rotulos == classe]
+    esquerda.scatter(selecionados, np.zeros_like(selecionados), marker=marcador, s=90)
+    direita.scatter(selecionados, selecionados ** 2, marker=marcador, s=90)
 
 esquerda.set_yticks([])
 esquerda.set_ylim(-1, 1)
@@ -288,9 +273,9 @@ Usar máquinas de vetores de suporte sem depender de software de otimização es
 
 Três capítulos, uma escada, e o degrau de cima é este. A [seção 11.1](../cap11/01-o-modelo.qmd) ajustou uma reta com uma **fórmula fechada** — duas médias, uma covariância, uma variância, sem laço nenhum. O [Capítulo 12](../cap12/index.qmd) manteve a fórmula fechada existindo e parou de usá-la: a solução exata era um sistema linear que aquele capítulo escolheu não resolver, por escopo. Aqui ela não existe, e a promessa da [seção 5.5](../cap05/05-ajustando-modelos.qmd) foi cobrada — o gradiente descendente deixou de ser conveniência e virou a única via até um modelo. É assim também nos capítulos [15](../cap15/index.qmd) e [16](../cap16/index.qmd) — mas não em todo o resto: os capítulos [14](../cap14/index.qmd) e [17](../cap17/index.qmd) constroem modelos que não descem gradiente nenhum, como o [Capítulo 5](../cap05/index.qmd) já avisava.
 
-Há uma segunda herança, e ela só ficou visível na figura desta seção. Os três modelos da escada, mais a máquina de vetores de suporte, decidem todos comparando `dot(x, beta)` com um limiar — e produto escalar contra limiar é, sempre, um **hiperplano no espaço de atributos**. Uma reta, no nosso caso. Os 21 usuários do lado errado dela não estão lá por falta de epochs de treino: estão lá porque nenhuma reta os colocaria do lado certo. O truque do kernel é uma saída para isso, e uma saída cara — ele compra a curvatura trocando o espaço, sem abandonar o produto escalar, e paga com um custo que cresce entre o quadrado e o cubo do número de pontos, e com uma fronteira que ninguém mais consegue ler.
+Há uma segunda herança, e ela só ficou visível na figura desta seção. Os três modelos da escada, mais a máquina de vetores de suporte, decidem todos comparando `x @ beta` com um limiar — e produto escalar contra limiar é, sempre, um **hiperplano no espaço de atributos**. Uma reta, no nosso caso. Os 24 usuários do lado errado dela não estão lá por falta de epochs de treino: estão lá porque nenhuma reta os colocaria do lado certo. O truque do kernel é uma saída para isso, e uma saída cara — ele compra a curvatura trocando o espaço, sem abandonar o produto escalar, e paga com um custo que cresce entre o quadrado e o cubo do número de pontos, e com uma fronteira que ninguém mais consegue ler.
 
-O [Capítulo 14](../cap14/index.qmd) chega à curvatura por um caminho que não tem nada disso. A árvore de decisão não tem produto escalar, não tem coeficiente, não tem gradiente e não tem ponto de partida aleatório; ela pergunta uma coisa de cada vez — "salário acima de 60.000?" — e a fronteira que sai é feita de degraus paralelos aos eixos. Uma consequência disso fecha justamente a lição da [seção 13.3](03-aplicando-o-modelo.qmd): para uma árvore, **medir salário em reais ou em desvios padrão é rigorosamente indiferente**. Reescalonar não muda uma única pergunta que ela faça, porque toda pergunta é sobre a **ordem** dos valores de uma coluna, e reescalonar preserva a ordem. O `ValueError` da primeira conta, a saturação em `float64`, a taxa de aprendizado que serve para uma coluna e não para a outra — nada disso existe no próximo capítulo. Some o problema inteiro, junto com o produto escalar que o criava.
+O [Capítulo 14](../cap14/index.qmd) chega à curvatura por um caminho que não tem nada disso. A árvore de decisão não tem produto escalar, não tem coeficiente, não tem gradiente e não tem ponto de partida aleatório; ela pergunta uma coisa de cada vez — "salário acima de 60.000?" — e a fronteira que sai é feita de degraus paralelos aos eixos. Uma consequência disso fecha justamente a lição da [seção 13.3](03-aplicando-o-modelo.qmd): para uma árvore, **medir salário em reais ou em desvios padrão é rigorosamente indiferente**. Reescalonar não muda uma única pergunta que ela faça, porque toda pergunta é sobre a **ordem** dos valores de uma coluna, e reescalonar preserva a ordem. A perda `nan` da primeira conta, a saturação em `float64`, a taxa de aprendizado que serve para uma coluna e não para a outra — nada disso existe no próximo capítulo. Some o problema inteiro, junto com o produto escalar que o criava.
 
 ::: {.callout-tip collapse="true"}
 ## Na prática: `scikit-learn`
@@ -309,7 +294,7 @@ modelo = LinearSVC(C=1.0)              # sem kernel; muito mais rápido
 Três coisas que valem a pena saber:
 
 - **`C` é o mesmo tipo de hiperparâmetro da regularização** da [seção 12.8](../cap12/08-regularizacao.qmd). Como dados reais quase nunca são separáveis — os nossos não são —, a formulação usada na prática é a de *margem suave*, que permite alguns pontos violarem a margem e cobra por isso. `C` é quanto se cobra.
-- **Reescalonar não é opcional.** A margem é medida com distância euclidiana, então uma coluna em reais e outra em anos produzem o mesmo desastre que a [seção 13.3](03-aplicando-o-modelo.qmd) mostrou — aqui sem `ValueError`, só com um modelo silenciosamente dominado pela coluna de escala maior. O guia prático do LIBSVM começa por essa recomendação.
+- **Reescalonar não é opcional.** A margem é medida com distância euclidiana, então uma coluna em reais e outra em anos produzem o mesmo desastre que a [seção 13.3](03-aplicando-o-modelo.qmd) mostrou — aqui sem nenhum `nan` na tela, só com um modelo silenciosamente dominado pela coluna de escala maior. O guia prático do LIBSVM começa por essa recomendação.
 - **`SVC` não escala para dados grandes.** O custo do treino cresce entre o quadrado e o cubo do número de pontos, o que na prática limita `SVC` a algumas dezenas de milhares de exemplos. Acima disso usa-se `LinearSVC` (sem kernel) ou `SGDClassifier`, que aplica a mesma perda de margem por gradiente descendente estocástico — o método do [Capítulo 5](../cap05/index.qmd), de volta pela última vez neste capítulo.
 
 E vale registrar a diferença de interface que resume a diferença de critério: `SVC` **não tem** `predict_proba` habilitado por padrão. Ele devolve o lado do hiperplano, não uma probabilidade, porque nunca modelou uma. Obter probabilidades dele exige uma calibração extra por cima, e o `scikit-learn` acabou de mudar como se pede isso: o parâmetro `SVC(probability=True)` foi **depreciado na versão 1.9** e será removido na 1.11, em favor de

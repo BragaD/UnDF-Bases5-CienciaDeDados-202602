@@ -15,42 +15,36 @@ O conjunto tem cerca de 200 usuários anonimizados, e para cada um sabemos três
 Cada linha bruta é `[experiência, salário, conta_paga]`. Convertendo para o formato de que precisamos — com a coluna de 1 na frente, pela convenção do capítulo anterior:
 
 ```python
-xs = [[1.0] + row[:2] for row in data]    # [1, experiência, salário]
-ys = [row[2] for row in data]             # conta_paga
+xs = np.column_stack([np.ones(len(data)), data[:, :2]])   # [1, experiência, salário]
+ys = data[:, 2]                                           # conta_paga
 ```
+
+`np.column_stack` cola vetores como colunas de uma matriz; o resultado é o `xs` de forma `(200, 3)` que `scratch_np.logistic_regression` exporta, junto com o `ys` de forma `(200,)`.
 
 ```{python}
 #| label: importa-dados
-#| include: false
-import random
-random.seed(0)
-from scratch.logistic_regression import xs, ys
-from scratch.multiple_regression import least_squares_fit, predict
-import matplotlib.pyplot as plt
-plt.close('all')
+import numpy as np
+from matplotlib import pyplot as plt
+
+from scratch_np.logistic_regression import xs, ys
 ```
 
 ```{python}
 #| label: mostra-dados
-len(xs), xs[0], ys[0], sum(ys)
+xs.shape, xs[0], ys[0], ys.sum()
 ```
 
 São 200 usuários, dos quais 52 pagaram — 26% da base. A primeira linha é um usuário com 0,7 ano de experiência, salário de 48.000 e conta paga.
 
-Vale olhar os dados antes de modelar:
+Vale olhar os dados antes de modelar. `ys == 1` é uma máscara booleana, e `xs[paga, 1]` seleciona a coluna da experiência só nas linhas que ela marca — o `~paga` faz o complemento. É a máscara da [seção 7.1](../cap07/01-explorando-seus-dados.qmd) com o `~` da [seção 10.5](../cap10/05-usando-o-modelo.qmd), no lugar dos quatro `zip` que a separação por classe exigiria de outro jeito.
 
 ```{python}
 #| label: fig-usuarios
 #| fig-cap: "Usuários pagantes e não pagantes"
-experiencia = [x[1] for x in xs]
-salario = [x[2] for x in xs]
+paga = ys == 1
 
-plt.scatter([e for e, y in zip(experiencia, ys) if y == 1],
-            [s for s, y in zip(salario, ys) if y == 1],
-            marker='+', label='paga')
-plt.scatter([e for e, y in zip(experiencia, ys) if y == 0],
-            [s for s, y in zip(salario, ys) if y == 0],
-            marker='.', label='não paga')
+plt.scatter(xs[paga, 1], xs[paga, 2], marker='+', label='paga')
+plt.scatter(xs[~paga, 1], xs[~paga, 2], marker='.', label='não paga')
 plt.xlabel("anos de experiência")
 plt.ylabel("salário")
 plt.legend(loc='upper left')
@@ -70,69 +64,62 @@ $$
 \text{conta paga} = \beta_0 + \beta_1 \,\text{experiência} + \beta_2 \,\text{salário} + \varepsilon
 $$
 
-Nada impede de modelar o problema assim. Literalmente nada: a função `least_squares_fit` do [Capítulo 12](../cap12/03-ajustando-o-modelo.qmd) aceita qualquer lista de `ys`, e não tem como saber que estes só valem 0 e 1.
+Nada impede de modelar o problema assim. Literalmente nada: a função `least_squares_fit` do [Capítulo 12](../cap12/03-ajustando-o-modelo.qmd) aceita qualquer array `ys` de forma `(n,)`, e não tem como saber que estes só valem 0 e 1.
 
-Antes de ajustar, um passo de higiene: **reescalonar**. Experiência vai de 0,1 a 10; salário vai de 30.000 a 107.000. Com amplitudes que diferem por um fator de quase 8.000, a coluna do salário domina qualquer produto escalar, e o gradiente descendente com taxa de aprendizado única não tem chance. A função é a mesma que a [seção 7.6](../cap07/06-reescalonamento.qmd) construiu:
+Antes de ajustar, um passo de higiene: **reescalonar**. Experiência vai de 0,1 a 10; salário vai de 30.000 a 107.000. Com amplitudes que diferem por um fator de quase 8.000, a coluna do salário domina qualquer produto escalar, e o gradiente descendente com taxa de aprendizado única não tem chance. A função é a mesma que a [seção 7.6](../cap07/06-reescalonamento.qmd) construiu, repetida aqui porque cada página deste livro roda num kernel próprio — `axis=0` reduz coluna a coluna, `ddof=1` é o desvio amostral, e `varia` é a máscara que protege as colunas sem variação:
 
 ```{python}
 #| label: rescale
-from typing import List, Tuple
-from scratch.linear_algebra import Vector, vector_mean
-from scratch.statistics import standard_deviation
+from typing import Tuple
 
-def scale(data: List[Vector]) -> Tuple[Vector, Vector]:
-    """devolve a média e o desvio padrão de cada posição"""
-    dim = len(data[0])
-    means = vector_mean(data)
-    stdevs = [standard_deviation([vector[i] for vector in data])
-              for i in range(dim)]
-    return means, stdevs
+def scale(X: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
+    """devolve a média e o desvio padrão de cada coluna"""
+    X = np.asarray(X, dtype=float)
+    return X.mean(axis=0), X.std(axis=0, ddof=1)
 
-def rescale(data: List[Vector]) -> List[Vector]:
-    """cada posição passa a ter média 0 e desvio padrão 1"""
-    dim = len(data[0])
-    means, stdevs = scale(data)
-    rescaled = [v[:] for v in data]
-    for v in rescaled:
-        for i in range(dim):
-            if stdevs[i] > 0:
-                v[i] = (v[i] - means[i]) / stdevs[i]
+def rescale(X: np.ndarray) -> np.ndarray:
+    """cada coluna passa a ter média 0 e desvio padrão 1"""
+    X = np.asarray(X, dtype=float)
+    means, stdevs = scale(X)
+
+    rescaled = X.copy()
+    varia = stdevs > 0                  # máscara sobre as colunas
+    rescaled[:, varia] = (X[:, varia] - means[varia]) / stdevs[varia]
     return rescaled
 
 rescaled_xs = rescale(xs)
-[round(v, 4) for v in rescaled_xs[0]]
+rescaled_xs[0].round(4)
 ```
 
-A coluna de 1 sobrevive intacta: o desvio padrão dela é zero, e `rescale` deixa em paz qualquer dimensão sem variação em vez de dividir por zero.
+A coluna de 1 sobrevive intacta, e agora dá para ver por quê: o desvio padrão dela é zero, `varia` não a marca, e a atribuição `rescaled[:, varia] = ...` simplesmente não a alcança. Nenhuma divisão por zero acontece porque a coluna nunca entra na conta.
 
 ::: {.callout-important}
 ## Reescalonar aqui é higiene; na próxima seção vira sobrevivência
 
 Neste ajuste linear, esquecer o `rescale` produziria um modelo ruim — coeficientes que não convergem, uma taxa de aprendizado que serve para uma coluna e não para a outra. Chato, mas visível: o número sai errado e você percebe.
 
-Na [seção 13.3](03-aplicando-o-modelo.qmd), com o mesmo conjunto de dados e o mesmo tipo de otimizador, esquecer este passo não produz um modelo ruim. Produz um `ValueError` na primeira conta, antes do primeiro passo de gradiente. Vale voltar a esta linha depois de ver aquilo acontecer.
+Na [seção 13.3](03-aplicando-o-modelo.qmd), com o mesmo conjunto de dados e o mesmo tipo de otimizador, esquecer este passo não produz um modelo ruim. Produz uma perda igual a `nan` já no chute inicial — e, pior, um treino que roda até o fim mesmo assim e devolve coeficientes com cara de resposta. Vale voltar a esta linha depois de ver aquilo acontecer.
 :::
 
-Agora o ajuste, com o `least_squares_fit` do [capítulo anterior](../cap12/03-ajustando-o-modelo.qmd), sem uma linha de mudança:
+Agora o ajuste, com o `least_squares_fit` do [capítulo anterior](../cap12/03-ajustando-o-modelo.qmd), sem uma linha de mudança — só o gerador, que ele exige como argumento para que a semente fique visível aqui, ao lado do sorteio que ela produz:
 
 ```{python}
 #| label: ajuste-linear
-#| warning: false
-from scratch.multiple_regression import least_squares_fit, predict
+from scratch_np.multiple_regression import least_squares_fit, predict
 
-random.seed(0)
+rng = np.random.default_rng(0)
 learning_rate = 0.001
-beta = least_squares_fit(rescaled_xs, ys, learning_rate, 1000, 1)
+beta = least_squares_fit(rescaled_xs, ys, rng, learning_rate, 1000, 1)
 
-[round(b, 4) for b in beta]
+beta.round(4)
 ```
 
-O modelo rodou e devolveu coeficientes. Vamos ver as previsões contra os valores reais:
+O modelo rodou e devolveu coeficientes. Vamos ver as previsões contra os valores reais. `predict(rescaled_xs, beta)` é `X @ beta` — as 200 previsões numa multiplicação de matriz por vetor, não uma por vez, do mesmo jeito que a [seção 12.1](../cap12/01-o-modelo.qmd) mostrou a mesma função aceitar um usuário ou a matriz inteira:
 
 ```{python}
 #| label: fig-linear-probabilidades
 #| fig-cap: "Regressão linear para prever contas pagas"
-previsoes = [predict(x_i, beta) for x_i in rescaled_xs]
+previsoes = predict(rescaled_xs, beta)
 
 plt.scatter(previsoes, ys, marker='.')
 plt.axvline(0, color='gray', linestyle=':')
@@ -145,16 +132,16 @@ plt.show()
 
 ## Os dois problemas
 
-O primeiro salta do gráfico. As duas linhas pontilhadas marcam 0 e 1, os únicos valores que a variável a prever assume. Trinta e oito dos 200 pontos caem fora desse intervalo:
+O primeiro salta do gráfico. As duas linhas pontilhadas marcam 0 e 1, os únicos valores que a variável a prever assume. Trinta e oito dos 200 pontos caem fora desse intervalo — e para contá-los basta uma máscara: `previsoes < 0` devolve um array de 200 booleanos, e `np.sum` conta os `True`.
 
 ```{python}
 #| label: previsoes-fora-do-intervalo
-negativas = sum(1 for p in previsoes if p < 0)
-acima_de_um = sum(1 for p in previsoes if p > 1)
+negativas = np.sum(previsoes < 0)
+acima_de_um = np.sum(previsoes > 1)
 
 print(f"previsões negativas:  {negativas}")
 print(f"previsões acima de 1: {acima_de_um}")
-print(f"mínimo: {min(previsoes):.4f}   máximo: {max(previsoes):.4f}")
+print(f"mínimo: {previsoes.min():.4f}   máximo: {previsoes.max():.4f}")
 ```
 
 Gostaríamos que a saída ficasse entre 0 e 1, para poder lê-la como probabilidade — uma previsão de 0,25 significaria "25% de chance de ser assinante". Isso seria perfeitamente aceitável. Mas as previsões deste modelo vão de **−0,58** a **1,44**: 37 dos 200 usuários recebem uma previsão negativa, e um recebe previsão acima de 1. Não há leitura possível para uma probabilidade negativa.
@@ -162,9 +149,9 @@ Gostaríamos que a saída ficasse entre 0 e 1, para poder lê-la como probabilid
 O segundo problema é mais sutil, e é sobre a validade do ajuste, não sobre a interpretação da saída. A regressão linear supõe que os erros são **não correlacionados** com as colunas de `x` — é uma das hipóteses que a [seção 12.2](../cap12/02-hipoteses-do-minimos-quadrados.qmd) listou. Aqui essa hipótese é violada por construção. O coeficiente de experiência é positivo (mais experiência, maior previsão), então o modelo produz valores altos para quem tem muita experiência. Só que o valor real é, no máximo, 1. Logo, uma previsão muito alta **obriga** o erro a ser muito negativo — o erro passa a depender de `x`, exatamente o que a hipótese proibia. A consequência não é cosmética: a estimativa de $\beta$ fica **enviesada**.
 
 ::: {.conceito}
-O que queremos, no lugar disso: que valores grandes e positivos de `dot(x_i, beta)` correspondam a probabilidades **próximas de 1**, e valores grandes e negativos, a probabilidades **próximas de 0** — com uma transição suave no meio.
+O que queremos, no lugar disso: que valores grandes e positivos de `x_i @ beta` correspondam a probabilidades **próximas de 1**, e valores grandes e negativos, a probabilidades **próximas de 0** — com uma transição suave no meio.
 
-Repare no que essa formulação **não** pede. Ela não pede um modelo diferente, nem um otimizador diferente, nem abandonar o produto escalar. `dot(x_i, beta)` continua sendo o coração da coisa; a estrutura linear do capítulo anterior sobrevive inteira. O que falta é uma função aplicada **depois** dele, que pegue a reta inteira dos reais e a comprima dentro de $[0, 1]$. É essa função que a [próxima seção](02-a-funcao-logistica.qmd) apresenta.
+Repare no que essa formulação **não** pede. Ela não pede um modelo diferente, nem um otimizador diferente, nem abandonar o produto escalar. `x_i @ beta` continua sendo o coração da coisa; a estrutura linear do capítulo anterior sobrevive inteira. O que falta é uma função aplicada **depois** dele, que pegue a reta inteira dos reais e a comprima dentro de $[0, 1]$. É essa função que a [próxima seção](02-a-funcao-logistica.qmd) apresenta.
 :::
 
 ::: {.callout-tip collapse="true"}
@@ -177,7 +164,7 @@ O ponto para esta seção é outro: **a biblioteca não avisa**. `LinearRegressi
 ```python
 from sklearn.linear_model import LinearRegression
 
-X = [x[1:] for x in xs]      # sem a coluna de 1
+X = xs[:, 1:]                # sem a coluna de 1
 modelo = LinearRegression().fit(X, ys)
 modelo.predict(X).min()      # negativo
 ```
