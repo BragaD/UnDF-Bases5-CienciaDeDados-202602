@@ -122,7 +122,7 @@ lock: ## Regenera o uv.lock a partir do pyproject.toml
 	uv lock
 
 clean: ## Remove artefatos de render (inclusive o lixo que um render abortado deixa)
-	rm -rf _book _freeze .quarto
+	rm -rf _book _freeze .quarto site_libs
 # O Quarto cria .html e *_files durante o render e os apaga no final. Se o render
 # aborta (o bind mount do Docker no macOS às vezes falha com "Directory not
 # empty"), esse lixo fica — e TRAVA o render seguinte, que não consegue remover

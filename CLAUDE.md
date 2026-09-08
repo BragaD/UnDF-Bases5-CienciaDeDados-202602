@@ -4,9 +4,14 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Estado atual
 
-O design está aprovado e escrito em `docs/superpowers/specs/2026-08-15-estrutura-livro-bases5-design.md` — **leia essa spec antes de mexer na estrutura.** Este arquivo é o resumo operacional; a spec é a fonte das decisões e das razões. A spec carrega algumas notas de correção pós-implementação — leia-as também; elas registram onde a decisão original mudou depois de escrita.
+Duas specs governam este repositório, e ambas precisam ser lidas antes de mexer na estrutura ou no código dos capítulos:
 
-**O livro está escrito e publicado.** 17 capítulos, 87 seções + 17 `index.qmd` = 104 `.qmd`, todos registrados em `_quarto.yml`. Nenhum stub restante. Container Docker (Quarto + `uv`), CI publicando em `gh-pages`, 41 testes (`make teste`) guardando os invariantes. O **capítulo 9 (k-Vizinhos Mais Próximos)** foi o primeiro escrito e segue sendo o **modelo de estilo** da casa: leia `content/cap09/` antes de mexer em qualquer capítulo, para o formato pegar (ver "Antes de escrever um capítulo", abaixo).
+- `docs/superpowers/specs/2026-08-15-estrutura-livro-bases5-design.md` — a **estrutura** do livro (escopo, numeração, dados, infra). Carrega notas de correção pós-implementação; leia-as também, elas registram onde a decisão original mudou depois de escrita.
+- `docs/superpowers/specs/2026-09-06-reescrita-numpy-design.md` — a **reescrita dos capítulos 6 a 17 em numpy**, decidida pelo autor e em curso na branch `reescrita-numpy`. Ela inverte, para esses capítulos, a decisão pedagógica original ("tudo em Python puro"). Ver "Pedagogia" e "A reescrita em numpy", abaixo.
+
+Este arquivo é o resumo operacional; as specs são a fonte das decisões e das razões.
+
+**O livro está escrito e publicado.** 17 capítulos, 87 seções + 17 `index.qmd` = 104 `.qmd`, todos registrados em `_quarto.yml`. Nenhum stub restante. Container Docker (Quarto + `uv`), CI publicando em `gh-pages`, 52 testes (`make teste`) guardando os invariantes. O **capítulo 9 (k-Vizinhos Mais Próximos)** foi o primeiro escrito e segue sendo o **modelo de estilo** da casa: leia `content/cap09/` antes de mexer em qualquer capítulo, para o formato pegar (ver "Antes de escrever um capítulo", abaixo).
 
 Além do livro, `notebooks/` traz **um `.ipynb` por capítulo**, gerado a partir dos `.qmd` para executar ao vivo na aula (ver "Os notebooks de aula", abaixo), e `atividades/` guarda o PID da disciplina.
 
@@ -15,9 +20,19 @@ Os irmãos já prontos definiram o padrão da casa **na hora de montar o andaime
 - `../bases_3_estatistica/` — Quarto + Docker + `uv`, um `.qmd` por seção. Se uma dúvida de convenção não estiver resolvida aqui (formato de `Makefile`, padrão de `.devcontainer/`, uso de `styles.css`), é lá que a resposta provavelmente já foi pensada uma vez — mas adapte, não copie por cima do que já funciona.
 - `../../202601/BasesIV_EngSoft_BD/` — livro de Banco de Dados, geração anterior (R + `renv`, sem container). Vale pelo `atividades/`: provas e trabalhos em `.qmd` que renderizam para PDF **fora** do projeto-livro, com gabarito via metadado + filtro Lua — ainda fora de escopo aqui. **Cuidado:** lá os caminhos de dados são relativos ao arquivo (`../../dados/`); aqui são relativos à raiz. Não copie esse padrão.
 
+### A reescrita em numpy (branch `reescrita-numpy`)
+
+**Os capítulos 6 a 17 estão sendo reescritos para construir os modelos com numpy**, um capítulo por vez, na branch `reescrita-numpy`. Os capítulos 1 a 5 **não** mudam: eles continuam em Python puro e são a motivação do numpy — quem escreveu `dot` como um `sum` sobre um `zip` entende o que o `@` faz.
+
+Estado: **6 a 12 concluídos** (planejados, implementados, revisados e corrigidos); 13 em andamento; 14 a 17 pendentes. Cada capítulo tem um plano em `docs/superpowers/plans/2026-09-06-numpy-capNN.md` — o plano do capítulo é a memória do que foi decidido, medido e desviado ali, e é o primeiro lugar a olhar antes de mexer num capítulo já reescrito.
+
+O processo, fixado em `docs/superpowers/plans/2026-09-06-numpy-00-instrucoes.md`, é **um capítulo por vez**: um agente planejador (Opus, com o mapa do capítulo já no prompt) escreve o plano; um implementador o executa e verifica; um revisor lê o capítulo inteiro com uma única pergunta — *o texto condiz com o que foi reescrito?* — e devolve discrepâncias; o implementador corrige. Doze planejadores em paralelo estouraram o limite de sessão da API sem produzir nada; a sequência não é preferência de estilo, é o que cabe no orçamento.
+
+Ao terminar os 17, falta um **passe de coerência global**: `content/cap01`, `content/cap04/index.qmd` e o callout de `content/cap04/01-vetores.qmd` (que ainda diz "a regra deste livro — nada de NumPy", e é o destino de links dos capítulos 6 e 7), o `index.qmd` da raiz, o `README.md`, este arquivo e uma nota de correção na spec de 2026-08-15.
+
 ### Antes de escrever um capítulo
 
-**Leia `content/cap09/` inteiro primeiro.** É o único capítulo escrito e foi revisado por rodadas sucessivas até fixar a forma: abertura de seção, posição dos callouts, formato de citação (capítulo + título em itálico, nunca um número de seção do Grus), justificativa de semente em chunk estocástico, e o callout de fechamento em `scikit-learn`. Um capítulo novo que copiar essa forma economiza rodadas de revisão; um que reinventar a forma provavelmente repete um erro que o cap. 9 já pagou.
+**Leia `content/cap09/` inteiro primeiro.** Foi o primeiro capítulo escrito e foi revisado por rodadas sucessivas até fixar a forma: abertura de seção, posição dos callouts, formato de citação (capítulo + título em itálico, nunca um número de seção do Grus), justificativa de semente em chunk estocástico, e o callout de fechamento em `scikit-learn`. Um capítulo novo que copiar essa forma economiza rodadas de revisão; um que reinventar a forma provavelmente repete um erro que o cap. 9 já pagou.
 
 ## Visão geral
 
@@ -69,22 +84,44 @@ Os capítulos 2 e 16 são os únicos que se afastam de "um `.qmd` por seção" �
 
 ## Pedagogia
 
-Cada seção implementa o algoritmo em Python puro, como o Grus faz, e **fecha com um callout mostrando o equivalente em `scikit-learn`** — o fecho do arco. O `scikit-learn` nunca aparece na implementação de uma seção, só no callout.
+Cada seção **implementa o algoritmo**, como o Grus faz, e **fecha com um callout mostrando o equivalente em `scikit-learn`** — o fecho do arco "abrir a caixa-preta". O `scikit-learn` nunca aparece na implementação de uma seção, só no callout, sempre num bloco ```` ```python ```` que **não executa** (`test_nenhum_chunk_executavel_usa_sklearn` trava isso no livro inteiro).
 
-**Não "melhore" o código do livro.** O pacote `scratch/` não importa numpy em lugar nenhum: `Vector = List[float]`, `dot` é um `sum(...)` sobre um `zip`. Trocar isso por `np.ndarray`, por broadcasting ou por uma chamada de `sklearn` destrói exatamente o que a disciplina existe para ensinar. O instinto de fazer isso é forte, porque o código é de fato lento e verboso para padrões de produção — a lentidão é o preço da transparência, pago de propósito.
+O que muda de um capítulo para outro é a **calculadora**:
+
+- **Capítulos 1 a 5: Python puro.** `Vector = List[float]`, `dot` é um `sum(...)` sobre um `zip`. Não "melhore" esse código — trocá-lo por `np.ndarray` ou por uma chamada de `sklearn` destrói exatamente o que esses capítulos existem para ensinar. O instinto é forte, porque o código é lento e verboso para padrões de produção; a lentidão é o preço da transparência, pago de propósito. O pacote `scratch/` (vendorizado, com hash travado em teste) é o desses capítulos.
+- **Capítulos 6 a 17: numpy.** Vetores e matrizes são `np.ndarray`, produto escalar é `@`, somas sobre pontos viram reduções com `axis`, laços sobre os dados viram operações vetorizadas. O algoritmo continua sendo escrito por nós, linha a linha, no `.qmd`. O pacote `scratch_np/` (nosso, editável) é o desses capítulos.
+
+**A regra que decide cada dúvida: numpy é a calculadora, não o modelo.** Numpy entra para fazer álgebra linear, broadcasting, reduções, indexação booleana e sorteio. O que o capítulo existe para ensinar — a regra de atualização do gradiente, o critério de partição da árvore, a votação do k-NN, a verossimilhança do Naive Bayes, os passos do k-means, a retropropagação — continua escrito à mão.
+
+| Pode e deve | Não pode |
+|---|---|
+| `X @ w`, `X.T @ X`, `np.linalg.solve`, `np.linalg.norm` | `np.linalg.lstsq` **como** implementação (só como conferência, em callout) |
+| `np.mean`, `np.std(ddof=1)`, `np.corrcoef`, `np.cov` | `np.polyfit` |
+| `np.argmax`, `np.argsort`, `np.unique(return_counts=True)` | qualquer `sklearn.*` em chunk executável |
+| `rng.permutation`, `rng.random`, `rng.normal`, `rng.integers` | `np.random.seed` global, `random` da stdlib |
+| máscaras booleanas, `np.isin`, `np.where` | `scipy.*` (não é dependência declarada) |
+
+A pergunta de desempate é: **o aluno ainda vê a fórmula?** `beta = np.linalg.solve(X.T @ X, X.T @ y)` mostra as equações normais; `np.linalg.lstsq(X, y)` esconde.
+
+**Laços continuam existindo** onde o laço *é* o algoritmo: a iteração do gradiente descendente, as épocas de treino, a recursão da árvore, a repetição do k-means até convergir, a fusão par a par do clustering hierárquico. O que sai é o laço **sobre os pontos de dados** — esse vira uma operação de array.
+
+**Onde o numpy é apresentado ao leitor:** o callout de fechamento do capítulo 4 mostra `np.array`/`np.dot` de relance; a seção 6.1 faz o primeiro contato (`np.loadtxt`, `shape`, `dtype`, uma operação vetorizada); e o bloco `## De listas a arrays`, que **abre a seção 7.1**, é a apresentação de verdade — forma e tipo, indexação e fatias, máscaras booleanas, broadcasting, `axis`, e o laço em Python que some. Um capítulo posterior **cita** esse bloco em vez de reexplicar; e não usa vocabulário que ele não apresentou sem apresentá-lo ali mesmo.
 
 ## Comandos
 
-Tudo roda dentro do container — não há Python instalado no host.
+O caminho canônico é o container — é ele que renderiza local e no CI.
 
 ```bash
 make preview          # hot-reload em http://localhost:4201
 make render           # renderiza para _book/
+make refresh CAP=NN   # reexecuta UM capítulo do zero (apaga só o _freeze/ dele)
+make secoes CAP=NN    # executa cada .qmd do capítulo num kernel próprio, sem render
 make teste            # roda a suíte de invariantes estruturais (pytest, tests/)
 make offline          # renderiza SEM REDE, com _freeze/ limpo antes — prova o isolamento
 make jupyter          # JupyterLab em http://localhost:8901 (notebooks de aula)
 make notebooks        # regenera notebooks/ a partir dos .qmd
 make notebooks-teste  # executa os 17 notebooks de ponta a ponta (demora)
+make atividade FONTE= # gera as duas versões (aluno e gabarito) de uma atividade
 make shell            # shell dentro do container
 make check            # quarto check
 make build            # reconstrói a imagem (após mudar Dockerfile ou uv.lock)
@@ -92,7 +129,25 @@ make lock             # regenera uv.lock após editar pyproject.toml
 make clean            # remove _book/, _freeze/, .quarto/ e o lixo de render abortado
 ```
 
-**`make teste` roda `pytest tests/`** — 41 testes em sete arquivos: `test_estrutura.py` (registro no `_quarto.yml`, caminhos de dados, citações, e os totais de 17 capítulos / 87 seções / 104 arquivos contra o `LIVRO` de `scripts/gerar-stubs.py`), `test_scratch.py` (o pacote vendorizado — inclusive um hash SHA-256 travando que `scratch/` continua verbatim upstream), `test_dados.py` (os seis conjuntos commitados), `test_freeze.py` (o cache envenenado), `test_gradiente.py` (toda subida de gradiente tem motivo registrado), `test_notebooks.py` (os notebooks de aula não podem defasar dos `.qmd`) e `test_atividades.py` (o gabarito não pode vazar para o site). É o que garante a regra "todo `.qmd` novo precisa ser registrado em `_quarto.yml`", abaixo — sem essa suíte, um arquivo esquecido no YAML só aparece quando alguém percebe a seção faltando no site publicado.
+**`make teste` roda `pytest tests/`** — 52 testes em oito arquivos: `test_estrutura.py` (registro no `_quarto.yml`, caminhos de dados, citações, e os totais de 17 capítulos / 87 seções / 104 arquivos contra o `LIVRO` de `scripts/gerar-stubs.py`), `test_scratch.py` (o pacote vendorizado — inclusive um hash SHA-256 travando que `scratch/` continua verbatim upstream), `test_scratch_np.py` (os invariantes da reescrita em numpy, abaixo), `test_dados.py` (os seis conjuntos commitados), `test_freeze.py` (o cache envenenado), `test_gradiente.py` (toda subida de gradiente tem motivo registrado), `test_notebooks.py` (os notebooks de aula não podem defasar dos `.qmd`) e `test_atividades.py` (o gabarito não pode vazar para o site). É o que garante a regra "todo `.qmd` novo precisa ser registrado em `_quarto.yml`", abaixo — sem essa suíte, um arquivo esquecido no YAML só aparece quando alguém percebe a seção faltando no site publicado.
+
+### Verificar um capítulo sem renderizar o livro
+
+O `make render` é **serializado** e leva minutos; vários agentes disputando o lock não funciona, e editar um `.qmd` enquanto um render roda envenena o `_freeze/` (as duas seções adiante). Por isso quem escreve um capítulo **não renderiza**: verifica com os três comandos abaixo, e o render completo é feito uma vez, por quem coordena, ao fim de cada bloco de capítulos.
+
+Há um `.venv/` na raiz (gitignorado, criado por `uv sync`) com o mesmo lock do container, e é nele que essa verificação roda — sem Docker, em paralelo, em segundos:
+
+```bash
+export MPLBACKEND=Agg PYTHONHASHSEED=0          # os mesmos ENV do Dockerfile
+.venv/bin/python scripts/gerar-notebooks.py      # regenera os 17 notebooks (idempotente)
+.venv/bin/python scripts/executar-secoes.py 11   # cada .qmd do cap. 11 num kernel PRÓPRIO
+.venv/bin/python scripts/executar-notebooks.py cap11   # o capítulo inteiro num kernel só
+.venv/bin/pytest tests/ -q
+```
+
+**`scripts/executar-secoes.py` é o análogo fiel do `quarto render` para um capítulo.** Ele reaproveita o parser de `gerar-notebooks.py` (que já sabe o que é callout e o que é `eval: false`), monta em memória um notebook só de código para **cada** `.qmd` e o executa num kernel novo, com o cwd na raiz — que é o que o `execute-dir: project` faz no Quarto. É assim que se pega o `import` que falta numa seção porque foi feito na anterior: o notebook de aula, com um kernel só para o capítulo inteiro, deixa isso passar. Não toca em `_freeze/` nem em `.quarto/`, então pode rodar em paralelo e nunca precisa do lock. O alvo `make secoes CAP=NN` roda o mesmo script dentro do container.
+
+Os dois modos são complementares e ambos importam: `executar-secoes.py` reproduz o **site** (um kernel por página), `executar-notebooks.py` reproduz a **aula** (um kernel por capítulo).
 
 **Porta 4201, não 4200.** O `bases_3_estatistica` ocupa a 4200, e os dois livros são editados na mesma tarde.
 
@@ -118,7 +173,9 @@ O CI **não** é afetado: lá o checkout é limpo e o sistema de arquivos é nat
 
 ### `make render` é serializado — um render por vez neste repositório
 
-Este livro é escrito por vários agentes em paralelo, cada um responsável por um capítulo. Dois `quarto render` simultâneos sobre o mesmo `_freeze/` corrompem o cache: um grava a saída congelada de um chunk enquanto o outro lê o índice, e o livro sai com saída trocada entre páginas — **sem erro nenhum na tela**. É a pior classe de falha deste projeto, silenciosa e difícil de atribuir.
+Este livro é escrito por agentes, e mais de um pode estar ativo. Dois `quarto render` simultâneos sobre o mesmo `_freeze/` corrompem o cache: um grava a saída congelada de um chunk enquanto o outro lê o índice, e o livro sai com saída trocada entre páginas — **sem erro nenhum na tela**. É a pior classe de falha deste projeto, silenciosa e difícil de atribuir.
+
+A reescrita em numpy tirou a pressão daqui, e vale manter a prática: quem escreve um capítulo verifica com `scripts/executar-secoes.py`, que não toca no `_freeze/`, e **só quem coordena renderiza**, uma vez por bloco de capítulos. Render em fila é o sintoma de que o trabalho está organizado errado, não um problema a contornar.
 
 O alvo `render` toma um lock antes de começar. Se outro render estiver rodando, ele imprime `outro render em andamento neste repositório; aguardando a vez...` **uma vez** e espera, pegando a vez sozinho. Isso é comportamento normal: **não interrompa, não contorne, não mate o processo.**
 
@@ -227,18 +284,51 @@ A correção **não** é editar o pacote: é criar `im/` vazio, como o Grus tem 
 
 `tests/test_scratch.py`'s `NAO_IMPORTAVEIS` documenta os dois motivos e trava com um teste que a exclusão precisa vir com motivo escrito. Consequência de conteúdo: os capítulos **7** (que *é* o módulo `working_with_data`) e **13** (que precisaria de `rescale`/`scale` de lá) não importam `working_with_data` — escrevem essas funções **inline no `.qmd`**, exatamente como o capítulo 6 já faz com o código de `getting_data`.
 
+### O pacote `scratch_np/` — o código dos capítulos 6 a 17, em numpy
+
+Contraparte em arrays do `scratch/`, e o oposto dele em quase tudo: é **nosso**, editável, sem hash travado, testado em `tests/test_scratch_np.py`. Espelha os módulos do Grus **com os mesmos nomes de função** sempre que a função existe nos dois lados — assim o aluno acha no livro-texto a versão em listas do que está lendo em arrays.
+
+| Módulo | Dono | Conteúdo |
+|---|---|---|
+| `gradient_descent.py` | andaime | `gradient_step`, `minibatches` (gera arrays de índices) |
+| `machine_learning.py` | cap. 8 | `split_data`, `train_test_split`, `accuracy`, `precision`, `recall`, `f1_score` |
+| `probability.py` | andaime | `normal_cdf`, `inverse_normal_cdf` (vetorizadas) |
+| `statistics.py` | andaime | os dados da DataSciencester como arrays |
+| `working_with_data.py` | cap. 7 | `scale`, `rescale`, `de_mean`, `pca`, `transform`, ... |
+| `k_nearest_neighbors.py` | cap. 9 | `majority_vote`, `knn_classify`, `random_distances` |
+| `naive_bayes.py` | cap. 10 | `tokenize`, `Message`, `NaiveBayesClassifier` |
+| `simple_linear_regression.py` | cap. 11 | `least_squares_fit`, `total_sum_of_squares`, `r_squared`, ... |
+| `multiple_regression.py` | cap. 12 | `inputs`, `least_squares_fit`, bootstrap, `p_value`, ridge, lasso |
+| `logistic_regression.py` | cap. 13 | `logistic`, `negative_log_likelihood`, `negative_log_gradient` |
+
+Faltam os dos capítulos 14 a 17 (`decision_trees`, `neural_networks`, `deep_learning`, `clustering`), que entram com os capítulos.
+
+**Não existe `linear_algebra` aqui, de propósito:** ele *é* o numpy — `dot` é `@`, `distance` é `np.linalg.norm(a - b)`, `vector_mean` é `X.mean(axis=0)`.
+
+**A única importação permitida de `scratch/` é de DADOS, nunca de função.** As listas hard-coded do Grus (`statistics.num_friends`, `multiple_regression.inputs`, `logistic_regression.data`, `decision_trees.inputs`) são reexportadas como arrays pelo módulo correspondente; importar o módulo do Grus desenha figuras no nível do módulo, então o reexportador faz `plt.close("all")` em seguida. `REEXPORTA_DADOS`, em `tests/test_scratch_np.py`, exige o motivo escrito de cada uma dessas exceções — o mesmo padrão de `NAO_IMPORTAVEIS`.
+
+**"A seção implementa, a próxima importa."** Cada `.qmd` roda no seu próprio kernel, então a seção que ensina o algoritmo o escreve inline num chunk, e as seções (e capítulos) seguintes importam **o mesmo código** de `scratch_np/`. O código do módulo e o do chunk são idênticos — o módulo é o chunk salvo em arquivo. Quando o texto diz *"não é redefinida aqui: vem de `scratch_np.k_nearest_neighbors`, o mesmo código que você escreveu na seção anterior"*, isso precisa ser verdade, e os revisores conferem caractere a caractere.
+
+Convenções de array, seguidas por todos os módulos e chunks:
+
+- `X` tem forma `(n, d)` — uma linha por observação; `y` tem `(n,)`; parâmetros (`beta`, `theta`, `w`) têm `(d,)`; um único ponto é `(d,)`.
+- `dtype=float` explícito ao construir array a partir de dado lido.
+- Anotações de tipo usam `np.ndarray` direto — sem alias `Vector`.
+- Onde o Grus usa a fórmula amostral (variância, desvio padrão), `ddof=1`.
+- Funções escalares devolvem `float(...)`, para a saída da célula não vir como `np.float64(...)`.
+
 ### Dependência dos capítulos fora da ementa
 
 Tirar os Grus 5 e 6 da ementa não tira o código deles do caminho:
 
-| Módulo | Nossos capítulos que importam |
+| Módulo | Quem depende |
 |---|---|
-| `scratch/statistics.py` (Grus 5) | 7, 11, 12 |
-| `scratch/probability.py` (Grus 6) | 7, 12, 16 |
+| `scratch/statistics.py` (Grus 5) | os **dados** da DataSciencester, reexportados por `scratch_np/statistics.py` → capítulos 7, 11, 12 |
+| `scratch/probability.py` (Grus 6) | `normal_cdf` / `inverse_normal_cdf`, reescritas em `scratch_np/probability.py` → capítulos 7, 12, 16 |
 
-Há também dependência de **dados**: `scratch/statistics.py` carrega `num_friends_good` e `daily_minutes_good` — o dataset da rede social — e os capítulos 11 e 12 fazem regressão em cima dele.
+`scratch/statistics.py` carrega `num_friends_good` e `daily_minutes_good` — o dataset da rede social —, e os capítulos 11 e 12 fazem regressão em cima dele. Depois da reescrita a dependência ficou **indireta** (o capítulo importa de `scratch_np/`, que reexporta como array), mas não sumiu.
 
-Consequência: `scratch/` é vendorizado **inteiro**, incluindo os módulos fora da ementa. Podar o pacote quebra o livro.
+Consequência: `scratch/` é vendorizado **inteiro**, incluindo os módulos fora da ementa. Podar o pacote quebra o livro — e agora quebra por dois caminhos, o dos capítulos 1 a 5 e o dos reexportadores.
 
 ### Dados
 
@@ -255,23 +345,30 @@ acoes = pd.read_csv("../../dados/stocks.csv")  # ✗ nunca
 
 ### Sementes em chunks estocásticos — obrigatório
 
-`train_test_split`, inicialização de pesos, k-means, gradiente estocástico: metade do livro é aleatória. **Todo chunk com RNG usa semente explícita** — e o Grus usa o `random` da stdlib, não o `numpy.random`:
+`train_test_split`, inicialização de pesos, k-means, gradiente estocástico: metade do livro é aleatória. **Todo chunk com RNG usa semente explícita**, e a forma depende do capítulo:
 
 ```python
-random.seed(42)
+random.seed(42)                        # capítulos 1 a 5 (o Grus usa o random da stdlib)
+rng = np.random.default_rng(42)        # capítulos 6 a 17
 ```
 
 Sem isso, cada render produz números e gráficos diferentes: o `freeze` perde o sentido, o diff do site publicado vira ruído, e o material deixa de bater com o que o aluno vê na tela.
+
+Nos capítulos reescritos, o gerador é **explícito e passado adiante**: toda função estocástica de `scratch_np/` recebe `rng: np.random.Generator` como parâmetro **obrigatório**, sem valor padrão, para a semente ficar visível no chunk de quem chama. Nunca `np.random.seed(...)` (estado global) nem `random` da stdlib — `test_capitulo_numpy_usa_default_rng` falha se aparecerem, e uma exceção deliberada precisa de motivo escrito em `RANDOM_PERMITIDO`.
+
+**Semear um gerador e sortear de outro é um jeito silencioso de achar que fixou a aleatoriedade sem ter fixado.** `random.seed` não tem efeito nenhum sobre o `numpy.random`, e nenhum dos dois é escutado pelo `scikit-learn`, que tem o próprio `random_state`.
+
+**Sorteio novo, número novo.** `random.seed(12)` com `random.shuffle` e `default_rng(12).permutation` produzem divisões diferentes. Toda afirmação do texto que dependia de um sorteio específico — uma matriz de confusão, uma acurácia, um coeficiente de bootstrap — é **recalculada a partir da saída nova**, nunca copiada da versão anterior. Foi a principal fonte de trabalho de revisão da reescrita.
 
 ### Ambiente
 
 Duas camadas travadas: `pyproject.toml` + `uv.lock` fixam as versões; o `Dockerfile` consome esse lock (`uv sync --frozen`) sobre um SO fixo com Quarto e locale `pt_BR.UTF-8`. O mesmo container renderiza local e no CI.
 
-Dependências (a lista completa e comentada está na spec): `jupyter`, `matplotlib`, `tqdm`, `requests`, `beautifulsoup4`, `html5lib`, `python-dateutil`, `pillow` e `scikit-learn`.
+Dependências (a lista completa e comentada está na spec): `jupyter`, `matplotlib`, `numpy`, `tqdm`, `requests`, `beautifulsoup4`, `html5lib`, `python-dateutil`, `pillow`, `scikit-learn` e `pytest`.
 
-O `scikit-learn` é **nosso**, não do livro — entra só pelos callouts de caixa-preta. Os pacotes `mnist` e `twython` do `requirements.txt` do Grus ficam de fora: o primeiro só serve para baixar dataset que será lido do disco, o segundo depende de uma API do Twitter que não é mais gratuita.
+**`numpy` é dependência direta desde a reescrita dos capítulos 6 a 17**, e o teto é `<3`. Antes ele estava instalado assim mesmo, como dependência transitiva do matplotlib e do scikit-learn, mas ficava deliberadamente fora do `pyproject.toml` — a ausência era o sinal de que não era ferramenta da disciplina. Deixou de ser: a partir do capítulo 6 os modelos são construídos com arrays, e o pacote precisa estar declarado e travado como qualquer outro. Os capítulos 1 a 5 continuam sem ele.
 
-**`numpy` não está na lista e estará instalado assim mesmo**, como dependência transitiva do matplotlib e do scikit-learn. Não é contradição: a regra é *não reescrever o código do livro com numpy*, não *mantê-lo fora do ambiente*. A ausência deliberada no `pyproject.toml` é o sinal de que ele não é ferramenta desta disciplina.
+O `scikit-learn` é **nosso**, não do livro — entra só pelos callouts de caixa-preta, e nunca em chunk que executa. Os pacotes `mnist` e `twython` do `requirements.txt` do Grus ficam de fora: o primeiro só serve para baixar dataset que será lido do disco, o segundo depende de uma API do Twitter que não é mais gratuita. `scipy` **não** é dependência declarada — não use em implementação, mesmo que ele apareça instalado como transitiva do scikit-learn.
 
 Dois detalhes herdados, já pagos no Bases 3:
 
@@ -282,11 +379,15 @@ Dois detalhes herdados, já pagos no Bases 3:
 
 **`PYTHONHASHSEED=0` também é obrigatório, e o motivo é sutil.** `scratch/naive_bayes.py:113` tem, no nível do módulo, um `assert` de igualdade **exata** de float sobre uma soma que percorre um `Set[str]`. A ordem de iteração de um `set` depende do hash das strings, que o Python randomiza por processo, e soma de ponto flutuante não é associativa — então a ordem muda o último bit e o assert falha. Medido neste container: **2 de 15 sementes falham no import; com `PYTHONHASHSEED=0`, 15 de 15 passam.**
 
-Isso torna instável qualquer coisa que importe aquele módulo — hoje a suíte de testes, e o **render do capítulo 10** (que *é* Naive Bayes) assim que ele for escrito. A correção fica no `Dockerfile`, não em `scratch/`, porque o pacote é vendorizado literalmente e nunca editado: é propriedade do ambiente, e combina com a postura do livro de fixar semente em todo chunk estocástico.
+Isso torna instável qualquer coisa que importe aquele módulo — hoje, a suíte de testes. A correção fica no `Dockerfile`, não em `scratch/`, porque o pacote é vendorizado literalmente e nunca editado: é propriedade do ambiente, e combina com a postura do livro de fixar semente em todo chunk estocástico.
+
+**Não afrouxe isso** por achar que a reescrita resolveu. O capítulo 10 deixou de depender do `PYTHONHASHSEED` — `scratch_np/naive_bayes.py` guarda o vocabulário num array ordenado, então a soma tem ordem fixa e o resultado é determinístico —, mas `scratch/naive_bayes.py` continua vendorizado com o `assert` exato, e `tests/test_scratch.py` continua importando o módulo.
 
 ### Verificação
 
-1. **O `quarto render` é o teste.** Os módulos do `scratch/` executam `assert` no nível do módulo (`assert add([1, 2, 3], [4, 5, 6]) == [5, 7, 9]`, `linear_algebra.py:21`). Importar o pacote roda a suíte do próprio livro: um upgrade que quebre `add`, `dot` ou `mean` derruba o render no import, em vez de publicar um número errado em silêncio.
+0. **`scripts/executar-secoes.py`**, o mais barato e o primeiro a rodar: executa cada `.qmd` de um capítulo num kernel próprio, sem render e sem lock (ver "Verificar um capítulo sem renderizar o livro"). É o que se usa enquanto se escreve.
+
+1. **O `quarto render` é o teste.** Os módulos do `scratch/` **e** do `scratch_np/` executam `assert` no nível do módulo (`assert add([1, 2, 3], [4, 5, 6]) == [5, 7, 9]`, `linear_algebra.py:21`). Importar o pacote roda a suíte do próprio livro: um upgrade que quebre `add`, `dot` ou `mean` derruba o render no import, em vez de publicar um número errado em silêncio. Os módulos de `scratch_np/` seguem a mesma disciplina, com os `assert` do Grus traduzidos para arrays — e onde o Grus comparava float por igualdade exata, vira `np.isclose` **com a explicação na prosa**, nunca em silêncio.
 
 2. **Render com a rede desligada** — `docker run --network none`, tanto local (`make offline`) quanto no CI (job `offline` do workflow, ver "CI/CD"). Específico deste livro: o risco de rede em tempo de render aparece em três lugares e nenhum falha de modo visível — com rede, tudo passa; o que se degrada é a reprodutibilidade, silenciosamente, até a página raspada mudar. Renderizar offline converte essa classe de fragilidade num teste booleano.
 
