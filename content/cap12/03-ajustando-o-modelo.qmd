@@ -8,40 +8,39 @@ Como no modelo linear simples, vamos escolher `beta` para minimizar a soma dos e
 
 ## O erro e o seu gradiente
 
-A função de erro é quase idêntica à do capítulo anterior. A única mudança é que, em vez de esperar dois parâmetros `[alpha, beta]`, ela recebe um vetor de tamanho arbitrário:
+A função de erro é quase idêntica à do capítulo anterior. A única mudança é que, em vez de esperar dois parâmetros `alpha` e `beta`, ela recebe um vetor `beta` de tamanho arbitrário — e é o `@` que absorve esse tamanho, sem que nada no código diga quantas variáveis existem:
 
 ```{python}
 #| label: erro
-from typing import List
-from scratch.linear_algebra import dot, Vector
+import numpy as np
 
-def predict(x: Vector, beta: Vector) -> float:
+def predict(x: np.ndarray, beta: np.ndarray):
     """assume que o primeiro elemento de x é 1"""
-    return dot(x, beta)
+    return x @ beta
 
-def error(x: Vector, y: float, beta: Vector) -> float:
+def error(x: np.ndarray, y, beta: np.ndarray):
     return predict(x, beta) - y
 
-def squared_error(x: Vector, y: float, beta: Vector) -> float:
+def squared_error(x: np.ndarray, y, beta: np.ndarray):
     return error(x, y, beta) ** 2
 
-x = [1, 2, 3]
-y = 30
-beta = [4, 4, 4]  # previsão = 4 + 8 + 12 = 24
+x = np.array([1.0, 2.0, 3.0])
+y = 30.0
+beta = np.array([4.0, 4.0, 4.0])   # previsão = 4 + 8 + 12 = 24
 
 assert error(x, y, beta) == -6
 assert squared_error(x, y, beta) == 36
 ```
 
-O gradiente é onde a generalização compensa. No capítulo anterior, as duas derivadas parciais foram escritas à mão, uma de cada vez. Aqui elas viram uma única compreensão de lista:
+O gradiente é onde a generalização compensa. No capítulo anterior, as duas derivadas parciais foram escritas à mão, uma de cada vez. Aqui elas viram uma multiplicação só: um número — o erro — vezes o vetor `x` inteiro.
 
 ```{python}
 #| label: gradiente
-def sqerror_gradient(x: Vector, y: float, beta: Vector) -> Vector:
-    err = error(x, y, beta)
-    return [2 * err * x_i for x_i in x]
+def sqerror_gradient(x: np.ndarray, y: float, beta: np.ndarray) -> np.ndarray:
+    """o gradiente do erro quadrático de UM ponto x, com forma (d,)"""
+    return 2 * error(x, y, beta) * x
 
-assert sqerror_gradient(x, y, beta) == [-12, -24, -36]
+assert np.array_equal(sqerror_gradient(x, y, beta), [-12, -24, -36])
 ```
 
 ::: {.exemplo}
@@ -51,7 +50,7 @@ $$
 \frac{\partial}{\partial \beta_j} \left( \mathbf{x} \cdot \beta - y \right)^2 = 2 \left( \mathbf{x} \cdot \beta - y \right) x_j
 $$
 
-Ou seja: `2 * err * x_j`, para cada `j`. É exatamente o que a compreensão de lista escreve — e repare que ela vale para o termo constante também, porque ali $x_0 = 1$ e a derivada dá `2 * err`, sem caso especial nenhum. É a coluna de 1 da [seção 12.1](01-o-modelo.qmd) pagando dividendo.
+Ou seja: `2 * err * x_j`, para cada `j`. Como `err` é o mesmo para todos os `j`, as $d$ derivadas parciais são o vetor `x` multiplicado por um número — que é literalmente o que `2 * error(x, y, beta) * x` escreve. E repare que vale para o termo constante também, porque ali $x_0 = 1$ e a derivada dá `2 * err`, sem caso especial nenhum. É a coluna de 1 da [seção 12.1](01-o-modelo.qmd) pagando dividendo.
 :::
 
 ## O ajustador
@@ -60,57 +59,52 @@ Com o gradiente pronto, `least_squares_fit` é o gradiente descendente em miniba
 
 ```{python}
 #| label: least-squares-fit
-import random
-import tqdm
-from scratch.linear_algebra import vector_mean
-from scratch.gradient_descent import gradient_step
+from scratch_np.gradient_descent import gradient_step
 
-def least_squares_fit(xs: List[Vector],
-                      ys: List[float],
+def least_squares_fit(xs: np.ndarray,
+                      ys: np.ndarray,
+                      rng: np.random.Generator,
                       learning_rate: float = 0.001,
                       num_steps: int = 1000,
-                      batch_size: int = 1) -> Vector:
+                      batch_size: int = 1) -> np.ndarray:
     """
     Encontra o beta que minimiza a soma dos erros ao quadrado,
-    supondo o modelo y = dot(x, beta).
+    supondo o modelo y = x @ beta.
     """
     # Começa com um chute aleatório
-    guess = [random.random() for _ in xs[0]]
+    guess = rng.random(xs.shape[1])
 
-    for _ in tqdm.trange(num_steps, desc="least squares fit"):
+    for _ in range(num_steps):
         for start in range(0, len(xs), batch_size):
-            batch_xs = xs[start:start+batch_size]
-            batch_ys = ys[start:start+batch_size]
+            batch_xs = xs[start:start + batch_size]
+            batch_ys = ys[start:start + batch_size]
 
-            gradient = vector_mean([sqerror_gradient(x, y, guess)
-                                    for x, y in zip(batch_xs, batch_ys)])
+            # a média, sobre o lote, de 2 * erro_i * x_i
+            erros = batch_xs @ guess - batch_ys
+            gradient = 2 * batch_xs.T @ erros / len(batch_xs)
+
             guess = gradient_step(guess, gradient, -learning_rate)
 
     return guess
 ```
 
-Não há nada de novo aqui, e esse é o ponto. `gradient_step` é a mesma função de cinco linhas do [Capítulo 5](../cap05/03-usando-o-gradiente.qmd); `vector_mean` é do [Capítulo 4](../cap04/01-vetores.qmd); a estrutura de laço externo sobre passos e laço interno sobre lotes é a da [seção 5.6](../cap05/06-minibatch-e-estocastico.qmd). Passar de uma variável explicativa para três não exigiu **nenhuma** mudança no otimizador — só que o gradiente devolvesse uma lista mais comprida.
+Dois laços, e eles não são do mesmo tipo. O de fora percorre os **passos** do gradiente descendente e o de dentro percorre os **lotes**: os dois *são* o algoritmo da [seção 5.6](../cap05/06-minibatch-e-estocastico.qmd), e por isso continuam escritos como laço. O que sumiu foi o terceiro, o que percorria os pontos **dentro** de cada lote calculando um gradiente por ponto para depois tirar a média. Esse virou duas linhas de array, e vale acompanhar a passagem.
+
+O gradiente do lote é a média, sobre os pontos do lote, de $2\,e_i\,x_i$, onde $e_i = x_i \cdot \beta - y_i$ é o erro daquele ponto. A primeira linha calcula **todos** os $e_i$ de uma vez: `batch_xs @ guess` são as previsões do lote (uma por linha, como a [seção 12.1](01-o-modelo.qmd) mostrou) e a subtração de `batch_ys` é elemento a elemento. Sobra somar os $x_i$ pesados pelos $e_i$ — e essa soma é exatamente o que `batch_xs.T @ erros` faz. Transpor coloca cada **ponto** numa coluna; multiplicar por `erros` pesa a coluna $i$ por $e_i$ e soma todas. As formas contam a história: `batch_xs.T` é `(d, m)`, `erros` é `(m,)`, e o produto é `(d,)` — um número por coeficiente, que é precisamente o que um gradiente tem que ser. Dividir por `len(batch_xs)` troca a soma pela média, que é o que o Grus faz com `vector_mean`.
+
+Guarde o padrão `X.T @ (algo por ponto)`: ele é "somar sobre os pontos" em uma operação, e vai reaparecer em todo modelo linear deste livro. Fora ele, não há nada de novo aqui, e esse é o ponto. `gradient_step` é a mesma função do [Capítulo 5](../cap05/03-usando-o-gradiente.qmd), agora em arrays. A ordem dos lotes é fixa — `range(0, len(xs), batch_size)` fatia sempre igual, como no código de @grus2019 —, e a [seção 12.2](02-hipoteses-do-minimos-quadrados.qmd) já mostrou a consequência disso. Passar de uma variável explicativa para três não exigiu **nenhuma** mudança no otimizador: só que o gradiente devolvesse um vetor mais comprido.
 
 ## Ajustando aos dados
 
 ```{python}
-#| label: importa-dados
-#| include: false
-import random
-random.seed(0)
-from scratch.multiple_regression import inputs
-from scratch.statistics import daily_minutes_good
-import matplotlib.pyplot as plt
-plt.close('all')
-```
-
-```{python}
 #| label: ajusta
-#| warning: false
-random.seed(0)
+from scratch_np.multiple_regression import inputs
+from scratch_np.statistics import daily_minutes_good
+
+rng = np.random.default_rng(0)
 learning_rate = 0.001
 
-beta = least_squares_fit(inputs, daily_minutes_good, learning_rate, 5000, 25)
+beta = least_squares_fit(inputs, daily_minutes_good, rng, learning_rate, 5000, 25)
 
 assert 30.50 < beta[0] < 30.70  # constante
 assert  0.96 < beta[1] <  1.00  # número de amigos
@@ -128,6 +122,14 @@ $$
 
 Os hiperparâmetros — taxa de aprendizado 0,001, 5.000 passos, lotes de 25 — foram escolhidos por tentativa e erro, e o próprio Grus diz isso no livro. Não há fórmula para eles; há o diagnóstico da [seção 5.4](../cap05/04-escolhendo-o-tamanho-do-passo.qmd) para quando o passo é grande demais e a paciência para quando é pequeno demais.
 
+::: {.callout-warning}
+## A semente não é opcional
+
+`np.random.default_rng(0)` cria o gerador que sorteia o `beta` de onde o ajuste parte, e a semente fica escrita aqui, ao lado do sorteio que ela produziu — não num estado global, em algum lugar acima. É por isso que `least_squares_fit` exige o gerador como argumento: quem chama decide a semente, e ela aparece na página.
+
+Neste capítulo o **destino** quase não depende do começo — a [seção 12.2](02-hipoteses-do-minimos-quadrados.qmd) mostrou quatro ajustes com sementes diferentes terminando no mesmo valor bit a bit, e é por isso que estes quatro números não mudam quando a semente muda. Mas "quase" não é "nada": o mesmo gerador vai sortear as reamostras da [seção 12.7](07-erros-padrao-dos-coeficientes.qmd), e ali a semente muda todos os números da tabela. Sem ela, cada renderização desta página publicaria erros padrão diferentes.
+:::
+
 ::: {.callout-important}
 ## Estes quatro números são uma aproximação
 
@@ -141,7 +143,14 @@ O nosso ajuste parou em 30,51, 0,975, −1,851 e 0,914 — diferenças que vão 
 
 A explicação não é semente infeliz nem passos de menos. Gradiente descendente **estocástico**, com taxa de aprendizado fixa e ordem de lote fixa, não pousa no mínimo: ele entra numa órbita em torno dele, como a [seção 12.2](02-hipoteses-do-minimos-quadrados.qmd) mostrou rodando. Mais passos percorrem a mesma órbita de novo. A distância que sobra é do método, não da paciência.
 
-Mas repare no que a existência daquele mínimo exato significa: **a regressão múltipla tem, sim, solução fechada.** Ela não desapareceu quando saímos de uma variável para três. O que aconteceu é que ela deixou de caber nas duas médias, na correlação e nos dois desvios padrão do [Capítulo 11](../cap11/01-o-modelo.qmd), e passou a exigir resolver um sistema linear — o que, por sua vez, exigiria construir do zero maquinaria de álgebra linear que este livro não construiu. É uma decisão de escopo, não uma impossibilidade matemática.
+Mas repare no que a existência daquele mínimo exato significa: **a regressão múltipla tem, sim, solução fechada.** Ela não desapareceu quando saímos de uma variável para três. O que aconteceu é que ela deixou de caber nas duas médias, na correlação e nos dois desvios padrão do [Capítulo 11](../cap11/01-o-modelo.qmd), e passou a exigir resolver um sistema linear — e é daí que os quatro números acima saíram:
+
+```{python}
+#| label: equacoes-normais
+np.linalg.solve(inputs.T @ inputs, inputs.T @ daily_minutes_good)
+```
+
+Essas duas linhas resolvem as **equações normais**, o sistema linear que sai de igualar a zero as $d$ derivadas parciais da soma dos erros ao quadrado. Elas estão aqui como **conferência**, não como método: `np.linalg.solve` é uma caixa-preta de álgebra linear que este livro não abriu, e abri-la — eliminação gaussiana, decomposições — é outro capítulo. O que este capítulo ensina é o gradiente descendente, que continua sendo o de cima, e que chega perto do mesmo lugar sem saber nada de sistemas lineares. A distância entre os dois vetores é a órbita, não um erro de conta. Deixar essa maquinaria fechada é uma decisão de escopo, não uma impossibilidade matemática.
 
 Vale ser literal, então, sobre o que a [seção 11.2](../cap11/02-usando-gradiente-descendente.qmd) prometeu no fim: quando aquele texto diz que aqui "a álgebra ainda fecha, mas fica pesada", ele está dizendo exatamente isto. Fecha mesmo. Os modelos que **não** têm fórmula fechada nenhuma começam no [Capítulo 13](../cap13/index.qmd), com a regressão logística.
 :::
@@ -152,13 +161,13 @@ Vale ser literal, então, sobre o que a [seção 11.2](../cap11/02-usando-gradie
 ```python
 from sklearn.linear_model import LinearRegression
 
-X = [x[1:] for x in inputs]     # sem a coluna de 1
+X = inputs[:, 1:]                # sem a coluna de 1
 modelo = LinearRegression().fit(X, daily_minutes_good)
 
 modelo.intercept_, modelo.coef_
 ```
 
-Isso devolve, direto, os coeficientes exatos — os 30,579 / 0,9725 / −1,865 / 0,9232 citados acima, sem semente, sem taxa de aprendizado e sem barra de progresso. `LinearRegression` não itera: ela resolve o sistema de mínimos quadrados por decomposição em valores singulares, que é a álgebra linear fora do escopo mencionada acima, implementada em LAPACK.
+Isso devolve, direto, os coeficientes exatos — os 30,579 / 0,9725 / −1,865 / 0,9232 citados acima, sem semente e sem taxa de aprendizado. `LinearRegression` não itera: ela resolve o sistema de mínimos quadrados por decomposição em valores singulares, que é a álgebra linear fora do escopo mencionada acima, implementada em LAPACK — outra rota para o mesmo sistema que o `np.linalg.solve` do callout anterior resolveu.
 
 Duas coisas que vale saber, agora que você viu o código por dentro:
 

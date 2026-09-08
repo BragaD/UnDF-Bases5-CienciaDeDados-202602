@@ -10,94 +10,87 @@ A ideia é literalmente a mesma da seção anterior, com `beta` no lugar da medi
 
 ## Reamostrando pares
 
-Há uma única sutileza técnica. Não podemos reamostrar `inputs` e `daily_minutes_good` separadamente — isso embaralharia quais minutos pertencem a qual usuário. Precisamos reamostrar **pares** $(x_i, y_i)$ e desmontá-los depois:
-
-```{python}
-#| label: importa
-#| include: false
-import random
-random.seed(0)
-from scratch.multiple_regression import (
-    inputs, least_squares_fit, bootstrap_statistic,
-)
-from scratch.statistics import daily_minutes_good, standard_deviation
-import matplotlib.pyplot as plt
-plt.close('all')
-```
+Há uma única sutileza técnica. Não podemos reamostrar `inputs` e `daily_minutes_good` separadamente — isso embaralharia quais minutos pertencem a qual usuário. Precisamos reamostrar **pares** $(x_i, y_i)$, e a forma de fazer isso com matrizes é grudar o `y` como uma quinta coluna: aí uma reamostra de linhas leva cada usuário inteiro, e `estimate_sample_beta` desmonta a matriz de volta em `x` e `y` antes de ajustar.
 
 ```{python}
 #| label: estimate-sample-beta
-from typing import List, Tuple
-from scratch.linear_algebra import Vector
+import numpy as np
+
+from scratch_np.multiple_regression import (
+    inputs, least_squares_fit, bootstrap_statistic,
+)
+from scratch_np.statistics import daily_minutes_good
 
 learning_rate = 0.001
+rng = np.random.default_rng(0)
 
-def estimate_sample_beta(pairs: List[Tuple[Vector, float]]) -> Vector:
-    x_sample = [x for x, _ in pairs]
-    y_sample = [y for _, y in pairs]
-    return least_squares_fit(x_sample, y_sample, learning_rate, 5000, 25)
+# cada linha é um par (x_i, y_i): as quatro colunas de inputs mais os minutos
+pares = np.column_stack([inputs, daily_minutes_good])
+
+def estimate_sample_beta(amostra: np.ndarray) -> np.ndarray:
+    x_sample = amostra[:, :-1]     # todas as colunas menos a última
+    y_sample = amostra[:, -1]      # a última
+    return least_squares_fit(x_sample, y_sample, rng, learning_rate, 5000, 25)
 ```
+
+`bootstrap_sample` sorteia linhas, e uma linha aqui é um usuário — por isso a mesma `bootstrap_statistic` da seção anterior serve, sem uma linha de mudança. O `rng` é o mesmo dos dois lados, o do sorteio das reamostras e o do chute inicial de cada ajuste: um gerador só, semeado uma vez, é o que torna esta página inteira reprodutível.
 
 E então é uma chamada só:
 
 ```{python}
 #| label: bootstrap-betas
-#| warning: false
-random.seed(0)   # para você obter os mesmos resultados
+# Isto leva alguns segundos!
+bootstrap_betas = bootstrap_statistic(pares, estimate_sample_beta, 100, rng)
 
-# Isto leva mais de um minuto!
-bootstrap_betas = bootstrap_statistic(list(zip(inputs, daily_minutes_good)),
-                                      estimate_sample_beta,
-                                      100)
-
-len(bootstrap_betas), bootstrap_betas[0]
+bootstrap_betas.shape, bootstrap_betas[0]
 ```
 
 ::: {.callout-note}
-Cem ajustes completos, cada um com 5.000 passos de gradiente descendente sobre 203 pontos, em Python puro. Isso leva cerca de **90 segundos**.
+Cem ajustes completos, cada um com 5.000 passos de gradiente descendente sobre 203 pontos — 45 mil gradientes por ajuste, 4,5 milhões no total. Isso leva cerca de **20 segundos**.
 
 O custo é o preço do método, não um defeito da nossa implementação: o bootstrap **é** repetir a estimativa cem vezes. O próprio @grus2019 observa que estimativas melhores viriam de mais amostras e mais iterações por amostra, "mas não temos o dia inteiro".
 
-Vale ver o custo como informação, não como incômodo. Quando a estatística é barata — a mediana da seção anterior —, o bootstrap é praticamente gratuito e não há razão para não usá-lo. Quando ela é cara, o bootstrap multiplica esse custo por cem, e aí a fórmula fechada da abordagem clássica deixa de ser um luxo teórico e passa a ser a diferença entre um segundo e uma tarde.
+Vale ver o custo como informação, não como incômodo. Quando a estatística é barata — a mediana da seção anterior —, o bootstrap é praticamente gratuito e não há razão para não usá-lo. Quando ela é cara, o bootstrap multiplica esse custo por cem — e cem vezes um número pequeno ainda dá um número que você espera olhando para a tela. Com dados de verdade, onde um ajuste leva minutos, é a diferença entre a fórmula fechada e uma tarde.
 :::
 
-Com os 100 vetores em mãos, o erro padrão de cada coeficiente é o desvio padrão daquela coordenada:
+Com os 100 vetores em mãos, o erro padrão de cada coeficiente é o desvio padrão daquela coordenada. `bootstrap_betas` tem forma `(100, 4)` — uma linha por reamostra, uma coluna por coeficiente —, então o desvio que interessa corre **as linhas**: é `axis=0`, e o resultado tem quatro números, um por coluna. (`ddof=1` de novo: desvio amostral.)
 
 ```{python}
 #| label: erros-padrao
-bootstrap_standard_errors = [
-    standard_deviation([beta[i] for beta in bootstrap_betas])
-    for i in range(4)]
+bootstrap_standard_errors = np.std(bootstrap_betas, axis=0, ddof=1)
 
 bootstrap_standard_errors
 ```
 
 ```{python}
 #| label: reajusta
-#| warning: false
-random.seed(0)
-beta = least_squares_fit(inputs, daily_minutes_good, learning_rate, 5000, 25)
+rng_ajuste = np.random.default_rng(0)
+beta = least_squares_fit(inputs, daily_minutes_good, rng_ajuste, learning_rate, 5000, 25)
 
 nomes = ["constante", "amigos", "horas de trabalho", "doutorado"]
 for nome, b, s in zip(nomes, beta, bootstrap_standard_errors):
     print(f"{nome:20s} {b:8.4f}   ± {s:.4f}")
 ```
 
-Os números já dizem a história antes de qualquer teste. O coeficiente de `amigos` é 0,975 com erro padrão de 0,103 — quase dez vezes maior que a própria incerteza. O de `doutorado` é 0,914 com erro padrão de 1,249: **a incerteza é maior que a estimativa**.
+O reajuste usa um gerador novo, `rng_ajuste`, para que este `beta` seja o mesmo das seções 12.3, 12.4 e 12.5 — o `rng` do bootstrap já andou 100 reamostras e daria outro chute inicial.
+
+Os números já dizem a história antes de qualquer teste. O coeficiente de `amigos` é 0,975 com erro padrão de 0,103 — quase dez vezes maior que a própria incerteza. O de `doutorado` é 0,914 com erro padrão de 1,080: **a incerteza é maior que a estimativa**.
 
 ```{python}
 #| label: fig-bootstrap-coeficientes
 #| fig-cap: "Distribuição dos 100 coeficientes bootstrap. Mesma escala horizontal nos três painéis; a linha tracejada marca o zero."
 #| echo: false
+import matplotlib.pyplot as plt
+
 fig, axes = plt.subplots(1, 3, figsize=(11, 3.4), sharex=True, sharey=True)
 
-todos = [b[i] for b in bootstrap_betas for i in (1, 2, 3)]
-faixa = (min(todos) - 0.3, max(todos) + 0.3)
+todos = bootstrap_betas[:, 1:]
+faixa = (todos.min() - 0.3, todos.max() + 0.3)
 
 for ax, i, titulo in zip(axes, [1, 2, 3],
                          ["amigos", "horas de trabalho", "doutorado"]):
-    coluna = [b[i] for b in bootstrap_betas]
-    ax.hist(coluna, bins=30, range=faixa, color='tab:blue', edgecolor='white')
+    ax.hist(bootstrap_betas[:, i], bins=30, range=faixa,
+            color='tab:blue', edgecolor='white')
     ax.axvline(0, color='black', linestyle='--', linewidth=1.2)
     ax.set_title(titulo, fontsize=10)
     ax.set_xlabel("coeficiente")
@@ -107,14 +100,14 @@ plt.tight_layout()
 plt.show()
 ```
 
-O gráfico mostra o que a tabela resume, e a escala compartilhada é o que torna a comparação legítima: com um eixo por painel, três distribuições de larguras completamente diferentes pareceriam igualmente espalhadas. Na mesma régua, `amigos` e `horas de trabalho` se apertam em faixas estreitas, inteiramente de um lado do zero — nenhuma das 100 reamostras produziu um coeficiente de sinal trocado. A de `doutorado` ocupa quase toda a largura do gráfico e atravessa o zero: uma boa parte das reamostras produziu um coeficiente **negativo**.
+O gráfico mostra o que a tabela resume, e a escala compartilhada é o que torna a comparação legítima: com um eixo por painel, três distribuições de larguras completamente diferentes pareceriam igualmente espalhadas. Na mesma régua, `amigos` e `horas de trabalho` se apertam em faixas estreitas, inteiramente de um lado do zero — nenhuma das 100 reamostras produziu um coeficiente de sinal trocado. A de `doutorado` ocupa quase toda a largura do gráfico e atravessa o zero: 17 das 100 reamostras produziram um coeficiente **negativo**.
 
 ```{python}
 #| label: cruza-zero
 for i, nome in zip([1, 2, 3], ["amigos", "horas de trabalho", "doutorado"]):
-    coluna = [b[i] for b in bootstrap_betas]
-    negativos = sum(1 for v in coluna if v < 0)
-    print(f"{nome:20s} de {min(coluna):7.3f} a {max(coluna):6.3f}   "
+    coluna = bootstrap_betas[:, i]
+    negativos = int((coluna < 0).sum())
+    print(f"{nome:20s} de {coluna.min():7.3f} a {coluna.max():6.3f}   "
           f"negativos: {negativos:3d} de 100")
 ```
 
@@ -134,20 +127,20 @@ Não temos uma função `students_t_cdf`, e escrevê-la do zero seria uma digres
 
 ```{python}
 #| label: valor-p
-from scratch.probability import normal_cdf
+from scratch_np.probability import normal_cdf
 
 def p_value(beta_hat_j: float, sigma_hat_j: float) -> float:
     if beta_hat_j > 0:
         # se o coeficiente é positivo, precisamos calcular o dobro da
         # probabilidade de ver um valor ainda *maior*
-        return 2 * (1 - normal_cdf(beta_hat_j / sigma_hat_j))
+        return float(2 * (1 - normal_cdf(beta_hat_j / sigma_hat_j)))
     else:
         # caso contrário, o dobro da probabilidade de ver um valor *menor*
-        return 2 * normal_cdf(beta_hat_j / sigma_hat_j)
+        return float(2 * normal_cdf(beta_hat_j / sigma_hat_j))
 
 # os coeficientes abaixo são a solução exata do sistema de mínimos quadrados;
 # os nossos, na tabela acima, vêm do gradiente descendente e diferem na
-# segunda ou terceira casa. Os erros padrão são os nossos, do bootstrap.
+# segunda ou terceira casa. Os erros padrão são os do Grus, também do bootstrap.
 assert p_value(30.58, 1.27)   < 0.001  # termo constante
 assert p_value(0.972, 0.103)  < 0.001  # amigos
 assert p_value(-1.865, 0.155) < 0.001  # horas de trabalho
@@ -164,7 +157,7 @@ for nome, b, s in zip(nomes, beta, bootstrap_standard_errors):
 ::: {.conceito}
 O valor-p responde a: *se o coeficiente verdadeiro fosse exatamente zero, com que frequência o acaso da amostragem produziria uma estimativa tão distante de zero quanto a que eu obtive?*
 
-Para `amigos` e `horas de trabalho`, a resposta é "praticamente nunca" — esses efeitos são reais. Para `doutorado`, a resposta é "quase metade das vezes". Um coeficiente de 0,914 com erro padrão de 1,249 é perfeitamente compatível com um efeito verdadeiro de zero, e também com um efeito de $-1$ ou de $+3$. Não sabemos.
+Para `amigos` e `horas de trabalho`, a resposta é "praticamente nunca" — esses efeitos são reais. Para `doutorado`, a resposta é "cerca de 40% das vezes". Um coeficiente de 0,914 com erro padrão de 1,080 é perfeitamente compatível com um efeito verdadeiro de zero, e também com um efeito de $-1$ ou de $+3$. Não sabemos.
 :::
 
 ::: {.callout-note}
@@ -174,19 +167,19 @@ Repare no que **não** foi preciso supor para chegar até aqui. A via clássica 
 
 Quando ela não vale, o caso comum é o erro crescer junto com o valor previsto: o modelo acerta na faixa baixa e erra feio na alta. Nesse cenário, o ajuste de mínimos quadrados continua devolvendo coeficientes utilizáveis, mas os **erros padrão** da fórmula fechada saem errados — e não erram todos para o mesmo lado, o que impediria até de corrigir a leitura de cabeça. O que quebra, então, é exatamente a camada que esta seção construiu: o erro padrão, o *t* e o valor-p. Nada na tabela de saída avisa; um coeficiente pode aparecer com p < 0,001 só porque a fórmula supôs uma variância que os dados não têm.
 
-O bootstrap de pares não faz essa suposição. Ele reamostra $(x_i, y_i)$ juntos, então cada reamostra herda a estrutura de dispersão do conjunto original, seja ela qual for — a dispersão dos 100 `beta` reflete a variabilidade que os dados de fato têm, não a que um modelo de erros supôs que eles teriam. É o que se compra com os 90 segundos de CPU: hipóteses a menos.
+O bootstrap de pares não faz essa suposição. Ele reamostra $(x_i, y_i)$ juntos, então cada reamostra herda a estrutura de dispersão do conjunto original, seja ela qual for — a dispersão dos 100 `beta` reflete a variabilidade que os dados de fato têm, não a que um modelo de erros supôs que eles teriam. É o que se compra com os vinte segundos de CPU: hipóteses a menos.
 :::
 
 ## Por que justamente o doutorado
 
 Este resultado não deveria surpreender quem leu a [seção 12.2](02-hipoteses-do-minimos-quadrados.qmd): `tem_doutorado` é quase determinado por `num_amigos`, e a comparação capaz de separar os dois efeitos — mesmo número de amigos, formação diferente — só existe nos 22 usuários daquela seção.
 
-Isso é multicolinearidade quase perfeita, e o erro padrão de 1,249 é exatamente a forma como ela se manifesta. Cada reamostra bootstrap sorteia um punhado diferente daqueles 22 usuários, e o coeficiente balança junto.
+Isso é multicolinearidade quase perfeita, e o erro padrão de 1,080 é exatamente a forma como ela se manifesta. Cada reamostra bootstrap sorteia um punhado diferente daqueles 22 usuários, e o coeficiente balança junto.
 
 ::: {.callout-important}
 Repare no arco que se fechou até aqui. A [seção 12.2](02-hipoteses-do-minimos-quadrados.qmd) apontou uma propriedade estrutural dos dados. A [seção 12.4](04-interpretando-o-modelo.qmd) explicou por que ela torna a frase "mantendo tudo o mais constante" vazia para aquele coeficiente. A [seção 12.5](05-qualidade-do-ajuste.qmd) mostrou que o R² é cego para esse tipo de problema. E o bootstrap, sem saber nada de nada disso — sem teoria, sem álgebra, sem sequer olhar para a matriz de correlações —, mediu o efeito no número que interessa.
 
-Falta o passo que **age** sobre esse diagnóstico. Até agora, tudo o que sabemos fazer com o coeficiente do `doutorado` é olhar a tabela, ver o 1,249 e decidir à mão remover a variável — o que exige um humano, um critério e uma rodada a mais de ajuste. A [seção 12.8](08-regularizacao.qmd) muda o objetivo que o ajuste persegue, de modo que um coeficiente que os dados não sustentam encolha sozinho, sem que ninguém precise olhar tabela nenhuma.
+Falta o passo que **age** sobre esse diagnóstico. Até agora, tudo o que sabemos fazer com o coeficiente do `doutorado` é olhar a tabela, ver o 1,080 e decidir à mão remover a variável — o que exige um humano, um critério e uma rodada a mais de ajuste. A [seção 12.8](08-regularizacao.qmd) muda o objetivo que o ajuste persegue, de modo que um coeficiente que os dados não sustentam encolha sozinho, sem que ninguém precise olhar tabela nenhuma.
 :::
 
 ::: {.callout-warning}
@@ -194,7 +187,7 @@ Falta o passo que **age** sobre esse diagnóstico. Até agora, tudo o que sabemo
 
 Três leituras erradas, todas comuns:
 
-- **"p = 0,46 prova que o doutorado não tem efeito."** Não prova. Prova que estes dados não conseguem distinguir o efeito de zero, o que é diferente. Ausência de evidência não é evidência de ausência — e neste caso sabemos até *por que* os dados não conseguem: eles quase não contêm a comparação necessária.
+- **"p = 0,40 prova que o doutorado não tem efeito."** Não prova. Prova que estes dados não conseguem distinguir o efeito de zero, o que é diferente. Ausência de evidência não é evidência de ausência — e neste caso sabemos até *por que* os dados não conseguem: eles quase não contêm a comparação necessária.
 - **"p < 0,05, então o efeito é importante."** Significância estatística é sobre distinguir de zero, não sobre tamanho. Com dados suficientes, um efeito de 0,001 minuto por amigo sairia com p < 0,001 e não teria a menor relevância prática.
 - **"testei vinte variáveis e uma deu p < 0,05."** Esperado: testando vinte variáveis inúteis a 5%, sai em média uma "significativa" por puro acaso. É o mesmo mecanismo que a [seção 12.5](05-qualidade-do-ajuste.qmd) mostrou com as vinte colunas de ruído, agora vestido de teste de hipótese.
 
@@ -217,9 +210,9 @@ print(modelo.summary())
 
 `summary()` imprime, de uma vez, a tabela que nós montamos à mão: coeficiente, erro padrão, estatística *t*, valor-p e intervalo de confiança de 95% para cada variável — mais R², R² ajustado, estatística *F* e uma lista de avisos de diagnóstico. Repare que `sm.OLS` **espera** a coluna de 1 explícita, exatamente como o nosso código (há `sm.add_constant` para quem não a tem), e resolve por álgebra linear em vez de gradiente descendente.
 
-A diferença de fundo: os erros padrão do `statsmodels` vêm da **fórmula fechada**, sob a hipótese de erros normais independentes com variância constante. Os nossos vieram do bootstrap, que não assume nada disso. Nestes dados os dois caminhos chegam perto: @grus2019 registra, ao lado dos valores bootstrap, os erros exatos calculados pela fórmula — 1,19 / 0,080 / 0,127 / 0,998, contra os nossos 1,272 / 0,103 / 0,155 / 1,249.
+A diferença de fundo: os erros padrão do `statsmodels` vêm da **fórmula fechada**, sob a hipótese de erros normais independentes com variância constante. Os nossos vieram do bootstrap, que não assume nada disso. Nestes dados os dois caminhos chegam perto: @grus2019 registra, ao lado dos valores bootstrap, os erros exatos calculados pela fórmula — 1,19 / 0,080 / 0,127 / 0,998, contra os nossos 1,258 / 0,102 / 0,149 / 1,080.
 
-É tentador ler essa folga como imprecisão do bootstrap e supor que mais reamostras fechariam a diferença. **Não fecham.** Com 400 reamostras em vez de 100, estes dados dão 1,302 / 0,102 / 0,154 / 1,236: os dois do meio mal se mexem e o do termo constante *sobe*, andando para longe de 1,19. Nem poderia ser diferente — o desvio padrão de $B$ réplicas bootstrap não tem viés para cima que se dissolva com $B$ maior. Aumentar $B$ deixa a estimativa mais **estável**, e é só isso: ela converge, mas converge para o número do bootstrap, não para o número da fórmula.
+É tentador ler essa folga como imprecisão do bootstrap e supor que mais reamostras fechariam a diferença. **Não fecham.** Com 400 reamostras em vez de 100, estes dados dão 1,403 / 0,108 / 0,149 / 1,197: os dois do meio mal se mexem, e os das pontas *sobem* — andando para longe de 1,19 e de 0,998, não em direção a eles. Nem poderia ser diferente — o desvio padrão de $B$ réplicas bootstrap não tem viés para cima que se dissolva com $B$ maior. Aumentar $B$ deixa a estimativa mais **estável**, e é só isso: ela converge, mas converge para o número do bootstrap, não para o número da fórmula.
 
 Os dois não convergem um para o outro porque **medem alvos diferentes**. A fórmula responde: *qual seria a dispersão de $\beta$ se os erros fossem normais, independentes e de variância constante?* O bootstrap responde: *qual é a dispersão de $\beta$ quando eu reamostro estes pares?* Só sob as hipóteses da fórmula as duas perguntas têm a mesma resposta. Que elas discordem um pouco é **informação sobre os dados** — o sinal de que alguma hipótese da fórmula não descreve bem este conjunto —, não imprecisão de nenhum dos dois.
 

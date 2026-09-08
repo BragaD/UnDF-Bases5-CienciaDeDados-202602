@@ -136,7 +136,7 @@ def least_squares_fit(x: np.ndarray, y: np.ndarray) -> tuple[float, float]   # (
 def predict(alpha: float, beta: float, x) -> np.ndarray | float
 
 # scratch_np/multiple_regression.py  (cap. 12; o cap. 13 importa)
-inputs: np.ndarray            # (200, 3): coluna constante 1, amigos, horas de trabalho
+inputs: np.ndarray            # (203, 4): coluna constante 1, amigos, horas de trabalho, doutorado
 def predict(x: np.ndarray, beta: np.ndarray)          # x (d,) ou X (n, d) -> escalar ou (n,)
 def least_squares_fit(xs: np.ndarray, ys: np.ndarray, rng: np.random.Generator,
                       learning_rate: float = 0.001, num_steps: int = 1000,

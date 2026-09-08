@@ -4,41 +4,29 @@
 Esta seção corresponde a *Goodness of Fit*, do capítulo 15 de @grus2019.
 :::
 
-O [Capítulo 11](../cap11/01-o-modelo.qmd) mediu a qualidade do ajuste com o **coeficiente de determinação**, o R²: a fração da variação total em `y` que o modelo captura. A generalização para várias variáveis não muda nada na ideia; só troca a assinatura da função:
-
-```{python}
-#| label: importa
-#| include: false
-import random
-random.seed(0)
-from scratch.multiple_regression import inputs, least_squares_fit
-from scratch.statistics import daily_minutes_good
-import matplotlib.pyplot as plt
-plt.close('all')
-```
+O [Capítulo 11](../cap11/01-o-modelo.qmd) mediu a qualidade do ajuste com o **coeficiente de determinação**, o R²: a fração da variação total em `y` que o modelo captura. A generalização para várias variáveis não muda nada na ideia; só troca a assinatura da função — e some com o laço, porque a `error` da [seção 12.3](03-ajustando-o-modelo.qmd), importada aqui, recebe a matriz inteira em `error(xs, ys, beta)` e devolve os 203 erros de uma vez, como a [seção 12.1](01-o-modelo.qmd) mostrou:
 
 ```{python}
 #| label: r-quadrado
-from typing import List
-from scratch.linear_algebra import Vector, dot
-from scratch.simple_linear_regression import total_sum_of_squares
+import numpy as np
 
-def error(x: Vector, y: float, beta: Vector) -> float:
-    return dot(x, beta) - y
+from scratch_np.multiple_regression import error
+from scratch_np.simple_linear_regression import total_sum_of_squares
 
-def multiple_r_squared(xs: List[Vector], ys: Vector, beta: Vector) -> float:
-    sum_of_squared_errors = sum(error(x, y, beta) ** 2
-                                for x, y in zip(xs, ys))
+def multiple_r_squared(xs: np.ndarray, ys: np.ndarray, beta: np.ndarray) -> float:
+    sum_of_squared_errors = float(np.sum(error(xs, ys, beta) ** 2))
     return 1.0 - sum_of_squared_errors / total_sum_of_squares(ys)
 ```
 
-`total_sum_of_squares` é a mesma função do capítulo anterior: a variação quadrática total dos `y` em torno da própria média, que é o erro do modelo mais burro possível — aquele que ignora as variáveis explicativas e sempre chuta a média.
+`total_sum_of_squares` é a mesma função do capítulo anterior — a mesma função de `scratch_np.simple_linear_regression`, importada, não reescrita: a variação quadrática total dos `y` em torno da própria média, que é o erro do modelo mais burro possível — aquele que ignora as variáveis explicativas e sempre chuta a média.
 
 ```{python}
 #| label: mede
-#| warning: false
-random.seed(0)
-beta = least_squares_fit(inputs, daily_minutes_good, 0.001, 5000, 25)
+from scratch_np.multiple_regression import inputs, least_squares_fit
+from scratch_np.statistics import daily_minutes_good
+
+rng = np.random.default_rng(0)
+beta = least_squares_fit(inputs, daily_minutes_good, rng, 0.001, 5000, 25)
 
 multiple_r_squared(inputs, daily_minutes_good, beta)
 ```
@@ -57,19 +45,19 @@ O argumento é curto e não tem brecha. O modelo de uma variável é um **caso p
 
 O mesmo argumento vale para qualquer coluna acrescentada, e é aí que ele incomoda: ele vale também para uma coluna de números aleatórios sem relação nenhuma com o que estamos tentando prever. Zero é um coeficiente possível para ela, então o ajuste com a coluna de ruído nunca fica pior que o ajuste sem. Se o ajuste consegue tirar até um fiapo de vantagem daquele ruído — e com dados finitos ele quase sempre consegue —, o R² sobe.
 
-Isso não é um argumento de papel. Dá para rodar:
+Isso não é um argumento de papel. Dá para rodar. São dois geradores, com papéis diferentes: `default_rng(1)` sorteia as vinte colunas de ruído uma única vez, para que as seis linhas da tabela vejam exatamente o mesmo ruído; `default_rng(0)`, recriado a cada ajuste, dá o chute inicial. Sem separá-los, a tabela mediria duas coisas ao mesmo tempo.
 
 ```{python}
 #| label: ruido
-#| warning: false
-random.seed(1)
+rng_ruido = np.random.default_rng(1)
+
 # vinte colunas de puro ruído, na mesma faixa das horas de trabalho
-ruido = [[random.uniform(0, 10) for _ in range(20)] for _ in inputs]
+ruido = rng_ruido.random((len(inputs), 20)) * 10
 
 for k in [0, 1, 5, 10, 15, 20]:
-    xs = [x + r[:k] for x, r in zip(inputs, ruido)]
-    random.seed(0)
-    beta_k = least_squares_fit(xs, daily_minutes_good, 0.001, 15000, 25)
+    xs = np.hstack([inputs, ruido[:, :k]])
+    rng = np.random.default_rng(0)
+    beta_k = least_squares_fit(xs, daily_minutes_good, rng, 0.001, 15000, 25)
     r2 = multiple_r_squared(xs, daily_minutes_good, beta_k)
     plural = "coluna" if k == 1 else "colunas"
     print(f"{k:2d} {plural:7s} de puro ruído → R² = {r2:.4f}")
@@ -78,7 +66,7 @@ for k in [0, 1, 5, 10, 15, 20]:
 ::: {.callout-warning}
 ## O que acabou de acontecer
 
-Vinte colunas de `random.uniform(0, 10)`. Nenhuma delas sabe coisa alguma sobre quantos minutos por dia um usuário passa no site — são números sorteados, gerados sem olhar para `daily_minutes_good` uma única vez. Ainda assim, o R² subiu de 0,68 para 0,71.
+Vinte colunas de `rng.random(...) * 10`. Nenhuma delas sabe coisa alguma sobre quantos minutos por dia um usuário passa no site — são números sorteados, gerados sem olhar para `daily_minutes_good` uma única vez. Ainda assim, o R² subiu de 0,6800 para 0,7004.
 
 Um analista que acrescentasse essas vinte colunas ao modelo e relatasse "o R² subiu, o modelo melhorou" estaria enganando a si mesmo e a quem o ouvisse. O modelo não melhorou em nada: ele apenas ganhou vinte botões a mais para girar, e usou-os para se ajustar ao ruído específico destes 203 usuários. Aplicado a usuários novos, esse modelo prevê **pior** que o de três variáveis, não melhor.
 
@@ -90,7 +78,7 @@ Este é o sobreajuste do [Capítulo 8](../cap08/03-overfitting-e-underfitting.qm
 
 O argumento da caixa anterior é sobre o **mínimo exato** da soma dos erros ao quadrado, e o nosso `least_squares_fit` não encontra o mínimo exato — ele dá 15.000 passos e para perto dele. Cabe perguntar, então, se o que a tabela mostra é o efeito das colunas de ruído ou a imprecisão do otimizador.
 
-É o efeito das colunas, e por uma margem confortável. Olhe a **segunda** linha da tabela: uma única coluna de ruído já levou o R² de 0,6800 para 0,6825. São uns poucos milésimos — a ordem de grandeza que a regra de bolso para "uma variável a mais" prevê com 203 pontos —, e são milésimos que **sobem**. A imprecisão do otimizador, medida contra a solução exata do mesmo modelo de três variáveis, é de 0,000026 (0,679985 contra 0,680011): duas ordens de grandeza abaixo. Uma coluna sozinha já demonstra o ponto; as vinte apenas o tornam impossível de ignorar.
+É o efeito das colunas, e dá para provar sem depender do otimizador. Olhe a **segunda** linha da tabela: uma única coluna de ruído levou o R² de 0,6800 para 0,6803 — três décimos de milésimo, que **sobem**. Agora repita a conta com as equações normais, que não têm otimizador nenhum: a solução exata sem ruído dá R² = 0,680011 e a solução exata com uma coluna de ruído dá 0,680311. A mesma subida, com a mesma ordem de grandeza. A imprecisão do nosso ajuste — 0,000025, a distância entre 0,679986 e 0,680011 — entra igual nas duas linhas e por isso não explica a diferença entre elas. Uma coluna sozinha já demonstra o ponto; as vinte apenas o tornam impossível de ignorar.
 
 Vale generalizar a lição, porque ela reaparece toda vez que se mede alguma coisa: **um efeito só é demonstrável quando ele é maior que a imprecisão do instrumento que o mede.** Quando os dois têm o mesmo tamanho, a medição não distingue "o efeito não existe" de "o efeito existe e eu não consigo vê-lo" — e concluir a primeira coisa é um erro. É a mesma disciplina que o [Capítulo 8](../cap08/index.qmd) pediu ao separar treino de teste, e é exatamente o que a [seção 12.7](07-erros-padrao-dos-coeficientes.qmd) vai fazer com cada coeficiente do modelo.
 :::
@@ -112,7 +100,7 @@ Ficaríamos, então, sem erros padrão — a não ser que exista um caminho que 
 ::: {.callout-tip collapse="true"}
 ## Na prática: `scikit-learn`
 
-`modelo.score(X, y)` devolve exatamente este R², e `sklearn.metrics.r2_score(y_verdadeiro, y_previsto)` faz a mesma conta a partir de duas listas. Nenhum dos dois protege você do que esta seção mostrou: os dois sobem quando você acrescenta ruído.
+`modelo.score(X, y)` devolve exatamente este R², e `sklearn.metrics.r2_score(y_verdadeiro, y_previsto)` faz a mesma conta a partir de dois arrays. Nenhum dos dois protege você do que esta seção mostrou: os dois sobem quando você acrescenta ruído.
 
 O que se usa de verdade para escolher variáveis:
 

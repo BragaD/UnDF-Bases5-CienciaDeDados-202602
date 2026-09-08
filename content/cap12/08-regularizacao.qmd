@@ -20,34 +20,27 @@ O ganho é duplo, e o segundo é fácil de subestimar: quanto menos coeficientes
 
 ## A penalidade *ridge*
 
-Na regressão *ridge*, a penalidade é proporcional à soma dos quadrados dos coeficientes — com uma exceção importante, o termo constante:
+Na regressão *ridge*, a penalidade é proporcional à soma dos quadrados dos coeficientes — com uma exceção importante, o termo constante. `beta[1:] @ beta[1:]` é a soma dos quadrados dos coeficientes a partir do segundo: o mesmo `@` do produto escalar, com o vetor multiplicado por ele mesmo.
 
 ```{python}
 #| label: importa
-#| include: false
-import random
-random.seed(0)
-from scratch.multiple_regression import (
+import numpy as np
+
+from scratch_np.multiple_regression import (
     inputs, error, sqerror_gradient, least_squares_fit_ridge, multiple_r_squared,
 )
-from scratch.statistics import daily_minutes_good
-import matplotlib.pyplot as plt
-plt.close('all')
+from scratch_np.statistics import daily_minutes_good
 ```
 
 ```{python}
 #| label: ridge-penalty
-from scratch.linear_algebra import dot, Vector, add
-
 # alpha é um *hiperparâmetro* que controla a força da penalidade.
 # Às vezes ele é chamado de "lambda", mas isso já significa algo em Python.
-def ridge_penalty(beta: Vector, alpha: float) -> float:
-    return alpha * dot(beta[1:], beta[1:])
+def ridge_penalty(beta: np.ndarray, alpha: float) -> float:
+    return float(alpha * (beta[1:] @ beta[1:]))
 
-def squared_error_ridge(x: Vector,
-                        y: float,
-                        beta: Vector,
-                        alpha: float) -> float:
+def squared_error_ridge(x: np.ndarray, y: float,
+                        beta: np.ndarray, alpha: float) -> float:
     """erro estimado mais a penalidade ridge sobre beta"""
     return error(x, y, beta) ** 2 + ridge_penalty(beta, alpha)
 ```
@@ -66,44 +59,40 @@ O gradiente da penalidade sai direto da derivada de $\alpha \beta_j^2$, com o me
 
 ```{python}
 #| label: ridge-gradient
-def ridge_penalty_gradient(beta: Vector, alpha: float) -> Vector:
+def ridge_penalty_gradient(beta: np.ndarray, alpha: float) -> np.ndarray:
     """gradiente apenas da penalidade ridge"""
-    return [0.] + [2 * alpha * beta_j for beta_j in beta[1:]]
+    return np.concatenate([[0.0], 2 * alpha * beta[1:]])
 
-def sqerror_ridge_gradient(x: Vector,
-                           y: float,
-                           beta: Vector,
-                           alpha: float) -> Vector:
+def sqerror_ridge_gradient(x: np.ndarray, y: float,
+                           beta: np.ndarray, alpha: float) -> np.ndarray:
     """
     o gradiente correspondente ao i-ésimo termo de erro quadrático,
     incluindo a penalidade ridge
     """
-    return add(sqerror_gradient(x, y, beta),
-               ridge_penalty_gradient(beta, alpha))
+    return sqerror_gradient(x, y, beta) + ridge_penalty_gradient(beta, alpha)
 ```
 
-Como a perda é uma soma de duas parcelas, o gradiente é a soma dos dois gradientes — e é literalmente isso que `add` faz.
+Como a perda é uma soma de duas parcelas, o gradiente é a soma dos dois gradientes — e com arrays isso é o `+` de sempre. O `np.concatenate` na linha de cima é o `[0.] + [...]` do vetor: um zero na frente, porque o termo constante não é penalizado, e `2 * alpha * beta[1:]` — a derivada de $\alpha \beta_j^2$ — no resto.
 
-`error` e `sqerror_gradient`, usados acima, são exatamente as funções da [seção 12.3](03-ajustando-o-modelo.qmd), importadas de `scratch.multiple_regression`. A partir daí, a mudança conceitual no otimizador é uma só: trocar `sqerror_gradient` por `sqerror_ridge_gradient` dentro do `least_squares_fit` daquela seção. O chute inicial, o laço sobre lotes, o `gradient_step` — tudo o que faz o gradiente descendente ser gradiente descendente fica igual. O pacote `scratch` já traz essa versão pronta, como `least_squares_fit_ridge`.
+`error` e `sqerror_gradient`, usados acima, são exatamente as funções da [seção 12.3](03-ajustando-o-modelo.qmd), importadas de `scratch_np.multiple_regression`. A partir daí, a mudança conceitual no otimizador é uma só: trocar `sqerror_gradient` por `sqerror_ridge_gradient`. Na versão em arrays isso aparece de um jeito ainda mais econômico — a penalidade **não depende do ponto**, então a média dela sobre o lote é ela mesma, e ela entra somada uma vez só ao gradiente do erro. O chute inicial, o laço sobre lotes, o `gradient_step` — tudo o que faz o gradiente descendente ser gradiente descendente fica igual. O pacote `scratch_np` já traz essa versão pronta, como `least_squares_fit_ridge`.
 
 ## O efeito de apertar a penalidade
 
-Com `alpha = 0` não há penalidade nenhuma, e devemos recuperar o ajuste da seção 12.3. Conforme `alpha` cresce, o ajuste piora e os coeficientes encolhem:
+Com `alpha = 0` não há penalidade nenhuma, e devemos recuperar o ajuste da seção 12.3. Conforme `alpha` cresce, o ajuste piora e os coeficientes encolhem. O gerador é recriado a cada linha, com a mesma semente: assim a única coisa que muda entre elas é o `alpha`.
 
 ```{python}
 #| label: ridge-varredura
-#| warning: false
 print(f"{'alpha':>6}  {'constante':>10}{'amigos':>9}{'horas':>9}{'doutorado':>11}"
       f"{'|beta|²':>10}{'R²':>8}")
 
 resultados = {}
 for alpha in [0.0, 0.1, 1.0, 10.0]:
-    random.seed(0)
+    rng = np.random.default_rng(0)
     b = least_squares_fit_ridge(inputs, daily_minutes_good, alpha,
-                                0.001, 5000, 25)
+                                rng, 0.001, 5000, 25)
     resultados[alpha] = b
     print(f"{alpha:6.1f}  {b[0]:10.3f}{b[1]:9.3f}{b[2]:9.3f}{b[3]:11.3f}"
-          f"{dot(b[1:], b[1:]):10.3f}"
+          f"{b[1:] @ b[1:]:10.3f}"
           f"{multiple_r_squared(inputs, daily_minutes_good, b):8.4f}")
 ```
 
@@ -137,8 +126,8 @@ A penalidade *ridge* usa a soma dos **quadrados**. Uma alternativa é usar a som
 
 ```{python}
 #| label: lasso
-def lasso_penalty(beta, alpha):
-    return alpha * sum(abs(beta_i) for beta_i in beta[1:])
+def lasso_penalty(beta: np.ndarray, alpha: float) -> float:
+    return float(alpha * np.abs(beta[1:]).sum())
 ```
 
 A diferença de comportamento é maior do que a diferença de código sugere. Enquanto a *ridge* encolhe todos os coeficientes proporcionalmente — deixando-os pequenos, mas raramente exatamente zero (repare que nem mesmo com `alpha = 10` o `doutorado` chegou a zero: parou em −0,005) —, a *lasso* tende a **zerar** coeficientes de vez. Isso a torna a ferramenta certa para aprender modelos esparsos, em que boa parte das variáveis some do modelo e as sobreviventes são todas legíveis.
@@ -161,7 +150,7 @@ Oito seções, uma linha só de raciocínio. O modelo de várias variáveis é o
 
 O que o alonga é tudo o que vem **depois** de ter os coeficientes na mão. A [seção 12.4](04-interpretando-o-modelo.qmd) mostrou que ler um coeficiente é afirmar "mantendo tudo o mais constante" — uma comparação que os dados podem simplesmente não conter, e que nos nossos não contêm para o `doutorado`. A [seção 12.5](05-qualidade-do-ajuste.qmd) mostrou que a métrica óbvia para arbitrar isso é cega: o R² sobe até com colunas de ruído puro, e uma métrica que nunca piora não serve de critério para deixar nada de fora. A [seção 12.6](06-digressao-o-bootstrap.qmd) foi buscar por outro caminho — reamostrar os próprios dados — o que a teoria clássica não nos deixava calcular; a [seção 12.7](07-erros-padrao-dos-coeficientes.qmd) converteu isso num erro padrão por coeficiente e, com ele, disse com todas as letras que o coeficiente do `doutorado` é indistinguível de zero. Esta seção fechou o circuito: em vez de olhar a tabela e remover a variável à mão, mudou o objetivo que o ajuste persegue, para que o coeficiente que os dados não sustentam encolha sozinho.
 
-Três peças ficam para o resto do livro, e nenhuma delas é sobre regressão. **O bootstrap** estima a incerteza de qualquer estatística que você consiga escrever como função de uma lista — e a reamostragem com reposição que ele inventou para isso reaparece com outro objetivo nas florestas aleatórias do [Capítulo 14](../cap14/index.qmd), lá para treinar modelos em vez de medir incerteza. **O erro padrão** separa efeito de ruído, e é o que permite dizer "esta variável não se sustenta" com um número em vez de com uma impressão. **A regularização** é a resposta padrão ao sobreajuste do [Capítulo 8](../cap08/03-overfitting-e-underfitting.qmd), e ela viaja intacta para o próximo modelo: o [Capítulo 13](../cap13/index.qmd) troca a soma dos erros ao quadrado por outra função de perda, perde a fórmula fechada de vez e passa a depender inteiramente do gradiente descendente — e a penalidade desta seção o acompanha sem nenhuma alteração conceitual, uma parcela somada à perda, um gradiente somado ao gradiente. É por isso que o `scikit-learn` mantém a regularização **ligada por padrão** no `LogisticRegression`, detalhe que costuma pegar de surpresa quem chega lá sem ter passado por aqui.
+Três peças ficam para o resto do livro, e nenhuma delas é sobre regressão. **O bootstrap** estima a incerteza de qualquer estatística que você consiga escrever como função de um conjunto de dados — e a reamostragem com reposição que ele inventou para isso reaparece com outro objetivo nas florestas aleatórias do [Capítulo 14](../cap14/index.qmd), lá para treinar modelos em vez de medir incerteza. **O erro padrão** separa efeito de ruído, e é o que permite dizer "esta variável não se sustenta" com um número em vez de com uma impressão. **A regularização** é a resposta padrão ao sobreajuste do [Capítulo 8](../cap08/03-overfitting-e-underfitting.qmd), e ela viaja intacta para o próximo modelo: o [Capítulo 13](../cap13/index.qmd) troca a soma dos erros ao quadrado por outra função de perda, perde a fórmula fechada de vez e passa a depender inteiramente do gradiente descendente — e a penalidade desta seção o acompanha sem nenhuma alteração conceitual, uma parcela somada à perda, um gradiente somado ao gradiente. É por isso que o `scikit-learn` mantém a regularização **ligada por padrão** no `LogisticRegression`, detalhe que costuma pegar de surpresa quem chega lá sem ter passado por aqui.
 
 ::: {.callout-tip collapse="true"}
 ## Na prática: `scikit-learn`

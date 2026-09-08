@@ -44,18 +44,18 @@ beta = [alpha, beta_1, ..., beta_k]
 x_i  = [1, x_i1, ..., x_ik]
 ```
 
-Com essa convenção, $\alpha \cdot 1$ é só mais um termo da soma, e o modelo inteiro vira um **produto escalar** — a função `dot` que o [Capítulo 4](../cap04/index.qmd) construiu, e que continua sendo `sum(v_i * w_i for v_i, w_i in zip(v, w))`, sem numpy nenhum:
+Com essa convenção, $\alpha \cdot 1$ é só mais um termo da soma, e o modelo inteiro vira um **produto escalar** — o `@` que a [seção 7.1](../cap07/01-explorando-seus-dados.qmd) apresentou, e que faz exatamente a conta que o `dot` do [Capítulo 4](../cap04/index.qmd) escreveu à mão: multiplica posição a posição e soma.
 
 ```{python}
 #| label: predict
-from scratch.linear_algebra import dot, Vector
+import numpy as np
 
-def predict(x: Vector, beta: Vector) -> float:
+def predict(x: np.ndarray, beta: np.ndarray):
     """assume que o primeiro elemento de x é 1"""
-    return dot(x, beta)
+    return x @ beta
 ```
 
-Duas linhas. O modelo de regressão múltipla inteiro é um produto escalar entre a linha de dados e o vetor de parâmetros — e todo o resto deste capítulo é sobre como escolher esse vetor e o quanto confiar nele depois de escolhido.
+Uma linha. O modelo de regressão múltipla inteiro é um produto escalar entre a linha de dados e o vetor de parâmetros — e todo o resto deste capítulo é sobre como escolher esse vetor e o quanto confiar nele depois de escolhido.
 
 ::: {.conceito}
 A coluna de 1 não é um detalhe de implementação: é o que torna o intercepto **um coeficiente como qualquer outro**. Sem ela, `predict` teria que somar `alpha` separadamente, o gradiente teria um caso especial, e cada função escrita a partir daqui carregaria essa exceção. Com ela, existe só uma regra — produto escalar — e ela vale para o vetor inteiro.
@@ -65,7 +65,7 @@ O preço é lembrar da convenção. Passar a `predict` uma linha de dados sem o 
 
 ## Os dados
 
-Cada entrada, então, é uma lista de quatro números:
+Cada entrada, então, é uma linha de quatro números:
 
 ```python
 [1,    # termo constante
@@ -74,30 +74,36 @@ Cada entrada, então, é uma lista de quatro números:
  0]    # não tem doutorado
 ```
 
-O pacote `scratch` já traz as 203 linhas prontas, no mesmo formato:
+O pacote `scratch_np` já traz as 203 linhas prontas, no mesmo formato — uma matriz com uma linha por usuário e uma coluna por variável:
 
 ```{python}
 #| label: importa-inputs
-#| include: false
-import random
-random.seed(0)
-from scratch.multiple_regression import inputs
-from scratch.statistics import daily_minutes_good
-import matplotlib.pyplot as plt
-plt.close('all')
+from scratch_np.multiple_regression import inputs
+from scratch_np.statistics import daily_minutes_good
 ```
 
 ```{python}
 #| label: mostra-inputs
-len(inputs), len(inputs[0]), inputs[0]
+inputs.shape, inputs[0]
 ```
 
 ```{python}
 #| label: mostra-y
-len(daily_minutes_good), daily_minutes_good[0]
+daily_minutes_good.shape, daily_minutes_good[:3]
 ```
 
-São os **mesmos 203 usuários** do Capítulo 11 — `daily_minutes_good` é exatamente a mesma lista de minutos por dia que aquele capítulo tentou prever, e a segunda coluna de `inputs` é exatamente `num_friends_good`. O que mudou não foi o dado a ser previsto; foi a quantidade de informação disponível para prevê-lo.
+São os **mesmos 203 usuários** do Capítulo 11. `daily_minutes_good` é exatamente o mesmo array de minutos por dia que aquele capítulo tentou prever (vem do mesmo `scratch_np.statistics` que a [seção 11.1](../cap11/01-o-modelo.qmd) usou), e a coluna `inputs[:, 1]` é exatamente `num_friends_good`. O que mudou não foi o dado a ser previsto; foi a quantidade de informação disponível para prevê-lo.
+
+Antes de seguir, vale ver `predict` receber os dados nas duas formas em que ele vai ser chamado neste capítulo — uma linha, e a matriz inteira:
+
+```{python}
+#| label: predict-em-lote
+beta_chute = np.array([30.0, 1.0, -2.0, 1.0])   # um beta qualquer, só para ver a forma
+
+float(predict(inputs[0], beta_chute)), predict(inputs, beta_chute).shape
+```
+
+`predict(inputs[0], beta_chute)` é a previsão de um usuário: um vetor `(4,)` vezes um vetor `(4,)` dá um número. `predict(inputs, beta_chute)` é a mesma função, com a matriz inteira no lugar da linha — e devolve **203 previsões**, uma por linha. Não há laço: `@` com uma matriz à esquerda aplica o mesmo produto escalar a cada linha dela, e a forma do resultado, `(203,)`, é a resposta de "quantas previsões saíram daí". É essa mesma linha que a [seção 12.5](05-qualidade-do-ajuste.qmd) usa para medir o erro do modelo nos 203 usuários de uma vez.
 
 ::: {.callout-tip collapse="true"}
 ## Na prática: `scikit-learn`
@@ -107,7 +113,7 @@ A coluna de 1 é uma convenção do livro, não uma exigência da matemática, e
 ```python
 from sklearn.linear_model import LinearRegression
 
-X = [x[1:] for x in inputs]     # SEM a coluna de 1
+X = inputs[:, 1:]                # SEM a coluna de 1
 y = daily_minutes_good
 
 modelo = LinearRegression().fit(X, y)   # fit_intercept=True é o padrão
@@ -115,6 +121,8 @@ modelo.intercept_, modelo.coef_
 ```
 
 `LinearRegression` mantém `fit_intercept=True` por padrão e cuida do termo constante internamente, o que separa `intercept_` (um escalar) de `coef_` (o vetor dos demais). Passar a ela uma matriz que **já** tem a coluna de 1 é um erro comum e silencioso: o modelo acaba com duas colunas constantes, e a [seção 12.2](02-hipoteses-do-minimos-quadrados.qmd) explica exatamente o que isso quebra.
+
+Repare que a fatia `inputs[:, 1:]` é literalmente o que `fit_intercept=True` dispensa você de fazer: a coluna de 1 existe do nosso lado porque o nosso `predict` é um produto escalar e nada mais.
 
 Para a variável indicadora, o equivalente industrial é `pandas.get_dummies` ou o `OneHotEncoder` do `scikit-learn`, que recebem uma coluna de categorias e devolvem as colunas de 0 e 1. Ambos aceitam `drop_first=True` / `drop='first'` — o "menos uma" mencionado acima, que não é opcional quando o modelo tem intercepto.
 :::

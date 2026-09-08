@@ -24,7 +24,7 @@ CONTENT = RAIZ / "content"
 PACOTE = RAIZ / "scratch_np"
 
 # Capítulos já reescritos em numpy. Cresce a cada entrega; no fim, range(6, 18).
-CAPITULOS_NUMPY: set[int] = {6, 7, 8, 9, 10, 11}
+CAPITULOS_NUMPY: set[int] = {6, 7, 8, 9, 10, 11, 12}
 
 # "Python puro" só pode aparecer num capítulo reescrito quando é contraste
 # deliberado com os caps. 1–5. chave: "capNN/arquivo.qmd", valor: o motivo.
@@ -41,7 +41,8 @@ REEXPORTA_DADOS: dict[str, str] = {
         "os caps. 11 e 12 fazem regressão em cima delas."
     ),
     "multiple_regression.py": (
-        "`inputs` (200 linhas: constante, amigos, horas) mora em scratch/multiple_regression.py."
+        "`inputs` (203 linhas: constante, amigos, horas de trabalho, doutorado) "
+        "mora em scratch/multiple_regression.py; os caps. 12 e 13 regridem sobre elas."
     ),
     "logistic_regression.py": (
         "`data` (200 linhas: experiência, salário, conta paga) mora em scratch/logistic_regression.py."

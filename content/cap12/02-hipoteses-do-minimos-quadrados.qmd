@@ -8,29 +8,27 @@ Passar de uma variável explicativa para várias exige duas hipóteses adicionai
 
 ```{python}
 #| label: importa
-#| include: false
-import random
-random.seed(0)
-from scratch.multiple_regression import inputs, least_squares_fit, multiple_r_squared
-from scratch.statistics import daily_minutes_good, correlation
-import matplotlib.pyplot as plt
-plt.close('all')
+import numpy as np
+
+from scratch_np.multiple_regression import (
+    inputs, least_squares_fit, multiple_r_squared,
+)
+from scratch_np.statistics import daily_minutes_good
 ```
 
 ## Hipótese 1: as colunas de `x` são linearmente independentes
 
 Nenhuma coluna pode ser escrita como soma ponderada das outras. Quando essa hipótese falha, **é impossível estimar `beta`** — e o motivo não é numérico, é lógico: não existe *uma* resposta a ser encontrada.
 
-O caso extremo torna isso visível. Imagine que os dados tivessem um campo extra, `num_conhecidos`, que por um acidente de coleta fosse **exatamente igual** a `num_amigos` para todo usuário. Vamos construir esse campo e ajustar o modelo três vezes, cada uma partindo de um chute inicial diferente:
+O caso extremo torna isso visível. Imagine que os dados tivessem um campo extra, `num_conhecidos`, que por um acidente de coleta fosse **exatamente igual** a `num_amigos` para todo usuário. Vamos construir esse campo — `np.column_stack` cola a coluna de amigos de novo no fim da matriz — e ajustar o modelo três vezes, cada uma partindo de um chute inicial diferente. Aqui a semente **é** o experimento: cada `np.random.default_rng(semente)` é um gerador novo, e é dele que sai o `beta` de onde o ajuste parte.
 
 ```{python}
 #| label: colinear
-#| warning: false
-inputs_colineares = [x + [x[1]] for x in inputs]   # num_conhecidos == num_amigos
+inputs_colineares = np.column_stack([inputs, inputs[:, 1]])   # num_conhecidos == num_amigos
 
 for semente in [0, 1, 2]:
-    random.seed(semente)
-    b = least_squares_fit(inputs_colineares, daily_minutes_good, 0.001, 5000, 25)
+    rng = np.random.default_rng(semente)
+    b = least_squares_fit(inputs_colineares, daily_minutes_good, rng, 0.001, 5000, 25)
     r2 = multiple_r_squared(inputs_colineares, daily_minutes_good, b)
     print(f"semente {semente}: amigos = {b[1]:.4f}   conhecidos = {b[4]:.4f}   "
           f"soma = {b[1] + b[4]:.4f}   R² = {r2:.6f}")
@@ -46,31 +44,30 @@ Note que o modelo continua **prevendo** bem: o R² é o mesmo nos três ajustes.
 
 Esse é também o motivo do "menos uma" que a [seção 12.1](01-o-modelo.qmd) mencionou ao codificar categorias. Se uma variável de três categorias virasse três colunas indicadoras, elas somariam 1 em toda linha — ou seja, reproduziriam exatamente a coluna constante do intercepto. Uma coluna seria combinação linear das outras, e cairíamos nesse mesmo poço. O nome do erro é *dummy variable trap*, e ele é frequente o bastante para ter nome próprio.
 
-Violações **exatas** como essa são raras na prática (e, quando acontecem, quase sempre por descuido: uma coluna duplicada, um total que é a soma das partes, um conjunto completo de indicadoras). O que é comum é a versão aproximada — duas colunas quase redundantes, a chamada **multicolinearidade**. Aí o ajuste é tecnicamente único, mas quase indeterminado: o coeficiente fica extremamente sensível a pequenas mudanças nos dados. Guarde essa frase; a [seção 12.7](07-erros-padrao-dos-coeficientes.qmd) vai medir exatamente essa sensibilidade, e nossos próprios dados têm um caso:
+Violações **exatas** como essa são raras na prática (e, quando acontecem, quase sempre por descuido: uma coluna duplicada, um total que é a soma das partes, um conjunto completo de indicadoras). O que é comum é a versão aproximada — duas colunas quase redundantes, a chamada **multicolinearidade**. Aí o ajuste é tecnicamente único, mas quase indeterminado: o coeficiente fica extremamente sensível a pequenas mudanças nos dados. Guarde essa frase; a [seção 12.7](07-erros-padrao-dos-coeficientes.qmd) vai medir exatamente essa sensibilidade, e nossos próprios dados têm um caso. `np.corrcoef` devolve a matriz de correlações do par, e o que interessa é a posição `[0, 1]`:
 
 ```{python}
 #| label: correlacoes
-amigos = [x[1] for x in inputs]
-horas  = [x[2] for x in inputs]
-phd    = [x[3] for x in inputs]
+amigos, horas, phd = inputs[:, 1], inputs[:, 2], inputs[:, 3]
 
-print(f"corr(amigos, horas) = {correlation(amigos, horas):.4f}")
-print(f"corr(amigos, phd)   = {correlation(amigos, phd):.4f}")
-print(f"corr(horas,  phd)   = {correlation(horas, phd):.4f}")
+print(f"corr(amigos, horas) = {np.corrcoef(amigos, horas)[0, 1]:.4f}")
+print(f"corr(amigos, phd)   = {np.corrcoef(amigos, phd)[0, 1]:.4f}")
+print(f"corr(horas,  phd)   = {np.corrcoef(horas, phd)[0, 1]:.4f}")
 ```
 
-`num_amigos` e `tem_doutorado` têm correlação de $-0{,}61$. Olhando mais de perto, a redundância é ainda maior do que esse número sugere:
+`num_amigos` e `tem_doutorado` têm correlação de $-0{,}61$. Olhando mais de perto, a redundância é ainda maior do que esse número sugere. Com máscaras booleanas ([seção 7.1](../cap07/01-explorando-seus-dados.qmd)), a pergunta se escreve quase como se fala: `amigos[com_phd]` são os amigos de quem tem doutorado, e `&` combina duas condições:
 
 ```{python}
 #| label: sobreposicao
-faixa_phd    = [a for a, p in zip(amigos, phd) if p == 1]
-faixa_sem    = [a for a, p in zip(amigos, phd) if p == 0]
+com_phd = phd == 1
 
-print(f"com doutorado ({len(faixa_phd):3d} usuários): amigos de {min(faixa_phd)} a {max(faixa_phd)}")
-print(f"sem doutorado ({len(faixa_sem):3d} usuários): amigos de {min(faixa_sem)} a {max(faixa_sem)}")
+print(f"com doutorado ({com_phd.sum():3d} usuários): "
+      f"amigos de {amigos[com_phd].min():.0f} a {amigos[com_phd].max():.0f}")
+print(f"sem doutorado ({(~com_phd).sum():3d} usuários): "
+      f"amigos de {amigos[~com_phd].min():.0f} a {amigos[~com_phd].max():.0f}")
 print(f"única sobreposição: usuários com exatamente 6 amigos "
-      f"({sum(1 for a, p in zip(amigos, phd) if a == 6 and p == 1)} com doutorado, "
-      f"{sum(1 for a, p in zip(amigos, phd) if a == 6 and p == 0)} sem)")
+      f"({((amigos == 6) & com_phd).sum()} com doutorado, "
+      f"{((amigos == 6) & ~com_phd).sum()} sem)")
 ```
 
 Neste conjunto de dados, saber o número de amigos de um usuário quase determina se ele tem doutorado: abaixo de 6 amigos, tem; acima de 6, não tem. A **única** faixa em que os dois grupos coexistem é a de exatamente 6 amigos — 22 usuários dos 203. `tem_doutorado` não é uma coluna redundante, mas falta pouco. As seções 12.7 e 12.8 vão colher a consequência disso.
@@ -92,21 +89,20 @@ Isto é, o modelo "real" incluiria `horas de trabalho` com coeficiente **negativ
 O ajuste de mínimos quadrados corrige isso do único jeito que pode: **diminuindo** o coeficiente de `amigos`. O resultado é uma estimativa enviesada para baixo — não por erro de conta, mas porque o modelo está fazendo o melhor possível com uma variável faltando.
 :::
 
-Nos nossos dados, a correlação entre amigos e horas de trabalho é praticamente nula ($0{,}025$), então essa história específica não se realiza. Mas o **fenômeno** se realiza, por outro caminho — via `tem_doutorado`, que é fortemente correlacionado com `num_amigos`. Dá para ver o coeficiente de `amigos` se mexer conforme mudamos o que mais está no modelo:
+Nos nossos dados, a correlação entre amigos e horas de trabalho é praticamente nula ($0{,}025$), então essa história específica não se realiza. Mas o **fenômeno** se realiza, por outro caminho — via `tem_doutorado`, que é fortemente correlacionado com `num_amigos`. Dá para ver o coeficiente de `amigos` se mexer conforme mudamos o que mais está no modelo. Uma lista de índices no lugar do número da coluna — `inputs[:, [0, 1, 3]]` — recorta as colunas escolhidas, nessa ordem: a constante, os amigos e o doutorado:
 
 ```{python}
 #| label: modelos-aninhados
-#| warning: false
 variantes = {
-    "amigos":                   [[1.0, x[1]] for x in inputs],
-    "amigos + horas":           [[1.0, x[1], x[2]] for x in inputs],
-    "amigos + phd":             [[1.0, x[1], x[3]] for x in inputs],
+    "amigos":                   inputs[:, [0, 1]],
+    "amigos + horas":           inputs[:, [0, 1, 2]],
+    "amigos + phd":             inputs[:, [0, 1, 3]],
     "amigos + horas + phd":     inputs,
 }
 
 for nome, xs in variantes.items():
-    random.seed(0)
-    b = least_squares_fit(xs, daily_minutes_good, 0.001, 5000, 25)
+    rng = np.random.default_rng(0)
+    b = least_squares_fit(xs, daily_minutes_good, rng, 0.001, 5000, 25)
     print(f"{nome:24s} coeficiente de amigos = {b[1]:.4f}")
 ```
 
@@ -130,19 +126,18 @@ A tentação é dizer que faltaram passos, ou que a semente foi infeliz. Nenhuma
 
 ```{python}
 #| label: ciclo-limite
-#| warning: false
-xs_amigos = [[1.0, x[1]] for x in inputs]
+xs_amigos = inputs[:, [0, 1]]
 
 for semente in [0, 1]:
     for passos in [5000, 20000]:
-        random.seed(semente)
-        b = least_squares_fit(xs_amigos, daily_minutes_good, 0.001, passos, 25)
-        print(f"semente {semente}, {passos:5d} passos: {b[1]!r}")
+        rng = np.random.default_rng(semente)
+        b = least_squares_fit(xs_amigos, daily_minutes_good, rng, 0.001, passos, 25)
+        print(f"semente {semente}, {passos:5d} passos: {float(b[1])!r}")
 ```
 
 Quatro ajustes, o mesmo valor **bit a bit** — não "parecido", idêntico até o último dígito da representação. Quadruplicar os passos não move nada, e trocar o chute inicial também não.
 
-O motivo é que o gradiente descendente estocástico com taxa de aprendizado fixa e ordem de lote fixa não pousa no mínimo: ele entra numa **órbita estável deslocada** dele. Como a sequência de lotes se repete igual a cada passagem pelos dados, não há ruído a promediar — mais voltas percorrem a mesma órbita. O viés é estrutural do otimizador com estes hiperparâmetros, e o tamanho dele depende do problema: para o modelo de quatro variáveis, que é o deste capítulo, ele cai para a terceira casa decimal (0,9748 contra 0,9725 exato).
+O motivo é que o gradiente descendente estocástico com taxa de aprendizado fixa e ordem de lote fixa não pousa no mínimo: ele entra numa **órbita estável deslocada** dele. Como a sequência de lotes se repete igual a cada passagem pelos dados — o laço interno de `least_squares_fit` fatia os pontos sempre na mesma ordem —, não há ruído a promediar: mais voltas percorrem a mesma órbita. O viés é estrutural do otimizador com estes hiperparâmetros, e o tamanho dele depende do problema: para o modelo de quatro variáveis, que é o deste capítulo, ele cai para a terceira casa decimal (0,9748 contra 0,9725 exato).
 
 Vale registrar isso em vez de esconder, por dois motivos. Primeiro, porque o **padrão** — o coeficiente de `amigos` subir quando as outras variáveis entram — é robusto e aparece igual na solução exata, que é a da tabela acima. Segundo, porque é um lembrete de que todo número deste capítulo tem duas fontes de incerteza empilhadas: a dos dados e a do otimizador. As seções 12.6 e 12.7 medem a primeira, que é a que interessa. A segunda não é ruído que se promedia: é viés de instrumento, e só some trocando o instrumento — outra taxa de aprendizado, outra ordem de lote, ou a álgebra exata.
 :::
