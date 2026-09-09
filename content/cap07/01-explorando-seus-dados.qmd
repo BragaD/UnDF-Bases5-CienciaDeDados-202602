@@ -4,7 +4,7 @@
 Esta seção corresponde a *Exploring Your Data*, do capítulo 10 de @grus2019.
 :::
 
-Depois de identificar as perguntas que você quer responder e conseguir dado nas mãos — o assunto do [Capítulo 6](../cap06/index.qmd) —, a tentação é pular direto para os modelos. Resista. O primeiro passo deveria ser sempre **explorar** os dados. Antes, porém, uma parada obrigatória: a partir daqui os dados são arrays do `numpy`, e este é o lugar de dizer o que isso significa.
+Depois de identificar as perguntas que você quer responder e conseguir dado nas mãos — o assunto do [Capítulo 6](../cap06/index.qmd) —, a tentação é pular direto para os modelos. Resista. O primeiro passo deveria ser sempre **explorar** os dados. Antes, porém, uma parada obrigatória. O [Capítulo 6](../cap06/index.qmd) deixou o dado numa tabela do `pandas`, e é de lá que ele vem daqui para a frente; mas toda conta de modelo deste livro é feita em arrays do `numpy`. Este é o lugar de dizer o que um array é — e onde, exatamente, o dado deixa a tabela e vira array.
 
 ## De listas a arrays
 
@@ -66,7 +66,7 @@ pesados = X[:, 2] > 155        # quem pesa mais de 155 libras?
 pesados, X[pesados], X[pesados, 0], pesados.sum()
 ```
 
-`X[pesados]` fica só com as linhas em que a máscara é `True`; `X[pesados, 0]` combina a máscara com uma coluna. E como `True` conta como 1, `pesados.sum()` é quantos passaram no filtro. É o `if` de uma compreensão de lista, aplicado a todos os elementos de uma vez — e é assim que a [seção 7.5](05-manipulando-dados.qmd) vai separar "as linhas da AAPL" das outras 13,5 mil.
+`X[pesados]` fica só com as linhas em que a máscara é `True`; `X[pesados, 0]` combina a máscara com uma coluna. E como `True` conta como 1, `pesados.sum()` é quantos passaram no filtro. É o `if` de uma compreensão de lista, aplicado a todos os elementos de uma vez — e é assim que a [seção 7.5](05-manipulando-dados.qmd) vai separar "as linhas da AAPL" das outras 13,5 mil — do mesmo jeito, com a mesma sintaxe, sobre uma tabela em vez de sobre um array.
 
 ### Broadcasting
 
@@ -125,9 +125,31 @@ O resultado é o mesmo número; a diferença de tempo é de cerca de cem vezes �
 
 É a promessa que o callout do Capítulo 4 fez — *"depois desta seção, você olha `v @ w` e enxerga a soma dos produtos"* — cumprida; o que ele adiou de propósito foi usar o `@`. Você escreveu a soma; agora usa o `@`. Daqui em diante, cada laço sobre os pontos de um conjunto de dados vira uma dessas operações — fatia, máscara, *broadcasting*, redução por eixo —, e o laço que sobrevive é só o que **é** o algoritmo: os passos de um gradiente, as iterações de um agrupamento. Com isso na mão, dá para explorar os dados.
 
+### Do `DataFrame` para o array: a fronteira
+
+Falta dizer de onde `X` vem. Quase nunca de uma matriz escrita à mão como a das três pessoas acima: o dado chega de um arquivo, e o [Capítulo 6](../cap06/01-lendo-arquivos.qmd) mostrou como — `pd.read_csv` devolve um **`DataFrame`**, a tabela de colunas nomeadas, cada uma com o seu tipo. É de lá que este livro parte daqui em diante.
+
+Só que um modelo não sabe o que é uma coluna chamada `Close`. Ele recebe uma matriz de números e um vetor de números, e a passagem de um formato para o outro é um método:
+
+```{python}
+#| label: a-fronteira
+import pandas as pd
+
+acoes = pd.read_csv("dados/stocks.csv", parse_dates=["Date"])
+
+X = acoes[["Open", "High", "Low"]].to_numpy()   # a fronteira: a matriz do modelo
+y = acoes["Close"].to_numpy()                   # e o alvo
+
+X.shape, y.shape, X.dtype
+```
+
+Essas duas linhas são a **fronteira** deste livro, e vale dar nome a elas porque elas voltam em todo capítulo que ajusta um modelo. De um lado, a mesa de trabalho: o `DataFrame`, onde o dado é lido, tipado, limpo, juntado, agrupado e conferido — tudo com as colunas se chamando pelo nome. Do outro, a calculadora: `X` e `y`, dois blocos de `float64` sem nome nenhum, que é o que o `@`, o gradiente e a distância euclidiana sabem consumir. `.to_numpy()` é a passagem, e ela é explícita de propósito: **é aqui que o dado perde os nomes**, e é bom que isso apareça numa linha em vez de acontecer sozinho.
+
+Repare que o nome `X` foi reaproveitado — a matriz das três pessoas cumpriu o papel dela. Daqui até o fim do livro, `X` é sempre a matriz `(n, d)` que o modelo recebe, e `y` o vetor `(n,)` do que se quer prever. Nada é ajustado aqui: esse `X` e esse `y` são só a forma, e o primeiro ajuste de verdade é o do [Capítulo 11](../cap11/index.qmd).
+
 ## Dados unidimensionais
 
-O caso mais simples é um conjunto de dados unidimensional: só uma coleção de números — o tempo médio diário que cada usuário passa no seu site, por exemplo. Um primeiro passo óbvio é calcular estatísticas resumo: quantos pontos você tem, o menor, o maior, a média, o desvio padrão — com um array, `len(x)`, `x.min()`, `x.max()`, `x.mean()` e `x.std(ddof=1)`, uma chamada cada (o `ddof=1` pede o desvio amostral — a [seção 7.6](06-reescalonamento.qmd) explica).
+O caso mais simples é um conjunto de dados unidimensional: só uma coleção de números — o tempo médio diário que cada usuário passa no seu site, por exemplo. Um primeiro passo óbvio é calcular estatísticas resumo: quantos pontos você tem, o menor, o maior, a média, o desvio padrão. Com um array são cinco chamadas — `len(x)`, `x.min()`, `x.max()`, `x.mean()`, `x.std(ddof=1)` (o `ddof=1` pede o desvio amostral; a [seção 7.6](06-reescalonamento.qmd) explica). Com uma tabela é uma só, e daqui a três parágrafos ela aparece.
 
 Mas mesmo essas estatísticas não necessariamente dão uma boa noção do que está acontecendo. Um passo melhor é construir um **histograma**, agrupando os dados em faixas discretas — *buckets* — e contando quantos pontos caem em cada uma:
 
@@ -190,7 +212,7 @@ f"médias: {uniform.mean():.2f} e {normal.mean():.2f}"
 
 `np.random.default_rng(0)` cria um **gerador** de números aleatórios com a semente 0, e `rng.random(10000)` sorteia dez mil uniformes em `[0, 1)` de uma vez. Todo sorteio deste livro sai de um gerador assim, criado no chunk e passado explicitamente para quem sorteia — `random_normal` recebe o `rng` como parâmetro em vez de puxar de um estado global —, para que a semente fique visível onde o sorteio acontece. Sem ela, cada execução desenharia dois histogramas diferentes, e os números do parágrafo seguinte não seriam os seus.
 
-Ambos têm média perto de 0. Os dois histogramas mostram o quanto isso esconde:
+Ambos têm média perto de 0. O histograma mostra o quanto isso esconde — comece pela uniforme:
 
 ```{python}
 #| label: fig-histograma-uniforme
@@ -199,14 +221,26 @@ plot_histogram(uniform, 10, "Histograma — uniforme")
 plt.show()
 ```
 
+Escrever `bucketize` uma vez vale a pena: é assim que se enxerga o que um histograma decide por você. Escrevê-lo toda vez, não. Do jeito que se faz no trabalho, as duas amostras vão para uma tabela — uma coluna cada — e o resumo sai de uma chamada:
+
 ```{python}
-#| label: fig-histograma-normal
-#| fig-cap: "Histograma da distribuição normal"
-plot_histogram(normal, 10, "Histograma — normal")
+#| label: explora-com-dataframe
+amostras = pd.DataFrame({"uniforme": uniform, "normal": normal})
+amostras.describe().round(2)
+```
+
+Contagem, média, desvio, mínimo, quartis e máximo, para as duas colunas, numa chamada — o `describe` que o [Capítulo 6](../cap06/01-lendo-arquivos.qmd) apresentou. E o resumo confirma o que a seção quer dizer: as duas amostras têm média perto de 0 e desvio padrão perto de 57 (57,81 e 56,66). Se a exploração parasse aqui, as duas distribuições seriam a mesma coisa.
+
+Não são, e o histograma mostra. `hist()` desenha um por coluna:
+
+```{python}
+#| label: fig-histogramas-pandas
+#| fig-cap: "As mesmas duas amostras, lado a lado — resumos quase idênticos, formas opostas"
+amostras.hist(bins=20, figsize=(9, 3.5), layout=(1, 2))
 plt.show()
 ```
 
-Os dois também têm desvio padrão próximo de 57. Ainda assim, um é achatado e limitado; o outro tem pico ao centro e caudas compridas. Nenhuma estatística resumo diz isso — só olhar para a forma diz.
+Um é achatado e limitado; o outro tem pico ao centro e caudas compridas que chegam a −215 e 198 — valores que a uniforme não alcança nem por acidente. Nenhuma estatística resumo diz isso; a tabela do `describe` acima, olhada com atenção, no máximo insinua (repare no mínimo e no máximo). Só a forma diz.
 
 ## Duas dimensões
 
@@ -234,12 +268,14 @@ plt.title("Distribuições conjuntas muito diferentes")
 plt.show()
 ```
 
-`ys1` cresce com `xs`; `ys2` decresce. A diferença fica evidente também na correlação — `np.corrcoef` devolve a matriz 2×2 de correlações entre os dois arrays, com 1 na diagonal, e a entrada `[0, 1]` é a que interessa:
+`ys1` cresce com `xs`; `ys2` decresce. A diferença fica evidente também na correlação. `df.corr()` devolve a matriz de correlações entre todas as colunas, com 1 na diagonal e o nome de cada série na margem — não é preciso lembrar qual índice era qual:
 
 ```{python}
 #| label: correlacoes
-np.corrcoef(xs, ys1)[0, 1], np.corrcoef(xs, ys2)[0, 1]
+pd.DataFrame({"xs": xs, "ys1": ys1, "ys2": ys2}).corr().round(3)
 ```
+
+0,893 contra −0,897: a mesma força, sinais opostos. E a terceira entrada, −0,806 entre `ys1` e `ys2`, sai de graça — é o tipo de pergunta que não se faz quando cada correlação custa uma chamada.
 
 ::: {.callout-warning}
 ## Uma afirmação sobre dado aleatório precisa de semente
@@ -270,9 +306,9 @@ def correlation_matrix(X: np.ndarray) -> np.ndarray:
     return np.corrcoef(X, rowvar=False)
 ```
 
-A função tem uma linha, e ela existe por causa de um detalhe que morde: `np.corrcoef` assume, por padrão, uma **variável por linha** — é o `rowvar=True` implícito. A convenção deste livro é o contrário, uma variável por coluna, e é o `rowvar=False` que diz isso. Esquecê-lo não dá erro: dá uma matriz $n \times n$ de correlações entre observações, um número que não significa nada, calculado sem aviso.
+A função tem uma linha, e ela existe por causa de um detalhe que morde: `np.corrcoef` assume, por padrão, uma **variável por linha** — é o `rowvar=True` implícito. A convenção deste livro é o contrário, uma variável por coluna, e é o `rowvar=False` que diz isso. Esquecê-lo não dá erro: dá uma matriz $n \times n$ de correlações entre observações, um número que não significa nada, calculado sem aviso. É uma armadilha que só existe do lado do array. Num `DataFrame` não há o que confundir: coluna **é** variável, por definição, e `df.corr()` não tem um parâmetro `rowvar` porque não precisa de um. O preço de perder os nomes, na fronteira, é ter de lembrar da convenção sozinho.
 
-Uma abordagem mais visual — quando o número de dimensões não é grande demais — é a **matriz de dispersão**, mostrando todos os gráficos de dispersão dois a dois. Para gerar um exemplo com correlações interessantes, construímos quatro séries relacionadas entre si de propósito — cada uma um array de 100 valores, empilhadas como colunas de uma matriz `(100, 4)`. `np.where(cond, 6, 0)` escolhe, elemento a elemento, 6 onde a máscara é verdadeira e 0 onde não é: o `6 if ... else 0` do Grus, para a coluna inteira.
+Uma abordagem mais visual — quando o número de dimensões não é grande demais — é a **matriz de dispersão**, mostrando todos os gráficos de dispersão dois a dois. Para gerar um exemplo com correlações interessantes, construímos quatro séries relacionadas entre si de propósito — cada uma um array de 100 valores, que viram as quatro colunas de uma tabela. `np.where(cond, 6, 0)` escolhe, elemento a elemento, 6 onde a máscara é verdadeira e 0 onde não é: o `6 if ... else 0` do Grus, para a coluna inteira. Desenhar a grade é uma chamada — `pd.plotting.scatter_matrix` faz os dezesseis painéis, põe um histograma de cada série na diagonal e escreve os nomes nos eixos.
 
 ```{python}
 #| label: fig-dispersao-matriz
@@ -285,43 +321,36 @@ col1 = -5 * col0 + random_normal(num_points, rng)
 col2 = col0 + col1 + 5 * random_normal(num_points, rng)
 col3 = np.where(col2 > -2, 6, 0)
 
-# uma série por coluna: (100, 4)
-corr_data = np.column_stack([col0, col1, col2, col3])
+series = pd.DataFrame({"serie0": col0, "serie1": col1,
+                       "serie2": col2, "serie3": col3})
 
-num_vectors = corr_data.shape[1]
-fig, ax = plt.subplots(num_vectors, num_vectors, figsize=(8, 8))
-
-for i in range(num_vectors):
-    for j in range(num_vectors):
-        if i != j:
-            ax[i][j].scatter(corr_data[:, j], corr_data[:, i], s=8)
-        else:
-            ax[i][j].annotate("série " + str(i), (0.5, 0.5),
-                              xycoords='axes fraction',
-                              ha="center", va="center")
-        if i < num_vectors - 1: ax[i][j].xaxis.set_visible(False)
-        if j > 0: ax[i][j].yaxis.set_visible(False)
-
-ax[-1][-1].set_xlim(ax[0][-1].get_xlim())
-ax[0][0].set_ylim(ax[0][1].get_ylim())
+pd.plotting.scatter_matrix(series, figsize=(8, 8))
 plt.show()
 ```
 
 ```{python}
 #| label: matriz-de-correlacao-valores
-np.round(correlation_matrix(corr_data), 2)
+print(np.round(correlation_matrix(series.to_numpy()), 2))   # a matriz, sem nomes
+
+series.corr().round(2)                                      # a mesma, com nomes
 ```
 
-A matriz confirma o que os gráficos sugerem: a série 1 é fortemente **anticorrelacionada** com a série 0 (a própria fórmula de `col1` inverte o sinal de `col0`); a série 2 é positivamente correlacionada com a série 1; e a série 3 só assume os valores 0 e 6 — 6 quando a série 2 é grande, 0 quando é pequena —, o que explica as duas faixas de pontos nos gráficos que a envolvem: verticais quando a série 3 está no eixo $x$, horizontais quando está no eixo $y$.
+A matriz confirma o que os gráficos sugerem: a série 1 é fortemente **anticorrelacionada** com a série 0 (a própria fórmula de `col1` inverte o sinal de `col0`); a série 2 é positivamente correlacionada com a série 1; e a série 3 só assume os valores 0 e 6 — 6 quando a série 2 é grande, 0 quando é pequena —, o que explica as duas faixas de pontos nos gráficos que a envolvem: verticais quando a série 3 está no eixo $x$, horizontais quando está no eixo $y$. Os mesmos dezesseis números, dos dois lados da fronteira. A diferença é só que num deles é preciso lembrar que a linha 1 era a série 1.
 
 ::: {.conceito}
 A matriz de dispersão é uma ferramenta de **triagem**, não de conclusão. Ela mostra rápido quais pares de dimensões merecem uma olhada mais de perto — o que é valioso justamente porque examinar cada par manualmente não escala além de um punhado de dimensões. A [seção 7.8](08-reducao-de-dimensionalidade.qmd) lida com o problema oposto: dimensões demais para sequer desenhar uma matriz dessas.
 :::
 
 ::: {.callout-tip collapse="true"}
-## Na prática: `pandas` e `seaborn`
+## Na prática: o que `describe`, `corr` e `hist` decidem por você
 
-Você acabou de escrever, à mão, o que `pandas.DataFrame.describe()`, `.hist()` e `.corr()` fazem em uma linha cada — e o que `pd.plotting.scatter_matrix(df)` ou `seaborn.pairplot(df)` fazem no lugar da dupla de laços `for i in range(num_vectors): for j in range(num_vectors):` acima.
+Três chamadas desta seção resumiram um conjunto de dados, e cada uma tomou decisões que não pediram sua opinião.
 
-O que essas funções escondem, e vale saber que está sendo escondido: `.corr()` por padrão calcula a correlação de Pearson — a mesma do `np.corrcoef`, e com a convenção certa, uma variável por coluna —, mas aceita trocar para Spearman ou Kendall com um parâmetro, que medem relação *monotônica* em vez de linear, e lidam melhor com outliers. `.describe()` decide sozinho quais estatísticas mostrar dependendo do tipo da coluna. E tanto `.hist()` quanto `scatter_matrix` decidem o número de buckets ou o tamanho dos pontos por uma heurística — a mesma heurística que, se você tivesse implementado `bucketize` com um `bucket_size` ruim, teria escondido de você exatamente o tipo de diferença que a seção "Dados unidimensionais" acima existe para revelar.
+**`.corr()` escolhe um coeficiente.** O padrão é Pearson — o mesmo do `np.corrcoef`, e com a convenção certa, uma variável por coluna. Um parâmetro troca para Spearman ou Kendall, que medem relação *monotônica* em vez de linear e aguentam melhor um outlier. Se as suas séries têm uma relação forte mas curva, Pearson vai chamá-la de fraca, com toda a cara de resposta.
+
+**`.describe()` escolhe as estatísticas.** Ele decide o que mostrar pelo tipo da coluna: para número, o resumo de cinco pontos; para texto, contagem, quantos valores distintos e o mais frequente. É conveniente e é uma armadilha pequena — uma coluna numérica que chegou como texto (o caso do `object` que o [Capítulo 6](../cap06/01-lendo-arquivos.qmd) mostrou) aparece no `describe` com uma cara plausível e sem média nenhuma.
+
+**`.hist()` e `scatter_matrix` escolhem os baldes.** O número de barras sai de uma heurística — a mesma decisão que você tomou à mão em `bucketize`, com a diferença de que ali ela estava escrita. Um `bucket_size` ruim esconde exatamente o tipo de diferença que a seção *Dados unidimensionais* existe para revelar, e é por isso que `bins=20` aparece na chamada acima: o padrão deixava a uniforme com degraus que sugeriam estrutura onde não há nenhuma.
+
+Fora deste livro, quem faz muito disso costuma usar o [`seaborn`](https://seaborn.pydata.org/), construído em cima do `matplotlib` e do `pandas`: `seaborn.pairplot(df)` é a matriz de dispersão com dispersão e densidade já escolhidas, e `seaborn.heatmap(df.corr())` desenha a matriz de correlação com cor em vez de número. Nenhum dos dois é dependência deste livro; os dois valem o tempo de instalar quando a exploração for o trabalho, e não o preâmbulo dele.
 :::

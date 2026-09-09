@@ -101,6 +101,28 @@ assert np.array_equal(stdevs, [1, 1, 0])
 
 A terceira coluna continua com desvio padrão 0 — `rescale` deliberadamente deixa em paz qualquer dimensão sem variação, em vez de dividir por zero.
 
+## E com um `DataFrame`?
+
+Vale perguntar por que essas duas funções estão em `numpy`, se a mesa de trabalho deste capítulo é o `pandas` — que faz o mesmo cálculo numa expressão:
+
+```{python}
+#| label: rescale-com-dataframe
+import pandas as pd
+
+df = pd.DataFrame(vectors, columns=["a", "b", "c"])
+
+print(df.std())              # ddof=1 por padrão — ao contrário do numpy
+(df - df.mean()) / df.std()
+```
+
+Duas coisas nessa saída, e as duas são o argumento.
+
+A primeira é boa: **`DataFrame.std()` já usa `ddof=1`**, o desvio amostral, ao contrário do `np.std`, que usa `ddof=0` e obrigou o argumento explícito em `scale`. Os desvios batem com os do `scale` — 2, 1 e 0 — sem que fosse preciso pedir. Vale saber porque é uma das poucas incompatibilidades de padrão entre as duas bibliotecas, e ela muda o número em silêncio nos dois sentidos.
+
+A segunda é o motivo de preferirmos o array: **a coluna constante virou `NaN`**. Desvio padrão zero, divisão por zero, `NaN` na coluna inteira — sem aviso, e três colunas viram duas quando o modelo for calcular alguma coisa com elas. `rescale` trata esse caso explicitamente, com a máscara `stdevs > 0`, porque a decisão de deixar uma dimensão sem variação em paz é uma decisão de **modelagem**, e o parágrafo abaixo mostra que ela nem sempre é a certa. Uma expressão de uma linha não tem onde guardar essa decisão.
+
+É a divisão de trabalho deste livro em miniatura: a tabela é a mesa, o array é a calculadora, e reescalonar já é conta de modelo. Quando o dado vier de um `DataFrame` — o que é o caso normal —, ele atravessa a [fronteira](01-explorando-seus-dados.qmd) antes: `rescale(df[colunas].to_numpy())`.
+
 ::: {.conceito}
 Como sempre, é preciso usar julgamento. Se você pegasse um conjunto de dados grande e o filtrasse para conter só pessoas com altura entre 69,5 e 70,5 polegadas, é bem provável que a variação restante naquela dimensão seja só ruído — e talvez você não quisesse colocar o desvio padrão dela em pé de igualdade com o das outras dimensões. Reescalonar não é neutro: é uma decisão sobre o que conta como sinal.
 :::

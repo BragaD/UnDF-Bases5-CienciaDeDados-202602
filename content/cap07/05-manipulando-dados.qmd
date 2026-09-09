@@ -6,57 +6,27 @@ Esta seção corresponde a *Manipulating Data*, do capítulo 10 de @grus2019.
 
 Uma das habilidades mais importantes de quem trabalha com dado é **manipulá-lo**. É mais uma abordagem geral do que uma técnica específica — então esta seção percorre alguns exemplos, para dar a ideia.
 
-Imagine que temos uma pilha de preços de ações como esta:
+A [seção anterior](04-limpeza-e-transformacao.qmd) tratou de seis linhas. Esta trata de vinte e três mil, e a mudança de escala muda a ferramenta: cada pergunta aqui é sobre o **conjunto** — o maior preço de cada ação, a maior variação de um dia para o outro, a média por mês —, e nenhuma delas se responde bem percorrendo registros um a um. É o caso do `DataFrame`, e é o que a [seção 7.3](03-dataclasses.qmd) antecipou.
 
-```python
-data = [
-    StockPrice(symbol='MSFT',
-              date=datetime.date(2018, 12, 24),
-              closing_price=106.03),
-    # ...
-]
-```
-
-e começamos a fazer perguntas sobre esse dado. Ao longo do caminho, vamos tentar notar padrões no que estamos fazendo e abstrair ferramentas que tornem a manipulação mais fácil.
-
-Desta vez, em vez de um conjunto de brinquedo, vamos usar `dados/stocks.csv` inteiro — as 23.105 linhas de preços diários de quatro ações (AAPL, FB, GOOG, MSFT) já usadas no restante deste livro:
+O arquivo é o `dados/stocks.csv` inteiro: 23.105 preços diários de quatro ações (AAPL, FB, GOOG, MSFT), o mesmo que o [Capítulo 6](../cap06/01-lendo-arquivos.qmd) leu. Ao longo do caminho, vamos notar padrões no que estamos fazendo e abstrair ferramentas que tornem a manipulação mais fácil.
 
 ```{python}
-#| label: carrega-stocks-completo
-import csv
+#| label: carrega-stocks
 import numpy as np
-from scratch_np.working_with_data import StockPrice, try_parse_row
+import pandas as pd
 
-with open("dados/stocks.csv", "r") as f:
-    reader = csv.DictReader(f)
-    rows = [[row['Symbol'], row['Date'], row['Close']]
-            for row in reader]
+acoes = pd.read_csv("dados/stocks.csv",
+                    usecols=["Symbol", "Date", "Close"],
+                    parse_dates=["Date"])
 
-# garante que todas carregaram com sucesso
-maybe_data = [try_parse_row(row) for row in rows]
-assert maybe_data
-assert all(sp is not None for sp in maybe_data)
-
-data = [sp for sp in maybe_data if sp is not None]
-len(data)
+print(acoes.shape)
+print(acoes.dtypes)
+acoes.head(3)
 ```
 
-::: {.callout-note}
-Diferente do CSV de brinquedo da [seção anterior](04-limpeza-e-transformacao.qmd), aqui as 23.105 linhas passam **todas** por `try_parse_row` sem cair fora — este arquivo não tem o mesmo tipo de linha corrompida. É o que o `assert all(...)` acima confirma: se uma linha só tivesse voltado `None`, ele estouraria. `StockPrice` e `try_parse_row` não são redefinidos aqui: vêm de `scratch_np.working_with_data`, o mesmo código que você escreveu na [seção 7.4](04-limpeza-e-transformacao.qmd) (com o `is_high_tech` da [7.2](02-namedtuples.qmd)).
-:::
+Uma chamada, três argumentos, e a tabela está pronta. `usecols` fica só com as três colunas que esta seção usa — o arquivo tem oito —, e `parse_dates` faz o que a [seção anterior](04-limpeza-e-transformacao.qmd) mostrou dar errado quando o dado é sujo: aqui dá certo, e o `dtypes` prova, com `Date` em `datetime64[ns]`. Vale conferir sempre; é barato.
 
-`data` é uma lista de registros, e cada registro mistura texto, data e número: o formato certo para a fronteira do parsing, e o formato errado para fazer conta. O passo seguinte é desempacotar a lista em três arrays paralelos — um por campo —, cada um com o `dtype` que o campo pede:
-
-```{python}
-#| label: desempacota-em-arrays
-symbols = np.array([sp.symbol for sp in data])                       # texto
-dates   = np.array([sp.date for sp in data], dtype="datetime64[D]")  # datas, com resolução de dia
-closes  = np.array([sp.closing_price for sp in data], dtype=float)   # números
-
-symbols[:3], dates[:3], closes[:3], np.unique(symbols)
-```
-
-Três `dtype`s diferentes, um por array: `<U4` é texto de até quatro caracteres, `datetime64[D]` é uma data que o `numpy` sabe ordenar e comparar, `float64` é o preço. A posição `i` dos três arrays é a mesma linha do arquivo — é isso que "paralelos" quer dizer, e é o que permite usar uma máscara feita num deles para fatiar outro. `np.unique` diz que são quatro ações (AAPL, FB, GOOG, MSFT), as mesmas do resto deste livro.
+Repare no que **não** foi preciso: nenhum laço, nenhuma conversão de campo, nenhuma função de *parsing*, nenhuma decisão sobre linha ruim. As 23.105 linhas deste arquivo são limpas, e o `read_csv` as leu como estão — três colunas, três tipos, uma tabela. É a diferença entre o arquivo de brinquedo da seção anterior, feito para ter defeito, e um arquivo de verdade que por acaso não tem nenhum.
 
 Suponha que queremos saber o maior preço de fechamento já registrado para a AAPL. Podemos dividir isso em passos concretos:
 
@@ -64,45 +34,47 @@ Suponha que queremos saber o maior preço de fechamento já registrado para a AA
 2. Pegar o `closing_price` de cada linha.
 3. Tirar o `max` desses preços.
 
-Uma máscara faz as três coisas de uma vez — `symbols == "AAPL"` é o filtro, aplicado a `closes` é a coluna, e `.max()` é a resposta:
+Uma máscara faz as três coisas de uma vez, e é a mesma máscara booleana do bloco *De listas a arrays*: `acoes["Symbol"] == "AAPL"` é o filtro — uma coluna de 23.105 booleanos —, `.loc[..., "Close"]` aplica o filtro e escolhe a coluna, e `.max()` é a resposta:
 
 ```{python}
 #| label: max-aapl
-max_aapl_price = closes[symbols == "AAPL"].max()
+max_aapl_price = acoes.loc[acoes["Symbol"] == "AAPL", "Close"].max()
 max_aapl_price
 ```
 
-Mais geralmente, podemos querer saber o maior preço de fechamento de cada ação no conjunto. Uma forma de fazer isso:
+`.loc` recebe duas coisas separadas por vírgula: quais linhas e quais colunas. As linhas vêm da máscara, a coluna vem pelo nome — e é por isso que existem `.loc` e `.iloc` separados no `pandas`: um escolhe por **rótulo**, o outro por **posição**. Num array só existe a posição.
 
-1. Listar os símbolos distintos, com `np.unique`.
-2. Para cada um, a mesma máscara e o mesmo `.max()` — um laço sobre quatro ações, não sobre 23.105 linhas.
-
-```{python}
-#| label: max-precos-por-simbolo
-for symbol in np.unique(symbols):
-    print(f"{symbol}: {closes[symbols == symbol].max():.2f}")
-```
-
-Agora podemos começar a fazer perguntas mais complicadas, como quais foram as maiores e as menores variações percentuais em um único dia no conjunto de dados. A variação percentual é `preço_hoje / preço_ontem - 1`, o que significa que precisamos de alguma forma de associar o preço de hoje ao de ontem. Uma abordagem é agrupar os preços por símbolo e, dentro de cada grupo:
-
-1. Ordenar os preços por data.
-2. Alinhar cada dia com o anterior — duas fatias do mesmo array, deslocadas por uma posição.
-3. Dividir uma pela outra.
-
-Vamos começar agrupando os preços por símbolo e ordenando cada grupo por data:
+Mais geralmente, podemos querer o maior preço de fechamento de cada ação. A receita é a de sempre: listar os símbolos distintos, e para cada um repetir a máscara e o `.max()` — um laço sobre quatro ações, não sobre 23.105 linhas.
 
 ```{python}
-#| label: agrupa-e-ordena
-prices = {}
-for symbol in np.unique(symbols).tolist():
-    mask = symbols == symbol                  # as linhas desta ação
-    order = np.argsort(dates[mask])           # os índices que as põem em ordem de data
-    prices[symbol] = (dates[mask][order], closes[mask][order])
-
-{symbol: len(symbol_closes) for symbol, (_, symbol_closes) in prices.items()}
+#| label: max-por-simbolo-a-mao
+for simbolo in sorted(acoes["Symbol"].unique()):
+    maximo = acoes.loc[acoes["Symbol"] == simbolo, "Close"].max()
+    print(f"{simbolo}: {maximo:.2f}")
 ```
 
-`np.argsort` não ordena: devolve os **índices** que ordenariam — `dates[mask][order]` é o array de datas em ordem, e `closes[mask][order]`, indexado pelos mesmos índices, é o de preços na mesma ordem. É o que garante que a data da posição `i` e o preço da posição `i` continuam sendo o mesmo dia. O agrupamento em si é um `dict` comum, com quatro chaves: o dado heterogêneo (que ação) fica na chave; o numérico (datas e preços) fica em arrays. O `.tolist()` só transforma os símbolos de `np.str_` em `str` comum, para as chaves do `dict` saírem limpas.
+Funciona, e é o padrão que a seção prometeu notar: **um laço sobre os valores distintos de uma coluna, repetindo a mesma conta em cada pedaço**. Esse padrão tem nome e tem uma linha:
+
+```{python}
+#| label: max-por-simbolo-groupby
+acoes.groupby("Symbol")["Close"].max()
+```
+
+`groupby("Symbol")` parte a tabela nos quatro pedaços que o laço percorria; `["Close"]` escolhe a coluna; `.max()` é aplicado a cada pedaço. É literalmente o laço de cima — máscara, coluna, redução —, e é assim que vale lê-lo sempre que ele aparecer: **`groupby` é o laço sobre os valores distintos, escrito de uma vez**. Daqui em diante usamos a linha; o laço já cumpriu o papel de mostrar o que ela faz.
+
+Repare que os símbolos saíram em ordem alfabética. O `groupby` ordena pela chave por padrão — foi por isso que o laço acima percorreu `sorted(...)`, para as duas saídas serem comparáveis linha a linha. E o resultado é uma **`Series`** com o símbolo no índice, não uma tabela com uma coluna de símbolos: o que era chave do agrupamento vira rótulo.
+
+Agora podemos fazer perguntas mais complicadas, como quais foram as maiores e as menores variações percentuais em um único dia. A variação é `preço_hoje / preço_ontem - 1`, o que exige associar o preço de hoje ao de ontem — dentro de cada ação, e na ordem certa. Então o primeiro passo é garantir a ordem:
+
+```{python}
+#| label: ordena-por-simbolo-e-data
+acoes = acoes.sort_values(["Symbol", "Date"])
+acoes.head(3)
+```
+
+A saída não mudou nada, e isso não é motivo para tirar a linha. Este arquivo já vem com as ações em blocos e as datas em ordem dentro de cada bloco — conferido —, mas **nada no que vem a seguir verifica isso**. A conta de variação diária assume que a linha de baixo é o dia seguinte da mesma ação, e ela assume em silêncio: com as linhas embaralhadas, ela não levanta erro nenhum — devolve, sem uma palavra, "variações diárias" entre dias que não são consecutivos, comparando terça com sexta e a AAPL com ela mesma sete anos depois.
+
+Ordenar antes de agrupar é o tipo de linha que parece supérflua até o dia em que o arquivo chega em outra ordem, e aí ela é a diferença entre um número certo e um número plausível. `sort_values(["Symbol", "Date"])` ordena por símbolo e, dentro de cada símbolo, por data — a mesma coisa que faríamos com dois arrays paralelos e um `argsort`, sem o risco de reindexar um e esquecer o outro.
 
 Com cada ação em ordem, podemos calcular uma sequência de variações dia a dia:
 
@@ -111,64 +83,82 @@ Com cada ação em ordem, podemos calcular uma sequência de variações dia a d
 def day_over_day_changes(closes: np.ndarray) -> np.ndarray:
     """Variações percentuais dia a dia. Assume preços de uma única ação, em ordem."""
     return closes[1:] / closes[:-1] - 1
+
+aapl = acoes.loc[acoes["Symbol"] == "AAPL", "Close"].to_numpy()   # a fronteira
+variacoes_aapl = day_over_day_changes(aapl)
+
+len(aapl), len(variacoes_aapl), f"{variacoes_aapl.max():+.2%}"
 ```
 
-`closes[1:]` é "hoje" — do segundo dia em diante — e `closes[:-1]` é "ontem" — até o penúltimo. As duas fatias têm o mesmo tamanho e estão desalinhadas por uma posição, que é exatamente o truque de percorrer duas sequências em paralelo do `zip` do [Capítulo 2](../cap02/06-ferramentas-e-tipos.qmd), que o Grus usa aqui como `zip(prices, prices[1:])`; a divisão elemento a elemento faz o resto. `pct_change` e `DailyChange` do Grus não aparecem: a fórmula `hoje / ontem - 1` cabe na própria linha, e o resultado é um array, não uma lista de registros.
+`closes[1:]` é "hoje" — do segundo dia em diante — e `closes[:-1]` é "ontem" — até o penúltimo. As duas fatias têm o mesmo tamanho e estão desalinhadas por uma posição, que é exatamente o truque de percorrer duas sequências em paralelo do `zip` do [Capítulo 2](../cap02/06-ferramentas-e-tipos.qmd); a divisão elemento a elemento faz o resto. Repare no `.to_numpy()`: a função recebe um array porque a conta é sobre números, e é a [fronteira](01-explorando-seus-dados.qmd) de novo, aqui só para uma coluna. Repare também que saíram 9.583 variações de 9.584 preços — o primeiro dia não tem ontem.
 
-Depois, juntar as quatro ações em três arrays paralelos de novo — símbolo, data e variação de cada dia. `np.full(k, valor)` faz um array com `k` cópias do valor; `d[1:]` descarta a primeira data de cada ação, que não tem "ontem"; e `np.concatenate` emenda as quatro partes:
+Fazer isso para as quatro ações significaria repetir a fatia dentro de um laço e emendar os pedaços. É outro padrão com nome e com uma linha:
 
 ```{python}
-#| label: todas-as-variacoes
-all_symbols = np.concatenate([np.full(len(c) - 1, symbol) for symbol, (_, c) in prices.items()])
-all_dates   = np.concatenate([d[1:] for d, _ in prices.values()])
-all_pct     = np.concatenate([day_over_day_changes(c) for _, c in prices.values()])
+#| label: variacoes-com-pct-change
+acoes["variacao"] = acoes.groupby("Symbol")["Close"].pct_change()
 
-len(all_pct)
+print(f"{acoes['variacao'].notna().sum()} variações, "
+      f"{acoes['variacao'].isna().sum()} NaN (o primeiro dia de cada ação)")
+acoes.head(3)
 ```
 
-Há 23.101 variações, quatro a menos que linhas — uma por ação.
+`pct_change()` é a fatia deslocada, e `groupby("Symbol")` a aplica dentro de cada ação — sem misturar o último dia da AAPL com o primeiro do FB. São 23.101 variações, quatro a menos que linhas.
 
-A partir daqui entra um método novo, `argmax` — primo das reduções por `axis` do bloco *De listas a arrays*: ele devolve a **posição** da maior variação, o índice e não o valor, e a mesma posição nos outros dois arrays diz de que ação e de que dia ela é:
+A diferença em relação à versão à mão é onde essas quatro linhas foram parar. A função devolvia um array **menor**, sem o primeiro dia; a coluna nova tem o mesmo tamanho da tabela, com `NaN` nas quatro linhas que não têm ontem. É uma escolha do `pandas` e é a certa aqui: a variação virou uma coluna ao lado do preço, na mesma linha, e para isso a linha precisa existir.
+
+Com a coluna pronta, achar os extremos é uma chamada — `idxmax` devolve o **rótulo** da linha do maior valor, e `.loc` busca a linha por esse rótulo:
 
 ```{python}
 #| label: maior-menor-variacao
-i_max, i_min = all_pct.argmax(), all_pct.argmin()
+i_max, i_min = acoes["variacao"].idxmax(), acoes["variacao"].idxmin()
 
-print(f"maior alta:  {all_symbols[i_max]} em {all_dates[i_max]}: {all_pct[i_max]:+.2%}")
-print(f"maior queda: {all_symbols[i_min]} em {all_dates[i_min]}: {all_pct[i_min]:+.2%}")
+acoes.loc[[i_max, i_min]]
 ```
+
+`idxmax` é primo do `argmax` do bloco *De listas a arrays*, com uma diferença que morde: `argmax` devolve a **posição** no array, `idxmax` devolve o **rótulo** no índice. Aqui os dois coincidem — 4208 é ao mesmo tempo o rótulo e a posição, porque nenhuma linha foi descartada e a AAPL continua sendo o primeiro bloco da tabela —, e é essa coincidência que torna o erro perigoso: basta um `dropna()` como o da [seção anterior](04-limpeza-e-transformacao.qmd), que deixou os rótulos 0, 1, 3 e 5, para os dois números se separarem. Usar um no lugar do outro não dá erro: dá a linha errada. É a mesma distinção que separa `.loc` de `.iloc`, e é a primeira coisa a lembrar quando um resultado do `pandas` vier de uma linha que não faz sentido.
 
 O maior salto de um dia para o outro foi a AAPL, em 6 de agosto de 1997 — mais de 33% em um único pregão. A maior queda foi também a AAPL, em 29 de setembro de 2000 — quase 52% em um dia. As duas datas batem com eventos reais e documentados: o investimento de US$ 150 milhões da Microsoft na Apple, anunciado naquele agosto de 1997, e o alerta de resultados abaixo do esperado que a Apple divulgou em setembro de 2000.
 
-Podemos agora usar esses arrays para descobrir qual é o melhor mês para investir em ações de tecnologia. Basta olhar a variação diária média por mês. Extrair o mês de um `datetime64` é uma conversão de unidade — para `datetime64[M]`, que conta meses desde 1970 — seguida de um resto por 12; com o array de meses na mão, cada mês é uma máscara e uma média:
+Podemos agora descobrir qual é o melhor mês para investir em ações de tecnologia: basta a variação diária média por mês. Uma coluna de datas guarda os componentes dela atrás do acessório `.dt` — `.dt.month`, `.dt.year`, `.dt.day_name()` —, e o mês extraído serve de chave de agrupamento como qualquer outra coluna serviria:
 
 ```{python}
 #| label: variacao-media-por-mes
-# datetime64[M] conta meses desde janeiro de 1970; o resto por 12 dá o mês do ano (0 = janeiro)
-months = all_dates.astype("datetime64[M]").astype(int) % 12 + 1
-
-avg_daily_change = {month: all_pct[months == month].mean()
-                    for month in range(1, 13)}
-
-{month: round(float(change), 5) for month, change in avg_daily_change.items()}
+variacao_media = acoes.groupby(acoes["Date"].dt.month)["variacao"].mean()
+variacao_media.round(5)
 ```
 
 ```{python}
 #| label: melhor-mes
-melhor_mes = max(avg_daily_change, key=avg_daily_change.get)
+melhor_mes = int(variacao_media.idxmax())
 assert melhor_mes == 10   # outubro é o melhor mês
 
-melhor_mes, f"{avg_daily_change[melhor_mes]:.2%}"
+melhor_mes, f"{variacao_media.max():.2%}"
 ```
 
 Outubro é o melhor mês para investir, com uma variação diária média de cerca de 0,29% — número que vale hesitar antes de levar a sério: são apenas quatro ações e quase quatro décadas de dados misturados numa única média por mês, sem nenhum teste de significância por trás. É o tipo de padrão fácil de achar e fácil demais de acreditar.
 
+E há um detalhe silencioso nessa média que vale registrar: as quatro linhas com `NaN` estão dentro dos grupos, e `mean()` simplesmente as ignora. O `pandas` tem uma política de ausência embutida em quase toda agregação; o `numpy` não tem — `acoes["variacao"].to_numpy().mean()` devolve `nan`, e essa diferença atravessa a fronteira com você.
+
 Faremos esse tipo de manipulação pelo livro inteiro, em geral sem chamar muita atenção para ela.
 
 ::: {.callout-tip collapse="true"}
-## Na prática: `pandas`
+## Na prática: o que o `groupby` decide sozinho
 
-Tudo que esta seção fez à mão tem uma linha de `pandas` correspondente: `df.groupby('Symbol')['Close'].max()` no lugar da máscara `symbols == symbol` seguida de `.max()`; `df.groupby('Symbol')['Close'].pct_change()` no lugar de `day_over_day_changes`; `df.resample('ME')` para agregações por mês, no lugar da máscara por mês construída à mão — e repare no `'ME'`, de *month end*: o `'M'` que a maior parte do material antigo usa foi depreciado no `pandas` 2.2.
+Três linhas desta seção substituíram uns quarenta laços, e cada uma delas tomou decisões que não estavam escritas.
 
-O que isso esconde, e vale saber que está sendo escondido: `.pct_change()` não ordena nada — ela assume que as linhas já chegam ordenadas e contíguas, exatamente o `np.argsort(dates[mask])` que esta seção gastou um parágrafo justificando antes de calcular `day_over_day_changes`. Esqueça o `sort_values('Date')` antes de agrupar e o `pandas` não levanta erro nenhum: `.pct_change()` roda normalmente e devolve, em silêncio, variações entre dias que não são consecutivos — uma "variação diária" que na verdade compara terça com sexta.
+**`groupby` ordena pela chave.** Por isso os símbolos saíram em ordem alfabética, e não na ordem em que aparecem no arquivo. Com quatro grupos isso é cosmético; com cem mil chaves é tempo, e `groupby(..., sort=False)` existe para isso.
+
+**Toda agregação ignora `NaN`.** `mean()`, `sum()`, `max()` e companhia pulam os ausentes e calculam com o que sobrou — o que às vezes é o que você quer e às vezes é uma média de dez valores apresentada como se fosse de mil. `count()` conta os presentes; `size()` conta as linhas; a diferença entre os dois é quantos faltam. Do lado do `numpy` não há política nenhuma: um `nan` contamina a redução inteira, o que é mais barulhento e, para uma conta de modelo, geralmente melhor.
+
+**`pct_change()` não ordena nada.** Foi por isso que o `sort_values` veio antes, no corpo desta seção. Vale insistir aqui porque o erro é fácil e o resultado é plausível: sem ordenar, ela devolve variações entre linhas vizinhas quaisquer, sem erro nenhum.
+
+**Agregar por mês de calendário é outra coisa.** A média por mês desta seção é por *mês do ano* — todos os outubros juntos, de 1980 a 2018. Se a pergunta fosse "qual foi o fechamento médio da AAPL em cada mês do calendário", a ferramenta seria o `resample`, que exige uma coluna de datas no índice:
+
+```python
+aapl = acoes[acoes["Symbol"] == "AAPL"].set_index("Date")
+aapl["Close"].resample("ME").mean()
+```
+
+Repare no `"ME"`, de *month end*: o `"M"` que a maior parte do material antigo da internet usa foi depreciado no `pandas` 2.2 e sai com aviso. `resample` aceita a mesma família de códigos em `"D"` (dia), `"W"` (semana), `"QE"` (fim de trimestre) e `"YE"` (fim de ano), e é a ferramenta certa para série temporal — que é o assunto de um livro inteiro, e não deste capítulo.
 :::

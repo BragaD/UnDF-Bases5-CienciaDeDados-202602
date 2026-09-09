@@ -110,6 +110,8 @@ Só uma linha é rejeitada: `MSFT,6/19/2014,n/a`, porque `"n/a"` não converte p
 Repare: `try_parse_row` não rejeitou a linha da FB, e o ano da data dela é **3014**. `"6/20/3014"` é uma string sintaticamente válida — `dateutil.parser.parse` converte sem reclamar, porque é um ano válido do ponto de vista do calendário, só que a mil anos de distância do resto do conjunto. O regex do símbolo não pega isso, e o `try/except ValueError` também não, porque não houve exceção nenhuma.
 
 É o mesmo tipo de outlier que a [seção 7.1](01-explorando-seus-dados.qmd) existe para achar — por inspeção visual ou checagem *ad hoc* —, não algo que uma função de *parsing* bem escrita consegue capturar sozinha. Dado do mundo real tem casas decimais faltando, zeros a mais, erros de digitação e outros problemas do tipo — capturá-los é trabalho seu (talvez não seja oficialmente seu trabalho, mas quem mais vai fazer?).
+
+Guarde essa linha da FB: o ano 3014 volta em dois parágrafos, e do outro lado — é ele que faz o `pandas` desistir da coluna inteira sem dizer nada.
 :::
 
 ::: {.callout-note}
@@ -129,10 +131,92 @@ O `n/a` virou `nan`, sem aviso — a linha que `try_parse_row` rejeitou em voz a
 
 E então é preciso decidir o que fazer com as linhas inválidas. Em geral, as três opções são: descartá-las, voltar à fonte e tentar corrigir o dado ausente ou ruim, ou não fazer nada e torcer. Se é uma linha ruim entre milhões, provavelmente está tudo bem ignorá-la. Mas se metade das suas linhas têm dado ruim, isso é algo que precisa ser corrigido.
 
+## O mesmo arquivo com o `pandas`
+
+Nada disso é trabalho que se faça à mão duas vezes. O [Capítulo 6](../cap06/01-lendo-arquivos.qmd) apresentou o `read_csv`, e ele lê este arquivo sem uma linha de laço — o arquivo não tem cabeçalho, então os nomes das colunas vão no argumento `names`:
+
+```{python}
+#| label: pandas-csv-sujo
+import pandas as pd
+
+precos = pd.read_csv("dados/comma_delimited_stock_prices.csv",
+                     names=["symbol", "date", "closing_price"])
+
+print(precos.dtypes)
+print(precos.isna().sum())
+precos
+```
+
+Duas diferenças em relação ao laço, e as duas importam.
+
+A primeira: **as seis linhas estão lá**. `try_parse_row` descartou a linha `MSFT,6/19/2014,n/a` e imprimiu um aviso; o `read_csv` a manteve, com `NaN` no lugar do preço. O `"n/a"` está na lista de marcadores de ausência que o `pandas` já conhece — `NA`, `N/A`, `n/a`, `null`, `NaN`, campo vazio —, então nem foi preciso pedir. É a coerção silenciosa: nenhuma linha "pulando linha inválida", nenhuma exceção, e uma coluna `float64` com um buraco dentro.
+
+A segunda: **`isna().sum()` é o que substitui aquele aviso impresso**. Ele conta os ausentes por coluna, e é o comando a rodar logo depois de todo `read_csv` — a informação que o laço dava de graça, e que aqui você tem de ir buscar. Uma ausência em `closing_price`, nenhuma em `date`… o que nos leva ao problema seguinte.
+
+A coluna `date` continua sendo texto — `object` no `dtypes` acima. O jeito de pedir a conversão é o argumento `parse_dates`, o mesmo do Capítulo 6:
+
+```{python}
+#| label: pandas-parse-dates-silencioso
+precos = pd.read_csv("dados/comma_delimited_stock_prices.csv",
+                     names=["symbol", "date", "closing_price"],
+                     parse_dates=["date"])
+
+precos.dtypes
+```
+
+`date` continua `object`. **Você pediu a conversão e ela não aconteceu** — sem erro, sem aviso, sem uma linha de saída dizendo que algo deu errado. O único sinal é o `dtypes`, e só para quem foi olhar.
+
+O culpado é a linha da FB. Uma data do `pandas` é um `datetime64[ns]`, um número de nanossegundos desde 1970, e um inteiro de 64 bits de nanossegundos cobre de 1677 a 2262 — `pd.Timestamp.max` é `2262-04-11`. O ano **3014** não cabe. Diante de uma coluna que ele não consegue converter inteira, o `read_csv` desiste dela e devolve o texto original, calado. Uma linha ruim em seis contaminou as seis.
+
+A mesma conversão, pedida diretamente, diz o que aconteceu:
+
+```{python}
+#| label: pandas-to-datetime-estoura
+try:
+    pd.to_datetime(precos["date"])
+except Exception as erro:
+    print(type(erro).__name__)
+    print(str(erro).split("You might")[0].strip())
+```
+
+Posição 2, a linha da FB, com o valor no texto do erro. É a informação que o `read_csv` tinha e engoliu.
+
+E aqui a seção se inverte: **o `pandas` pegou o outlier que a nossa função deixou passar.** `try_parse_row` aceitou `6/20/3014` porque o `dateutil` converte sem reclamar — é um ano válido do calendário — e o regex do símbolo não tinha nada a dizer sobre datas. O `pandas` reclamou por um motivo que não tem nada a ver com cuidado: o tipo dele não cabe o ano 3014. Não é que uma ferramenta seja mais segura que a outra; é que **cada uma tem a sua noção de dado ruim**, e nenhuma das duas é a sua. Saber qual é a noção de cada uma é o trabalho.
+
+Com o problema à vista, dá para decidir o que fazer com ele — que é exatamente a decisão do parágrafo acima, agora com o dado na mão. `errors="coerce"` converte o que dá e põe `NaT` (*not a time*) no que não dá:
+
+```{python}
+#| label: pandas-coerce-e-descarta
+precos["date"] = pd.to_datetime(precos["date"], errors="coerce")
+
+print(precos.isna().sum())
+print(f"{len(precos)} linhas lidas, {len(precos.dropna())} sobrevivem")
+precos.dropna()
+```
+
+Quatro linhas, não cinco. O laço com `try_parse_row` descartou **uma** — a do `n/a` — e entregou cinco registros, com o ano 3014 entre eles. O caminho do `pandas` descartou **duas**, porque conta o `NaT` da data impossível como ausência igual à do preço.
+
+Os índices que sobraram — 0, 1, 3, 5 — dizem de que linha do arquivo veio cada uma. É o índice do `DataFrame`, que não é a posição: `dropna()` tirou linhas e não renumerou nada, o que é uma vantagem quando se precisa voltar à fonte e ver o que havia ali.
+
+E o `dropna()` é uma das três opções que este parágrafo já listou, não a resposta certa. Ele é a mais fácil de escrever e a mais fácil de escrever **sem pensar** — é o `.dropna()` no fim de uma linha comprida, que some no meio do código e leva junto vinte por cento do conjunto sem que ninguém veja. É por isso que o `print` acima existe: **conte antes e depois, sempre**. Uma linha ruim em um milhão se ignora; metade das linhas ruins é um problema de fonte de dados, e nenhum `dropna()` conserta isso.
+
 ::: {.callout-tip collapse="true"}
-## Na prática: `pandas`
+## Na prática: quatro leitores, quatro noções de "dado ruim"
 
-`try_parse_row` — com seu regex, seus dois `try/except` e seu `None` como sinal de "descarte isto" — é o que `pd.read_csv(..., parse_dates=["date"], na_values=["n/a"])` faz por baixo, mais `pd.to_numeric(coluna, errors='coerce')` para o resto.
+Esta seção passou o mesmo arquivo de seis linhas por quatro caminhos. Vale ver o balanço, porque nenhum deles é a resposta certa e todos aparecem em código de verdade:
 
-O que isso esconde, e vale saber que está sendo escondido: a coerção do `pandas` é **silenciosa**. Onde `try_parse_row` devolve `None` e a linha é descartada com um aviso impresso, `errors='coerce'` não descarta nada — ele converte o valor problemático em `NaN` (ou `NaT`, para data), e a linha *sobrevive* no `DataFrame`. Ela não aparece como "pulando linha inválida" em lugar nenhum; ela só aparece depois, quando alguém calcula uma média sem checar `.isna()` antes, e o resultado sai errado sem erro nenhum. É o mesmo tipo de problema que a linha da FB com ano 3014 ilustrou acima — e o mesmo `nan` silencioso do `np.genfromtxt` no callout anterior — só que lá o dado passou pelo filtro por ser sintaticamente válido; aqui ele passa porque o `pandas` foi instruído a deixar passar.
+| leitor | `MSFT,…,n/a` | `FB,6/20/3014,…` | você fica sabendo? |
+|---|---|---|---|
+| `try_parse_row` | descarta a linha | **aceita** | sim, imprime a linha pulada |
+| `pd.read_csv` | vira `NaN` | desiste da coluna de datas | só no `dtypes` e no `isna()` |
+| `pd.to_datetime` | — | levanta `OutOfBoundsDatetime` | sim, com a posição |
+| `np.genfromtxt` | vira `nan` | não foi lido (`usecols`) | não |
+
+Duas coisas que a tabela deixa implícitas e que vale dizer em voz alta:
+
+**`errors="coerce"` é uma decisão, não um conserto.** O nome é bom: ele *coage*. Onde `try_parse_row` devolve `None` e a linha é descartada com um aviso impresso, `coerce` não descarta nada — converte o valor problemático em `NaN` (ou `NaT`) e a linha *sobrevive* na tabela. Ela não aparece como "pulando linha inválida" em lugar nenhum; ela aparece depois, quando alguém calcula uma média sem checar `.isna()` antes, e o resultado sai errado sem erro nenhum.
+
+**O silêncio do `parse_dates` é o pior dos quatro comportamentos**, e não porque o `pandas` seja descuidado: converter uma coluna inteira é tudo ou nada, e desistir é a única saída que não inventa dado. O que se pode fazer contra isso é o hábito de sempre: `dtypes` e `isna().sum()` depois de toda leitura, e desconfiar de uma coluna `object` que devia ser data ou número. É o mesmo aviso do [Capítulo 6](../cap06/01-lendo-arquivos.qmd), e ele é repetido aqui porque esta seção é a única do livro em que ele custa caro na frente do leitor.
+
+Fora deste livro há uma família de ferramentas que existe só para isso — `pandera`, `great-expectations` e parentes: você declara o que a coluna deveria ser (faixa, tipo, unicidade, "nenhuma data depois de hoje") e a validação falha alto, na entrada, em vez de silenciosamente, no meio. É a ideia do `assert` deste livro, aplicada a uma tabela inteira. Um `assert precos["date"].max().year <= 2025` teria pego a linha da FB antes de qualquer uma das quatro leituras.
 :::
