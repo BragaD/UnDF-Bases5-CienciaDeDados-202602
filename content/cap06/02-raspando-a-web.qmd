@@ -228,6 +228,55 @@ Raspar um site livremente como o exemplo faz é, em geral, indelicado. A maioria
 
 Vale registrar também uma limitação do exemplo: as páginas de "comunicados de imprensa" de verdade costumam ser paginadas, com só 5 ou 10 comunicados por página. O código acima recupera só os comunicados mais recentes de cada parlamentar — uma solução mais completa precisaria iterar sobre as páginas e recuperar o texto de cada comunicado.
 
+## Quando a página já é uma tabela
+
+Repare no que a página de representantes tinha, e que o exemplo acima ignorou: aquele `<td><a href="...">Jayapal, Pramila</a></td>` não era um `<div>` solto — era a célula de uma **tabela**. Boa parte do dado que se raspa está nessa situação: uma tabela HTML, com cabeçalho e linhas, que alguém já organizou em formato tabular e só não publicou como arquivo.
+
+Para esse caso não é preciso percorrer `<tr>` e `<td>` na mão. O `pandas` tem um leitor que faz isso, e devolve direto o `DataFrame` da [seção 6.1](01-lendo-arquivos.qmd) — uma tabela por `<table>` encontrada na página:
+
+```{python}
+#| label: tabela-congresso-read-html
+import io
+import pandas as pd
+
+tabela_html = """
+<table>
+  <tr><th>Representante</th><th>Estado</th><th>Partido</th></tr>
+  <tr><td><a href="https://jayapal.house.gov">Jayapal, Pramila</a></td><td>WA</td><td>D</td></tr>
+  <tr><td><a href="https://larsen.house.gov">Larsen, Rick</a></td><td>WA</td><td>D</td></tr>
+  <tr><td><a href="https://newhouse.house.gov">Newhouse, Dan</a></td><td>WA</td><td>R</td></tr>
+</table>
+"""
+
+tabelas = pd.read_html(io.StringIO(tabela_html), flavor="bs4")
+representantes = tabelas[0]
+
+representantes
+```
+
+Uma linha no lugar do laço aninhado, com o cabeçalho já virando nome de coluna. Dois detalhes da chamada não são decoração:
+
+`io.StringIO(...)` embrulha a string porque o `read_html` espera um arquivo, uma URL ou algo que se comporte como arquivo — passar HTML solto ainda funciona, mas com um aviso de que vai deixar de funcionar. E `flavor="bs4"` escolhe o parser: o padrão do `pandas` é o `lxml`, que não é uma biblioteca deste livro; com `bs4`, o `read_html` roda em cima do **mesmo Beautiful Soup + html5lib** que você usou nesta seção inteira. Não há mágica nova aqui — há a mesma sopa de tags, com a montagem da tabela feita por outra pessoa.
+
+`read_html` devolve uma **lista** de `DataFrame`, uma por `<table>` da página, e é por isso que o `[0]`. Numa página de verdade, com tabela de navegação e tabela de rodapé, escolher qual delas é a que interessa é parte do trabalho.
+
+Só que falta o que mais importava no exemplo do Congresso: o **endereço** de cada site. O `read_html` lê o *texto* das células, e o `href` é um atributo — ele não aparece na tabela acima. É onde o Beautiful Soup continua sendo necessário, e onde os dois se encontram: a raspagem produz as linhas, o `DataFrame` as recebe.
+
+```{python}
+#| label: tabela-congresso-links
+soup = BeautifulSoup(tabela_html, 'html5lib')
+
+linhas = [{"representante": a.text, "site": a["href"]}
+          for a in soup('a') if a.has_attr('href')]
+
+sites = pd.DataFrame(linhas)
+sites
+```
+
+Uma lista de `dict`s vira um `DataFrame` direto — cada chave é uma coluna. Daqui em diante o resultado da raspagem se comporta como qualquer tabela: dá para filtrar por estado, contar por partido, cruzar com outra fonte pelo nome, exportar com `to_csv`. É essa a forma em que dado raspado deve terminar, e é por isso que vale insistir: o `read_html` resolve a tabela em uma linha quando o dado **é** o texto das células; quando o que interessa está num atributo, no `href` ou num `data-`, a raspagem continua sendo o trabalho, e o `DataFrame` é onde ela desemboca.
+
+(O `read_html` tem um `extract_links="body"` que também recupera os `href` — mas ele devolve cada célula como uma tupla `(texto, link)`, inclusive as colunas que não têm link nenhum, e desfazer isso costuma dar mais trabalho que as três linhas acima.)
+
 ::: {.callout-tip collapse="true"}
 ## Na prática: além de Beautiful Soup + Requests
 
@@ -237,5 +286,5 @@ Primeiro, páginas que montam o conteúdo via JavaScript **depois** de carregada
 
 Segundo, projetos de raspagem maiores — muitas páginas, navegação por links desconhecidos, reexecução periódica — ganham de uma estrutura dedicada como **Scrapy**, que cuida de fila de requisições, novas tentativas, limite de taxa e exportação de dados, em vez de você reimplementar cada uma dessas partes por cima de um `for` com `requests.get`.
 
-Nenhuma das duas muda a lição central: o dado bruto de uma página raspada é HTML mal formado, e alguma coisa — `BeautifulSoup` ou o que quer que você use — vai ter que impor uma estrutura em cima dele antes que a informação vire algo utilizável.
+Nenhuma das duas muda a lição central: o dado bruto de uma página raspada é HTML mal formado, e alguma coisa — `BeautifulSoup` ou o que quer que você use — vai ter que impor uma estrutura em cima dele antes que a informação vire algo utilizável. E essa estrutura, quase sempre, é uma tabela: a raspagem termina onde a [seção 6.1](01-lendo-arquivos.qmd) começou.
 :::

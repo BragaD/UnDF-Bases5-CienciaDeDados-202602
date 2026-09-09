@@ -83,15 +83,20 @@ from dateutil.parser import parse
 
 repos = [
     {"name": "grafo-de-amizades", "language": "Python",
-     "created_at": "2024-03-14T09:12:00Z", "pushed_at": "2024-11-02T17:40:00Z"},
+     "created_at": "2024-03-14T09:12:00Z", "pushed_at": "2024-11-02T17:40:00Z",
+     "owner": {"login": "datasciencester", "type": "Organization"}},
     {"name": "painel-de-metricas", "language": "JavaScript",
-     "created_at": "2024-03-21T14:05:00Z", "pushed_at": "2024-10-15T08:22:00Z"},
+     "created_at": "2024-03-21T14:05:00Z", "pushed_at": "2024-10-15T08:22:00Z",
+     "owner": {"login": "datasciencester", "type": "Organization"}},
     {"name": "modelo-de-recomendacao", "language": "Python",
-     "created_at": "2024-06-02T11:47:00Z", "pushed_at": "2024-11-20T13:10:00Z"},
+     "created_at": "2024-06-02T11:47:00Z", "pushed_at": "2024-11-20T13:10:00Z",
+     "owner": {"login": "datasciencester", "type": "Organization"}},
     {"name": "relatorios-mensais", "language": "R",
-     "created_at": "2024-07-19T16:30:00Z", "pushed_at": "2024-09-05T10:00:00Z"},
+     "created_at": "2024-07-19T16:30:00Z", "pushed_at": "2024-09-05T10:00:00Z",
+     "owner": {"login": "vp-analytics", "type": "User"}},
     {"name": "api-interna", "language": "Python",
-     "created_at": "2024-09-08T08:55:00Z", "pushed_at": "2024-11-25T19:03:00Z"},
+     "created_at": "2024-09-08T08:55:00Z", "pushed_at": "2024-11-25T19:03:00Z",
+     "owner": {"login": "datasciencester", "type": "Organization"}},
 ]
 
 # Em que meses e dias da semana a equipe mais costuma criar repositórios?
@@ -109,7 +114,38 @@ last_5_languages = [repo["language"] for repo in last_5_repositories]
 month_counts, weekday_counts, last_5_languages
 ```
 
-Contra a API de verdade, `repos` teria dezenas ou centenas de entradas em vez de cinco, mas a lógica que extrai mês, dia da semana e linguagem é exatamente esta — rodando sobre um `dict` Python comum, o mesmo tipo de dado que você manipulou o livro inteiro, só que ele teria chegado pela rede em vez de escrito à mão aqui.
+Repare no `owner`: ele não é um valor, é outro `dict` dentro do primeiro. Respostas de API são assim quase sempre — o GitHub devolve o dono, a licença e as permissões de cada repositório como objetos aninhados, e é o formato natural de quem serializa objetos, não tabelas.
+
+Contra a API de verdade, `repos` teria dezenas ou centenas de entradas em vez de cinco, mas a lógica que extrai mês, dia da semana e linguagem é exatamente esta, rodando sobre `dict`s do Python que teriam chegado pela rede em vez de escritos à mão aqui. Com cinco repositórios, `Counter` e `sorted` bastam. O que se faz no trabalho, a partir da dúzia — e sempre que a resposta precisa ser cruzada com outra tabela, filtrada por três critérios ou virar um relatório —, é achatar o aninhamento numa tabela e deixar as perguntas para o `pandas`.
+
+### Da resposta aninhada para uma tabela
+
+`pd.json_normalize` recebe a lista de `dict`s como ela veio e devolve um `DataFrame`, resolvendo o aninhamento: cada campo de `owner` vira uma coluna própria, com o nome do caminho até ele.
+
+```{python}
+#| label: api-github-dataframe
+import pandas as pd
+
+df = pd.json_normalize(repos)
+df["created_at"] = pd.to_datetime(df["created_at"])
+df["pushed_at"] = pd.to_datetime(df["pushed_at"])
+
+df.dtypes
+```
+
+Seis colunas, e duas delas — `owner.login` e `owner.type` — não existiam como campos: o `json_normalize` as criou a partir do `dict` aninhado, juntando os nomes com um ponto. As datas ainda chegam como texto (JSON não tem tipo de data), e `pd.to_datetime` faz sobre a coluna inteira o que o `dateutil.parser.parse` fez linha a linha acima — o `UTC` no `dtype` é o `Z` do final de `"2024-03-14T09:12:00Z"`, reconhecido e guardado.
+
+As mesmas três perguntas, agora sobre a tabela:
+
+```{python}
+#| label: api-github-perguntas
+print(df["created_at"].dt.month.value_counts().sort_index())
+print(df["created_at"].dt.day_name().value_counts())
+
+df.sort_values("pushed_at", ascending=False)[["name", "language"]].head(5)
+```
+
+As mesmas respostas do chunk anterior — dois repositórios criados em março, dois num domingo, e as cinco linguagens na ordem do último *push*. O que mudou foi o custo de fazer a **próxima** pergunta. `.dt` abre os componentes de uma coluna de datas (`.month`, `.day_name()`, `.year`, `.hour`), e `day_name()` já responde "quinta" em vez de `3`, sem exigir que ninguém lembre que a semana começa no zero. `value_counts()` é o `Counter`, `sort_values()` é o `sorted`, e o índice preservado (4, 2, 0, 1, 3) diz de que repositório veio cada linha. Quem quiser agora saber quantos repositórios cada dono tem escreve `df.groupby("owner.login")["name"].count()` — uma linha, sobre a tabela que já está pronta.
 
 O formato em que o dado chega já é uma decisão que ecoa adiante: JSON quebrado em campos como `language` e `created_at` deixa pronto exatamente o tipo de [atributo](../cap08/06-extracao-e-selecao-de-atributos.qmd) que um modelo consegue usar — uma API que devolvesse só um parágrafo de texto livre sobre cada repositório teria deixado bem menos pronto.
 
