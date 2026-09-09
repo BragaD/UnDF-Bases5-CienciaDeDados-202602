@@ -2,6 +2,7 @@
 
 **Data:** 2026-09-08
 **Status:** decidido pelo autor; este documento fixa as regras e a execução
+**Implementação:** em curso na branch `pandas-nos-dados` — fundação e capítulos 6 e 7 concluídos (ver a nota de correção no fim)
 **Precede:** `2026-09-06-reescrita-numpy-design.md`, que continua valendo para os algoritmos
 
 ## A decisão
@@ -192,3 +193,26 @@ Os capítulos 14 a 17 ainda não existem em `numpy`: para eles, **as duas specs 
 | Capítulo 7 | à mão uma vez, `pandas` ao lado, `pandas` depois | preserva a lição sem virar hipocrisia |
 | `sklearn`, `scipy`, `polyfit`, `lstsq` | continuam proibidos na implementação | a decisão original do autor, reafirmada |
 | Versão | `pandas>=2,<3` | o pandas 3 já quebrou o livro irmão em silêncio |
+
+---
+
+## Nota de correção — 2026-09-08, depois dos capítulos 6 e 7
+
+Escrita durante a execução, contra medições. **Onde esta nota discorda do corpo da spec, é ela que vale** — o corpo foi escrito antes de o `pandas` ser instalado.
+
+**1. A linha que esta spec sugere para a 7.4 tem os dois argumentos errados.** O texto propõe comparar `try_parse_row` com `read_csv(..., parse_dates=[...], na_values=["n/a"])`. Medido, com `pandas` 2.3.3:
+
+- **`na_values=["n/a"]` é redundante.** `n/a` já está na lista padrão de marcadores nulos (`pandas._libs.parsers.STR_NA_VALUES`). O marcador que *não* está, e que o livro já usava em `precos_com_erro.txt`, é `N/D` — e com ele a coluna inteira vira `object`, `Series.sum()` **concatena strings** (`'1250.00N/D980.50'`) e nada avisa. É material melhor, e é o que os capítulos 6 e 7 passaram a usar.
+- **`parse_dates` não faz nada sobre esse arquivo, e não avisa.** A linha `FB,6/20/3014` estoura o `datetime64[ns]` (`pd.Timestamp.max` é 2262-04-11), o `pandas` desiste da coluna inteira e a devolve como `object`. Zero avisos, medido com `warnings.simplefilter("always")`.
+
+**2. O capítulo 7 inverte de um jeito que esta spec não previu, e a favor dela.** Com `pd.to_datetime(..., errors="coerce")` seguido de `dropna()`, sobram **4** linhas — contra as **5** de `try_parse_row`. Ou seja: **o `pandas` pega o outlier de ano 3014 que a função à mão deixou passar.** O callout *O erro que passa pelo filtro* deixa de ser curiosidade e vira a causa do silêncio do `parse_dates`. A 7.4 **cresce** cerca de sessenta linhas em vez de encolher, e passa a ser a melhor seção do capítulo: quatro leitores diante da mesma linha ruim, cada um com a sua noção de dado ruim.
+
+**3. A 7.5 guarda dois exemplos à mão, não um.** A spec nomeia o `max` por símbolo. Ficou também o `day_over_day_changes` com as fatias deslocadas, porque a função mora em `scratch_np/working_with_data.py` e tirar o chunk deixaria o módulo com código que o livro não mostra.
+
+**4. `pd.read_html` exige `flavor="bs4"`** neste projeto: o padrão é `lxml`, que não está no `uv.lock`. Não é contorno — é ganho, porque o `read_html` passa a rodar sobre o mesmo BeautifulSoup + `html5lib` que a seção 6.2 acabou de apresentar. HTML literal também precisa de `io.StringIO`, senão vem `FutureWarning`.
+
+**5. O bloco `## O DataFrame` entra no meio da 6.1, não no começo.** A spec pede a ordem do trabalho real ("primeiro se lê o dado, depois se calcula"), o que empurraria o bloco para o topo. Três coisas empurram de volta, e a decisão foi documentada no plano do capítulo 6: o `read_csv` só é convincente contra o laço que ele substitui; o `np.loadtxt` não pode vir antes, senão a seção ensina o leitor mais restrito e depois desdiz; e o fecho da 6.1 precisa continuar amarrando o `numpy` ao bloco *De listas a arrays* da 7.1, que o cita nominalmente. A ordem publicada é **`csv` → `DataFrame` → `array`**.
+
+**6. O bloco `## O DataFrame` saiu com 133 linhas**, acima das 80 a 120 que a spec estipula. Três subtítulos quebram a leitura e cada chunk ensina uma coisa; o corte, se um dia for preciso, é o par do TSV de brinquedo.
+
+**7. `scratch_np/working_with_data.py` não mudou uma linha, e `EXPORTA_DATAFRAME` continua vazio.** Mas a 7.5 era o **único** `.qmd` do livro que importava esse módulo, e a importação saiu com a conversão: hoje `grep -rn "working_with_data" content/` não devolve nada. Nenhuma função ficou órfã — todas continuam num chunk do capítulo 7 —, mas a convenção *"a seção implementa, a próxima importa"* fica sem demonstração para esse módulo **até os capítulos 9 e 13 importarem `rescale`**. Quem converter esses dois deve fechar isso.

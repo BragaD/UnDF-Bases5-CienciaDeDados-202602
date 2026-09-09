@@ -8,11 +8,11 @@ Três specs governam este repositório, e as três precisam ser lidas antes de m
 
 - `docs/superpowers/specs/2026-08-15-estrutura-livro-bases5-design.md` — a **estrutura** do livro (escopo, numeração, dados, infra). Carrega notas de correção pós-implementação; leia-as também, elas registram onde a decisão original mudou depois de escrita.
 - `docs/superpowers/specs/2026-09-06-reescrita-numpy-design.md` — a **reescrita dos capítulos 6 a 17 em numpy**, decidida pelo autor e em curso na branch `reescrita-numpy`. Ela inverte, para esses capítulos, a decisão pedagógica original ("tudo em Python puro"). Ver "Pedagogia" e "A reescrita em numpy", abaixo.
-- `docs/superpowers/specs/2026-09-08-pandas-nos-dados-design.md` — **`pandas` no trabalho com dados**, decidida pelo autor e ainda **não implementada**. Tira o `pandas` dos callouts e o põe no corpo do texto onde o assunto é obter, limpar, agrupar e apresentar dado, aproximando o livro do uso real. Não afrouxa nada sobre os algoritmos. Ver "Pedagogia", abaixo.
+- `docs/superpowers/specs/2026-09-08-pandas-nos-dados-design.md` — **`pandas` no trabalho com dados**, decidida pelo autor e **em curso na branch `pandas-nos-dados`**. Tira o `pandas` dos callouts e o põe no corpo do texto onde o assunto é obter, limpar, agrupar e apresentar dado, aproximando o livro do uso real. Não afrouxa nada sobre os algoritmos. Ver "Pedagogia" e "A conversão para pandas", abaixo.
 
 Este arquivo é o resumo operacional; as specs são a fonte das decisões e das razões.
 
-**O livro está escrito e publicado.** 17 capítulos, 87 seções + 17 `index.qmd` = 104 `.qmd`, todos registrados em `_quarto.yml`. Nenhum stub restante. Container Docker (Quarto + `uv`), CI publicando em `gh-pages`, 52 testes (`make teste`) guardando os invariantes. O **capítulo 9 (k-Vizinhos Mais Próximos)** foi o primeiro escrito e segue sendo o **modelo de estilo** da casa: leia `content/cap09/` antes de mexer em qualquer capítulo, para o formato pegar (ver "Antes de escrever um capítulo", abaixo).
+**O livro está escrito e publicado.** 17 capítulos, 87 seções + 17 `index.qmd` = 104 `.qmd`, todos registrados em `_quarto.yml`. Nenhum stub restante. Container Docker (Quarto + `uv`), CI publicando em `gh-pages`, 62 testes (`make teste`) guardando os invariantes. O **capítulo 9 (k-Vizinhos Mais Próximos)** foi o primeiro escrito e segue sendo o **modelo de estilo** da casa: leia `content/cap09/` antes de mexer em qualquer capítulo, para o formato pegar (ver "Antes de escrever um capítulo", abaixo).
 
 Além do livro, `notebooks/` traz **um `.ipynb` por capítulo**, gerado a partir dos `.qmd` para executar ao vivo na aula (ver "Os notebooks de aula", abaixo), `atividades/` guarda o PID da disciplina, e `apoio/` traz páginas HTML interativas para projetar em aula (ver "`apoio/`", abaixo).
 
@@ -23,13 +23,32 @@ Os irmãos já prontos definiram o padrão da casa **na hora de montar o andaime
 
 ### A reescrita em numpy (branch `reescrita-numpy`)
 
-**Os capítulos 6 a 17 estão sendo reescritos para construir os modelos com numpy**, um capítulo por vez, na branch `reescrita-numpy`. Os capítulos 1 a 5 **não** mudam: eles continuam em Python puro e são a motivação do numpy — quem escreveu `dot` como um `sum` sobre um `zip` entende o que o `@` faz.
+**Os capítulos 6 a 17 estão sendo reescritos para construir os modelos com numpy**, um capítulo por vez. A branch `reescrita-numpy` já foi mesclada na `main`. Os capítulos 1 a 5 **não** mudam: eles continuam em Python puro e são a motivação do numpy — quem escreveu `dot` como um `sum` sobre um `zip` entende o que o `@` faz.
 
-Estado: **6 a 12 concluídos** (planejados, implementados, revisados e corrigidos); 13 em andamento; 14 a 17 pendentes. Cada capítulo tem um plano em `docs/superpowers/plans/2026-09-06-numpy-capNN.md` — o plano do capítulo é a memória do que foi decidido, medido e desviado ali, e é o primeiro lugar a olhar antes de mexer num capítulo já reescrito.
+Estado: **6 a 13 concluídos** (planejados, implementados, revisados e corrigidos); 14 a 17 pendentes, com o mapa de cada um em `docs/superpowers/plans/2026-09-08-retomada-caps-14-17.md`. Cada capítulo tem um plano em `docs/superpowers/plans/2026-09-06-numpy-capNN.md` — o plano do capítulo é a memória do que foi decidido, medido e desviado ali, e é o primeiro lugar a olhar antes de mexer num capítulo já reescrito.
 
 O processo, fixado em `docs/superpowers/plans/2026-09-06-numpy-00-instrucoes.md`, é **um capítulo por vez**: um agente planejador (Opus, com o mapa do capítulo já no prompt) escreve o plano; um implementador o executa e verifica; um revisor lê o capítulo inteiro com uma única pergunta — *o texto condiz com o que foi reescrito?* — e devolve discrepâncias; o implementador corrige. Doze planejadores em paralelo estouraram o limite de sessão da API sem produzir nada; a sequência não é preferência de estilo, é o que cabe no orçamento.
 
 Ao terminar os 17, falta um **passe de coerência global**: `content/cap01`, `content/cap04/index.qmd` e o callout de `content/cap04/01-vetores.qmd` (que ainda diz "a regra deste livro — nada de NumPy", e é o destino de links dos capítulos 6 e 7), o `index.qmd` da raiz, o `README.md`, este arquivo e uma nota de correção na spec de 2026-08-15.
+
+### A conversão para pandas (branch `pandas-nos-dados`)
+
+**Onde o assunto é *dado*, e não *modelo*, a ferramenta passa a ser o `pandas`** — spec de 2026-09-08, um capítulo por vez, no mesmo processo da reescrita em numpy (planejador Opus → implementador → revisor → correções), com os planos em `docs/superpowers/plans/2026-09-08-pandas-capNN.md`.
+
+Estado: **fundação e capítulos 6 e 7 concluídos**. Faltam, na ordem da spec: 9 e 10 (leitura de arquivo real), 11, 12 e 13 (colunas nomeadas e as tabelas de resultado), 8 (o menor retrabalho), e 14 a 17 — que ainda não existem em numpy e **já nascem com as duas specs valendo juntas**.
+
+`CAPITULOS_PANDAS`, em `tests/test_pandas.py`, cresce a cada capítulo convertido, no mesmo molde de `CAPITULOS_NUMPY`: um teste vermelho nunca significa "ainda não chegou a vez".
+
+Três decisões dos capítulos 6 e 7 que os seguintes herdam, e que não devem ser redecididas:
+
+- **A ordem da 6.1 é `csv` → `DataFrame` → `array`.** O módulo `csv` fica, encolhido, porque o `read_csv` só é convincente contra o laço que ele substitui; e o `np.loadtxt` fica no fim porque a 7.1 o cita nominalmente.
+- **A fronteira é batizada em `### Do `DataFrame` para o array: a fronteira`**, no fim do bloco *De listas a arrays* da 7.1. Todo capítulo que ajusta modelo cita esse `###` e mostra a linha; nenhum reexplica.
+- **"À mão uma vez, `pandas` ao lado, `pandas` daí em diante"** é o limite do capítulo 7, e o que impede a hipocrisia pedagógica. Onde um exemplo à mão sobrevive, **o texto diz por que** — o `max` por símbolo da 7.5 sobrevive para mostrar o que o `groupby` faz por baixo; o `scale`/`rescale` da 7.6 sobrevive porque deixar uma coluna constante em paz é decisão de modelagem, e `(df - df.mean()) / df.std()` a transforma em `NaN` sem avisar.
+
+Duas armadilhas medidas, que valem para quem converter os próximos capítulos:
+
+- **`pd.read_html` precisa de `flavor="bs4"`** neste projeto: o padrão é `lxml`, que não está no `uv.lock`. Sem o argumento, `ImportError` e render no chão. **Não instale `lxml` para contornar.**
+- **`na_values=["n/a"]` é redundante** — `n/a` já está na lista padrão de marcadores nulos do `pandas`. O marcador que *não* está, e que o livro usa, é `N/D`: com ele a coluna inteira vira `object` e `Series.sum()` concatena strings em vez de somar, sem erro nenhum.
 
 ### Antes de escrever um capítulo
 
@@ -94,7 +113,7 @@ O que muda de um capítulo para outro é a **calculadora**:
 
 **A regra que decide cada dúvida: numpy é a calculadora, não o modelo.** Numpy entra para fazer álgebra linear, broadcasting, reduções, indexação booleana e sorteio. O que o capítulo existe para ensinar — a regra de atualização do gradiente, o critério de partição da árvore, a votação do k-NN, a verossimilhança do Naive Bayes, os passos do k-means, a retropropagação — continua escrito à mão.
 
-### `pandas` é a mesa de trabalho (spec de 2026-09-08, ainda não implementada)
+### `pandas` é a mesa de trabalho (spec de 2026-09-08)
 
 **Onde o assunto é *dado*, e não *modelo*, a ferramenta é o `pandas`** — ler arquivo, tipar, limpar, juntar, agrupar, resumir, apresentar. É o que se faz no trabalho real, e escrever um leitor de CSV à mão não ensina ciência de dados: ensina *parsing*, e mal. A caixa-preta que esta disciplina abre é a do **modelo**.
 
@@ -128,7 +147,11 @@ A pergunta de desempate é: **o aluno ainda vê a fórmula?** `beta = np.linalg.
 
 **Laços continuam existindo** onde o laço *é* o algoritmo: a iteração do gradiente descendente, as épocas de treino, a recursão da árvore, a repetição do k-means até convergir, a fusão par a par do clustering hierárquico. O que sai é o laço **sobre os pontos de dados** — esse vira uma operação de array.
 
-**Onde o numpy é apresentado ao leitor:** o callout de fechamento do capítulo 4 mostra `np.array`/`np.dot` de relance; a seção 6.1 faz o primeiro contato (`np.loadtxt`, `shape`, `dtype`, uma operação vetorizada); e o bloco `## De listas a arrays`, que **abre a seção 7.1**, é a apresentação de verdade — forma e tipo, indexação e fatias, máscaras booleanas, broadcasting, `axis`, e o laço em Python que some. Um capítulo posterior **cita** esse bloco em vez de reexplicar; e não usa vocabulário que ele não apresentou sem apresentá-lo ali mesmo.
+**Onde cada ferramenta é apresentada ao leitor.** São três blocos, e um capítulo posterior **cita** o bloco em vez de reexplicar — e não usa vocabulário que o bloco não apresentou sem apresentá-lo ali mesmo:
+
+- o callout de fechamento do capítulo 4 mostra `np.array`/`np.dot` de relance;
+- **`## O DataFrame`, no meio da seção 6.1**, apresenta o `pandas`: `read_csv` com `parse_dates` e `na_values`, `head`, `dtypes`, `describe`, `Series`, seleção de coluna e de linha, `.loc`/`.iloc`, e a inferência de tipo como **heurística, não garantia**. A ordem da 6.1 é `csv` (o mecanismo) → `DataFrame` (o caminho) → `array` (o atalho para o modelo): o `read_csv` só é convincente contra o laço que ele substitui, e o `np.loadtxt` fica no fim porque a 7.1 o cita nominalmente;
+- **`## De listas a arrays`, que abre a seção 7.1**, é a apresentação de verdade do array — forma e tipo, indexação e fatias, máscaras booleanas, broadcasting, `axis`, e o laço em Python que some — e fecha com **`### Do `DataFrame` para o array: a fronteira`**, onde `.to_numpy()` é batizado. É esse `###` que os capítulos 8 a 17 citam.
 
 ## Comandos
 
@@ -152,7 +175,7 @@ make lock             # regenera uv.lock após editar pyproject.toml
 make clean            # remove _book/, _freeze/, .quarto/ e o lixo de render abortado
 ```
 
-**`make teste` roda `pytest tests/`** — 52 testes em oito arquivos: `test_estrutura.py` (registro no `_quarto.yml`, caminhos de dados, citações, e os totais de 17 capítulos / 87 seções / 104 arquivos contra o `LIVRO` de `scripts/gerar-stubs.py`), `test_scratch.py` (o pacote vendorizado — inclusive um hash SHA-256 travando que `scratch/` continua verbatim upstream), `test_scratch_np.py` (os invariantes da reescrita em numpy, abaixo), `test_dados.py` (os seis conjuntos commitados), `test_freeze.py` (o cache envenenado), `test_gradiente.py` (toda subida de gradiente tem motivo registrado), `test_notebooks.py` (os notebooks de aula não podem defasar dos `.qmd`) e `test_atividades.py` (o gabarito não pode vazar para o site). É o que garante a regra "todo `.qmd` novo precisa ser registrado em `_quarto.yml`", abaixo — sem essa suíte, um arquivo esquecido no YAML só aparece quando alguém percebe a seção faltando no site publicado.
+**`make teste` roda `pytest tests/`** — 62 testes em nove arquivos: `test_estrutura.py` (registro no `_quarto.yml`, caminhos de dados, citações, e os totais de 17 capítulos / 87 seções / 104 arquivos contra o `LIVRO` de `scripts/gerar-stubs.py`), `test_scratch.py` (o pacote vendorizado — inclusive um hash SHA-256 travando que `scratch/` continua verbatim upstream), `test_scratch_np.py` (os invariantes da reescrita em numpy, abaixo), `test_pandas.py` (os invariantes do `pandas` como mesa de trabalho — a fronteira `.to_numpy()`, o `csv` à mão só onde é lição, nenhum algoritmo pronto em chunk executável), `test_dados.py` (os seis conjuntos commitados), `test_freeze.py` (o cache envenenado), `test_gradiente.py` (toda subida de gradiente tem motivo registrado), `test_notebooks.py` (os notebooks de aula não podem defasar dos `.qmd`) e `test_atividades.py` (o gabarito não pode vazar para o site). É o que garante a regra "todo `.qmd` novo precisa ser registrado em `_quarto.yml`", abaixo — sem essa suíte, um arquivo esquecido no YAML só aparece quando alguém percebe a seção faltando no site publicado.
 
 ### Verificar um capítulo sem renderizar o livro
 
@@ -406,7 +429,7 @@ Nos capítulos reescritos, o gerador é **explícito e passado adiante**: toda f
 
 Duas camadas travadas: `pyproject.toml` + `uv.lock` fixam as versões; o `Dockerfile` consome esse lock (`uv sync --frozen`) sobre um SO fixo com Quarto e locale `pt_BR.UTF-8`. O mesmo container renderiza local e no CI.
 
-Dependências (a lista completa e comentada está na spec): `jupyter`, `matplotlib`, `numpy`, `tqdm`, `requests`, `beautifulsoup4`, `html5lib`, `python-dateutil`, `pillow`, `scikit-learn` e `pytest`. **`pandas>=2,<3` entra com a spec de 2026-09-08**, e o teto `<3` não é burocracia: é o pandas 3 que quebrou dois exemplos do livro irmão sem levantar exceção.
+Dependências (a lista completa e comentada está na spec): `jupyter`, `matplotlib`, `numpy`, `pandas`, `tqdm`, `requests`, `beautifulsoup4`, `html5lib`, `python-dateutil`, `pillow`, `scikit-learn` e `pytest`. **`pandas>=2,<3` é dependência direta desde a spec de 2026-09-08**, e o teto `<3` não é burocracia: é o pandas 3 que quebrou dois exemplos do livro irmão sem levantar exceção.
 
 **`numpy` é dependência direta desde a reescrita dos capítulos 6 a 17**, e o teto é `<3`. Antes ele estava instalado assim mesmo, como dependência transitiva do matplotlib e do scikit-learn, mas ficava deliberadamente fora do `pyproject.toml` — a ausência era o sinal de que não era ferramenta da disciplina. Deixou de ser: a partir do capítulo 6 os modelos são construídos com arrays, e o pacote precisa estar declarado e travado como qualquer outro. Os capítulos 1 a 5 continuam sem ele.
 
