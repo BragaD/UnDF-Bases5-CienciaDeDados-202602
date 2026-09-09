@@ -144,6 +144,29 @@ h1{
   text-wrap: balance;
 }
 
+.topo-dir{ display: flex; align-items: flex-end; gap: 18px; }
+
+.modos{
+  display: flex;
+  border: 1px solid var(--rule);
+  border-radius: var(--r);
+  overflow: hidden;
+  background: var(--panel);
+}
+.modos button{
+  font-family: var(--cond);
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: .04em;
+  padding: 8px 14px;
+  border: 0;
+  background: transparent;
+  color: var(--ink-2);
+  cursor: pointer;
+}
+.modos button + button{ border-left: 1px solid var(--rule); }
+.modos button[aria-selected="true"]{ background: var(--marca); color: var(--paper); }
+
 .relogio{
   text-align: right;
   font-family: var(--mono);
@@ -401,9 +424,15 @@ footer code{ font-family: var(--mono); font-size: 12px; color: var(--ink-2); }
       <p class="eyebrow">Bases 5 · Ciência de Dados · Seção 5.6</p>
       <h1>Lote, minibatch, estocástico</h1>
     </div>
-    <div class="relogio">
-      <span class="n" id="relogio">0</span>
-      <span class="u">chamadas a gradient_step</span>
+    <div class="topo-dir">
+      <div class="modos" role="tablist" aria-label="O que o relógio conta">
+        <button role="tab" data-modo="chamadas" aria-selected="true">chamadas</button>
+        <button role="tab" data-modo="epochs" aria-selected="false">epochs</button>
+      </div>
+      <div class="relogio">
+        <span class="n" id="relogio">0</span>
+        <span class="u" id="relogio-u">chamadas a gradient_step</span>
+      </div>
     </div>
   </header>
 
@@ -470,7 +499,7 @@ footer code{ font-family: var(--mono); font-size: 12px; color: var(--ink-2); }
   </main>
 
   <footer>
-    <p><strong>O orçamento é o mesmo, o número de epochs não.</strong> Uma chamada a <code>gradient_step</code> custa o mesmo nos três; o que muda é quantos pontos entraram no gradiente daquela chamada. Comparar por epoch compara corridas com orçamentos diferentes — por isso o relógio desta página conta chamadas.</p>
+    <p><strong>O interruptor lá em cima troca o que está sendo igualado.</strong> Em <em>chamadas</em>, os três gastam o mesmo e os epochs saem diferentes; em <em>epochs</em>, os três dão o mesmo número de passadas pelos dados e o gasto sai diferente — o estocástico faz cem chamadas no tique em que o lote faz uma. Ele parece ganhar de longe num relógio e perder feio no outro, e a diferença é só qual coluna você decidiu manter fixa.</p>
     <p><strong>Fidelidade.</strong> O lote inteiro e o estocástico não embaralham nada, então reproduzem os laços do livro dígito a dígito, a partir do mesmo <code>theta</code> de <code>random.seed(0)</code> e <code>random.seed(2)</code>. O minibatch embaralha, e o gerador do Python não existe aqui: a curva dele bate com a do livro em comportamento, não em número.</p>
   </footer>
 </div>
@@ -507,14 +536,29 @@ const THETA0 = {
   esto: [0.9120685437784988, 0.8956549741186988]   // random.seed(2)
 };
 
-const ORCAMENTO = 10000;   // o maior dos três laços do livro (100 epochs × 100)
+// Dois relógios, e a diferença entre eles é o assunto da seção.
+//
+// Em CHAMADAS, um tique é uma chamada a `gradient_step` para cada método —
+// orçamento igual, e os epochs de cada um saem diferentes. Em EPOCHS, um
+// tique é uma passada completa pelos dados para cada método — epochs iguais,
+// e o orçamento de cada um sai diferente (o estocástico gasta cem chamadas
+// no tique em que o lote gasta uma).
+//
+// O modo também muda o que é registrado: em EPOCHS a perda é medida uma vez
+// por epoch, ou seja, só nas fronteiras — onde a cascata do estocástico já
+// se autocorrigiu. É por isso que o serrilhado some ao trocar de modo, e é
+// exatamente a observação que a seção 5.6 faz ao medir "só nas fronteiras
+// de epoch".
+const ORCAMENTOS = { chamadas: 10000, epochs: 5000 };
+function orcamento(){ return ORCAMENTOS[S.modo]; }
 
 /* ==================================================================== *
  * Estado
  * ==================================================================== */
 
 const S = {
-  chamadas: 0,
+  modo: "chamadas",   // "chamadas" | "epochs"
+  relogio: 0,
   lr: 0.001,
   tamLote: 20,
   rodando: false,
@@ -595,19 +639,36 @@ function criarMetodos(){
   return [lote, mbat, esto];
 }
 
-function umaChamada(){
-  if (S.chamadas >= ORCAMENTO) return false;
+function umaChamadaDe(m){
+  passo(m.theta, m.pontos());
+  m.chamadas++;
+}
+
+function umEpochDe(m){
+  // `pontos()` de cada método incrementa `epoch` sozinho quando fecha a
+  // passada — no lote, já na primeira chamada; no estocástico, na centésima.
+  const alvo = m.epoch + 1;
+  let guarda = 0;
+  while (m.epoch < alvo && guarda++ <= N) umaChamadaDe(m);
+}
+
+function umTique(){
+  if (S.relogio >= orcamento()) return false;
   for (const m of S.metodos){
-    passo(m.theta, m.pontos());
-    m.chamadas++;
-    m.hist.push({ c: m.chamadas, m: mse(m.theta) });
+    if (S.modo === "chamadas"){
+      umaChamadaDe(m);
+      m.hist.push({ x: m.chamadas, m: mse(m.theta) });
+    } else {
+      umEpochDe(m);
+      m.hist.push({ x: m.epoch, m: mse(m.theta) });
+    }
   }
-  S.chamadas++;
+  S.relogio++;
   return true;
 }
 
 function reiniciar(){
-  S.chamadas = 0;
+  S.relogio = 0;
   S.rodando = false;
   semente = 20260909;
   S.metodos = criarMetodos();
@@ -680,6 +741,7 @@ function desenharPerda(){
   g.fillStyle = C.panel; g.fillRect(0, 0, W, H);
 
   const X = c => M.e + Math.log10(Math.max(1, c)) / 4 * pw;              // 1 … 10⁴
+  const unidade = S.modo === "chamadas" ? "chamadas a gradient_step" : "epochs";
   const Y = m => {
     const t = (Math.log10(Math.max(MIN_Y, Math.min(MAX_Y, m))) - Math.log10(MIN_Y))
             / (Math.log10(MAX_Y) - Math.log10(MIN_Y));
@@ -702,18 +764,27 @@ function desenharPerda(){
 
   g.textAlign = "center"; g.textBaseline = "alphabetic";
   g.font = "600 11.5px " + css("--cond");
-  g.fillText("chamadas a gradient_step", M.e + pw / 2, H - 9);
+  g.fillText(unidade, M.e + pw / 2, H - 9);
   g.save();
   g.translate(13, M.c + ph / 2); g.rotate(-Math.PI / 2);
   g.fillText("erro quadrático médio", 0, 0);
   g.restore();
 
-  // O orçamento em que a seção compara os três: 5.000 chamadas.
-  const px5 = X(5000);
-  g.strokeStyle = C.rule; g.lineWidth = 1; g.setLineDash([4, 4]);
-  g.beginPath(); g.moveTo(px5, M.c); g.lineTo(px5, M.c + ph); g.stroke();
-  g.setLineDash([]);
-  rotulo(g, "5.000", px5 - 5, M.c + ph - 6, C.ink3, { align: "right", font: "400 10px " + css("--mono") });
+  // Em chamadas, o orçamento em que a seção compara os três. Em epochs, onde
+  // o laço de cada um termina no livro — o que já mostra, sozinho, que
+  // "100 epochs" e "5.000 epochs" não são a mesma medida.
+  const marcos = S.modo === "chamadas"
+    ? [[5000, "5.000", C.ink3]]
+    : [[100, "estocástico", css("--esto")],
+       [1000, "minibatch", css("--mbat")],
+       [5000, "lote", css("--lote")]];
+  for (const [v, txt, cor] of marcos){
+    const px = X(v);
+    g.strokeStyle = C.rule; g.lineWidth = 1; g.setLineDash([4, 4]);
+    g.beginPath(); g.moveTo(px, M.c); g.lineTo(px, M.c + ph); g.stroke();
+    g.setLineDash([]);
+    rotulo(g, txt, px - 5, M.c + 12, cor, { align: "right", font: "400 10px " + css("--mono") });
+  }
 
   g.save();
   g.beginPath(); g.rect(M.e, M.c, pw, ph); g.clip();
@@ -733,7 +804,7 @@ function desenharPerda(){
       if (b !== a) g.lineTo(px, Y(b));
     };
     for (const p of m.hist){
-      const col = Math.round(X(p.c));
+      const col = Math.round(X(p.x));
       if (col !== colAtual){
         if (colAtual >= 0) emite(colAtual, lo, hi);
         colAtual = col; lo = p.m; hi = p.m;
@@ -759,7 +830,7 @@ function desenharPerda(){
     ly += 15;
   }
 
-  if (S.chamadas === 0){
+  if (S.relogio === 0){
     rotulo(g, "anime para ver as três curvas", M.e + pw / 2, M.c + ph / 2, C.ink3,
            { align: "center", font: "400 12px " + css("--mono") });
   }
@@ -895,7 +966,9 @@ function desenharReta(){
  * ==================================================================== */
 
 function atualizarRail(){
-  document.getElementById("relogio").textContent = S.chamadas.toLocaleString("pt-BR");
+  document.getElementById("relogio").textContent = S.relogio.toLocaleString("pt-BR");
+  document.getElementById("relogio-u").textContent =
+    S.modo === "chamadas" ? "chamadas a gradient_step" : "epochs";
 
   document.getElementById("metodos").innerHTML = S.metodos.map(m => {
     const e = mse(m.theta);
@@ -904,6 +977,7 @@ function atualizarRail(){
       '<span class="rec">' + m.resumo() + "</span></h3>" +
       "<dl>" +
         "<dt>epoch</dt><dd>" + m.epoch.toLocaleString("pt-BR") + "</dd>" +
+        "<dt>chamadas</dt><dd>" + m.chamadas.toLocaleString("pt-BR") + "</dd>" +
         "<dt>inclinação</dt><dd>" + fmt(m.theta[0], 4) + "</dd>" +
         "<dt>intercepto</dt><dd>" + fmt(m.theta[1], 4) + "</dd>" +
         "<dt>MSE</dt><dd>" + (Number.isFinite(e) ? e.toExponential(3) : "—") + "</dd>" +
@@ -927,22 +1001,35 @@ function atualizarRail(){
     ).join("\n");
 }
 
-const DICAS = [
-  ["Antes de animar", "As três retas partem de lugares diferentes porque o livro usa uma semente diferente em cada laço. Nenhuma delas passa perto dos pontos ainda."],
-  ["Nas primeiras chamadas", "O estocástico dispara para fora da escala. Não é ruído: com <code>α = 0.001</code>, um único ponto em <code>x = -50</code> já produz um gradiente enorme, e o passo passa direto do valor certo."],
-  ["Perto de 5.000 chamadas", "Lote e minibatch praticamente se sobrepõem — mesmo orçamento, mesma precisão. O estocástico gastou o mesmo e está sete ordens de grandeza atrás."],
-  ["No fim", "O estocástico chega perto de <code>[20, 5]</code>, mas usando o dobro das chamadas e por um caminho que nunca parou de serrilhar."]
-];
+const DICAS = {
+  chamadas: [
+    ["Antes de animar", "As três retas partem de lugares diferentes porque o livro usa uma semente diferente em cada laço. Nenhuma delas passa perto dos pontos ainda."],
+    ["Nas primeiras chamadas", "O estocástico dispara para fora da escala. Não é ruído: com <code>α = 0.001</code>, um único ponto em <code>x = -50</code> já produz um gradiente enorme, e o passo passa direto do valor certo."],
+    ["Perto de 5.000 chamadas", "Lote e minibatch praticamente se sobrepõem — mesmo orçamento, mesma precisão. O estocástico gastou o mesmo e está sete ordens de grandeza atrás."],
+    ["No fim", "O estocástico chega perto de <code>[20, 5]</code>, mas usando o dobro das chamadas e por um caminho que nunca parou de serrilhar."]
+  ],
+  epochs: [
+    ["Contando epochs", "Agora cada tique é uma passada pelos dados para os três. Repare na linha <code>chamadas</code> de cada um: o estocástico gasta cem por tique, o minibatch cinco, o lote uma."],
+    ["Nos primeiros epochs", "O estocástico desce muito mais rápido — e é verdade, por epoch. Só que um epoch dele custa cem vezes um epoch do lote."],
+    ["No epoch 100", "O laço estocástico do livro termina aqui, à frente dos outros dois. Volte para <em>chamadas</em> e compare no mesmo orçamento: a ordem se inverte."],
+    ["Uma medida esconde a outra", "Medida uma vez por epoch, a perda do estocástico sai lisa — a cascata acontece <em>dentro</em> do epoch e já se autocorrigiu na fronteira. É o mesmo dado, amostrado de outro jeito."]
+  ]
+};
 
 function atualizarDica(){
-  const c = S.chamadas;
-  const i = c === 0 ? 0 : c < 400 ? 1 : c < 8000 ? 2 : 3;
+  const c = S.relogio, m = S.modo;
+  const i = m === "chamadas"
+    ? (c === 0 ? 0 : c < 400 ? 1 : c < 8000 ? 2 : 3)
+    : (c === 0 ? 0 : c < 30 ? 1 : c < 400 ? 2 : 3);
   document.getElementById("dica").innerHTML =
-    "<strong>" + DICAS[i][0] + ".</strong> " + DICAS[i][1];
+    "<strong>" + DICAS[m][i][0] + ".</strong> " + DICAS[m][i][1];
 }
 
 function sincronizarBotoes(){
-  const fim = S.chamadas >= ORCAMENTO;
+  const fim = S.relogio >= orcamento();
+  const un = S.modo === "chamadas" ? "chamada" : "epoch";
+  document.getElementById("btn-step").textContent = "um" + (un === "chamada" ? "a chamada" : " epoch");
+  document.getElementById("btn-fast").textContent = "×100 " + un + "s";
   document.getElementById("btn-play").textContent = S.rodando ? "pausar" : "animar";
   document.getElementById("btn-step").disabled = fim;
   document.getElementById("btn-fast").disabled = fim;
@@ -969,7 +1056,7 @@ function porQuadro(){
 function quadro(){
   if (S.rodando){
     let n = porQuadro();
-    while (n-- > 0) if (!umaChamada()){ S.rodando = false; break; }
+    while (n-- > 0) if (!umTique()){ S.rodando = false; break; }
     atualizar();
   }
   if (S.sujo){ desenharPerda(); desenharReta(); S.sujo = false; }
@@ -996,16 +1083,16 @@ function sincronizarControles(){
 }
 
 el("btn-reset").addEventListener("click", () => reiniciar());
-el("btn-step").addEventListener("click", () => { S.rodando = false; umaChamada(); atualizar(); });
+el("btn-step").addEventListener("click", () => { S.rodando = false; umTique(); atualizar(); });
 el("btn-play").addEventListener("click", () => { S.rodando = !S.rodando; atualizar(); });
 el("btn-fast").addEventListener("click", () => {
   S.rodando = false;
-  for (let i = 0; i < 100; i++) if (!umaChamada()) break;
+  for (let i = 0; i < 100; i++) if (!umTique()) break;
   atualizar();
 });
 el("btn-fim").addEventListener("click", () => {
   S.rodando = false;
-  while (umaChamada());
+  while (umTique());
   atualizar();
 });
 
@@ -1047,6 +1134,16 @@ el("chips").addEventListener("click", e => {
   sincronizarControles();
   reiniciar();
 });
+
+for (const b of document.querySelectorAll(".modos button")){
+  b.addEventListener("click", () => {
+    if (b.dataset.modo === S.modo) return;
+    S.modo = b.dataset.modo;
+    for (const o of document.querySelectorAll(".modos button"))
+      o.setAttribute("aria-selected", String(o === b));
+    reiniciar();
+  });
+}
 
 document.addEventListener("keydown", e => {
   if (/^(INPUT|SELECT|TEXTAREA)$/.test(e.target.tagName)) return;
