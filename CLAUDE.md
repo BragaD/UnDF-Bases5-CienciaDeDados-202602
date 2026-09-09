@@ -35,14 +35,17 @@ Ao terminar os 17, falta um **passe de coerência global**: `content/cap01`, `co
 
 **Onde o assunto é *dado*, e não *modelo*, a ferramenta passa a ser o `pandas`** — spec de 2026-09-08, um capítulo por vez, no mesmo processo da reescrita em numpy (planejador Opus → implementador → revisor → correções), com os planos em `docs/superpowers/plans/2026-09-08-pandas-capNN.md`.
 
-Estado: **fundação e capítulos 6 e 7 concluídos**. Faltam, na ordem da spec: 9 e 10 (leitura de arquivo real), 11, 12 e 13 (colunas nomeadas e as tabelas de resultado), 8 (o menor retrabalho), e 14 a 17 — que ainda não existem em numpy e **já nascem com as duas specs valendo juntas**.
+Estado: **fundação e capítulos 6, 7 e 8 concluídos**. O 8 foi antecipado a pedido do autor (a spec o punha por último entre os já escritos). Faltam: 9 e 10 (leitura de arquivo real), 11, 12 e 13 (colunas nomeadas e as tabelas de resultado), e 14 a 17 — que ainda não existem em numpy e **já nascem com as duas specs valendo juntas**.
+
+**Duas pendências que os capítulos 9 e 13 precisam fechar**, registradas nos "Desvios na implementação" do plano do cap. 8: a matriz de confusão do 9 deve ser montada como `DataFrame` no idioma da 8.4 (e aí a prosa da 8.4 pode voltar a dizer "do mesmo jeito"); e, se o 9 e o 13 passarem a ler um `DataFrame`, a 8.3 recupera a frase de que eles "atravessam a fronteira primeiro" — que hoje seria falsa e por isso foi retirada.
 
 `CAPITULOS_PANDAS`, em `tests/test_pandas.py`, cresce a cada capítulo convertido, no mesmo molde de `CAPITULOS_NUMPY`: um teste vermelho nunca significa "ainda não chegou a vez".
 
-Três decisões dos capítulos 6 e 7 que os seguintes herdam, e que não devem ser redecididas:
+Quatro decisões dos capítulos 6, 7 e 8 que os seguintes herdam, e que não devem ser redecididas:
 
 - **A ordem da 6.1 é `csv` → `DataFrame` → `array`.** O módulo `csv` fica, encolhido, porque o `read_csv` só é convincente contra o laço que ele substitui; e o `np.loadtxt` fica no fim porque a 7.1 o cita nominalmente.
 - **A fronteira é batizada em `### Do `DataFrame` para o array: a fronteira`**, no fim do bloco *De listas a arrays* da 7.1. Todo capítulo que ajusta modelo cita esse `###` e mostra a linha; nenhum reexplica.
+- **A matriz de confusão é um `DataFrame` com linha e coluna nomeadas**, e o idioma nasce na 8.4 (`pd.DataFrame([[tp, fp], [fn, tn]], index=..., columns=...)`, com a linha dizendo o que o modelo previu e a coluna dizendo qual era a verdade). Todo capítulo que monta uma cita esse idioma.
 - **"À mão uma vez, `pandas` ao lado, `pandas` daí em diante"** é o limite do capítulo 7, e o que impede a hipocrisia pedagógica. Onde um exemplo à mão sobrevive, **o texto diz por que** — o `max` por símbolo da 7.5 sobrevive para mostrar o que o `groupby` faz por baixo; o `scale`/`rescale` da 7.6 sobrevive porque deixar uma coluna constante em paz é decisão de modelagem, e `(df - df.mean()) / df.std()` a transforma em `NaN` sem avisar.
 
 Duas armadilhas medidas, que valem para quem converter os próximos capítulos:

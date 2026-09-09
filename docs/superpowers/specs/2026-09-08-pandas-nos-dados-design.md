@@ -2,7 +2,7 @@
 
 **Data:** 2026-09-08
 **Status:** decidido pelo autor; este documento fixa as regras e a execução
-**Implementação:** em curso na branch `pandas-nos-dados` — fundação e capítulos 6 e 7 concluídos (ver a nota de correção no fim)
+**Implementação:** em curso na branch `pandas-nos-dados` — fundação e capítulos 6, 7 e 8 concluídos (ver a nota de correção no fim)
 **Precede:** `2026-09-06-reescrita-numpy-design.md`, que continua valendo para os algoritmos
 
 ## A decisão
@@ -216,3 +216,14 @@ Escrita durante a execução, contra medições. **Onde esta nota discorda do co
 **6. O bloco `## O DataFrame` saiu com 133 linhas**, acima das 80 a 120 que a spec estipula. Três subtítulos quebram a leitura e cada chunk ensina uma coisa; o corte, se um dia for preciso, é o par do TSV de brinquedo.
 
 **7. `scratch_np/working_with_data.py` não mudou uma linha, e `EXPORTA_DATAFRAME` continua vazio.** Mas a 7.5 era o **único** `.qmd` do livro que importava esse módulo, e a importação saiu com a conversão: hoje `grep -rn "working_with_data" content/` não devolve nada. Nenhuma função ficou órfã — todas continuam num chunk do capítulo 7 —, mas a convenção *"a seção implementa, a próxima importa"* fica sem demonstração para esse módulo **até os capítulos 9 e 13 importarem `rescale`**. Quem converter esses dois deve fechar isso.
+
+### Acréscimo — 2026-09-09, depois do capítulo 8
+
+**8. A ordem de execução mudou por decisão do autor: o capítulo 8 veio logo depois do 7**, antes dos 9 a 13. A spec o punha em sexto lugar ("o menor retrabalho; pode vir junto com o 11"). Duas consequências:
+
+- **A primeira matriz de confusão do livro é a do capítulo 8, não a do 9.** A spec atribui ao capítulo 9 a ideia de apresentá-la como `DataFrame` com índice e colunas nomeados; como o 8 chegou antes, o **idioma nasce na 8.4** e o capítulo 9 passa a citá-lo em vez de inventar outro.
+- **Ficam duas pendências para os capítulos 9 e 13**, registradas nos "Desvios na implementação" do plano do capítulo 8: a matriz do 9 deve ser montada no idioma da 8.4; e a frase da 8.3 sobre o 9 e o 13 "atravessarem a fronteira primeiro" foi retirada, porque hoje seria falsa — os dois montam `X` e `y` sem passar por `DataFrame` nenhum —, e volta quando eles forem convertidos.
+
+**9. O capítulo 8 é o que menos muda, e isso é a resposta certa.** Quatro das seis seções não têm trabalho de dado nenhum (8.1, 8.2 e 8.6 não têm chunk executável; 8.5 são duas figuras de `numpy` puro). O total foi quatro chunks novos, uma tabela markdown que virou chunk e cerca de dez emendas de prosa — e **nenhum número afirmado pelo capítulo mudou**. O parágrafo que a spec dedica a ele previa isso corretamente.
+
+**10. `scratch_np/machine_learning.py` não mudou, e o motivo vale para os próximos.** Medido: `split_data(df, ...)` falha **alto** (`KeyError`, porque o `isinstance(data, np.ndarray)` é falso e `df[i]` procura coluna), mas `train_test_split(df, ...)` roda **em silêncio** — o `np.asarray(xs)` da primeira linha devolve um array de `dtype: object`, e o erro só aparece na primeira multiplicação. Isso virou material do capítulo (o callout *A fronteira acontece com ou sem você*) em vez de virar um terceiro ramo na função: o contrato em arrays é o que sete importações dos capítulos 9, 10 e 13 dependem.
