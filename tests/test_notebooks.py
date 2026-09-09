@@ -242,32 +242,60 @@ def test_todo_capitulo_tem_link_para_o_colab_e_nenhum_notebook_o_repete():
         )
 
 
-def test_link_de_apoio_e_relativo_no_qmd_e_absoluto_no_notebook():
-    """As duas pontas pedem coisas opostas, e as duas falham em silêncio.
+def test_toda_pagina_de_apoio_esta_publicada_e_linkada_certo():
+    """Varre `apoio/` inteiro, para uma página nova não entrar sem as amarras.
 
-    No `.qmd` o link precisa ser **relativo**: com a URL absoluta, `make
-    preview` manda o leitor para o site publicado em vez da cópia local que
-    ele está olhando — e ninguém percebe, porque a página abre normalmente.
-    No notebook precisa ser **absoluto**: de dentro de `notebooks/`, e mais
-    ainda no Colab, nenhum caminho relativo do livro resolve. Quem traduz é
-    `reescreve_links`; este teste guarda os dois lados.
+    São três invariantes, e cada uma falha em silêncio se quebrar:
+
+    1. Sem a linha em `project.resources`, a página existe no repositório e
+       não existe no site publicado — o link do capítulo dá 404 e o render
+       não reclama.
+    2. No `.qmd` o link precisa ser **relativo**: com a URL absoluta, o
+       `make preview` manda o leitor para o site publicado em vez da cópia
+       local que ele está olhando, e a página abre normalmente, então ninguém
+       percebe.
+    3. No notebook precisa ser **absoluto**: de dentro de `notebooks/`, e
+       mais ainda no Colab, nenhum caminho relativo do livro resolve. Quem
+       traduz é `reescreve_links`, no gerador.
     """
     gerador = carregar_gerador()
-    qmd = RAIZ / "content/cap05/index.qmd"
-    texto = qmd.read_text(encoding="utf-8")
-    assert "](../../apoio/gradiente-descendente.html)" in texto, (
-        "o link de apoio do cap. 5 não é relativo — no `make preview` ele "
-        "levaria ao site publicado, e não à cópia local"
-    )
-    assert f"{gerador.SITE}/apoio/" not in texto, (
-        "o cap. 5 aponta para apoio/ pela URL absoluta do site"
-    )
-    nb = carregados()["cap05-gradiente-descendente.ipynb"]
-    dentro = "\n".join(fonte(c) for c in nb["cells"])
-    assert f"{gerador.SITE}/apoio/gradiente-descendente.html" in dentro, (
-        "o notebook do cap. 5 não carrega a URL absoluta de apoio/ — um "
-        "caminho relativo não resolve de dentro de notebooks/"
-    )
+    yml = (RAIZ / "_quarto.yml").read_text(encoding="utf-8")
+    carregado = carregados()
+
+    paginas = sorted((RAIZ / "apoio").glob("*.html"))
+    assert paginas, "apoio/ está vazio — este teste perdeu o objeto"
+
+    for pagina in paginas:
+        rel = f"apoio/{pagina.name}"
+
+        assert f"- {rel}" in yml, (
+            f"{rel} não está em project.resources do _quarto.yml — o Quarto "
+            f"não vai copiá-la para _book/, e o link do capítulo dará 404"
+        )
+
+        fontes = [
+            q for q in sorted((RAIZ / "content").rglob("*.qmd"))
+            if pagina.name in q.read_text(encoding="utf-8")
+        ]
+        assert fontes, f"nenhum capítulo aponta para {rel}"
+
+        for qmd in fontes:
+            texto = qmd.read_text(encoding="utf-8")
+            assert f"](../../{rel})" in texto, (
+                f"{qmd.relative_to(RAIZ)} não liga para {rel} por caminho "
+                f"relativo — no `make preview` o link sairia para o site"
+            )
+            assert f"{gerador.SITE}/{rel}" not in texto, (
+                f"{qmd.relative_to(RAIZ)} aponta para {rel} pela URL absoluta"
+            )
+
+            cap = qmd.relative_to(RAIZ / "content").parts[0]      # "cap05"
+            nome = next(n for n in carregado if n.startswith(f"{cap}-"))
+            dentro = "\n".join(fonte(c) for c in carregado[nome]["cells"])
+            assert f"{gerador.SITE}/{rel}" in dentro, (
+                f"{nome} não carrega a URL absoluta de {rel} — um caminho "
+                f"relativo não resolve de dentro de notebooks/"
+            )
 
 
 def test_quarto_ignora_a_pasta_de_notebooks():

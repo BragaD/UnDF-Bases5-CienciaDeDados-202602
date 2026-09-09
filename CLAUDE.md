@@ -307,9 +307,14 @@ O link é do site para o notebook e **não** o contrário: `LINHA_COLAB`, no ger
 
 ### `apoio/` — páginas interativas de aula, servidas junto do livro
 
-`apoio/` guarda páginas HTML autônomas para usar **ao vivo na aula**, ao lado do slide e do notebook. Hoje há uma: `gradiente-descendente.html`, do capítulo 5 — o aluno escolhe a função, mexe no tamanho do passo e vê, a cada iteração, a derivada, o passo e o rastro; em uma variável e em duas, com contorno e superfície 3D lado a lado.
+`apoio/` guarda páginas HTML autônomas para usar **ao vivo na aula**, ao lado do slide e do notebook. Hoje são duas, as duas do capítulo 5:
+
+- **`gradiente-descendente.html`** (seções 5.1 a 5.4) — o aluno escolhe a função, mexe no tamanho do passo e vê, a cada iteração, a derivada, o passo e o rastro; em uma variável e em duas, com contorno e superfície 3D lado a lado.
+- **`lote-minibatch-estocastico.html`** (seção 5.6) — os três métodos treinando ao mesmo tempo na regressão da seção 5.5, num relógio comum de **chamadas a `gradient_step`**, com a perda (log-log) e a reta ajustada em dois painéis simultâneos. O relógio é chamadas, e não epochs, porque é esse o argumento da seção: 5.000 epochs de lote, 1.000 de minibatch e 100 de estocástico são orçamentos diferentes, e comparar por epoch faz o estocástico parecer dez vezes mais rápido do que é.
 
 **São arquivos estáticos, não conteúdo do livro.** Um HTML só, sem build, sem dependência de rede, que abre com dois cliques e roda offline. Não têm `.qmd`, não entram no `book.chapters` e não aparecem no sidebar — o que os leva ao site é uma linha em `project.resources`, no `_quarto.yml`, que o Quarto copia para `_book/apoio/`. Sem essa linha, a página existe no repositório e **não** existe no site publicado.
+
+As duas dividem tokens, tipografia e componentes de propósito — são irmãs, e uma terceira página deve copiar o mesmo bloco `:root` em vez de inventar outro.
 
 Quatro decisões que não são óbvias e custam tempo a redescobrir:
 
@@ -318,7 +323,11 @@ Quatro decisões que não são óbvias e custam tempo a redescobrir:
 - **`test_quarto_publica_apenas_o_diretorio_publico` não barra isto.** O teste casa só entradas de `resources` que começam com `atividades`, porque o que ele guarda é o gabarito. Recurso fora de `atividades/` passa — o que é o comportamento certo, mas parece proibido à primeira leitura do teste.
 - **Editar o `index.qmd` de um capítulo obriga a rodar `make notebooks`**, senão `test_notebooks_estao_atualizados` derruba a suíte. Vale para o link de `apoio/` como vale para qualquer outra linha.
 
+`test_toda_pagina_de_apoio_esta_publicada_e_linkada_certo` varre `apoio/` inteiro e cobra as três primeiras: recurso declarado, link relativo no `.qmd`, URL absoluta no notebook. Página nova entra na varredura sozinha — não é preciso editar o teste.
+
 **A paleta sai do livro e do logo.** O fundo e o texto são os do tema `cosmo`, o mesmo do livro em modo claro (`#FFFFFF`, `#373A3C`); os azuis são amostrados de `images/logo-undf.png` — `#2264AF`, `#4195D1`, `#8FCEF1` e o navy `#27316E`. Eles vestem a paisagem inteira: curvas de nível, malha 3d, curva de `f`, aba ativa, botão principal. A trajetória é a única coisa quente da página, e isso é decisão, não descuido: a marca é toda azul, e um rastro azul sobre um mapa azul sumiria justamente no que mais importa de ver. O laranja é o complementar daqueles azuis. A regra de leitura da página é essa — **azul é o terreno, laranja é a descida** —, e quem mexer nas cores deve mantê-la.
+
+**O que é reprodutível dígito a dígito, e o que não é.** Na página da seção 5.6, o lote inteiro e o estocástico não embaralham nada: basta fixar o `theta` inicial de `random.seed(0)` e `random.seed(2)` como constante — está no topo do arquivo, com a origem escrita — e o resto é determinístico, então as duas curvas reproduzem os laços do livro exatamente (medido: lote com MSE `4,107 × 10⁻⁸` e estocástico com `0,3394` e `theta = [20.0100, 4.4998]` em 5.000 chamadas, contra os `4,1 × 10⁻⁸` e `0,34` da seção). O minibatch embaralha, e o Mersenne Twister do Python não existe no navegador: a curva dele bate em comportamento, não em número, **e a página diz isso ao leitor** em vez de deixar parecer exata.
 
 **Os números da página são conferidos contra o Python, não estimados.** A superfície de erro quadrático médio usa os dados da seção 5.5 (`inputs = [(x, 20*x + 5) for x in range(-50, 50)]`) em forma fechada — média(x) = −0,5 e média(x²) = 833,5 —, e a trajetória bate dígito a dígito com o laço do livro: no passo 5, inclinação 22,5464 e intercepto 0,5475. As faixas de α de cada função foram medidas antes de escrever a página, e é isso que faz os presets ensinarem o que prometem (o poço duplo fica preso até α ≈ 0,15, escapa entre 0,17 e 0,25, e não assenta acima de 0,29). Mexeu na função ou no passo? Meça de novo — um preset que não faz o que o rótulo diz é pior que preset nenhum.
 
