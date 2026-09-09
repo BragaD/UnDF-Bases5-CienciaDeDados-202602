@@ -37,15 +37,37 @@ Frequentemente representamos essas contagens numa **matriz de confusão**:
 
 Vamos ver como o teste da leucemia se encaixa nesse quadro. Hoje em dia, aproximadamente **5 bebês em cada 1.000 se chamam Luke**. E a prevalência da leucemia ao longo da vida é de cerca de 1,4%, ou **14 em cada 1.000 pessoas**.
 
-Se acreditarmos que esses dois fatores são independentes e aplicarmos o teste "Luke é sinal de leucemia" a um milhão de pessoas, esperaríamos uma matriz de confusão assim:
+Se acreditarmos que esses dois fatores são independentes, dá para preencher as quatro caixas sem nenhum dado: a fração de Lukes entre quem desenvolve leucemia é a mesma da população inteira. Aplicando o teste a um milhão de pessoas:
 
-|  | Leucemia | Sem leucemia | Total |
-|---|---|---|---|
-| **"Luke"** | 70 | 4.930 | 5.000 |
-| **Não "Luke"** | 13.930 | 981.070 | 995.000 |
-| **Total** | 14.000 | 986.000 | 1.000.000 |
+```{python}
+#| label: matriz-de-confusao-luke
+import pandas as pd
 
-Com esses números dá para calcular várias estatísticas de desempenho. A **acurácia** é definida como a fração de previsões corretas:
+pessoas = 1_000_000
+lukes = pessoas * 5 // 1000        # 5 em cada 1.000 se chamam Luke
+doentes = pessoas * 14 // 1000     # 14 em cada 1.000 desenvolvem leucemia
+
+tp = lukes * doentes // pessoas    # independentes: os dois ao mesmo tempo
+fp = lukes - tp                    # Lukes que não adoecem
+fn = doentes - tp                  # doentes que não se chamam Luke
+tn = pessoas - lukes - doentes + tp
+
+matriz = pd.DataFrame([[tp, fp], [fn, tn]],
+                      index=['previu "Luke"', 'previu "não Luke"'],
+                      columns=["leucemia", "sem leucemia"])
+matriz["total"] = matriz.sum(axis=1)     # soma ao longo das colunas
+matriz.loc["total"] = matriz.sum()       # e ao longo das linhas
+
+assert (tp, fp, fn, tn) == (70, 4930, 13930, 981070)
+
+matriz
+```
+
+Esta é a **matriz de confusão** das quatro caixas acima, agora com números. Ela é um `DataFrame` por um motivo prático: uma matriz de confusão sem rótulo é um convite ao erro — quatro números numa grade dois por dois, e nada dizendo qual é qual. Aqui a linha diz o que o modelo previu, a coluna diz qual era a verdade, e ninguém precisa lembrar de nada. É assim que ela aparece daqui em diante, e o [Capítulo 9](../cap09/index.qmd) monta a dele com dados de verdade, não com uma conta.
+
+A linha e a coluna `total` são a conferência: `matriz.sum(axis=1)` soma cada linha, `matriz.sum()` soma cada coluna, e é o mesmo `axis` das reduções de array do [bloco *De listas a arrays*](../cap07/01-explorando-seus-dados.qmd). Os totais fecham em um milhão, 14.000 doentes e 5.000 Lukes — que eram os dados do enunciado.
+
+São os quatro números de dentro da tabela — `tp`, `fp`, `fn`, `tn`, nessa ordem — que as funções desta seção recebem. Com eles dá para calcular várias estatísticas de desempenho. A **acurácia** é definida como a fração de previsões corretas:
 
 ```{python}
 #| label: acuracia
@@ -170,7 +192,7 @@ f1_score(y_teste, previsto)          # 0.007368421052631579
 
 Reconstruindo o milhão de pessoas do teste do Luke, os quatro números saem idênticos aos que você calculou acima. Não há truque nenhum nessas funções — elas contam as mesmas quatro caixas. O que muda é tudo o que fica implícito.
 
-**O primeiro implícito é a orientação da matriz.** A tabela desta seção põe as previsões nas **linhas**; o `confusion_matrix` do `scikit-learn` põe os valores **reais** nas linhas e as previsões nas colunas. É a transposta:
+**O primeiro implícito é a orientação da matriz.** A tabela desta seção põe as previsões nas **linhas** — e diz isso, porque os rótulos estão escritos nela. O `confusion_matrix` do `scikit-learn` devolve um `ndarray` sem rótulo nenhum, com os valores **reais** nas linhas e as previsões nas colunas. É a transposta:
 
 ```python
 confusion_matrix(y_teste, previsto)

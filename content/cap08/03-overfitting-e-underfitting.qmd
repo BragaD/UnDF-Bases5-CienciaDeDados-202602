@@ -197,13 +197,95 @@ performance = model.test(x_test, y_test)
 
 Se o modelo tiver sofrido overfitting nos dados de treino, ele vai — espera-se — se sair muito mal nos dados de teste, que são completamente separados. Dito de outro jeito: se ele vai bem no teste, você pode ter mais confiança de que está *ajustando* em vez de *superajustando*.
 
+## O que se divide, na prática, é uma tabela
+
+Nos dois exemplos acima, `xs` e `ys` já eram arrays. Fora de um livro, quase nunca é assim que o dado chega: ele chega numa tabela, com uma coluna por atributo e um nome em cada coluna — o `DataFrame` que a [seção 6.1](../cap06/01-lendo-arquivos.qmd) apresentou e que a [seção 7.1](../cap07/01-explorando-seus-dados.qmd) atravessou para virar `X` e `y`.
+
+Com uma tabela na mão, a divisão acontece **antes** da fronteira, e é essa a ordem que a maior parte do trabalho real segue. `split_data` não serve para isso, e falha de forma barulhenta: ele testa `isinstance(data, np.ndarray)`, cai no ramo da sequência, e `data[i]` num `DataFrame` procura uma **coluna** com aquele número — `KeyError`. O método que divide uma tabela por posição é o `.iloc`, o mesmo que a [seção 7.5](../cap07/05-manipulando-dados.qmd) separou do `.loc`:
+
+```{python}
+#| label: divide-um-dataframe
+import pandas as pd
+
+acoes = pd.read_csv("dados/stocks.csv", parse_dates=["Date"])
+
+rng = np.random.default_rng(0)
+indices = rng.permutation(len(acoes))     # a mesma permutação de `split_data`
+corte = int(len(acoes) * 0.75)
+
+treino = acoes.iloc[indices[:corte]]
+teste = acoes.iloc[indices[corte:]]
+
+assert len(treino) == 17328 and len(teste) == 5777
+assert treino.dtypes.equals(acoes.dtypes)      # os oito tipos atravessam a divisão
+
+print(type(treino).__name__, treino.shape, "|", type(teste).__name__, teste.shape)
+teste.head(3)
+```
+
+As duas metades continuam sendo `DataFrame`: as oito colunas, os oito tipos e os nomes chegam inteiros dos dois lados. E repare nos números da primeira coluna da tabela acima — 20356, 4815, 10012. Não são posições no conjunto de teste: são os **rótulos** que aquelas linhas tinham no arquivo original, e eles viajaram junto com as linhas. Nenhuma linha está nos dois lados, e as duas metades somadas reconstroem a tabela inteira; o que se perde é só a ordem.
+
+Esse índice é o que torna a divisão auditável. Quando o modelo errar feio numa linha do teste, é por ele que se volta à observação original — a data, a ação, a linha do arquivo — para descobrir o que havia de estranho ali. Com dois arrays de números não há esse caminho de volta.
+
+A fronteira vem agora, e vem **duas vezes**, uma para cada metade:
+
+```{python}
+#| label: fronteira-nas-duas-metades
+atributos = ["Open", "High", "Low"]
+
+X_train = treino[atributos].to_numpy()     # a fronteira, para cada lado
+y_train = treino["Close"].to_numpy()
+X_test = teste[atributos].to_numpy()
+y_test = teste["Close"].to_numpy()
+
+X_train.shape, X_train.dtype, X_test.shape, y_test.shape
+```
+
+Quatro blocos de `float64`, sem nome nenhum, prontos para o `@` — e é isto que o modelo veria se houvesse um modelo aqui. Não há: como na [seção 7.1](../cap07/01-explorando-seus-dados.qmd), este `X` e este `y` servem só para a forma, porque a máxima e a mínima do dia já contêm o fechamento e prever `y` a partir deles seria trapaça.
+
+As duas ordens — dividir e depois atravessar, ou atravessar e depois dividir — dão o mesmo resultado para o modelo, e o livro usa as duas. Os capítulos [9](../cap09/index.qmd) e [13](../cap13/index.qmd) atravessam primeiro e chamam `train_test_split` sobre `X` e `y`, porque ali `X` e `y` são tudo o que existe. Quando a tabela tem colunas que **não** são atributos — um identificador, uma data, o nome da ação —, dividir a tabela primeiro é o que preserva essas colunas para conferir depois.
+
+E conferir depois é exatamente o que vale fazer antes de seguir. Uma pergunta que só se faz com a tabela na mão: o que caiu no conjunto de teste?
+
+```{python}
+#| label: o-que-caiu-no-teste
+teste["Symbol"].value_counts()
+```
+
+As quatro ações aparecem no teste — e, como a divisão foi sorteada linha a linha, as quatro aparecem também no treino. Pregões da mesma ação em dias vizinhos são quase iguais entre si, então boa parte de cada linha do teste tem uma prima muito parecida do outro lado da divisão. Um modelo pode ir muito bem aí sem ter aprendido nada além de reconhecer a ação.
+
+Isto não é um defeito da divisão: é o primeiro dos dois modos de ela falhar.
+
+::: {.callout-warning}
+## A fronteira acontece com ou sem você
+
+Nada impede passar a tabela inteira para o `train_test_split` que você escreveu acima. Ele roda:
+
+```{python}
+#| label: fronteira-por-acidente
+X_qualquer, _, _, _ = train_test_split(acoes, acoes["Close"], 0.25,
+                                       np.random.default_rng(0))
+
+try:
+    X_qualquer @ np.ones(8)
+except TypeError as e:
+    print("TypeError:", e)
+
+X_qualquer.shape, X_qualquer.dtype
+```
+
+A forma está certa, a divisão está certa, e nada avisa. Mas a primeira linha da função é `xs = np.asarray(xs)`, e um array tem **um** tipo só: diante de uma tabela com texto, data, float e int, o único tipo comum é `object` — uma matriz de ponteiros para objetos Python, em que cada `Timestamp` e cada `"AAPL"` continuam sendo o que eram. O `@` não sabe multiplicar `"AAPL"` por um float, e é isso que o `TypeError` diz.
+
+A fronteira foi atravessada de qualquer jeito; o que se perdeu foi a **escolha**. `treino[atributos].to_numpy()` diz quais colunas viram matriz, e o `float64` que sai é consequência dessa escolha. `np.asarray(tabela)` decide sozinho, e decide mal.
+:::
+
 ## Dois jeitos de isso dar errado
 
 Há, no entanto, dois modos de essa estratégia falhar.
 
 **O primeiro** é haver padrões comuns entre treino e teste que não generalizariam para um conjunto maior.
 
-Por exemplo: imagine que seus dados são de atividade de usuários, com uma linha por usuário por semana. Nesse caso, a maioria dos usuários vai aparecer tanto no treino quanto no teste, e certos modelos podem aprender a **identificar usuários** em vez de descobrir relações entre atributos. O @grus2019 registra que isso já aconteceu com ele.
+Por exemplo: imagine que seus dados são de atividade de usuários, com uma linha por usuário por semana. Nesse caso, a maioria dos usuários vai aparecer tanto no treino quanto no teste, e certos modelos podem aprender a **identificar usuários** em vez de descobrir relações entre atributos. É a mesma forma da divisão que você acabou de fazer, com a ação no lugar do usuário e o pregão no lugar da semana. O @grus2019 registra que isso já aconteceu com ele.
 
 **O segundo é maior**, e é o que mais aparece na prática: usar a divisão treino/teste não apenas para *julgar* um modelo, mas para *escolher* entre vários.
 
@@ -236,7 +318,7 @@ X_treino, X_teste, y_treino, y_teste = train_test_split(
 
 A assinatura é `train_test_split(*arrays, test_size=None, train_size=None, random_state=None, shuffle=True, stratify=None)`. Ela aceita quantos arrays você quiser e divide todos pelos mesmos índices — é o mesmo cuidado do nosso `train_test_split`, generalizado. Sem `test_size` nem `train_size`, o padrão é 25% para teste.
 
-**A primeira coisa que ela esconde é a semente — e vale dizer com cuidado o que "esconde" significa.** O nosso `split_data` recebe o gerador como parâmetro **obrigatório**: sem um `np.random.default_rng(42)` escrito na chamada, ele nem roda. O `train_test_split` da biblioteca tem `random_state=None` por padrão e, nesse caso, sorteia do gerador **global** do `numpy`: duas chamadas seguidas devolvem conjuntos diferentes, e criar um `np.random.default_rng(42)` antes não muda nada, porque o gerador que ela usa é outro. Só `random_state=42` torna a divisão reprodutível, e a regra vale para o pacote inteiro — todo objeto do `scikit-learn` que sorteia tem o seu próprio `random_state`. Os dois caminhos chegam ao mesmo lugar; a diferença é o padrão, e o dela deixa esquecer. O que ela esconde mesmo é a **permutação**: o nosso `split_data` monta `idx = rng.permutation(len(data))` e divide esse array, que dá para imprimir, guardar e conferir; o `train_test_split` devolve os pedaços e joga os índices fora. Para saber *quais* linhas foram para o teste — casar com um identificador, auditar uma divisão que deu resultado estranho —, o jeito é dividir um `np.arange(len(X))` junto com os dados, como se fosse mais uma variável, ou pedir os índices a `ShuffleSplit(n_splits=1, test_size=0.25, random_state=42).split(X)`.
+**A primeira coisa que ela esconde é a semente — e vale dizer com cuidado o que "esconde" significa.** O nosso `split_data` recebe o gerador como parâmetro **obrigatório**: sem um `np.random.default_rng(42)` escrito na chamada, ele nem roda. O `train_test_split` da biblioteca tem `random_state=None` por padrão e, nesse caso, sorteia do gerador **global** do `numpy`: duas chamadas seguidas devolvem conjuntos diferentes, e criar um `np.random.default_rng(42)` antes não muda nada, porque o gerador que ela usa é outro. Só `random_state=42` torna a divisão reprodutível, e a regra vale para o pacote inteiro — todo objeto do `scikit-learn` que sorteia tem o seu próprio `random_state`. Os dois caminhos chegam ao mesmo lugar; a diferença é o padrão, e o dela deixa esquecer. O que ela esconde mesmo é a **permutação**: o nosso `split_data` monta `idx = rng.permutation(len(data))` e divide esse array, que dá para imprimir, guardar e conferir; o `train_test_split` devolve os pedaços e joga os índices fora. Para saber *quais* linhas foram para o teste — casar com um identificador, auditar uma divisão que deu resultado estranho —, o jeito é dividir um `np.arange(len(X))` junto com os dados, como se fosse mais uma variável, ou pedir os índices a `ShuffleSplit(n_splits=1, test_size=0.25, random_state=42).split(X)`. É a pergunta que a divisão da tabela, acima nesta seção, responde de graça: o índice do `DataFrame` viaja com as linhas, e ele **é** o identificador.
 
 **A segunda é o embaralhamento.** `shuffle=True` é o padrão, e é o que o nosso `split_data` também faz — mas a família de validação cruzada não segue essa regra. `KFold(n_splits=5)` tem `shuffle=False` por padrão: ele corta a lista em cinco pedaços contíguos, na ordem em que os dados chegaram. Sobre um arquivo ordenado por classe, isso é catastrófico. O `dados/iris.data` do [Capítulo 9](../cap09/02-exemplo-o-dataset-iris.qmd) é exatamente assim — as 50 *setosa* primeiro, depois as 50 *versicolor*, depois as 50 *virginica*:
 

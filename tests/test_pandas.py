@@ -25,7 +25,7 @@ PACOTE = RAIZ / "scratch_np"
 
 # Capítulos já convertidos para `pandas` no trabalho com dados. Cresce a cada
 # entrega; no fim da conversão, range(6, 18).
-CAPITULOS_PANDAS: set[int] = {6, 7}
+CAPITULOS_PANDAS: set[int] = {6, 7, 8}
 
 # Capítulos que ajustam um modelo — é neles que a fronteira `.to_numpy()` tem
 # de aparecer. O 7 entra porque a 7.6 e a 7.8 (reescalonamento e PCA) já são
