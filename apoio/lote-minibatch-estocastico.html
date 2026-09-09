@@ -1,0 +1,1160 @@
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Lote, Minibatch, Estocástico</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans+Condensed:wght@600&family=IBM+Plex+Sans:wght@400;500&display=swap">
+
+<style>
+/* ------------------------------------------------------------------ *
+ * Tokens — os mesmos de apoio/gradiente-descendente.html, para as duas
+ * páginas de apoio serem visivelmente irmãs. Fundo e texto do tema
+ * `cosmo` (o do livro em modo claro); azuis amostrados do logo da UnDF.
+ *
+ * As três cores dos métodos coincidem com o ciclo padrão do matplotlib
+ * (azul, laranja, verde), que é o da figura da seção 5.6 — então a frase
+ * "o que salta aos olhos é a linha verde", no livro, continua valendo
+ * aqui, sem que a paleta da marca precise ceder.
+ * ------------------------------------------------------------------ */
+:root{
+  color-scheme: light;
+
+  --paper:    #FFFFFF;
+  --paper-2:  #EEF4FA;
+  --panel:    #FFFFFF;
+  --ink:      #373A3C;
+  --ink-2:    #5B6B76;
+  --ink-3:    #8A99A5;
+  --rule:     #DCE5EE;
+  --grid:     #EDF2F7;
+
+  --marca:    #2264AF;
+  --pontos:   #9CBBD6;   /* os 100 pontos de `inputs`, ao fundo */
+
+  --lote:     #2264AF;   /* lote inteiro  — o azul da marca */
+  --mbat:     #D9480F;   /* minibatch     — o laranja */
+  --esto:     #2F8F46;   /* estocástico   — o verde da figura do livro */
+
+  --ok:       #2F8F46;
+  --warn:     #B26A00;
+  --bad:      #C0392B;
+
+  --sans: "IBM Plex Sans", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --cond: "IBM Plex Sans Condensed", "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+
+  --r: 3px;
+  --rail: 330px;
+}
+
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    color-scheme: dark;
+    --paper:   #12161B;
+    --paper-2: #1A2430;
+    --panel:   #171F27;
+    --ink:     #E6ECF2;
+    --ink-2:   #9BAAB8;
+    --ink-3:   #6E7F8D;
+    --rule:    #2A3743;
+    --grid:    #202B35;
+    --marca:   #6FB0E8;
+    --pontos:  #4E6D8A;
+    --lote:    #6FB0E8;
+    --mbat:    #FF7A45;
+    --esto:    #5FC27E;
+    --ok:      #5FC27E;
+    --warn:    #E0A93B;
+    --bad:     #F0736A;
+  }
+}
+:root[data-theme="dark"]{
+  color-scheme: dark;
+  --paper:   #12161B;
+  --paper-2: #1A2430;
+  --panel:   #171F27;
+  --ink:     #E6ECF2;
+  --ink-2:   #9BAAB8;
+  --ink-3:   #6E7F8D;
+  --rule:    #2A3743;
+  --grid:    #202B35;
+  --marca:   #6FB0E8;
+  --pontos:  #4E6D8A;
+  --lote:    #6FB0E8;
+  --mbat:    #FF7A45;
+  --esto:    #5FC27E;
+  --ok:      #5FC27E;
+  --warn:    #E0A93B;
+  --bad:     #F0736A;
+}
+
+*{ box-sizing: border-box; }
+[hidden]{ display: none !important; }
+
+body{
+  margin: 0;
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--sans);
+  font-size: 15px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+}
+
+:focus-visible{ outline: 2px solid var(--marca); outline-offset: 2px; }
+
+/* --------------------------------- topo --------------------------------- */
+
+.app{
+  max-width: 1360px;
+  margin: 0 auto;
+  padding: 22px 24px 40px;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.topbar{
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 24px;
+  flex-wrap: wrap;
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--rule);
+}
+
+.eyebrow{
+  margin: 0 0 2px;
+  font-family: var(--cond);
+  font-size: 11.5px;
+  font-weight: 600;
+  letter-spacing: .14em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+}
+
+h1{
+  margin: 0;
+  font-family: var(--cond);
+  font-weight: 600;
+  font-size: clamp(26px, 3.4vw, 38px);
+  line-height: 1.04;
+  letter-spacing: -.005em;
+  text-wrap: balance;
+}
+
+.topo-dir{ display: flex; align-items: flex-end; gap: 18px; }
+
+.modos{
+  display: flex;
+  border: 1px solid var(--rule);
+  border-radius: var(--r);
+  overflow: hidden;
+  background: var(--panel);
+}
+.modos button{
+  font-family: var(--cond);
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: .04em;
+  padding: 8px 14px;
+  border: 0;
+  background: transparent;
+  color: var(--ink-2);
+  cursor: pointer;
+}
+.modos button + button{ border-left: 1px solid var(--rule); }
+.modos button[aria-selected="true"]{ background: var(--marca); color: var(--paper); }
+
+.relogio{
+  text-align: right;
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
+}
+.relogio .n{ font-size: 30px; line-height: 1; color: var(--ink); }
+.relogio .u{
+  display: block;
+  font-family: var(--cond);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+  margin-top: 4px;
+}
+
+/* -------------------------------- palco --------------------------------- */
+
+.stage{
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) var(--rail);
+  gap: 20px;
+  align-items: start;
+}
+
+.plot{ display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+
+.plates{ display: grid; gap: 12px; grid-template-columns: 1fr 1fr; }
+
+.plate{
+  position: relative;
+  background: var(--panel);
+  border: 1px solid var(--rule);
+  border-radius: var(--r);
+  overflow: hidden;
+}
+
+canvas.painel{ display: block; width: 100%; height: 430px; }
+
+.tag{
+  position: absolute;
+  top: 9px; left: 12px;
+  font-family: var(--cond);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+  pointer-events: none;
+}
+
+/* ----------------------------- transporte ------------------------------- */
+
+.transport{ display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+
+button.ctl{
+  font-family: var(--cond);
+  font-size: 13.5px;
+  font-weight: 600;
+  letter-spacing: .03em;
+  padding: 8px 14px;
+  border: 1px solid var(--rule);
+  border-radius: var(--r);
+  background: var(--panel);
+  color: var(--ink);
+  cursor: pointer;
+}
+button.ctl:hover{ border-color: var(--ink-3); }
+button.ctl:disabled{ opacity: .42; cursor: default; }
+button.ctl.primary{
+  background: var(--marca);
+  border-color: var(--marca);
+  color: var(--paper);
+}
+button.ctl.primary:hover{ filter: brightness(1.08); }
+
+.speed{
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-family: var(--cond);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: .07em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+}
+.speed input{ width: 92px; }
+
+/* --------------------------- linha de código ---------------------------- */
+
+.code{
+  margin: 0;
+  padding: 13px 15px;
+  background: var(--paper-2);
+  border: 1px solid var(--rule);
+  border-left: 3px solid var(--marca);
+  border-radius: var(--r);
+  font-family: var(--mono);
+  font-size: 12.5px;
+  line-height: 1.7;
+  color: var(--ink);
+  overflow-x: auto;
+  white-space: pre;
+  font-variant-ligatures: none;
+}
+.code .cm{ color: var(--ink-3); }
+.code .c1{ color: var(--lote); }
+.code .c2{ color: var(--mbat); }
+.code .c3{ color: var(--esto); }
+
+/* ---------------------------- trilho lateral ---------------------------- */
+
+.rail{
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--rule);
+  border-radius: var(--r);
+  background: var(--panel);
+}
+.group{ padding: 15px 16px; }
+.group + .group{ border-top: 1px solid var(--rule); }
+
+.label{
+  margin: 0 0 9px;
+  font-family: var(--cond);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: .13em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 8px;
+}
+.label .sym{ font-family: var(--mono); text-transform: none; letter-spacing: 0; font-size: 12px; }
+
+/* ------------------------------ os métodos ------------------------------ */
+
+.metodo + .metodo{ margin-top: 13px; padding-top: 13px; border-top: 1px dashed var(--rule); }
+
+.metodo h3{
+  margin: 0 0 5px;
+  font-family: var(--cond);
+  font-size: 13.5px;
+  font-weight: 600;
+  letter-spacing: .02em;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.metodo h3 .sw{ width: 13px; height: 3px; border-radius: 2px; flex: none; }
+.metodo h3 .rec{
+  margin-left: auto;
+  font-family: var(--mono);
+  font-size: 10.5px;
+  font-weight: 400;
+  color: var(--ink-3);
+  letter-spacing: 0;
+}
+
+.metodo dl{
+  margin: 0;
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 2px 10px;
+  font-family: var(--mono);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+.metodo dt{ color: var(--ink-3); white-space: nowrap; }
+.metodo dd{ margin: 0; text-align: right; }
+
+.ctrl{ display: grid; grid-template-columns: 1fr 86px; gap: 9px; align-items: center; }
+input[type="range"]{ width: 100%; accent-color: var(--marca); }
+input[type="text"]{
+  font-family: var(--mono);
+  font-size: 13px;
+  color: var(--ink);
+  background: var(--paper);
+  border: 1px solid var(--rule);
+  border-radius: var(--r);
+  padding: 6px 8px;
+  width: 100%;
+  text-align: right;
+}
+
+.nota{
+  margin: 9px 0 0;
+  font-size: 12.5px;
+  line-height: 1.45;
+  color: var(--ink-2);
+}
+.nota strong{ color: var(--ink); }
+
+.chips{ display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+.chip{
+  font-family: var(--mono);
+  font-size: 11px;
+  padding: 4px 8px;
+  border: 1px solid var(--rule);
+  border-radius: 999px;
+  background: var(--paper);
+  color: var(--ink-2);
+  cursor: pointer;
+  white-space: nowrap;
+}
+.chip:hover{ border-color: var(--marca); color: var(--ink); }
+
+/* --------------------------------- rodapé -------------------------------- */
+
+footer{
+  border-top: 1px solid var(--rule);
+  padding-top: 14px;
+  display: flex;
+  gap: 22px;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  font-size: 12.5px;
+  color: var(--ink-3);
+  line-height: 1.5;
+}
+footer p{ margin: 0; max-width: 60ch; }
+footer code{ font-family: var(--mono); font-size: 12px; color: var(--ink-2); }
+
+@media (max-width: 1180px){
+  .plates{ grid-template-columns: 1fr; }
+}
+@media (max-width: 940px){
+  .stage{ grid-template-columns: minmax(0, 1fr); }
+  .rail{ display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); }
+  .group + .group{ border-top: 0; border-left: 1px solid var(--rule); }
+  canvas.painel{ height: 360px; }
+  .speed{ margin-left: 0; }
+}
+@media (max-width: 560px){
+  .app{ padding: 16px 14px 28px; }
+  .rail{ grid-template-columns: 1fr; }
+  .group + .group{ border-left: 0; border-top: 1px solid var(--rule); }
+  canvas.painel{ height: 300px; }
+}
+
+@media (prefers-reduced-motion: reduce){
+  *{ transition: none !important; }
+}
+</style>
+
+<div class="app">
+
+  <header class="topbar">
+    <div>
+      <p class="eyebrow">Bases 5 · Ciência de Dados · Seção 5.6</p>
+      <h1>Lote, minibatch, estocástico</h1>
+    </div>
+    <div class="topo-dir">
+      <div class="modos" role="tablist" aria-label="O que o relógio conta">
+        <button role="tab" data-modo="chamadas" aria-selected="true">chamadas</button>
+        <button role="tab" data-modo="epochs" aria-selected="false">epochs</button>
+      </div>
+      <div class="relogio">
+        <span class="n" id="relogio">0</span>
+        <span class="u" id="relogio-u">chamadas a gradient_step</span>
+      </div>
+    </div>
+  </header>
+
+  <main class="stage">
+
+    <section class="plot">
+      <div class="plates">
+        <div class="plate">
+          <canvas class="painel" id="cv-perda"></canvas>
+          <span class="tag">a perda</span>
+        </div>
+        <div class="plate">
+          <canvas class="painel" id="cv-reta"></canvas>
+          <span class="tag">a reta ajustada</span>
+        </div>
+      </div>
+
+      <div class="transport">
+        <button class="ctl" id="btn-reset">reiniciar</button>
+        <button class="ctl" id="btn-step">uma chamada</button>
+        <button class="ctl primary" id="btn-play">animar</button>
+        <button class="ctl" id="btn-fast">×100 chamadas</button>
+        <button class="ctl" id="btn-fim">até o fim</button>
+        <label class="speed">velocidade
+          <input type="range" id="speed" min="0" max="100" value="45" aria-label="Velocidade da animação">
+        </label>
+      </div>
+
+      <pre class="code" id="code"></pre>
+    </section>
+
+    <aside class="rail">
+
+      <div class="group">
+        <h2 class="label">Os três métodos</h2>
+        <div id="metodos"></div>
+      </div>
+
+      <div class="group">
+        <h2 class="label">Tamanho do lote <span class="sym" id="bs-sym">20</span></h2>
+        <div class="ctrl">
+          <input type="range" id="bs" min="1" max="100" value="20" aria-label="Tamanho do minibatch">
+          <input type="text" id="bs-num" inputmode="numeric" aria-label="Tamanho do minibatch, valor exato">
+        </div>
+        <p class="nota">Só o <strong>minibatch</strong> usa este valor. Nos extremos ele vira os outros dois: <code>100</code> é o lote inteiro, <code>1</code> é o estocástico — os três são o mesmo método com fatias de tamanhos diferentes.</p>
+      </div>
+
+      <div class="group">
+        <h2 class="label">Learning rate <span class="sym">α</span></h2>
+        <div class="ctrl">
+          <input type="range" id="lr" min="0" max="1000" value="500" aria-label="Learning rate">
+          <input type="text" id="lr-num" inputmode="decimal" aria-label="Learning rate, valor exato">
+        </div>
+        <div class="chips" id="chips"></div>
+        <p class="nota">Um passo é estável enquanto <code>α</code> for menor que <code>2/curvatura</code>. A curvatura média do conjunto é <code>2·833,5 = 1667</code>, o que dá <code>α &lt; 0,0012</code>; a de um único ponto em <code>x = ±50</code> é <code>2·50² = 5000</code>, o que dá <code>α &lt; 0,0004</code>. É essa distância entre os dois limites que faz <code>0,001</code> ser seguro para a média e grande demais para um ponto só.</p>
+      </div>
+
+      <div class="group">
+        <h2 class="label">Onde olhar</h2>
+        <p class="nota" id="dica"></p>
+      </div>
+
+    </aside>
+  </main>
+
+  <footer>
+    <p><strong>O interruptor lá em cima troca o que está sendo igualado.</strong> Em <em>chamadas</em>, os três gastam o mesmo e os epochs saem diferentes; em <em>epochs</em>, os três dão o mesmo número de passadas pelos dados e o gasto sai diferente — o estocástico faz cem chamadas no tique em que o lote faz uma. Ele parece ganhar de longe num relógio e perder feio no outro, e a diferença é só qual coluna você decidiu manter fixa.</p>
+    <p><strong>Fidelidade.</strong> O lote inteiro e o estocástico não embaralham nada, então reproduzem os laços do livro dígito a dígito, a partir do mesmo <code>theta</code> de <code>random.seed(0)</code> e <code>random.seed(2)</code>. O minibatch embaralha, e o gerador do Python não existe aqui: a curva dele bate com a do livro em comportamento, não em número.</p>
+  </footer>
+</div>
+
+<script>
+"use strict";
+
+/* ==================================================================== *
+ * Os dados da seção 5.5, exatamente como o livro os escreve:
+ *   inputs = [(x, 20 * x + 5) for x in range(-50, 50)]
+ * ==================================================================== */
+
+const DADOS = [];
+for (let x = -50; x < 50; x++) DADOS.push([x, 20 * x + 5]);
+const N = DADOS.length;
+
+// Média de x e de x² deste conjunto: -0.5 e 833.5. Com elas o erro quadrático
+// médio sai em forma fechada, exato e em tempo constante — conferido contra
+// o `sum(...)` do livro, que devolve o mesmo número até o último bit.
+const MX = -0.5, MXX = 833.5;
+function mse(theta){
+  const a = theta[0] - 20, c = theta[1] - 5;
+  return MXX * a * a + 2 * MX * a * c + c * c;
+}
+
+// Os `theta` iniciais dos três laços da seção, calculados no Python com as
+// sementes que o livro usa. Ficam aqui como constante porque o gerador do
+// Python (Mersenne Twister) não existe no navegador — e é justamente por
+// isso que o lote e o estocástico, que não sorteiam mais nada depois disto,
+// reproduzem o livro exatamente.
+const THETA0 = {
+  lote: [0.6888437030500962, 0.515908805880605],   // random.seed(0)
+  mbat: [-0.7312715117751976, 0.6948674738744653], // random.seed(1)
+  esto: [0.9120685437784988, 0.8956549741186988]   // random.seed(2)
+};
+
+// Dois relógios, e a diferença entre eles é o assunto da seção.
+//
+// Em CHAMADAS, um tique é uma chamada a `gradient_step` para cada método —
+// orçamento igual, e os epochs de cada um saem diferentes. Em EPOCHS, um
+// tique é uma passada completa pelos dados para cada método — epochs iguais,
+// e o orçamento de cada um sai diferente (o estocástico gasta cem chamadas
+// no tique em que o lote gasta uma).
+//
+// O modo também muda o que é registrado: em EPOCHS a perda é medida uma vez
+// por epoch, ou seja, só nas fronteiras — onde a cascata do estocástico já
+// se autocorrigiu. É por isso que o serrilhado some ao trocar de modo, e é
+// exatamente a observação que a seção 5.6 faz ao medir "só nas fronteiras
+// de epoch".
+const ORCAMENTOS = { chamadas: 10000, epochs: 5000 };
+function orcamento(){ return ORCAMENTOS[S.modo]; }
+
+/* ==================================================================== *
+ * Estado
+ * ==================================================================== */
+
+const S = {
+  modo: "chamadas",   // "chamadas" | "epochs"
+  relogio: 0,
+  lr: 0.001,
+  tamLote: 20,
+  rodando: false,
+  sujo: true,
+  metodos: []
+};
+
+// Embaralhamento com semente fixa: a mesma demonstração toda vez que a aula
+// rodar, que é o que o CLAUDE.md exige de qualquer coisa estocástica aqui.
+let semente = 20260909;
+function rnd(){
+  semente = (semente * 1103515245 + 12345) & 0x7fffffff;
+  return semente / 0x7fffffff;
+}
+
+/* --------------------------------------------------------------------
+ * Um método é um jeito de escolher QUAIS pontos entram no gradiente da
+ * próxima chamada. O resto — a média dos gradientes, o passo — é igual
+ * nos três, e é esse o argumento da seção.
+ * ------------------------------------------------------------------ */
+
+function passo(theta, indices){
+  let gs = 0, gi = 0;
+  for (const k of indices){
+    const x = DADOS[k][0], y = DADOS[k][1];
+    const erro = theta[0] * x + theta[1] - y;
+    gs += 2 * erro * x;
+    gi += 2 * erro;
+  }
+  const n = indices.length;
+  theta[0] -= S.lr * (gs / n);
+  theta[1] -= S.lr * (gi / n);
+}
+
+const TODOS = DADOS.map((_, i) => i);
+
+function criarMetodos(){
+  const base = (id, nome, cor, theta0, resumo) => ({
+    id, nome, cor, resumo,
+    theta: theta0.slice(),
+    epoch: 0, chamadas: 0, cursor: 0,
+    hist: [],           // { c, m } por chamada
+    ordem: TODOS.slice()
+  });
+
+  const lote = base("lote", "lote inteiro", "--lote", THETA0.lote, () => "100 pontos por chamada");
+  lote.pontos = function(){ this.epoch++; return TODOS; };
+
+  const mbat = base("mbat", "minibatch", "--mbat", THETA0.mbat, () => S.tamLote + " pontos por chamada");
+  mbat.embaralhar = function(){
+    // O conserto que a seção 5.6 discute: embaralhar o DATASET a cada epoch,
+    // não os índices de início dos lotes. Sem isto cada lote é sempre a mesma
+    // fatia contígua de `x`, e portanto uma amostra torta, não ruidosa.
+    for (let i = this.ordem.length - 1; i > 0; i--){
+      const j = Math.floor(rnd() * (i + 1));
+      const t = this.ordem[i]; this.ordem[i] = this.ordem[j]; this.ordem[j] = t;
+    }
+  };
+  mbat.pontos = function(){
+    if (this.cursor === 0) this.embaralhar();
+    const fim = Math.min(this.cursor + S.tamLote, N);
+    const fatia = this.ordem.slice(this.cursor, fim);
+    this.cursor = fim;
+    if (this.cursor >= N){ this.cursor = 0; this.epoch++; }
+    return fatia;
+  };
+
+  const esto = base("esto", "estocástico", "--esto", THETA0.esto, () => "1 ponto por chamada");
+  esto.pontos = function(){
+    // Sem embaralhar: o livro percorre `inputs` na ordem, e é essa ordem —
+    // começando sempre em x = -50 — que provoca a cascata do primeiro epoch.
+    const fatia = [this.cursor];
+    this.cursor++;
+    if (this.cursor >= N){ this.cursor = 0; this.epoch++; }
+    return fatia;
+  };
+
+  return [lote, mbat, esto];
+}
+
+function umaChamadaDe(m){
+  passo(m.theta, m.pontos());
+  m.chamadas++;
+}
+
+function umEpochDe(m){
+  // `pontos()` de cada método incrementa `epoch` sozinho quando fecha a
+  // passada — no lote, já na primeira chamada; no estocástico, na centésima.
+  const alvo = m.epoch + 1;
+  let guarda = 0;
+  while (m.epoch < alvo && guarda++ <= N) umaChamadaDe(m);
+}
+
+function umTique(){
+  if (S.relogio >= orcamento()) return false;
+  for (const m of S.metodos){
+    if (S.modo === "chamadas"){
+      umaChamadaDe(m);
+      m.hist.push({ x: m.chamadas, m: mse(m.theta) });
+    } else {
+      umEpochDe(m);
+      m.hist.push({ x: m.epoch, m: mse(m.theta) });
+    }
+  }
+  S.relogio++;
+  return true;
+}
+
+function reiniciar(){
+  S.relogio = 0;
+  S.rodando = false;
+  semente = 20260909;
+  S.metodos = criarMetodos();
+  atualizar();
+}
+
+/* ==================================================================== *
+ * Desenho — utilidades
+ * ==================================================================== */
+
+function css(n){ return getComputedStyle(document.documentElement).getPropertyValue(n).trim(); }
+
+function ajustar(c){
+  const r = c.getBoundingClientRect();
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  const w = Math.max(1, Math.round(r.width)), h = Math.max(1, Math.round(r.height));
+  if (c.width !== Math.round(w * dpr) || c.height !== Math.round(h * dpr)){
+    c.width = Math.round(w * dpr);
+    c.height = Math.round(h * dpr);
+  }
+  const g = c.getContext("2d");
+  g.setTransform(dpr, 0, 0, dpr, 0, 0);
+  return [g, w, h];
+}
+
+function rotulo(g, txt, x, y, cor, opc){
+  const o = opc || {};
+  g.save();
+  g.font = o.font || "400 11px " + css("--mono");
+  g.textAlign = o.align || "left";
+  g.textBaseline = o.baseline || "alphabetic";
+  g.lineWidth = 3.5;
+  g.lineJoin = "round";
+  g.strokeStyle = css("--panel");
+  g.strokeText(txt, x, y);
+  g.fillStyle = cor;
+  g.fillText(txt, x, y);
+  g.restore();
+}
+
+function expo(v){
+  if (v === 0) return "0";
+  const e = Math.round(Math.log10(v));
+  const sup = String(e).replace("-", "⁻")
+    .replace(/0/g, "⁰").replace(/1/g, "¹").replace(/2/g, "²").replace(/3/g, "³")
+    .replace(/4/g, "⁴").replace(/5/g, "⁵").replace(/6/g, "⁶").replace(/7/g, "⁷")
+    .replace(/8/g, "⁸").replace(/9/g, "⁹");
+  return "10" + sup;
+}
+
+function fmt(v, casas){
+  if (!Number.isFinite(v)) return "—";
+  const a = Math.abs(v);
+  if (a !== 0 && (a < 1e-3 || a >= 1e6)) return v.toExponential(2);
+  return v.toFixed(casas === undefined ? 3 : casas);
+}
+
+/* ==================================================================== *
+ * Painel da perda — erro quadrático médio × chamadas, log-log
+ * ==================================================================== */
+
+const MIN_Y = 1e-18, MAX_Y = 1e19;
+
+function desenharPerda(){
+  const [g, W, H] = ajustar(document.getElementById("cv-perda"));
+  const M = { e: 54, d: 16, c: 34, b: 44 };
+  const pw = W - M.e - M.d, ph = H - M.c - M.b;
+
+  const C = { grid: css("--grid"), rule: css("--rule"), ink3: css("--ink-3"), panel: css("--panel") };
+  g.fillStyle = C.panel; g.fillRect(0, 0, W, H);
+
+  const X = c => M.e + Math.log10(Math.max(1, c)) / 4 * pw;              // 1 … 10⁴
+  const unidade = S.modo === "chamadas" ? "chamadas a gradient_step" : "epochs";
+  const Y = m => {
+    const t = (Math.log10(Math.max(MIN_Y, Math.min(MAX_Y, m))) - Math.log10(MIN_Y))
+            / (Math.log10(MAX_Y) - Math.log10(MIN_Y));
+    return M.c + (1 - t) * ph;
+  };
+
+  // grade: décadas em x, de três em três em y (28 décadas não cabem uma a uma)
+  g.strokeStyle = C.grid; g.lineWidth = 1;
+  g.beginPath();
+  for (let d = 0; d <= 4; d++){ const px = Math.round(X(Math.pow(10, d))) + .5; g.moveTo(px, M.c); g.lineTo(px, M.c + ph); }
+  for (let e = -18; e <= 18; e += 4){ const py = Math.round(Y(Math.pow(10, e))) + .5; g.moveTo(M.e, py); g.lineTo(M.e + pw, py); }
+  g.stroke();
+
+  g.font = "400 10.5px " + css("--mono");
+  g.fillStyle = C.ink3;
+  g.textAlign = "center"; g.textBaseline = "top";
+  for (let d = 0; d <= 4; d++) g.fillText(expo(Math.pow(10, d)), X(Math.pow(10, d)), M.c + ph + 7);
+  g.textAlign = "right"; g.textBaseline = "middle";
+  for (let e = -18; e <= 18; e += 4) g.fillText(expo(Math.pow(10, e)), M.e - 7, Y(Math.pow(10, e)));
+
+  g.textAlign = "center"; g.textBaseline = "alphabetic";
+  g.font = "600 11.5px " + css("--cond");
+  g.fillText(unidade, M.e + pw / 2, H - 9);
+  g.save();
+  g.translate(13, M.c + ph / 2); g.rotate(-Math.PI / 2);
+  g.fillText("erro quadrático médio", 0, 0);
+  g.restore();
+
+  // Em chamadas, o orçamento em que a seção compara os três. Em epochs, onde
+  // o laço de cada um termina no livro — o que já mostra, sozinho, que
+  // "100 epochs" e "5.000 epochs" não são a mesma medida.
+  const marcos = S.modo === "chamadas"
+    ? [[5000, "5.000", C.ink3]]
+    : [[100, "estocástico", css("--esto")],
+       [1000, "minibatch", css("--mbat")],
+       [5000, "lote", css("--lote")]];
+  for (const [v, txt, cor] of marcos){
+    const px = X(v);
+    g.strokeStyle = C.rule; g.lineWidth = 1; g.setLineDash([4, 4]);
+    g.beginPath(); g.moveTo(px, M.c); g.lineTo(px, M.c + ph); g.stroke();
+    g.setLineDash([]);
+    rotulo(g, txt, px - 5, M.c + 12, cor, { align: "right", font: "400 10px " + css("--mono") });
+  }
+
+  g.save();
+  g.beginPath(); g.rect(M.e, M.c, pw, ph); g.clip();
+
+  for (const m of S.metodos){
+    if (m.hist.length < 1) continue;
+    g.strokeStyle = css(m.cor);
+    g.lineWidth = m.id === "lote" ? 2.4 : 1.5;
+    if (m.id === "lote") g.setLineDash([7, 4]);      // a tracejada da figura do livro
+    g.beginPath();
+    // Decimação por coluna de pixel guardando mínimo e máximo: os picos do
+    // estocástico são o conteúdo desta figura, e uma amostragem por passo
+    // fixo os perderia justamente onde eles importam.
+    let colAtual = -1, lo = 0, hi = 0, primeiro = true;
+    const emite = (px, a, b) => {
+      if (primeiro){ g.moveTo(px, Y(a)); primeiro = false; } else { g.lineTo(px, Y(a)); }
+      if (b !== a) g.lineTo(px, Y(b));
+    };
+    for (const p of m.hist){
+      const col = Math.round(X(p.x));
+      if (col !== colAtual){
+        if (colAtual >= 0) emite(colAtual, lo, hi);
+        colAtual = col; lo = p.m; hi = p.m;
+      } else {
+        if (p.m < lo) lo = p.m;
+        if (p.m > hi) hi = p.m;
+      }
+    }
+    if (colAtual >= 0) emite(colAtual, lo, hi);
+    g.stroke();
+    g.setLineDash([]);
+  }
+  g.restore();
+
+  let ly = M.c + ph - 40;
+  for (const m of S.metodos){
+    const cor = css(m.cor);
+    g.strokeStyle = cor; g.lineWidth = m.id === "lote" ? 2.4 : 1.5;
+    if (m.id === "lote") g.setLineDash([7, 4]);
+    g.beginPath(); g.moveTo(M.e + 10, ly - 4); g.lineTo(M.e + 32, ly - 4); g.stroke();
+    g.setLineDash([]);
+    rotulo(g, m.nome, M.e + 38, ly, cor, { font: "500 11px " + css("--mono") });
+    ly += 15;
+  }
+
+  if (S.relogio === 0){
+    rotulo(g, "anime para ver as três curvas", M.e + pw / 2, M.c + ph / 2, C.ink3,
+           { align: "center", font: "400 12px " + css("--mono") });
+  }
+}
+
+/* ==================================================================== *
+ * Painel da reta — os 100 pontos e as três retas ajustadas
+ * ==================================================================== */
+
+function desenharReta(){
+  const [g, W, H] = ajustar(document.getElementById("cv-reta"));
+  const M = { e: 56, d: 16, c: 34, b: 44 };
+  const pw = W - M.e - M.d, ph = H - M.c - M.b;
+
+  const xa = -52, xb = 52, ya = -1150, yb = 1150;
+  const X = x => M.e + (x - xa) / (xb - xa) * pw;
+  const Y = y => M.c + (1 - (y - ya) / (yb - ya)) * ph;
+
+  const C = { grid: css("--grid"), rule: css("--rule"), ink3: css("--ink-3"), panel: css("--panel") };
+  g.fillStyle = C.panel; g.fillRect(0, 0, W, H);
+
+  g.strokeStyle = C.grid; g.lineWidth = 1;
+  g.beginPath();
+  for (let v = -50; v <= 50; v += 25){ const px = Math.round(X(v)) + .5; g.moveTo(px, M.c); g.lineTo(px, M.c + ph); }
+  for (let v = -1000; v <= 1000; v += 500){ const py = Math.round(Y(v)) + .5; g.moveTo(M.e, py); g.lineTo(M.e + pw, py); }
+  g.stroke();
+
+  g.strokeStyle = C.rule; g.lineWidth = 1.3;
+  g.beginPath();
+  g.moveTo(M.e, Math.round(Y(0)) + .5); g.lineTo(M.e + pw, Math.round(Y(0)) + .5);
+  g.moveTo(Math.round(X(0)) + .5, M.c); g.lineTo(Math.round(X(0)) + .5, M.c + ph);
+  g.stroke();
+
+  g.font = "400 10.5px " + css("--mono");
+  g.fillStyle = C.ink3;
+  g.textAlign = "center"; g.textBaseline = "top";
+  for (let v = -50; v <= 50; v += 25) g.fillText(String(v), X(v), M.c + ph + 7);
+  g.textAlign = "right"; g.textBaseline = "middle";
+  for (let v = -1000; v <= 1000; v += 500) g.fillText(String(v), M.e - 7, Y(v));
+
+  g.textAlign = "center"; g.textBaseline = "alphabetic";
+  g.font = "600 11.5px " + css("--cond");
+  g.fillText("x", M.e + pw / 2, H - 9);
+  g.save();
+  g.translate(13, M.c + ph / 2); g.rotate(-Math.PI / 2);
+  g.fillText("y", 0, 0);
+  g.restore();
+
+  g.save();
+  g.beginPath(); g.rect(M.e, M.c, pw, ph); g.clip();
+
+  g.fillStyle = css("--pontos");
+  for (const [x, y] of DADOS){ g.beginPath(); g.arc(X(x), Y(y), 2.2, 0, 7); g.fill(); }
+
+  const foraDaEscala = [];
+  for (const m of S.metodos){
+    const s = m.theta[0], i = m.theta[1];
+    const y1 = s * xa + i, y2 = s * xb + i;
+    if (!Number.isFinite(y1) || !Number.isFinite(y2)){ foraDaEscala.push([m, "não é número"]); continue; }
+    // Uma reta cujas duas pontas caem do mesmo lado da moldura não cruza o
+    // painel: desenhá-la não mostraria nada, então ela é anunciada em texto.
+    if ((y1 > yb && y2 > yb) || (y1 < ya && y2 < ya)){
+      foraDaEscala.push([m, "inclinação " + fmt(s, 1)]);
+      continue;
+    }
+    g.strokeStyle = css(m.cor);
+    g.lineWidth = m.id === "lote" ? 2.6 : 1.8;
+    if (m.id === "lote") g.setLineDash([7, 4]);
+    g.beginPath(); g.moveTo(X(xa), Y(y1)); g.lineTo(X(xb), Y(y2)); g.stroke();
+    g.setLineDash([]);
+  }
+  g.restore();
+
+  let ly = M.c + 14;
+  for (const [m, motivo] of foraDaEscala){
+    rotulo(g, m.nome + " fora da escala — " + motivo, M.e + pw - 6, ly, css(m.cor),
+           { align: "right", font: "500 11px " + css("--mono") });
+    ly += 15;
+  }
+
+  rotulo(g, "a resposta certa é y = 20x + 5", M.e + 8, M.c + 16, C.ink3,
+         { font: "400 11px " + css("--mono") });
+
+  // ---- zoom perto de x = 0, onde vive a diferença de intercepto ----
+  const iw = Math.min(190, pw * 0.46), ih = Math.min(126, ph * 0.40);
+  const ix = M.e + pw - iw - 10, iy = M.c + ph - ih - 10;
+  const zxa = -0.9, zxb = 0.9, zya = -15, zyb = 25;
+  const ZX = x => ix + (x - zxa) / (zxb - zxa) * iw;
+  const ZY = y => iy + (1 - (y - zya) / (zyb - zya)) * ih;
+
+  g.fillStyle = css("--panel");
+  g.fillRect(ix, iy, iw, ih);
+  g.strokeStyle = C.rule; g.lineWidth = 1;
+  g.strokeRect(ix + .5, iy + .5, iw - 1, ih - 1);
+
+  g.save();
+  g.beginPath(); g.rect(ix, iy, iw, ih); g.clip();
+
+  g.strokeStyle = C.grid;
+  g.beginPath();
+  g.moveTo(ix, Math.round(ZY(0)) + .5); g.lineTo(ix + iw, Math.round(ZY(0)) + .5);
+  g.moveTo(Math.round(ZX(0)) + .5, iy); g.lineTo(Math.round(ZX(0)) + .5, iy + ih);
+  g.stroke();
+
+  g.fillStyle = css("--pontos");
+  for (const [x, y] of DADOS){
+    if (x < zxa || x > zxb) continue;
+    g.beginPath(); g.arc(ZX(x), ZY(y), 3, 0, 7); g.fill();
+  }
+
+  g.strokeStyle = css("--ink-3"); g.lineWidth = 1.4;
+  g.beginPath(); g.arc(ZX(0), ZY(5), 5, 0, 7); g.stroke();
+
+  for (const m of S.metodos){
+    const y1 = m.theta[0] * zxa + m.theta[1], y2 = m.theta[0] * zxb + m.theta[1];
+    if (!Number.isFinite(y1) || !Number.isFinite(y2)) continue;
+    g.strokeStyle = css(m.cor);
+    g.lineWidth = m.id === "lote" ? 2.2 : 1.6;
+    if (m.id === "lote") g.setLineDash([6, 3]);
+    g.beginPath(); g.moveTo(ZX(zxa), ZY(y1)); g.lineTo(ZX(zxb), ZY(y2)); g.stroke();
+    g.setLineDash([]);
+  }
+  g.restore();
+
+  rotulo(g, "perto de x = 0 · o intercepto", ix + 6, iy + 13, C.ink3,
+         { font: "400 10px " + css("--mono") });
+  rotulo(g, "○ = 5, o certo", ix + iw - 6, iy + ih - 6, C.ink3,
+         { align: "right", font: "400 10px " + css("--mono") });
+}
+
+/* ==================================================================== *
+ * Trilho, código e relógio
+ * ==================================================================== */
+
+function atualizarRail(){
+  document.getElementById("relogio").textContent = S.relogio.toLocaleString("pt-BR");
+  document.getElementById("relogio-u").textContent =
+    S.modo === "chamadas" ? "chamadas a gradient_step" : "epochs";
+
+  document.getElementById("metodos").innerHTML = S.metodos.map(m => {
+    const e = mse(m.theta);
+    return '<div class="metodo">' +
+      '<h3><span class="sw" style="background:var(' + m.cor + ')"></span>' + m.nome +
+      '<span class="rec">' + m.resumo() + "</span></h3>" +
+      "<dl>" +
+        "<dt>epoch</dt><dd>" + m.epoch.toLocaleString("pt-BR") + "</dd>" +
+        "<dt>chamadas</dt><dd>" + m.chamadas.toLocaleString("pt-BR") + "</dd>" +
+        "<dt>inclinação</dt><dd>" + fmt(m.theta[0], 4) + "</dd>" +
+        "<dt>intercepto</dt><dd>" + fmt(m.theta[1], 4) + "</dd>" +
+        "<dt>MSE</dt><dd>" + (Number.isFinite(e) ? e.toExponential(3) : "—") + "</dd>" +
+      "</dl></div>";
+  }).join("");
+
+  const alvo = m => m.id === "lote" ? "inputs" : m.id === "mbat" ? "próximo lote" : "[(x, y)]";
+  const tam = m => m.id === "lote" ? N : m.id === "mbat" ? S.tamLote : 1;
+  const plural = n => String(n).padStart(3) + (n === 1 ? " ponto " : " pontos");
+  const cls = { lote: "c1", mbat: "c2", esto: "c3" };
+  const pad = (s, n) => s + " ".repeat(Math.max(0, n - s.length));
+
+  document.getElementById("code").innerHTML =
+    '<span class="cm"># a mesma chamada nos três; muda só quem entra em LOTE</span>\n' +
+    "grad  = vector_mean([linear_gradient(x, y, theta) for x, y in LOTE])\n" +
+    "theta = gradient_step(theta, grad, " + (-S.lr).toPrecision(3).replace(/0+$/, "").replace(/\.$/, "") + ")\n\n" +
+    S.metodos.map(m =>
+      '<span class="' + cls[m.id] + '">' + pad(m.nome, 14) + "</span>" +
+      '<span class="cm">LOTE = ' + pad(alvo(m), 15) + "(" + plural(tam(m)) +
+      ")   epoch " + String(m.epoch).padStart(5) + "</span>"
+    ).join("\n");
+}
+
+const DICAS = {
+  chamadas: [
+    ["Antes de animar", "As três retas partem de lugares diferentes porque o livro usa uma semente diferente em cada laço. Nenhuma delas passa perto dos pontos ainda."],
+    ["Nas primeiras chamadas", "O estocástico dispara para fora da escala. Não é ruído: com <code>α = 0.001</code>, um único ponto em <code>x = -50</code> já produz um gradiente enorme, e o passo passa direto do valor certo."],
+    ["Perto de 5.000 chamadas", "Lote e minibatch praticamente se sobrepõem — mesmo orçamento, mesma precisão. O estocástico gastou o mesmo e está sete ordens de grandeza atrás."],
+    ["No fim", "O estocástico chega perto de <code>[20, 5]</code>, mas usando o dobro das chamadas e por um caminho que nunca parou de serrilhar."]
+  ],
+  epochs: [
+    ["Contando epochs", "Agora cada tique é uma passada pelos dados para os três. Repare na linha <code>chamadas</code> de cada um: o estocástico gasta cem por tique, o minibatch cinco, o lote uma."],
+    ["Nos primeiros epochs", "O estocástico desce muito mais rápido — e é verdade, por epoch. Só que um epoch dele custa cem vezes um epoch do lote."],
+    ["No epoch 100", "O laço estocástico do livro termina aqui, à frente dos outros dois. Volte para <em>chamadas</em> e compare no mesmo orçamento: a ordem se inverte."],
+    ["Uma medida esconde a outra", "Medida uma vez por epoch, a perda do estocástico sai lisa — a cascata acontece <em>dentro</em> do epoch e já se autocorrigiu na fronteira. É o mesmo dado, amostrado de outro jeito."]
+  ]
+};
+
+function atualizarDica(){
+  const c = S.relogio, m = S.modo;
+  const i = m === "chamadas"
+    ? (c === 0 ? 0 : c < 400 ? 1 : c < 8000 ? 2 : 3)
+    : (c === 0 ? 0 : c < 30 ? 1 : c < 400 ? 2 : 3);
+  document.getElementById("dica").innerHTML =
+    "<strong>" + DICAS[m][i][0] + ".</strong> " + DICAS[m][i][1];
+}
+
+function sincronizarBotoes(){
+  const fim = S.relogio >= orcamento();
+  const un = S.modo === "chamadas" ? "chamada" : "epoch";
+  document.getElementById("btn-step").textContent = "um" + (un === "chamada" ? "a chamada" : " epoch");
+  document.getElementById("btn-fast").textContent = "×100 " + un + "s";
+  document.getElementById("btn-play").textContent = S.rodando ? "pausar" : "animar";
+  document.getElementById("btn-step").disabled = fim;
+  document.getElementById("btn-fast").disabled = fim;
+  document.getElementById("btn-fim").disabled = fim;
+  document.getElementById("btn-play").disabled = fim && !S.rodando;
+}
+
+function atualizar(){
+  S.sujo = true;
+  atualizarRail();
+  atualizarDica();
+  sincronizarBotoes();
+}
+
+/* ==================================================================== *
+ * Laço de animação
+ * ==================================================================== */
+
+function porQuadro(){
+  const v = +document.getElementById("speed").value;
+  return Math.max(1, Math.round(Math.pow(10, v / 100 * 2.2)));   // 1 … ~160
+}
+
+function quadro(){
+  if (S.rodando){
+    let n = porQuadro();
+    while (n-- > 0) if (!umTique()){ S.rodando = false; break; }
+    atualizar();
+  }
+  if (S.sujo){ desenharPerda(); desenharReta(); S.sujo = false; }
+  requestAnimationFrame(quadro);
+}
+
+/* ==================================================================== *
+ * Interface
+ * ==================================================================== */
+
+const el = id => document.getElementById(id);
+
+const LR_MIN = 0.00002, LR_MAX = 0.003;
+function lrParaSlider(a){ return Math.round(1000 * Math.log(a / LR_MIN) / Math.log(LR_MAX / LR_MIN)); }
+function sliderParaLr(v){ return LR_MIN * Math.pow(LR_MAX / LR_MIN, v / 1000); }
+function mostrarLr(){ return String(+S.lr.toPrecision(3)); }
+
+function sincronizarControles(){
+  el("bs").value = S.tamLote;
+  el("bs-num").value = S.tamLote;
+  el("bs-sym").textContent = S.tamLote;
+  el("lr").value = lrParaSlider(S.lr);
+  el("lr-num").value = mostrarLr();
+}
+
+el("btn-reset").addEventListener("click", () => reiniciar());
+el("btn-step").addEventListener("click", () => { S.rodando = false; umTique(); atualizar(); });
+el("btn-play").addEventListener("click", () => { S.rodando = !S.rodando; atualizar(); });
+el("btn-fast").addEventListener("click", () => {
+  S.rodando = false;
+  for (let i = 0; i < 100; i++) if (!umTique()) break;
+  atualizar();
+});
+el("btn-fim").addEventListener("click", () => {
+  S.rodando = false;
+  while (umTique());
+  atualizar();
+});
+
+el("bs").addEventListener("input", e => {
+  S.tamLote = Math.max(1, Math.min(N, +e.target.value));
+  sincronizarControles();
+  reiniciar();
+});
+el("bs-num").addEventListener("change", e => {
+  const v = parseInt(e.target.value, 10);
+  if (Number.isFinite(v)) S.tamLote = Math.max(1, Math.min(N, v));
+  sincronizarControles();
+  reiniciar();
+});
+
+el("lr").addEventListener("input", e => {
+  S.lr = sliderParaLr(+e.target.value);
+  sincronizarControles();
+  reiniciar();
+});
+el("lr-num").addEventListener("change", e => {
+  const v = parseFloat(e.target.value.replace(",", "."));
+  if (Number.isFinite(v) && v > 0) S.lr = Math.max(LR_MIN, Math.min(LR_MAX, v));
+  sincronizarControles();
+  reiniciar();
+});
+
+const CHIPS = [
+  [0.001,  "0.001 — o do livro"],
+  [0.0004, "0.0004 — limite de 1 ponto"],
+  [0.0012, "0.0012 — limite do lote"],
+  [0.0015, "0.0015 — todos divergem"]
+];
+el("chips").innerHTML = CHIPS.map(([a, t]) => '<button class="chip" data-a="' + a + '">α = ' + t + "</button>").join("");
+el("chips").addEventListener("click", e => {
+  const b = e.target.closest(".chip");
+  if (!b) return;
+  S.lr = parseFloat(b.dataset.a);
+  sincronizarControles();
+  reiniciar();
+});
+
+for (const b of document.querySelectorAll(".modos button")){
+  b.addEventListener("click", () => {
+    if (b.dataset.modo === S.modo) return;
+    S.modo = b.dataset.modo;
+    for (const o of document.querySelectorAll(".modos button"))
+      o.setAttribute("aria-selected", String(o === b));
+    reiniciar();
+  });
+}
+
+document.addEventListener("keydown", e => {
+  if (/^(INPUT|SELECT|TEXTAREA)$/.test(e.target.tagName)) return;
+  if (e.code === "Space"){ e.preventDefault(); el("btn-play").click(); }
+  else if (e.key === "ArrowRight"){ e.preventDefault(); el("btn-step").click(); }
+  else if (e.key === "r" || e.key === "R"){ el("btn-reset").click(); }
+});
+
+window.addEventListener("resize", () => { S.sujo = true; });
+
+sincronizarControles();
+reiniciar();
+requestAnimationFrame(quadro);
+</script>
