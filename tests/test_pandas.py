@@ -43,7 +43,7 @@ CSV_A_MAO: dict[str, str] = {
     "cap07/04-limpeza-e-transformacao.qmd": (
         "`try_parse_row` com `csv.reader` é a lição da seção — o mecanismo do "
         "descarte explícito de linha ruim, comparado logo em seguida com a "
-        "coerção silenciosa de `to_numeric(errors='coerce')`."
+        "coerção silenciosa de `read_csv` e de `to_datetime(errors='coerce')`."
     ),
 }
 
