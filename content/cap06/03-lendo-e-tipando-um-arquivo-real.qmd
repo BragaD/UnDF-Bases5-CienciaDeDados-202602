@@ -1,6 +1,153 @@
 # Lendo e Tipando um Arquivo Real
 
-::: {.callout-warning}
-## Em construção
-O conteúdo desta seção ainda será escrito.
+A seção anterior fechou avisando que `estados` não tinha um valor faltante sequer, e prometeu trocar esse arquivo limpo por um que chega direto de uma fonte real. É o que este arquivo faz: um conjunto de anúncios de aluguel de imóveis em cinco cidades brasileiras, lido sem nenhuma limpeza prévia — exatamente como ele chegaria de um raspador ou de uma exportação de planilha.
+
+```{python}
+#| label: setup
+#| include: false
+import matplotlib.pyplot as plt
+import pandas as pd
+
+plt.style.use("estilo-figuras.mplstyle")
+pd.set_option("display.max_columns", None)
+```
+
+## Uma primeira leitura
+
+```{python}
+#| label: shape-alugueis
+alugueis = pd.read_csv("dados/alugueis.csv")
+alugueis.shape
+```
+
+10.692 imóveis, 13 colunas. `head()` mostra o que cada linha descreve:
+
+```{python}
+#| label: head-alugueis
+alugueis.head()
+```
+
+Cada linha é um anúncio: a cidade, a área em metros quadrados, quantos quartos, banheiros e vagas de garagem, o andar, se aceita animal, se vem mobiliado, e quatro valores em reais — condomínio, aluguel, IPTU, seguro-incêndio e o total.
+
+## Uma coluna fora do padrão
+
+Antes de qualquer conta, `dtypes` — o mesmo primeiro passo da seção 6.1:
+
+```{python}
+#| label: dtypes-alugueis
+alugueis.dtypes
+```
+
+Doze colunas vieram como o esperado: nove numéricas (`area_m2` a `total`, todas contagens ou valores em reais) e três como `object` porque são texto de verdade — `cidade` é um nome de cidade, `aceita_animal` e `mobiliado` são "sim" ou "não". `andar` é a única que destoa: representa um número — o andar do imóvel —, e mesmo assim veio como `object`, junto dos textos.
+
+## O estrago, antes da causa
+
+Um número de andar deveria admitir média. Tentar calcular uma mostra o problema na prática, não em teoria:
+
+```{python}
+#| label: media-andar-erro
+try:
+    alugueis["andar"].mean()
+except TypeError as erro:
+    print("TypeError:", str(erro)[:90], "...")
+```
+
+`mean()` nem chega a rodar: `object` é o tipo genérico que o `pandas` usa para texto, e texto não tem média. A mensagem completa, se fosse impressa inteira, traria a coluna inteira concatenada num único bloco de mais de 10 mil caracteres — por isso o truncamento acima, e não por economia de espaço.
+
+## Onde está o problema
+
+`unique()` mostra os primeiros valores distintos da coluna:
+
+```{python}
+#| label: andar-unique
+alugueis["andar"].unique()[:10]
+```
+
+Entre `'7'`, `'20'`, `'6'` e outros números escritos como texto, aparece um `'-'`. Contando quantas linhas trazem exatamente esse valor:
+
+```{python}
+#| label: andar-tracos
+tracos = (alugueis["andar"] == "-").sum()
+tracos, round(100 * tracos / len(alugueis))
+```
+
+2.461 das 10.692 linhas — 23% do arquivo — têm `"-"` em vez de um número de andar. Basta uma linha assim para que a coluna inteira vire `object`: o `pandas` decide o tipo de uma coluna olhando *todos* os valores dela, e uma coluna não pode ser meio `int64`, meio texto.
+
+## Por que o `pandas` não pegou sozinho
+
+O `read_csv` já reconhece um conjunto de marcadores de valor ausente — `NaN`, `NA`, `null`, `n/a`, campo vazio, entre outros — e os converte direto em nulo, sem que ninguém peça. `"-"` não está nessa lista. Para o `pandas`, `"-"` é um caractere como outro qualquer, e uma coluna com um único valor não numérico entre milhares de números vira `object` inteira, sem aviso.
+
+::: {.conceito}
+A inferência de tipo do `pandas` é uma **heurística sobre os caracteres do arquivo**, não um contrato sobre o que a coluna significa. Ela acerta quando todo valor é uma forma reconhecível de número, texto ou marcador de nulo já catalogado — e erra silenciosamente quando um valor foge desse catálogo, mesmo sendo óbvio para quem lê a coluna que `"-"` ali significa "sem informação". Conferir `dtypes` logo depois de ler o arquivo é o que transforma esse silêncio em alguma coisa visível antes de qualquer conta.
 :::
+
+## Dois consertos, para duas situações
+
+Quando se sabe qual é o marcador, `na_values` ensina o `read_csv` a reconhecê-lo já na leitura:
+
+```{python}
+#| label: na-values-andar
+alugueis_tipado = pd.read_csv("dados/alugueis.csv", na_values=["-"])
+alugueis_tipado["andar"].dtype, alugueis_tipado["andar"].isna().sum(), round(alugueis_tipado["andar"].mean(), 2)
+```
+
+Com `"-"` na lista de nulos, `andar` vira `float64` — os 2.461 traços viram `NaN`, e a média dos demais 8.231 valores sai 6,58.
+
+Quando não se sabe de antemão qual marcador vai aparecer, `pd.to_numeric` com `errors="coerce"` faz o trabalho na direção contrária: converte o que consegue e transforma **tudo o que não é número** em nulo, seja `"-"`, seja qualquer outro caractere estranho que o arquivo trouxer.
+
+```{python}
+#| label: to-numeric-andar
+andar_coerced = pd.to_numeric(alugueis["andar"], errors="coerce")
+andar_coerced.dtype, andar_coerced.isna().sum()
+```
+
+O resultado bate com o de `na_values` neste arquivo — os mesmos 2.461 nulos —, porque `"-"` é o único valor fora do padrão numérico. Mas `to_numeric` é mais forte e mais perigoso do que parece: ele converte em silêncio qualquer valor que não reconheça, inclusive um erro de digitação que `na_values=["-"]` deixaria passar direto como texto visível, pronto para ser notado. Usar `na_values` é dizer "eu sei o que este marcador significa"; usar `to_numeric(errors="coerce")` é dizer "eu não sei o que vou encontrar, e prefiro perder o que não for número a travar a conversão inteira".
+
+## Uma coluna em que `category` compensa
+
+A seção 6.1 converteu `Sigla` em `category` e mediu que o consumo de memória *piorava* — 27 valores, todos distintos, sem repetição para amortizar. `cidade` pode ser o caso oposto, se poucos valores se repetirem por muitas linhas. Antes de converter, vale medir o consumo de memória como está:
+
+```{python}
+#| label: cidade-memoria-antes
+antes_cidade = alugueis["cidade"].memory_usage(deep=True)
+antes_cidade
+```
+
+730.981 bytes para uma coluna de texto. Quantos valores distintos existem por trás desse número:
+
+```{python}
+#| label: cidade-nunique
+alugueis["cidade"].nunique()
+```
+
+Só cinco cidades, repetidas pelas 10.692 linhas — a proporção entre valores distintos e linhas é o inverso exato do caso de `Sigla`. Convertendo e medindo de novo:
+
+```{python}
+#| label: cidade-memoria-depois
+depois_cidade = alugueis["cidade"].astype("category").memory_usage(deep=True)
+antes_cidade, depois_cidade, round(depois_cidade / antes_cidade * 100)
+```
+
+De 730.981 bytes como `object` para 11.325 bytes como `category` — 2% do tamanho original. Aqui a repetição é o que faz o `category` compensar: em vez de 10.692 ponteiros de texto, a coluna guarda cinco categorias e um array de códigos pequenos apontando para elas. É o mesmo mecanismo da 6.1, com o resultado invertido porque a proporção entre valores distintos e linhas também está invertida.
+
+## A cauda que o aluguel esconde
+
+Resolvido o problema de `andar`, vale olhar o que a distribuição do próprio aluguel revela:
+
+```{python}
+#| label: fig-distribuicao-aluguel
+#| fig-cap: "Distribuição do aluguel: a maioria dos imóveis se concentra abaixo de 10 mil reais, mas a cauda longa chega a 45 mil"
+fig, ax = plt.subplots(figsize=(7, 5))
+ax.hist(alugueis["aluguel"], bins=60)
+ax.set_xlabel("aluguel (R$)")
+ax.set_ylabel("imóveis")
+plt.tight_layout()
+plt.show()
+```
+
+```{python}
+#| label: aluguel-mediana-maximo
+alugueis["aluguel"].median(), alugueis["aluguel"].max()
+```
+
+A mediana fica em R$ 2.661, e a barra mais alta do histograma mora perto dela — mas a cauda à direita se estica até R$ 45.000, um único imóvel bem separado do resto. Uma coluna corretamente tipada não garante uma distribuição bem comportada: o `aluguel` já é `int64` desde a primeira leitura, e ainda assim traz um outlier que qualquer estatística resumida esconderia. É esse tipo de problema — não mais o tipo da coluna, mas o formato dos valores dentro dela — que a próxima seção enfrenta.
