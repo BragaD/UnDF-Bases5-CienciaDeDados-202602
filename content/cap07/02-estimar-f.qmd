@@ -4,7 +4,97 @@
 Esta seção corresponde à seção 2.1 de @james2023.
 :::
 
-::: {.callout-warning}
-## Em construção
-O conteúdo desta seção ainda será escrito.
-:::
+A seção anterior fechou perguntando o que significa estimar uma função a partir de dado, e o que muda entre prever e explicar. É essa pergunta que abre o ISLP, com o exemplo que também abre esta seção: `Advertising`, o investimento em TV, rádio e jornal de duzentos mercados, contra as vendas de cada um.
+
+```{python}
+#| label: setup
+#| include: false
+import matplotlib.pyplot as plt
+import numpy as np
+import pandas as pd
+
+plt.style.use("estilo-figuras.mplstyle")
+```
+
+## A formulação: Y = f(X) + ε
+
+```{python}
+#| label: leitura-advertising
+propaganda = pd.read_csv("dados/Advertising.csv", index_col=0)
+propaganda.shape, propaganda.columns.tolist()
+```
+
+O capítulo 6 já ensinou a conferir o que um arquivo traz antes de confiar nele: sem `index_col=0`, a primeira coluna chegaria como `Unnamed: 0`, sobra do índice de linha que o R grava ao exportar — não é variável nenhuma, é um acidente do formato. Corrigido, restam duzentos mercados e quatro colunas: `TV`, `radio` e `newspaper`, o investimento em cada mídia, e `sales`, o volume vendido.
+
+Em notação, `X` = (TV, rádio, jornal) são os preditores — o que se mede e, em alguma medida, se controla —, e `Y` = vendas é a resposta, o que se quer prever ou explicar a partir de `X`. A suposição central deste livro inteiro é que existe uma relação entre os dois, e que ela se escreve como
+
+$$Y = f(X) + \epsilon$$
+
+`f` é uma função fixa, mas desconhecida, de `X`: é a informação sistemática que `X` carrega sobre `Y` — o que aconteceria, em média, se todo mercado com o mesmo investimento em propaganda vendesse a mesma quantidade. ε é o erro: tudo que influencia `Y` e não está em `X` — sazonalidade que a tabela não registra, um concorrente que baixou preço na mesma semana, o próprio ruído de medir "vendas" —, e por definição não pode ser previsto a partir de `X`. ε não é descuido de quem coletou o dado: é a distância entre o que `X` explica e tudo o mais que também importa. Por construção, ε é independente de `X` e tem média zero — não há tendência sistemática de errar para cima nem para baixo, só a parte que `X` não alcança.
+
+## Prever ou explicar: duas perguntas diferentes
+
+Uma vez que existe `f`, o que se faz com ela depende da pergunta. "Quanto vou vender com um orçamento assim?" é uma pergunta de **predição**: o que importa é acertar o valor de `Y`, e a forma exata de `f` pode ficar escondida — um modelo tratado como caixa-preta serve, desde que a previsão saia certa. "O que faz vender mais?" é uma pergunta de **inferência**: aqui a forma de `f` é o que se quer, porque a resposta está nela — quais mídias têm associação com as vendas, se o efeito é positivo ou negativo, se um investimento pequeno em jornal já esgota o que jornal tem a contribuir. Nesse sentido, "inferência" aqui é sobre *entender* a relação entre `X` e `Y`, não sobre calcular um erro-padrão ou um valor-p — essa segunda coisa é assunto de outra disciplina.
+
+Um modelo pode responder bem a uma das duas perguntas e mal à outra, mesmo sobre o mesmo par (`X`, `Y`): uma caixa-preta pode prever vendas com folga e não dizer nada sobre qual mídia cortar num corte de orçamento; um modelo simples o bastante para se ler o efeito de cada mídia pode prever pior do que um mais flexível. Prever e explicar não são a mesma competência.
+
+## Erro redutível e irredutível: o teto de qualquer modelo
+
+Nenhuma estimativa `f̂` acerta `f` perfeitamente, e essa distância chama-se erro **redutível** — redutível porque escolher um método melhor, mais dado ou mais preditores pode encolhê-la. Mas mesmo que `f̂` fosse `f`, ponto a ponto, prever `Y` a partir de `X` ainda erraria: `Y` também depende de ε, que por definição não pode ser previsto a partir de `X`. Esse é o erro **irredutível**, e a distinção fica explícita ao decompor o erro quadrático médio da previsão `Ŷ = f̂(X)`:
+
+$$
+E\left[(Y - \hat{Y})^2\right] = \underbrace{\left[f(X) - \hat{f}(X)\right]^2}_{\text{redutível}} + \underbrace{\mathrm{Var}(\epsilon)}_{\text{irredutível}}
+$$
+
+O primeiro termo é o que um modelo melhor reduz. O segundo não muda com o modelo — é propriedade do problema, não do método — e por isso funciona como um teto: nenhum ajuste, por melhor que seja, empurra o erro esperado abaixo dele. Na prática o irredutível quase nunca é conhecido de antemão; mais adiante neste capítulo ele volta como o piso que explica por que a curva de erro de teste nunca chega a zero.
+
+## Income1: um f verdadeiro, porque o dado é simulado
+
+Na prática, `f` nunca aparece — só o dado observado, gerado por uma `f` desconhecida mais ε. `Income1` é a exceção que o ISLP usa de propósito: os pontos não vêm de pesquisa real, foram simulados pelos próprios autores, então a função que os gerou é conhecida por construção. É isso que torna possível desenhar `f` ao lado dos pontos, e não só os pontos.
+
+```{python}
+#| label: leitura-income1
+estudo_renda = pd.read_csv("dados/Income1.csv", index_col=0)
+estudo_renda.shape, estudo_renda.columns.tolist()
+```
+
+Trinta indivíduos, anos de estudo (`Education`) e renda em milhares de dólares (`Income`) — de novo a coluna de índice do R descartada com `index_col=0`.
+
+A função exata que os autores usaram para simular esses pontos não está disponível fora do pacote `ISLP` do R, que este material não instala. A curva a seguir não é aquela função: é uma média móvel sobre os pontos, ordenados por anos de estudo — uma estimativa suave de `f`, boa o bastante para mostrar a forma da relação, mas uma estimativa, não a verdade que gerou o dado.
+
+```{python}
+#| label: fig-income-erro
+#| fig-cap: "Renda contra anos de estudo em `Income1`. A curva é uma estimativa suave de f; cada segmento liga um ponto observado à curva, e esse segmento é o ε daquela observação."
+educacao = estudo_renda["Education"].to_numpy()
+renda_observada = estudo_renda["Income"].to_numpy()
+f_suave = estudo_renda["Income"].rolling(window=13, center=True, min_periods=1).mean().to_numpy()
+
+fig, ax = plt.subplots()
+ax.vlines(
+    educacao,
+    np.minimum(renda_observada, f_suave),
+    np.maximum(renda_observada, f_suave),
+    color="C1",
+    linewidth=1,
+)
+ax.plot(educacao, f_suave, color="C0", linewidth=2, label="f (estimativa suave)")
+ax.scatter(educacao, renda_observada, color="C2", zorder=3, label="observado")
+ax.set_xlabel("anos de estudo")
+ax.set_ylabel("renda (milhares de dólares)")
+ax.legend()
+plt.tight_layout()
+plt.show()
+```
+
+Os segmentos são o ε de cada observação: a distância entre o que a curva estima para aqueles anos de estudo e o que aquele indivíduo de fato ganha.
+
+```{python}
+#| label: pontos-acima-e-abaixo
+residuo = renda_observada - f_suave
+acima = int((residuo > 0).sum())
+abaixo = int((residuo < 0).sum())
+media = round(float(residuo.mean()), 2)
+acima, abaixo, media
+```
+
+Dezesseis pontos ficam acima da curva e catorze abaixo, com a média dos resíduos em 0,10 — perto de zero, não exatamente zero, porque a curva usada aqui é uma estimativa de `f`, não a função que de fato gerou o dado. Nenhum modelo apaga esses segmentos: mesmo com a `f` exata em mãos — o caso raro que a simulação permite —, prever a renda de um indivíduo específico ainda erraria pelo tamanho do seu ε. É esse piso, e não uma falha de ajuste, que a próxima seção começa a explorar ao perguntar como, afinal, se estima `f`.
