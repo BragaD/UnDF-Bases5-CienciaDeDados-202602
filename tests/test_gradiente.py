@@ -1,23 +1,20 @@
-"""Trava uma afirmação que o livro faz sobre si mesmo.
+"""Toda chamada a `gradient_step` com passo não negativo precisa de motivo.
 
-`content/cap07/08-reducao-de-dimensionalidade.qmd` diz, sobre a chamada a
-`gradient_step` dentro de `first_principal_component`, que aquele é **o único
-uso ascendente do livro inteiro** — passo positivo, subindo o gradiente em vez
-de descer. A nota existe porque sem ela o aluno que entendeu o capítulo 5 sai
-do capítulo 7 achando que entendeu errado.
-
-O problema: quando essa nota foi escrita, os capítulos 13 a 17 eram stubs. A
-afirmação era uma **aposta sobre texto que ainda não existia** — e uma revisão
-do livro inteiro apontou exatamente isso, dizendo, com razão, que não conseguia
-confirmá-la. Este teste transforma a aposta em invariante: se um capítulo novo
-subir um gradiente, ele falha, e aí ou a nota do capítulo 7 muda ou o capítulo
-novo ganha a sua própria.
+Gradiente descendente desce: o passo é negativo. Um passo positivo é uma
+**subida** — maximizar em vez de minimizar — e é exatamente o tipo de detalhe
+que o aluno que entendeu o capítulo 5 lê como erro de digitação. Quando um
+capítulo sobe o gradiente de propósito, ele precisa dizer isso ao leitor.
 
 Como funciona: acha toda chamada a `gradient_step(...)` nos `.qmd` e olha o
 terceiro argumento. Passo começando com `-` é descida, e não interessa. O que
 sobra vai para a lista de exceções abaixo, e **cada exceção precisa de motivo
 escrito** — o mesmo padrão de `NAO_IMPORTAVEIS` em `test_scratch.py`, porque
 uma exceção sem motivo é um esquecimento disfarçado de decisão.
+
+Este teste nasceu para travar uma afirmação do capítulo 7 ("o único uso
+ascendente do livro inteiro", em `first_principal_component`), escrita quando
+metade do livro ainda era stub. Aquele capítulo saiu em 2026-09-10, com o
+abandono da abordagem do Grus; o invariante sobreviveu porque vale sozinho.
 """
 import re
 from pathlib import Path
@@ -26,8 +23,8 @@ RAIZ = Path(__file__).resolve().parent.parent
 CONTENT = RAIZ / "content"
 
 # Chamadas cujo terceiro argumento NÃO começa com `-`, e por quê. Nem toda
-# entrada aqui é uma subida: nas duas primeiras o sinal simplesmente não está
-# visível no ponto da chamada.
+# entrada aqui é uma subida: nas duas o sinal simplesmente não está visível no
+# ponto da chamada.
 PASSO_NAO_NEGATIVO = {
     "cap05/03-usando-o-gradiente.qmd": (
         "É a DEFINIÇÃO de gradient_step, não uma chamada: `step_size: float` é o "
@@ -37,11 +34,6 @@ PASSO_NAO_NEGATIVO = {
         "O passo é parâmetro de `trajetoria_distancias`, que é chamada com -0.01 "
         "logo abaixo. Descida, com o sinal decidido no ponto da chamada."
     ),
-    "cap07/08-reducao-de-dimensionalidade.qmd": (
-        "A ÚNICA subida de gradiente do livro: `first_principal_component` maximiza "
-        "a variância na direção do palpite, então anda A FAVOR do gradiente. A nota "
-        "no próprio arquivo explica isso, e é esta entrada que ela descreve."
-    ),
 }
 
 
@@ -49,8 +41,8 @@ def terceiro_argumento(texto: str, inicio: int) -> str | None:
     """Extrai o 3º argumento de uma chamada, respeitando parênteses e colchetes.
 
     Um `split(",")` ingênuo quebra em `gradient_step(guess, [grad_a, grad_b], -lr)`,
-    e passa a ler `grad_b]` como terceiro argumento — falso positivo real, visto
-    no capítulo 11.
+    e passa a ler `grad_b]` como terceiro argumento — falso positivo real, medido
+    no capítulo de regressão linear simples, enquanto ele existia.
     """
     profundidade, atual, args = 0, [], []
     for ch in texto[inicio:]:
@@ -85,10 +77,9 @@ def test_toda_subida_de_gradiente_tem_motivo_registrado():
 
     assert not inesperados, (
         "chamada a gradient_step com passo não negativo fora das registradas.\n"
-        "Se for uma SUBIDA de gradiente, o capítulo 7 afirma ser o único uso "
-        "ascendente do livro — ou essa afirmação muda, ou este capítulo ganha a "
-        "própria nota explicando por que sobe. Se o sinal só não está visível "
-        "aqui, registre em PASSO_NAO_NEGATIVO com o motivo:\n  "
+        "Se for uma SUBIDA de gradiente, a seção precisa dizer ao leitor por que "
+        "sobe — sem isso ele lê o sinal como erro de digitação. Se o sinal só não "
+        "está visível aqui, registre em PASSO_NAO_NEGATIVO com o motivo:\n  "
         + "\n  ".join(inesperados)
     )
 

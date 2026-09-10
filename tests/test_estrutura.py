@@ -105,20 +105,6 @@ def test_nenhum_qmd_usa_caminho_relativo_de_dados():
     assert not ofensores, "caminho relativo de dados em: " + ", ".join(sorted(ofensores))
 
 
-def test_toda_secao_cita_o_grus():
-    """Todo .qmd de seção traz um callout `de @grus2019`.
-
-    É o que ancora a seção no livro-texto e o que permite conferir o
-    conteúdo depois.
-    """
-    sem_citacao = [
-        str(p.relative_to(RAIZ))
-        for p in CONTENT.rglob("*.qmd")
-        if p.name != "index.qmd" and "@grus2019" not in p.read_text(encoding="utf-8")
-    ]
-    assert not sem_citacao, "seções sem citação: " + ", ".join(sorted(sem_citacao))
-
-
 def test_nenhuma_secao_inventa_numero_de_secao_do_grus():
     """O Grus NÃO numera as seções — o sumário só traz títulos.
 
@@ -149,40 +135,49 @@ def test_nenhuma_secao_inventa_numero_de_secao_do_grus():
     assert not ofensores, "número de seção inventado em: " + ", ".join(sorted(ofensores))
 
 
-def test_dezessete_capitulos():
+def test_cinco_capitulos():
+    """Cinco, e não dezessete.
+
+    Os capítulos 6 a 17 saíram do livro em 2026-09-10, com o abandono da
+    abordagem do Grus, e estão em `arquivo/grus/`. Este teste falha tanto se
+    um deles voltar por engano quanto se um capítulo novo entrar em `content/`
+    sem passar pelo `LIVRO` de `scripts/gerar-stubs.py`.
+    """
     dirs = sorted(d.name for d in CONTENT.iterdir() if d.is_dir())
-    assert dirs == [f"cap{n:02d}" for n in range(1, 18)]
+    assert dirs == [f"cap{n:02d}" for n in range(1, 6)]
 
 
 def test_cada_capitulo_tem_index():
-    for n in range(1, 18):
+    for n in range(1, 6):
         assert (CONTENT / f"cap{n:02d}" / "index.qmd").is_file(), f"falta cap{n:02d}/index.qmd"
 
 
-def test_livro_completo_87_secoes_104_arquivos():
+def test_livro_completo_21_secoes_26_arquivos():
     """Nenhum outro teste deste arquivo detecta uma seção inteira sumindo.
 
     `test_todo_qmd_esta_registrado_no_quarto_yml` e
     `test_todo_href_do_quarto_yml_existe_no_disco` são checagens de diferença
     simétrica: apagar um `.qmd` E as duas linhas correspondentes do
-    `_quarto.yml` no mesmo commit passa nos dois. `test_dezessete_capitulos`
+    `_quarto.yml` no mesmo commit passa nos dois. `test_cinco_capitulos`
     só conta diretórios; `test_cada_capitulo_tem_index` só confere o
     `index.qmd`. A fonte da verdade sobre o que o livro DEVE conter é o
-    `LIVRO` de `scripts/gerar-stubs.py` — foi dali que os 104 `.qmd` foram
-    gerados —, então este teste confere, capítulo por capítulo, que cada
-    arquivo esperado existe em disco E aparece no `_quarto.yml`, e fecha nos
-    totais (17 capítulos, 87 seções, 104 arquivos). Como fim de linha, também
-    pega um arquivo de seção com nome digitado errado (por exemplo com um
-    `_` no início, que `qmds_no_disco()` ignora de propósito): o nome exato
-    esperado não existiria em nenhum dos dois lados.
+    `LIVRO` de `scripts/gerar-stubs.py`, então este teste confere, capítulo
+    por capítulo, que cada arquivo esperado existe em disco E aparece no
+    `_quarto.yml`, e fecha nos totais (5 capítulos, 21 seções, 26 arquivos).
+    Como fim de linha, também pega um arquivo de seção com nome digitado
+    errado (por exemplo com um `_` no início, que `qmds_no_disco()` ignora de
+    propósito): o nome exato esperado não existiria em nenhum dos dois lados.
+
+    Os totais eram 17 / 87 / 104 até 2026-09-10, quando os capítulos 6 a 17
+    saíram do livro — ver a spec da ruptura com o Grus.
     """
     livro = carregar_livro()
-    assert len(livro) == 17, f"esperava 17 capítulos no LIVRO, achei {len(livro)}"
+    assert len(livro) == 5, f"esperava 5 capítulos no LIVRO, achei {len(livro)}"
 
     hrefs = hrefs_registrados()
     total_arquivos = 0
     total_secoes = 0
-    for nosso, _grus_cap, _titulo, _leitura, secoes in livro:
+    for nosso, _titulo, secoes in livro:
         d = CONTENT / f"cap{nosso:02d}"
 
         index = d / "index.qmd"
@@ -191,7 +186,7 @@ def test_livro_completo_87_secoes_104_arquivos():
         assert href_index in hrefs, f"{href_index} não registrado no _quarto.yml"
         total_arquivos += 1
 
-        for arquivo, _titulo_secao, _titulo_grus in secoes:
+        for arquivo, _titulo_secao in secoes:
             secao = d / f"{arquivo}.qmd"
             assert secao.is_file(), f"falta {secao.relative_to(RAIZ)}"
             href_secao = str(secao.relative_to(RAIZ))
@@ -199,8 +194,8 @@ def test_livro_completo_87_secoes_104_arquivos():
             total_arquivos += 1
             total_secoes += 1
 
-    assert total_secoes == 87, f"esperava 87 seções, achei {total_secoes}"
-    assert total_arquivos == 104, f"esperava 104 arquivos, achei {total_arquivos}"
+    assert total_secoes == 21, f"esperava 21 seções, achei {total_secoes}"
+    assert total_arquivos == 26, f"esperava 26 arquivos, achei {total_arquivos}"
 
 
 def test_nenhum_chunk_comeca_com_linha_indentada():
@@ -273,3 +268,50 @@ def test_modo_leitura_esta_ligado_de_ponta_a_ponta():
     # logo o mesmo localStorage.
     assert "localStorage" in corpo
     assert "bases5-" in corpo, "a chave do localStorage precisa ser própria deste livro"
+
+
+# Marcas de meta-comentário editorial: texto que fala sobre a ESCRITA do
+# material em vez de falar sobre ciência de dados. Cada padrão é ancorado no
+# próprio material como sujeito ("este livro", "a versão anterior do
+# capítulo"), e não em palavras soltas — "abordagem anterior" e "passou a ser"
+# aparecem legitimamente no capítulo 5, falando de gradiente descendente, e um
+# padrão frouxo os pegaria.
+META_COMENTARIO = [
+    r"(nest[ae]|noss?[ae]|ness[ae])\s+(nova\s+)?vers[ãa]o\s+d[eo]s?\s+(livro|material|cap[íi]tulo)",
+    r"(vers[ãa]o|abordagem|edi[çc][ãa]o)\s+anterior\s+d[eo]s?\s+(livro|material|cap[íi]tulo)",
+    r"\breescrit\w*[^.\n]{0,40}(livro|material|cap[íi]tulo|se[çc][ãa]o)",
+    r"(livro|material|cap[íi]tulo|se[çc][ãa]o)[^.\n]{0,40}\breescrit\w*",
+    r"antes,?\s+est[ea]\s+(livro|material)",
+    r"est[ea]\s+(livro|material)\s+(agora|passou a|deixou de|usava|fazia)",
+    r"decis[ãa]o\s+(do autor|editorial)",
+    r"CLAUDE\.md",
+    r"docs/superpowers",
+    r"arquivo/grus",
+]
+
+
+def test_o_conteudo_nao_comenta_a_propria_escrita():
+    """O site é sobre ciência de dados, não sobre como o material foi escrito.
+
+    Regra do autor, fixada na spec da ruptura com o Grus (2026-09-10): nenhum
+    `.qmd` de `content/` diz que houve mudança de abordagem, que um capítulo
+    foi reescrito, que a versão anterior fazia de outro jeito, ou que o
+    material "agora" usa tal ferramenta. O aluno lê o conteúdo; a história
+    editorial vive em `docs/` e no `CLAUDE.md`.
+
+    É a mesma disciplina que já tirou do livro a explicação de Shift+Enter,
+    que foi parar no onboarding do Colab: texto sobre a ferramenta ou sobre o
+    processo não é texto sobre o conteúdo.
+
+    Falso positivo se corrige editando `META_COMENTARIO` com o motivo escrito
+    — nunca silenciando o teste.
+    """
+    padroes = [re.compile(p, re.IGNORECASE) for p in META_COMENTARIO]
+    ofensores = []
+    for p in sorted(CONTENT.rglob("*.qmd")):
+        for n, linha in enumerate(p.read_text(encoding="utf-8").split("\n"), start=1):
+            for padrao in padroes:
+                m = padrao.search(linha)
+                if m:
+                    ofensores.append(f"{p.relative_to(RAIZ)}:{n}: {m.group(0)!r}")
+    assert not ofensores, "meta-comentário editorial no conteúdo:\n  " + "\n  ".join(ofensores)
