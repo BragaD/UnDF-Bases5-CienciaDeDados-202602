@@ -15,6 +15,9 @@ ESPERADOS = [
     "estados.csv",
     "alugueis.csv",
     "cidades.csv",
+    "Advertising.csv",
+    "Income1.csv",
+    "Income2.csv",
 ]
 
 

@@ -94,5 +94,12 @@ else:
         escritor.writerows(linhas)
     print(f"ok    {saida.relative_to(RAIZ)} ({len(linhas)} assuntos)")
 
+# 7. Conjuntos do ISLP (@james2023), do site do livro. O capítulo 7 usa os três:
+# Advertising abre o capítulo 2; Income1 e Income2 são as figuras em que o f
+# verdadeiro é conhecido.
+BASE_ISLP = "https://www.statlearning.com/s/"
+for nome in ["Advertising", "Income1", "Income2"]:
+    baixar(BASE_ISLP + f"{nome}.csv", DADOS / f"{nome}.csv")
+
 print("---")
 print("Revise os arquivos e commite-os. Este script não roda no render.")

@@ -51,6 +51,27 @@ docker compose run --rm --no-deps livro python scripts/baixar-dados.py
 | `mnist/` | 16 | [MNIST](https://ossci-datasets.s3.amazonaws.com/mnist/) |
 | `imagem-cores.jpg` | 17 | [Wikimedia Commons](https://commons.wikimedia.org/wiki/File:Piet_Mondriaan,_1930_-_Mondrian_Composition_II_in_Red,_Blue,_and_Yellow.jpg) — Piet Mondriaan, *Composition II in Red, Blue, and Yellow* (1930); domínio público (autor falecido em 1944 — PD-old, PD-Art, PD-US por publicação pré-1931); redimensionada para no máximo 600 px no lado maior |
 
+## `Advertising.csv`, `Income1.csv`, `Income2.csv` — os três do capítulo 7
+
+Do site oficial de @james2023, *An Introduction to Statistical Learning*
+(`statlearning.com/s/`). O capítulo 7 usa os três; o resto do capítulo roda
+sobre dado simulado.
+
+| Coluna | `Advertising.csv` | `Income1.csv` | `Income2.csv` |
+|---|---|---|---|
+| — | 200 mercados, investimento em publicidade (`TV`, `radio`, `newspaper`, em milhares de dólares) e `sales` (milhares de unidades) | 30 pessoas, `Education` (anos) e `Income` (milhares de dólares) | 30 pessoas, `Education`, `Seniority` e `Income` |
+
+Os três vêm do R e trazem, como primeira coluna, um **índice sem nome** — o
+`pandas` o lê como `Unnamed: 0`. O arquivo fica como veio: não removemos essa
+coluna do CSV, é assunto de como cada seção lê o arquivo.
+
+`Income1` e `Income2` são **simulados pelos autores** de @james2023, não são
+dado observado. É por isso que o capítulo pode desenhar o *f* verdadeiro nas
+figuras: quando o dado é gerado por uma função conhecida mais ruído, dá para
+mostrar, ao lado do ajuste, o erro que nenhum modelo consegue eliminar —
+coisa que não é possível fazer com dado real, onde o *f* verdadeiro é
+justamente o que se está tentando estimar.
+
 ## `spam-assuntos.csv` — por que só os assuntos
 
 O `scratch/naive_bayes.py` lê cada arquivo de e-mail do corpus e **descarta tudo
