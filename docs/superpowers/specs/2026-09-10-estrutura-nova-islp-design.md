@@ -28,10 +28,18 @@ A regra do `scikit-learn` de ponta a ponta existia para impedir que o material v
 
 Portanto: **quando a fidelidade ao capítulo do ISLP e a preferência pelo `scikit-learn` colidirem, ganha a fidelidade.** Uma biblioteca que o conteúdo do capítulo exige entra, **registrada em `BIBLIOTECA_LIBERADA` com o motivo escrito** — o mesmo mecanismo que já libera o `scipy` para o dendrograma do capítulo 15.
 
+**A mesma precedência vale para o código à mão.** Complemento do autor, no mesmo dia:
+
+> *"caso o livro também tenha algoritmos escrito a mão (ou numpy/pandas/etc) para fins didáticos, podem ser inteiros no livro."*
+
+Ou seja: **onde o ISLP mostra o mecanismo à mão, nós mostramos também, inteiro.** O livro faz isso de propósito em vários pontos — um laço que ilustra a validação cruzada, uma conta que abre o que uma função esconde — e omitir aquilo para respeitar uma regra nossa entregaria ao aluno uma versão pior do capítulo.
+
+A fronteira que sobra, e que é a que importa: **nós não inventamos implementação à mão que o livro não tem.** A régua deixou de ser "nunca à mão" e passou a ser **"o que o capítulo do ISLP faz"**. Um agente em dúvida abre o capítulo e olha; se está lá, entra.
+
 O que a emenda **não** afrouxa:
 
 - **Nada de inferência.** Segue valendo: sem erro-padrão de coeficiente, sem estatística *t*, sem valor-p. Não é regra de ferramenta, é de escopo da disciplina.
-- **Nada de algoritmo de aprendizado escrito à mão.** A tese continua sendo escolher, ajustar e julgar.
+- **Nada de implementação à mão que o livro não tenha.** A tese continua sendo escolher, ajustar e julgar — o material não volta a reimplementar o que a biblioteca faz, salvo quando o próprio ISLP o faz para ensinar.
 - **Biblioteca entra por necessidade, não por conveniência.** Se o `scikit-learn` faz o que a seção precisa, é ele que se usa. A exceção é para o que ele não faz.
 - **`statsmodels` segue fora**, porque o que ele acrescentaria é justamente a inferência que a disciplina não faz.
 - **O pacote `ISLP` segue fora**, porque quebraria a regra de dados commitados.
