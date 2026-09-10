@@ -4,35 +4,83 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Estado atual
 
-**O material está entre duas abordagens.** Em 2026-09-10 a disciplina abandonou a abordagem *from scratch* do livro de Joel Grus, que governava o livro inteiro, e vai recomeçar do capítulo 6 em diante com um ensino tradicional de machine learning e outras referências — **ainda não escolhidas**.
+**A fonte é o ISLP.** James, Witten, Hastie, Tibshirani e Taylor, *An Introduction to Statistical Learning with Applications in Python* (Springer, 2023) — chave `@james2023` em `references.bib`, PDF em `livros/ISLP_website.pdf`. A escolha fecha o que a ruptura com o Grus tinha deixado em aberto: a fonte, a postura pedagógica, o escopo e a numeração.
 
-A decisão, as razões e o que ela derruba estão em `docs/superpowers/specs/2026-09-10-ruptura-com-o-grus-design.md`. **Leia essa spec antes de mexer em qualquer coisa de conteúdo.** Ela é a fonte; este arquivo é o resumo operacional.
+A decisão está em `docs/superpowers/specs/2026-09-10-estrutura-nova-islp-design.md`. **Leia essa spec antes de mexer em qualquer coisa de conteúdo.** Ela é a fonte — a tese, a ementa capítulo a capítulo com a correspondência ISLP, o que fica de fora e por quê, e a ordem de execução; este arquivo é o resumo operacional.
 
 O que existe hoje:
 
-- **Cinco capítulos**, 21 seções + 5 `index.qmd` = **26 `.qmd`**, todos registrados em `_quarto.yml`: Introdução, Um Curso Rápido de Python, Visualizando Dados, Álgebra Linear, Gradiente Descendente. São os que a turma já cursou.
-- **`arquivo/grus/`** — os capítulos 6 a 17 como estavam, os notebooks derivados deles, o pacote `scratch_np/` e os planos das duas reescritas que morreram. Está no `.quartoignore`, fora da suíte, e **não é fonte para nada**.
-- Container Docker (Quarto + `uv`), CI publicando em `gh-pages`, **43 testes** (`make teste`) guardando os invariantes.
-- `notebooks/` com um `.ipynb` por capítulo para a aula, `atividades/` com o PID e as listas, `apoio/` com páginas HTML interativas para projetar em aula.
+- **Seis capítulos**, 27 seções + 6 `index.qmd` = **33 `.qmd`**, todos registrados em `_quarto.yml`. Os capítulos 1 a 5 (Introdução, Um Curso Rápido de Python, Visualizando Dados, Álgebra Linear, Gradiente Descendente) são da abordagem anterior — ver "Os capítulos 1 a 5", abaixo. O **capítulo 6 — Dados: Tipos, Dados Retangulares e `pandas`** é o primeiro escrito sob a spec do ISLP: não corresponde a nenhuma seção do livro-fonte, e **é o modelo de estilo da casa**, o papel que o capítulo 9 tinha na abordagem do Grus.
+- **`arquivo/grus/`** — os capítulos 6 a 17 como estavam na abordagem do Grus, os notebooks derivados deles, o pacote `scratch_np/` e os planos das reescritas que morreram. Está no `.quartoignore`, fora da suíte, e **não é fonte para nada**.
+- Container Docker (Quarto + `uv`), CI publicando em `gh-pages`, **48 testes** (`make teste`) guardando os invariantes.
+- `notebooks/` com um `.ipynb` por capítulo (seis, hoje) para a aula, `atividades/` com o PID e as listas, `apoio/` com páginas HTML interativas para projetar em aula.
 
-### Nenhum capítulo novo antes das fontes
+### Antes de escrever um capítulo
 
-As referências e a postura pedagógica ainda não foram decididas — o autor pediu para buscá-las num próximo momento. **Escrever capítulo agora produziria um terceiro estilo para depois desfazer.** O que está em aberto, de propósito:
+**Leia `content/cap06/` inteiro primeiro.** Foi o primeiro capítulo escrito sob a spec do ISLP, e fixa a forma: abertura de seção sem "nesta seção veremos", o chunk de setup aplicando `estilo-figuras.mplstyle`, a posição dos callouts `::: {.conceito}` e `::: {.exemplo}`, e a regra de que todo número afirmado na prosa sai da saída de um chunk, nunca da cabeça de quem escreve. Um capítulo novo que copiar essa forma economiza rodadas de revisão; um que reinventar a forma provavelmente repete um erro que o cap. 6 já pagou.
 
-- as fontes;
-- se o `scikit-learn` passa a ser a ferramenta de ponta a ponta, ou se algum algoritmo ganha versão curta à mão onde ver o mecanismo é a lição do dia — e qual o critério;
-- o escopo, a numeração e a divisão em capítulos e seções;
-- o cronograma das aulas 6 em diante, e a redação da avaliação que hoje fala em "modelos vistos ao longo do semestre";
-- a reescrita dos capítulos 1 a 5, que ainda carregam marcas do Grus (os callouts de correspondência, a DataSciencester do capítulo 1, o `Vector = List[float]` do capítulo 4) e entram numa rodada posterior.
+### O que falta
+
+Onze capítulos, na ementa que a spec fixa:
+
+| Capítulo | Título | ISLP |
+|---|---|---|
+| 7 | O que é aprendizado estatístico | 2 |
+| 8 | Regressão linear | 3 |
+| 9 | Classificação | 4 |
+| 10 | Reamostragem | 5 |
+| 11 | Seleção de modelos e regularização | 6 |
+| 12 | Árvores de decisão | 8.1 |
+| 13 | Bagging, florestas e boosting | 8.2 |
+| 14 | Redes neurais | 10 (recorte denso — sem `torch`) |
+| 15 | Aprendizado não supervisionado | 12 |
+| 16 | Máquinas de vetores de suporte | 9 |
+| 17 | Um problema do começo ao fim | — (sem ISLP; a leitura do seminário/HPE) |
+
+Cada um ganha o seu próprio plano em `docs/superpowers/plans/2026-09-10-islp-capNN.md`, escrito quando chegar a vez — **um capítulo por vez**, sequencial, no processo que as reescritas anteriores fixaram: planejador com o mapa do capítulo no prompt, implementador, revisor que lê o capítulo inteiro com uma pergunta só (*o texto condiz com o que foi escrito?*), implementador corrigindo. O capítulo 17 sai de ordem, logo após o 9, porque tem prazo (o HPE de 14/10); o resto segue a ordem do livro. A ementa seção a seção está na spec.
+
+### Os capítulos 1 a 5
+
+São da abordagem anterior: citam o Grus, não o ISLP, e ficam **fora dos guardas novos** de propósito — `test_nenhum_chunk_executavel_usa_biblioteca_proibida`, `test_toda_secao_tem_figura` e `test_todo_chunk_que_desenha_aplica_o_estilo` (em `tests/test_estrutura.py`) só varrem `CAPITULOS_NOVOS`, isto é, `cap06` a `cap17`. `test_toda_secao_cita_o_islp` entra com o capítulo 7 e vale a mesma exclusão. A reescrita deles é decisão em aberto, registrada como tal na spec — não é tarefa deste plano.
 
 ### As specs, e o que sobrou de cada uma
 
 | Spec | Estado |
 |---|---|
-| `2026-09-10-ruptura-com-o-grus-design.md` | **vigente** — a ruptura e o que fica em aberto |
-| `2026-08-15-estrutura-livro-bases5-design.md` | **vale só a infraestrutura**: Quarto, Docker, `uv`, CI, dados commitados, sementes, notebooks, `apoio/`, `atividades/`, a suíte. Escopo, numeração, identidade e a tese "tudo em Python puro" morreram |
-| `2026-09-06-reescrita-numpy-design.md` | **morta** — governava os capítulos 6 a 17 |
-| `2026-09-08-pandas-nos-dados-design.md` | **morta** — idem. Guarda duas armadilhas medidas do `pandas` que continuam verdadeiras e podem poupar tempo: `read_html` precisa de `flavor="bs4"` neste projeto (o padrão `lxml` não está no `uv.lock`), e `N/D` **não** está na lista padrão de `na_values` — com ele a coluna vira `object` e `Series.sum()` concatena strings sem erro nenhum |
+| `2026-09-10-estrutura-nova-islp-design.md` | **vigente** — a fonte, a tese, a ementa e a ordem de execução |
+| `2026-09-10-ruptura-com-o-grus-design.md` | **histórico** — fechou a abordagem do Grus e abriu as três perguntas (fonte, postura, escopo) que a spec do ISLP responde |
+| `2026-08-15-estrutura-livro-bases5-design.md` | **vale só a infraestrutura**: Quarto, Docker, `uv`, CI, dados commitados, sementes, notebooks, `apoio/`, `atividades/`, a suíte |
+| `2026-09-06-reescrita-numpy-design.md`, `2026-09-08-pandas-nos-dados-design.md` | **mortas** — governavam os capítulos 6 a 17 na abordagem do Grus |
+
+## A pedagogia do ISLP
+
+**A tese: o modelo é uma ferramenta que se escolhe, se ajusta e se julga** — não se implementa. Consequências que decidem toda dúvida:
+
+- **`scikit-learn` de ponta a ponta. Nada é escrito à mão.** Todo capítulo é conceito mais `fit`/`predict`/`cross_val_score`/`Pipeline` sobre dado real. A matemática aparece em fórmula e em gráfico, nunca em implementação.
+- **Nada de inferência.** Sem erro-padrão de coeficiente, estatística *t*, valor-p ou teste de hipótese — decisão explícita do autor.
+- **O pacote `ISLP` não entra.** Ele existe para os labs do livro-fonte e traz uma API que só existe ali; os conjuntos de dados do ISLP entram como CSV commitado em `dados/`, como sempre.
+
+| Pode e deve | Não pode em chunk que executa |
+|---|---|
+| `scikit-learn` inteiro: estimadores, `Pipeline`, `ColumnTransformer`, `GridSearchCV`, métricas | `statsmodels` — a disciplina não faz inferência |
+| `pandas` para todo trabalho de dado, `numpy` para conta de array, `matplotlib` para todo gráfico | o pacote `ISLP`; `torch` (redes convolucionais e recorrentes são da disciplina de Deep Learning) |
+| | `scipy`, **exceto** a exceção registrada do dendrograma do capítulo 15 |
+
+`test_nenhum_chunk_executavel_usa_biblioteca_proibida` trava a tabela da direita; qualquer uma delas pode aparecer só num bloco ```` ```python ```` que **não executa**, para mostrar o que existe lá fora sem passar a depender.
+
+**A citação inverte a regra do Grus.** O ISLP numera as seções (3.3.1, 8.2.2 estão no sumário dele), então o callout de correspondência cita o **número**:
+
+```markdown
+::: {.callout-note}
+Esta seção corresponde à seção 8.2.2 de @james2023.
+:::
+```
+
+`test_nenhuma_secao_inventa_numero_de_secao_do_grus` continua valendo para os capítulos 1 a 5, que seguem citando o Grus por título. Os capítulos 6 e 17 não têm correspondência no ISLP e não trazem o callout — exceção registrada com motivo.
+
+**Toda seção dos capítulos 6 a 17 tem ao menos uma figura**, e todo chunk que chama `plt.` aplica `estilo-figuras.mplstyle` (na raiz — fundo transparente, cores medidas contra os temas claro e escuro do site). `test_toda_secao_tem_figura` e `test_todo_chunk_que_desenha_aplica_o_estilo` travam as duas regras; uma seção sem figura ou um chunk sem o estilo entra em `SECOES_SEM_FIGURA`/`BIBLIOTECA_LIBERADA` (`tests/test_estrutura.py`) só com o motivo escrito — `test_toda_excecao_de_figura_e_de_biblioteca_tem_motivo_e_arquivo_real` cobra isso. Antes de escrever o código de qualquer gráfico, carregue a skill `dataviz`.
+
+**Epígrafes de capítulo são citações reais, verificadas em fonte primária.** Na escrita do capítulo 6, duas candidatas foram descartadas por falha de verificação — inclusive a célebre "In God we trust; all others must bring data", que não tem evidência de ser de Deming. A regra: **se a atribuição não se verifica em fonte primária, a citação não entra.** É preferível um capítulo sem epígrafe a uma citação inventada.
 
 ## A regra editorial: o site não comenta a própria escrita
 
@@ -82,7 +130,7 @@ make lock             # regenera uv.lock após editar pyproject.toml
 make clean            # remove _book/, _freeze/, .quarto/ e o lixo de render abortado
 ```
 
-**`make teste` roda `pytest tests/`** — 43 testes em sete arquivos: `test_estrutura.py` (registro no `_quarto.yml`, caminhos de dados, os totais de 5 capítulos / 21 seções / 26 arquivos contra o `LIVRO` de `scripts/gerar-stubs.py`, todo link interno para `.qmd` resolvendo, e a regra editorial acima), `test_scratch.py` (o pacote vendorizado — inclusive um hash SHA-256 travando que `scratch/` continua verbatim upstream), `test_dados.py` (os conjuntos commitados), `test_freeze.py` (o cache envenenado), `test_gradiente.py` (toda subida de gradiente tem motivo registrado), `test_notebooks.py` (os notebooks de aula não podem defasar dos `.qmd`) e `test_atividades.py` (o gabarito não pode vazar para o site).
+**`make teste` roda `pytest tests/`** — 48 testes em sete arquivos: `test_estrutura.py` (registro no `_quarto.yml`, caminhos de dados, os totais de 6 capítulos / 27 seções / 33 arquivos contra o `LIVRO` de `scripts/gerar-stubs.py`, todo link interno para `.qmd` resolvendo, a regra editorial acima, nenhuma seção inventando número do Grus, e os três guardas da spec do ISLP: nenhum chunk executável usa biblioteca proibida, toda seção dos capítulos novos tem figura, e todo chunk que desenha aplica `estilo-figuras.mplstyle`), `test_scratch.py` (o pacote vendorizado — inclusive um hash SHA-256 travando que `scratch/` continua verbatim upstream), `test_dados.py` (os conjuntos commitados, inclusive que `alugueis.csv` preserva a armadilha do `andar`), `test_freeze.py` (o cache envenenado), `test_gradiente.py` (toda subida de gradiente tem motivo registrado), `test_notebooks.py` (os notebooks de aula não podem defasar dos `.qmd`) e `test_atividades.py` (o gabarito não pode vazar para o site).
 
 É o que garante a regra "todo `.qmd` novo precisa ser registrado em `_quarto.yml`" — sem essa suíte, um arquivo esquecido no YAML só aparece quando alguém percebe a seção faltando no site publicado.
 
@@ -103,6 +151,8 @@ export MPLBACKEND=Agg PYTHONHASHSEED=0          # os mesmos ENV do Dockerfile
 **`scripts/executar-secoes.py` é o análogo fiel do `quarto render` para um capítulo.** Ele reaproveita o parser de `gerar-notebooks.py` (que já sabe o que é callout e o que é `eval: false`), monta em memória um notebook só de código para **cada** `.qmd` e o executa num kernel novo, com o cwd na raiz — que é o que o `execute-dir: project` faz no Quarto. É assim que se pega o `import` que falta numa seção porque foi feito na anterior: o notebook de aula, com um kernel só para o capítulo inteiro, deixa isso passar. Não toca em `_freeze/` nem em `.quarto/`, então pode rodar em paralelo e nunca precisa do lock. O alvo `make secoes CAP=NN` roda o mesmo script dentro do container.
 
 Os dois modos são complementares e ambos importam: `executar-secoes.py` reproduz o **site** (um kernel por página), `executar-notebooks.py` reproduz a **aula** (um kernel por capítulo).
+
+**Mostrar um erro na página exige `try/except`, nunca `#| error: true`.** A opção do Quarto que deixaria uma célula levantar exceção sem derrubar o render **não é honrada aqui**: `scripts/executar-secoes.py` e `scripts/executar-notebooks.py` constroem o `NotebookClient` sem `allow_errors`, e `scripts/gerar-notebooks.py` só entende a opção `eval`. Uma célula que levanta exceção mata a verificação e o `make notebooks-teste`. Para mostrar um erro como conteúdo — a seção 6.3 faz isso com um `TypeError` de conversão de tipo —, capture com `try/except` e **trunque** a mensagem antes de imprimir: a exceção crua do `TypeError` daquela seção tem 12.722 caracteres, porque o `pandas` concatena a coluna inteira dentro do texto do erro.
 
 **Porta 4201, não 4200.** O `bases_3_estatistica` ocupa a 4200, e os dois livros são editados na mesma tarde.
 
@@ -182,6 +232,12 @@ content/cap05/
 
 **`LIVRO`, em `scripts/gerar-stubs.py`, é a fonte da verdade** sobre o que o material deve conter. Um capítulo novo entra ali primeiro; `python3 scripts/gerar-stubs.py` cria os stubs que faltam (nunca sobrescreve o que existe) e `--yaml` imprime o bloco `chapters` para colar no `_quarto.yml`.
 
+### Cada seção roda no seu próprio kernel: reconstrua o que herda
+
+No site, cada `.qmd` executa num kernel **próprio** e nome nenhum atravessa páginas — a razão de `import` se repetir de seção para seção. Isso tem uma consequência sobre **decisões**, não só sobre nomes: quando uma seção anterior decide algo sobre o dado e diz que a decisão fica, a seguinte não herda esse estado — precisa reconstruí-lo no chunk de setup, sem reexplicar.
+
+Já produziu uma contradição visível no capítulo 6: a seção 6.4 preenche `andar` com zero e fecha dizendo "é essa a versão que fica"; a 6.5 relia o CSV aplicando só `na_values`, e mostrava um `describe()` com os 2.461 nulos de volta — ninguém errou um número, a arquitetura de um kernel por página desfez, em silêncio, uma promessa do texto. **Regra: a seção que herda uma decisão a reconstrói no chunk de setup; a seção que a tomou não precisa reexplicar por quê.**
+
 ### Os notebooks de aula — derivados do material, nunca editados à mão
 
 `notebooks/` tem **um `.ipynb` por capítulo**, para executar ao vivo na aula. Eles são gerados por `scripts/gerar-notebooks.py` a partir dos `.qmd`, e a relação é a mesma do `scratch/` com o upstream: **o `.qmd` é a fonte, o notebook é cópia derivada.** Editar um `.ipynb` é trabalho perdido — o próximo `make notebooks` sobrescreve. Mudou a aula? Mude o `.qmd`.
@@ -208,7 +264,7 @@ O link é do site para o notebook e **não** o contrário: `LINHA_COLAB`, no ger
 
 **O onboarding do Colab vive em `scripts/onboarding-colab.md` e entra só no notebook do capítulo 2** — a aula 2 é a primeira em que a turma põe a mão no ambiente. Ele explica Shift+Enter, a armadilha da ordem de execução, o `assert` como idioma da casa, a semente obrigatória e o "salvar cópia no Drive". **Não está no site de propósito** — ver "A regra editorial", acima. Um teste confere que ele está no notebook e que não vazou para `content/`.
 
-**Verificação:** `make notebooks-teste` executa os notebooks de ponta a ponta com o cwd em `notebooks/` — o caso mais apertado. É o análogo do `quarto render` para os notebooks, e pelo mesmo motivo: os módulos de `scratch/` têm `assert` no nível do módulo. Com cinco capítulos leva cerca de **10 segundos**; a medição antiga de ~11 minutos era dos 17, dominada pelo MNIST e pelo bootstrap.
+**Verificação:** `make notebooks-teste` executa os notebooks de ponta a ponta com o cwd em `notebooks/` — o caso mais apertado. É o análogo do `quarto render` para os notebooks, e pelo mesmo motivo: os módulos de `scratch/` têm `assert` no nível do módulo. Com seis capítulos leva cerca de **10 segundos**; a medição antiga de ~11 minutos era dos 17, dominada pelo MNIST e pelo bootstrap.
 
 `notebooks/` está no **`.quartoignore`** — sem isso o Quarto trataria os `.ipynb` como conteúdo do site.
 
@@ -271,7 +327,7 @@ A correção **não** é editar o pacote: é manter `im/` vazio, como o upstream
 
 **Nenhum byte vem da rede em tempo de render.** Os conjuntos entram commitados em `dados/` (~13 MB); a proveniência de cada um está em `dados/README.md`, e `test_dados.py` cobra que o README documente todos.
 
-Boa parte deles alimentava os capítulos 6 a 17 e hoje não é usada por nenhuma página. **Ficam mesmo assim**: o material novo quase certamente usa iris e MNIST, e remover para reintroduzir em duas semanas é trabalho jogado fora. Mesma razão para `numpy`, `pandas` e `scikit-learn` continuarem declarados no `pyproject.toml` sem uso atual — desdeclarar exigiria `make lock` e `make build` agora, e outro par em seguida.
+O capítulo 6 já usa dado próprio, brasileiro e sem limpeza prévia — `alugueis.csv`, `estados.csv` e `cidades.csv`, com a proveniência em `dados/README.md`. Boa parte dos conjuntos restantes alimentava os capítulos 6 a 17 do Grus e hoje não é usada por nenhuma página nova; **ficam mesmo assim**, porque removê-los para reintroduzir em duas semanas é trabalho jogado fora. Do capítulo 7 em diante os dados são os do ISLP (`Advertising`, `Auto`, `Credit`, `Heart`, `College`, `Carseats`, `Default`, `Smarket`, `Hitters`, `Wage`, `OJ`, `Caravan`, `USArrests`, `NCI60` — as URLs de origem de cada um estão registradas no plano da fundação), baixados uma vez por `scripts/baixar-dados.py` e commitados, nunca em tempo de render. `pandas` já é usado (capítulo 6); `numpy` e `scikit-learn` seguem declarados no `pyproject.toml` sem uso executável ainda — só aparecem nos callouts ilustrativos dos capítulos 1 a 5 — e entram em uso de verdade a partir do capítulo 7. `requests`, `beautifulsoup4`, `html5lib`, `python-dateutil` e `pillow` são sobra da abordagem do Grus sem uso hoje; podá-los é limpeza que pode esperar (custa `make lock` e `make build`).
 
 **Caminhos a partir da raiz**, sempre:
 
@@ -279,6 +335,14 @@ Boa parte deles alimentava os capítulos 6 a 17 e hoje não é usada por nenhuma
 acoes = pd.read_csv("dados/stocks.csv")        # ✓
 acoes = pd.read_csv("../../dados/stocks.csv")  # ✗ nunca
 ```
+
+### Armadilhas de `pandas` medidas
+
+Três, e todas custam um número errado publicado sem erro nenhum na tela — vale conferir esta lista antes de desconfiar do dado:
+
+- **`pd.read_html` precisa de `flavor="bs4"`** neste projeto: o padrão é `lxml`, que não está no `uv.lock`. Sem o argumento, `ImportError` e render no chão. **Não instale `lxml` para contornar.**
+- **`na_values=["n/a"]` é redundante** — `n/a` já está na lista padrão de marcadores nulos do `pandas`. O marcador que *não* está é `N/D`: com ele a coluna inteira vira `object` e `Series.sum()` concatena strings em vez de somar, sem erro nenhum.
+- **`memory_usage(deep=True)` numa coluna de texto não-ASCII é contaminado pela ordem dos chunks.** Chamar `nunique()` (ou qualquer coisa que use `hash()` das strings) **antes** de medir infla o resultado: no CPython, o hash de uma `str` não-ASCII popula um cache interno de UTF-8 que o `sys.getsizeof` passa a contar. Medido em `dados/alugueis.csv`, coluna `cidade`: **730.981 bytes** medindo antes, **795.738** medindo depois de um `nunique()` — 8,9% de diferença sem um byte de dado ter mudado. A coluna `Sigla` de `dados/estados.csv`, que é ASCII, dá 1.509 nos dois casos, o que isola a causa. Consequência prática: **meça a memória primeiro, explore a coluna depois.** Uma seção que inverta a ordem publica um número errado sem erro nenhum na tela.
 
 ### Sementes em chunks estocásticos — obrigatório
 
