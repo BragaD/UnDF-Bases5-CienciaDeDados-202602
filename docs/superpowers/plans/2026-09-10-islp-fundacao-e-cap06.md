@@ -1259,7 +1259,21 @@ Copie a estrutura de `content/cap05/index.qmd` — é o índice mais recente e t
 5. A tabela de seções, no formato `| [6.1](01-elementos-de-dados-estruturados.qmd) | Elementos de Dados Estruturados |`.
 6. `## Leituras adicionais` com dois ou três ponteiros reais: a documentação do `pandas` (*10 minutes to pandas*, *Working with missing data*) e o *Data Wrangling* cheat sheet. Links reais, conferidos.
 
-- [ ] **Step 2: Conferir que o dicionário de exceções esvaziou**
+- [ ] **Step 2: Fazer o gerador de stubs emitir o link do Colab**
+
+`test_todo_capitulo_tem_link_para_o_colab_e_nenhum_notebook_o_repete` exige que **todo** capítulo registrado tenha o link do Colab no seu `index.qmd`, e `stub_index` não o emite. A Task 4 descobriu isso na prática e resolveu à mão, para o capítulo 6. Sem esta correção, **cada um dos capítulos 7 a 17 vai bater na mesma parede**.
+
+Em `scripts/gerar-stubs.py`, dentro de `stub_index`, acrescente a linha do Colab logo após o título (e após o callout de correspondência, quando houver). O formato exato está nos `index.qmd` dos capítulos 1 a 5 — copie de lá, trocando só o nome do notebook, que é `cap{nosso:02d}-{apelido(titulo)}.ipynb`. A função `apelido` vive em `scripts/gerar-notebooks.py`; importe-a por caminho, como `tests/test_notebooks.py` já faz com `carregar_gerador`, em vez de duplicar a tabela de acentos.
+
+Confirme que o gerador continua idempotente:
+
+```bash
+.venv/bin/python scripts/gerar-stubs.py
+```
+
+Esperado: `criados: 0   pulados (já existiam): 33`.
+
+- [ ] **Step 3: Conferir que o dicionário de exceções esvaziou**
 
 ```bash
 grep -A2 "SECOES_SEM_FIGURA: dict" tests/test_estrutura.py
@@ -1267,7 +1281,7 @@ grep -A2 "SECOES_SEM_FIGURA: dict" tests/test_estrutura.py
 
 Esperado: `SECOES_SEM_FIGURA: dict[str, str] = {}`. Se ainda houver entrada, uma seção ficou sem figura.
 
-- [ ] **Step 3: Rodar tudo, inclusive o capítulo num kernel só**
+- [ ] **Step 4: Rodar tudo, inclusive o capítulo num kernel só**
 
 ```bash
 export MPLBACKEND=Agg PYTHONHASHSEED=0
@@ -1279,7 +1293,7 @@ export MPLBACKEND=Agg PYTHONHASHSEED=0
 
 Os dois modos são complementares: `executar-secoes.py` reproduz o **site** (um kernel por página) e `executar-notebooks.py` reproduz a **aula** (um kernel por capítulo). Esperado: os dois OK e **48 passed**.
 
-- [ ] **Step 4: O render completo — a única vez neste plano**
+- [ ] **Step 5: O render completo — a única vez neste plano**
 
 ```bash
 make render
@@ -1296,14 +1310,14 @@ quarto render 2>&1 | grep -E "Unable to resolve|ERROR|Output created"
 
 Esperado: **só** `Output created: _book/index.html`. Qualquer `Unable to resolve link target` é link quebrado e precisa ser corrigido antes do commit — `test_todo_link_interno_para_qmd_resolve` existe para isso, mas o render pega também os links para recursos.
 
-- [ ] **Step 5: Abrir a página no tema escuro**
+- [ ] **Step 6: Abrir a página no tema escuro**
 
 O estilo de figura foi feito para os dois temas, e este é o único momento em que isso é conferido de fato. Abra `_book/content/cap06/01-elementos-de-dados-estruturados.html`, troque para o tema escuro no seletor do topo e confirme que os eixos, os rótulos e as barras continuam legíveis. Se alguma figura aparecer como um retângulo branco, o `savefig.transparent` não pegou naquele chunk.
 
-- [ ] **Step 6: Commit**
+- [ ] **Step 7: Commit**
 
 ```bash
-git add content/cap06/index.qmd notebooks tests/test_estrutura.py
+git add content/cap06/index.qmd scripts/gerar-stubs.py notebooks tests/test_estrutura.py
 git commit -m "feat(cap06): a visão geral, o link do Colab e o render
 
 Fecha o capítulo 6. A tabela é a mesa de trabalho, e quase todo erro de
