@@ -83,9 +83,10 @@ def test_um_notebook_por_capitulo():
         f"sobrando: {sorted(encontrados - set(esperados))}; "
         f"faltando: {sorted(set(esperados) - encontrados)}"
     )
-    # Cinco: os capítulos 6 a 17 saíram do livro em 2026-09-10, com o abandono
+    # Seis: os capítulos 7 a 17 saíram do livro em 2026-09-10, com o abandono
     # da abordagem do Grus, e os notebooks deles foram para `arquivo/grus/`.
-    assert len(esperados) == 5
+    # O capítulo 6 voltou nesse mesmo dia, já na fundação ISLP.
+    assert len(esperados) == 6
 
 
 def test_notebooks_estao_atualizados():

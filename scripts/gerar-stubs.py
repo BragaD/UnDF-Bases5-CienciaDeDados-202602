@@ -58,6 +58,14 @@ LIVRO = [
         ("05-ajustando-modelos", "Ajustando Modelos com Gradiente Descendente", None),
         ("06-minibatch-e-estocastico", "Minibatch e Gradiente Estocástico", None),
     ]),
+    (6, "Dados: Tipos, Dados Retangulares e pandas", None, [
+        ("01-elementos-de-dados-estruturados", "Elementos de Dados Estruturados", None),
+        ("02-dados-retangulares", "Dados Retangulares", None),
+        ("03-lendo-e-tipando-um-arquivo-real", "Lendo e Tipando um Arquivo Real", None),
+        ("04-limpando-e-transformando", "Limpando e Transformando", None),
+        ("05-agrupando-e-resumindo", "Agrupando e Resumindo", None),
+        ("06-da-tabela-para-o-modelo", "Da Tabela para o Modelo", None),
+    ]),
 ]
 
 

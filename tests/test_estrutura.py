@@ -135,8 +135,8 @@ def test_nenhuma_secao_inventa_numero_de_secao_do_grus():
     assert not ofensores, "número de seção inventado em: " + ", ".join(sorted(ofensores))
 
 
-def test_cinco_capitulos():
-    """Cinco, e não dezessete.
+def test_seis_capitulos():
+    """Seis, e não dezessete.
 
     Os capítulos 6 a 17 saíram do livro em 2026-09-10, com o abandono da
     abordagem do Grus, e estão em `arquivo/grus/`. Este teste falha tanto se
@@ -144,26 +144,26 @@ def test_cinco_capitulos():
     sem passar pelo `LIVRO` de `scripts/gerar-stubs.py`.
     """
     dirs = sorted(d.name for d in CONTENT.iterdir() if d.is_dir())
-    assert dirs == [f"cap{n:02d}" for n in range(1, 6)]
+    assert dirs == [f"cap{n:02d}" for n in range(1, 7)]
 
 
 def test_cada_capitulo_tem_index():
-    for n in range(1, 6):
+    for n in range(1, 7):
         assert (CONTENT / f"cap{n:02d}" / "index.qmd").is_file(), f"falta cap{n:02d}/index.qmd"
 
 
-def test_livro_completo_21_secoes_26_arquivos():
+def test_livro_completo_27_secoes_33_arquivos():
     """Nenhum outro teste deste arquivo detecta uma seção inteira sumindo.
 
     `test_todo_qmd_esta_registrado_no_quarto_yml` e
     `test_todo_href_do_quarto_yml_existe_no_disco` são checagens de diferença
     simétrica: apagar um `.qmd` E as duas linhas correspondentes do
-    `_quarto.yml` no mesmo commit passa nos dois. `test_cinco_capitulos`
+    `_quarto.yml` no mesmo commit passa nos dois. `test_seis_capitulos`
     só conta diretórios; `test_cada_capitulo_tem_index` só confere o
     `index.qmd`. A fonte da verdade sobre o que o livro DEVE conter é o
     `LIVRO` de `scripts/gerar-stubs.py`, então este teste confere, capítulo
     por capítulo, que cada arquivo esperado existe em disco E aparece no
-    `_quarto.yml`, e fecha nos totais (5 capítulos, 21 seções, 26 arquivos).
+    `_quarto.yml`, e fecha nos totais (6 capítulos, 27 seções, 33 arquivos).
     Como fim de linha, também pega um arquivo de seção com nome digitado
     errado (por exemplo com um `_` no início, que `qmds_no_disco()` ignora de
     propósito): o nome exato esperado não existiria em nenhum dos dois lados.
@@ -172,7 +172,7 @@ def test_livro_completo_21_secoes_26_arquivos():
     saíram do livro — ver a spec da ruptura com o Grus.
     """
     livro = carregar_livro()
-    assert len(livro) == 5, f"esperava 5 capítulos no LIVRO, achei {len(livro)}"
+    assert len(livro) == 6, f"esperava 6 capítulos no LIVRO, achei {len(livro)}"
 
     hrefs = hrefs_registrados()
     total_arquivos = 0
@@ -194,8 +194,8 @@ def test_livro_completo_21_secoes_26_arquivos():
             total_arquivos += 1
             total_secoes += 1
 
-    assert total_secoes == 21, f"esperava 21 seções, achei {total_secoes}"
-    assert total_arquivos == 26, f"esperava 26 arquivos, achei {total_arquivos}"
+    assert total_secoes == 27, f"esperava 27 seções, achei {total_secoes}"
+    assert total_arquivos == 33, f"esperava 33 arquivos, achei {total_arquivos}"
 
 
 def test_nenhum_chunk_comeca_com_linha_indentada():
@@ -348,7 +348,14 @@ ESTILO = 'plt.style.use("estilo-figuras.mplstyle")'
 
 # Seções sem figura, e por quê. Cada entrada é uma decisão registrada, não um
 # esquecimento — daí o dicionário em vez de uma lista.
-SECOES_SEM_FIGURA: dict[str, str] = {}
+SECOES_SEM_FIGURA: dict[str, str] = {
+    "cap06/01-elementos-de-dados-estruturados.qmd": "stub; a figura entra quando a seção for escrita",
+    "cap06/02-dados-retangulares.qmd": "stub; a figura entra quando a seção for escrita",
+    "cap06/03-lendo-e-tipando-um-arquivo-real.qmd": "stub; a figura entra quando a seção for escrita",
+    "cap06/04-limpando-e-transformando.qmd": "stub; a figura entra quando a seção for escrita",
+    "cap06/05-agrupando-e-resumindo.qmd": "stub; a figura entra quando a seção for escrita",
+    "cap06/06-da-tabela-para-o-modelo.qmd": "stub; a figura entra quando a seção for escrita",
+}
 
 # Usos de biblioteca proibida liberados: arquivo -> (biblioteca, motivo).
 # `scipy` volta a ser permitido em um lugar só, o dendrograma da seção 15.5,
