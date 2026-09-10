@@ -315,3 +315,25 @@ def test_o_conteudo_nao_comenta_a_propria_escrita():
                 if m:
                     ofensores.append(f"{p.relative_to(RAIZ)}:{n}: {m.group(0)!r}")
     assert not ofensores, "meta-comentário editorial no conteúdo:\n  " + "\n  ".join(ofensores)
+
+
+def test_todo_link_interno_para_qmd_resolve():
+    """Link relativo para um `.qmd` que não existe vira 404 no site publicado.
+
+    O `quarto render` avisa (`WARN: Unable to resolve link target`), mas **não
+    falha** — e o aviso se perde no meio de centenas de linhas de saída. Foi
+    assim que a saída dos capítulos 6 a 17, em 2026-09-10, deixou 43 links
+    quebrados nos capítulos 1 a 5 sem que nada ficasse vermelho.
+
+    Vale para `content/**/*.qmd` e para o `index.qmd` da raiz, cujos caminhos
+    são relativos ao próprio arquivo.
+    """
+    padrao = re.compile(r"\]\(([^)#\s]+\.qmd)(?:#[^)]*)?\)")
+    quebrados = []
+    fontes = sorted(CONTENT.rglob("*.qmd")) + [RAIZ / "index.qmd"]
+    for p in fontes:
+        for n, linha in enumerate(p.read_text(encoding="utf-8").split("\n"), start=1):
+            for alvo in padrao.findall(linha):
+                if not (p.parent / alvo).resolve().is_file():
+                    quebrados.append(f"{p.relative_to(RAIZ)}:{n} -> {alvo}")
+    assert not quebrados, "link para .qmd inexistente:\n  " + "\n  ".join(quebrados)
