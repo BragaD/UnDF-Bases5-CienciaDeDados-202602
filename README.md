@@ -5,7 +5,9 @@ Material de apoio da disciplina **Bases 5 — Ciência de Dados**, do curso de C
 O site é publicado automaticamente em
 **<https://BragaD.github.io/UnDF-Bases5-CienciaDeDados-202602>**
 
-O livro-texto é Joel Grus, *Data Science from Scratch* (2ª ed., O'Reilly, 2019), e a disciplina cobre seus **capítulos 1 a 4 e 8 a 20**. Todo algoritmo é implementado em Python puro, sem `numpy` e sem `scikit-learn` — a biblioteca aparece só no fecho de cada seção, depois de o leitor ter construído a coisa.
+Um Quarto book: um diretório por capítulo, um `.qmd` por seção, tudo executável e renderizado dentro de um container.
+
+O material está em transição de abordagem — os capítulos 6 a 17 saíram do livro em 2026-09-10 e estão em `arquivo/grus/`. Antes de escrever qualquer coisa, leia `CLAUDE.md` e `docs/superpowers/specs/2026-09-10-ruptura-com-o-grus-design.md`.
 
 ## Rodando localmente
 
@@ -37,13 +39,17 @@ Alternativa sem instalar nada: abra o repositório no **GitHub Codespaces** ou n
 
 ```
 .
-├── _quarto.yml           # Config mestre: 17 capítulos, tema, engine
+├── _quarto.yml           # Config mestre: capítulos, tema, engine
 ├── index.qmd             # Página inicial
 ├── content/capNN/        # Um diretório por capítulo, um .qmd por seção
-├── scratch/              # Código do livro-texto, vendorizado (MIT) — NÃO EDITAR
+├── notebooks/            # Um .ipynb por capítulo, gerado a partir dos .qmd
+├── apoio/                # Páginas HTML interativas para projetar em aula
+├── atividades/           # Listas e provas, fora do projeto-livro
+├── arquivo/grus/         # Material morto — não é fonte para nada
+├── scratch/              # Código vendorizado (MIT) — NÃO EDITAR
 ├── im/                   # Vazio de propósito; visualization.py grava 9 PNGs aqui no import
 ├── dados/                # Conjuntos de dados, todos commitados
-├── scripts/              # Coleta única de dados; gerador de stubs
+├── scripts/              # Coleta única de dados; geradores de stubs e notebooks
 ├── tests/                # Invariantes estruturais (pytest)
 ├── styles.css            # Classes .conceito e .exemplo, dark mode
 ├── references.bib        # Bibliografia
@@ -53,13 +59,15 @@ Alternativa sem instalar nada: abra o repositório no **GitHub Codespaces** ou n
 
 Todo arquivo novo em `content/` precisa ser registrado em `_quarto.yml` — e `make teste` falha se você esquecer.
 
-**Antes de escrever um capítulo novo, leia `content/cap09/` inteiro.** É o único capítulo escrito até agora e serve como modelo de estilo: abertura de seção, posição dos callouts, formato de citação do Grus, justificativa de semente em código estocástico, e o callout de fechamento em `scikit-learn`. Copiar essa forma é mais barato do que reinventá-la.
-
 ## O pacote `scratch/`
 
-É a cópia literal do [repositório do Joel Grus](https://github.com/joelgrus/data-science-from-scratch), sob licença MIT (veja `LICENSE-scratch`). **Nunca é editado**: toda adaptação vive no `.qmd`, para que um `diff` contra o upstream continue limpo.
+É a cópia literal do [repositório do Joel Grus](https://github.com/joelgrus/data-science-from-scratch), sob licença MIT (veja `LICENSE-scratch`), e é o código dos capítulos 1 a 5. **Nunca é editado**: toda adaptação vive no `.qmd`, para que um `diff` contra o upstream continue limpo.
 
 Um detalhe que surpreende: `im/` precisa existir, mesmo vazio, porque `scratch/visualization.py` (capítulo 3) tem nove `plt.savefig('im/viz_*.png')` no corpo do módulo — importá-lo grava os nove PNGs ali, a cada render. `working_with_data.py` também escreveria em `im/` no import, mas esse módulo nunca é importado (ver `CLAUDE.md`) — a razão viva para `im/` existir é `visualization.py`.
+
+## `arquivo/grus/`
+
+Os capítulos 6 a 17 como estavam antes da mudança de abordagem, em 2026-09-10, junto com os notebooks derivados deles, o pacote `scratch_np/` e os planos das duas reescritas. Está no `.quartoignore` e fora da suíte de testes. **Não é fonte para nada** — a razão está no `README.md` de lá.
 
 ## Dados
 
@@ -77,4 +85,4 @@ Até o passo 3, a URL acima retorna 404 mesmo com o workflow passando.
 
 ## Licença
 
-Material didático disponibilizado para fins educacionais. O código e os exemplos originais são de Joel Grus, sob licença MIT.
+Material didático disponibilizado para fins educacionais. O código reproduzido em `scratch/` é de Joel Grus, sob licença MIT.
