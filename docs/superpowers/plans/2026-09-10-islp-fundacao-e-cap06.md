@@ -1370,7 +1370,13 @@ Ela precisa dizer: que a fonte é o ISLP (`@james2023`, PDF em `livros/`), com a
 
 Uma seção curta com: a tese (*o modelo é uma ferramenta que se escolhe, se ajusta e se julga*), `scikit-learn` de ponta a ponta sem nada à mão, nada de inferência, a tabela do que é proibido em chunk executável (`statsmodels`, `torch`, o pacote `ISLP`, `scipy` fora da exceção), a regra de citação com número de seção do ISLP, e a regra da figura obrigatória com `estilo-figuras.mplstyle`.
 
-- [ ] **Step 4: Corrigir os números espalhados pelo arquivo**
+- [ ] **Step 4: Registrar a armadilha do `memory_usage` em coluna com acento**
+
+Descoberta durante a escrita da seção 6.3, e não é óbvia nem documentada em lugar nenhum do projeto. Acrescente ao `CLAUDE.md`, junto das outras armadilhas medidas:
+
+> **`memory_usage(deep=True)` numa coluna de texto não-ASCII é contaminado pela ordem dos chunks.** Chamar `nunique()` (ou qualquer coisa que use `hash()` das strings) **antes** de medir infla o resultado: no CPython, o hash de uma `str` não-ASCII popula um cache interno de UTF-8 que o `sys.getsizeof` passa a contar. Medido em `dados/alugueis.csv`, coluna `cidade`: **730.981 bytes** medindo antes, **795.738** medindo depois de um `nunique()` — 8,9% de diferença sem um byte de dado ter mudado. A coluna `Sigla` de `dados/estados.csv`, que é ASCII, dá 1.509 nos dois casos, o que isola a causa. Consequência prática: **meça a memória primeiro, explore a coluna depois.** Uma seção que inverta a ordem publica um número errado sem erro nenhum na tela.
+
+- [ ] **Step 5: Corrigir os números espalhados pelo arquivo**
 
 Busque e atualize todas as ocorrências: a contagem de testes, a de capítulos, seções e arquivos, a lista de arquivos de teste (que ganhou guardas novos), e a menção a `make notebooks-teste`.
 
@@ -1380,7 +1386,7 @@ grep -nE "43 testes|26 \`|21 seções|Cinco capítulos|5 capítulos" CLAUDE.md
 
 Esperado ao fim: nenhuma linha.
 
-- [ ] **Step 5: Rodar a suíte e commitar**
+- [ ] **Step 6: Rodar a suíte e commitar**
 
 ```bash
 export MPLBACKEND=Agg PYTHONHASHSEED=0
