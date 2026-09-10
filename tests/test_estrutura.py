@@ -337,3 +337,134 @@ def test_todo_link_interno_para_qmd_resolve():
                 if not (p.parent / alvo).resolve().is_file():
                     quebrados.append(f"{p.relative_to(RAIZ)}:{n} -> {alvo}")
     assert not quebrados, "link para .qmd inexistente:\n  " + "\n  ".join(quebrados)
+
+
+# Capítulos da abordagem nova. Os de 1 a 5 são da anterior e estão fora destes
+# guardas de propósito: as figuras deles não usam estilo nenhum, e entram na
+# rodada de reescrita daqueles capítulos.
+CAPITULOS_NOVOS = [f"cap{n:02d}" for n in range(6, 18)]
+
+ESTILO = 'plt.style.use("estilo-figuras.mplstyle")'
+
+# Seções sem figura, e por quê. Cada entrada é uma decisão registrada, não um
+# esquecimento — daí o dicionário em vez de uma lista.
+SECOES_SEM_FIGURA: dict[str, str] = {}
+
+# Usos de biblioteca proibida liberados: arquivo -> (biblioteca, motivo).
+# `scipy` volta a ser permitido em um lugar só, o dendrograma da seção 15.5,
+# porque desenhar a árvore É a lição daquela seção e o AgglomerativeClustering
+# do scikit-learn agrupa sem desenhar.
+BIBLIOTECA_LIBERADA: dict[str, tuple[str, str]] = {}
+
+PROIBIDAS = {
+    "statsmodels": "a disciplina não faz inferência — sem erro-padrão, t nem valor-p",
+    "torch": "redes convolucionais e recorrentes são da disciplina de Deep Learning",
+    "ISLP": "o pacote dos autores traz uma API que só existe no livro e quebra a regra de dados commitados",
+    "scipy": "não é ferramenta da disciplina; a exceção do dendrograma vai em BIBLIOTECA_LIBERADA",
+}
+
+
+def corpos_de_chunks_executaveis(caminho: Path) -> list[str]:
+    """Devolve o corpo de cada ```{python} que o Quarto realmente executa.
+
+    Varre as cercas sem saber o que é callout — chunk dentro de `::: {.exemplo}`
+    executa igual, e um parser que ignorasse divs deixaria justamente esses
+    passarem. Chunks com `#| eval: false` ficam de fora: são os que só ilustram.
+    """
+    linhas = caminho.read_text(encoding="utf-8").splitlines()
+    corpos, i = [], 0
+    while i < len(linhas):
+        m = re.match(r"^(`{3,})(.*)$", linhas[i])
+        if not m:
+            i += 1
+            continue
+        cerca, info = m.group(1), m.group(2).strip()
+        corpo = []
+        i += 1
+        while i < len(linhas) and not linhas[i].startswith(cerca):
+            corpo.append(linhas[i])
+            i += 1
+        i += 1
+        if info == "{python}" and not any(
+            re.match(r"#\|\s*eval:\s*false", l) for l in corpo
+        ):
+            corpos.append("\n".join(corpo))
+    return corpos
+
+
+def qmds_dos_capitulos_novos() -> list[Path]:
+    return sorted(
+        p for p in CONTENT.rglob("*.qmd") if p.parent.name in CAPITULOS_NOVOS
+    )
+
+
+def test_todo_chunk_que_desenha_aplica_o_estilo():
+    """Figura sem o estilo compartilhado sai de fundo branco e estoura no escuro.
+
+    O site tem tema claro e escuro. `estilo-figuras.mplstyle` fixa fundo
+    transparente e cores medidas contra os dois; uma seção que esqueça de
+    aplicá-lo produz uma figura que parece de outro material — e ninguém
+    percebe até alguém abrir o site no tema escuro.
+    """
+    faltando = []
+    for p in qmds_dos_capitulos_novos():
+        texto = p.read_text(encoding="utf-8")
+        desenha = any("plt." in c for c in corpos_de_chunks_executaveis(p))
+        if desenha and ESTILO not in texto:
+            faltando.append(str(p.relative_to(RAIZ)))
+    assert not faltando, (
+        f"chunk que desenha sem {ESTILO}: " + ", ".join(faltando)
+    )
+
+
+def test_toda_secao_tem_figura():
+    """O material ensina por figura, como o livro-texto.
+
+    Toda seção traz ao menos uma figura que carrega a ideia. Uma seção que
+    realmente não precise de gráfico entra em SECOES_SEM_FIGURA com o motivo
+    escrito — o mesmo padrão de NAO_IMPORTAVEIS em test_scratch.py, porque uma
+    exceção sem motivo é um esquecimento disfarçado de decisão.
+    """
+    sem_figura = []
+    for p in qmds_dos_capitulos_novos():
+        if p.name == "index.qmd":
+            continue
+        chave = f"{p.parent.name}/{p.name}"
+        if chave in SECOES_SEM_FIGURA:
+            continue
+        if not any("plt." in c for c in corpos_de_chunks_executaveis(p)):
+            sem_figura.append(chave)
+    assert not sem_figura, (
+        "seção sem figura. Se for deliberado, registre em SECOES_SEM_FIGURA "
+        "com o motivo:\n  " + "\n  ".join(sorted(sem_figura))
+    )
+
+
+def test_nenhum_chunk_executavel_usa_biblioteca_proibida():
+    """As bibliotecas de fora da disciplina não entram em código que roda.
+
+    Elas podem aparecer em bloco ```python que NÃO executa, para comparar — é
+    assim que o material mostra o que existe lá fora sem passar a depender.
+    """
+    ofensores = []
+    for p in qmds_dos_capitulos_novos():
+        chave = f"{p.parent.name}/{p.name}"
+        for corpo in corpos_de_chunks_executaveis(p):
+            for nome in PROIBIDAS:
+                if re.search(rf"\b(?:import|from)\s+{nome}\b", corpo):
+                    liberado = BIBLIOTECA_LIBERADA.get(chave)
+                    if liberado is not None and liberado[0] == nome:
+                        continue
+                    ofensores.append(f"{chave}: {nome}")
+    assert not ofensores, (
+        "biblioteca proibida em chunk que executa: " + ", ".join(sorted(set(ofensores)))
+    )
+
+
+def test_toda_excecao_de_figura_e_de_biblioteca_tem_motivo_e_arquivo_real():
+    """Exceção sem motivo escrito é esquecimento disfarçado de decisão."""
+    motivos = dict(SECOES_SEM_FIGURA)
+    motivos.update({k: v[1] for k, v in BIBLIOTECA_LIBERADA.items()})
+    for chave, motivo in motivos.items():
+        assert (CONTENT / chave).is_file(), f"{chave} não existe mais"
+        assert len(motivo) > 40, f"exceção de {chave} sem motivo de verdade"

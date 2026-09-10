@@ -6,10 +6,10 @@ assombra o resto do projeto, na sua versão local: alguém edita um `.qmd`,
 esquece de rodar `make notebooks`, e a aula roda com uma versão do capítulo
 que o livro publicado já não tem — sem erro nenhum na tela.
 
-Um chunk que fica de fora é o caso mais traiçoeiro: 19 dos chunks executáveis
-do livro moram **dentro** de callouts, e uma conversão ingênua os transforma
-em texto. O notebook continua abrindo, continua executando, e quebra várias
-células adiante, num `NameError` que não aponta para a causa.
+Um chunk que fica de fora é o caso mais traiçoeiro: chunks executáveis moram
+**dentro** de callouts, e uma conversão ingênua os transforma em texto. O
+notebook continua abrindo, continua executando, e quebra várias células
+adiante, num `NameError` que não aponta para a causa.
 """
 import importlib.util
 import json
