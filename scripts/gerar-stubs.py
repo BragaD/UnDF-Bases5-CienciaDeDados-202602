@@ -83,6 +83,15 @@ LIVRO = [
         ("05-agrupando-e-resumindo", "Agrupando e Resumindo", None),
         ("06-da-tabela-para-o-modelo", "Da Tabela para o Modelo", None),
     ]),
+    (7, "O que é Aprendizado Estatístico", 2, [
+        ("01-o-array", "O Array", "2.3"),
+        ("02-estimar-f", "Estimar f: Predição e Inferência", "2.1"),
+        ("03-parametrico-e-nao-parametrico", "Paramétrico e Não Paramétrico", "2.1.2"),
+        ("04-precisao-contra-interpretabilidade", "Precisão contra Interpretabilidade", "2.1.3"),
+        ("05-supervisionado-e-nao-supervisionado", "Supervisionado e Não Supervisionado", "2.1.4"),
+        ("06-qualidade-do-ajuste-e-vies-variancia", "Qualidade do Ajuste e o Compromisso Viés-Variância", "2.2.1"),
+        ("07-classificacao-e-o-classificador-de-bayes", "Classificação e o Classificador de Bayes", "2.2.3"),
+    ]),
 ]
 
 
