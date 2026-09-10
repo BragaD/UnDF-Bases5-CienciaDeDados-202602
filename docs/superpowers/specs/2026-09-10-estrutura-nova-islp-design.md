@@ -197,6 +197,53 @@ Era exatamente o que o Grus não permitia, e a regra antiga existia porque *aque
 
 Os capítulos 6 e 17 não têm correspondência no ISLP e não trazem esse callout. É a única exceção, e ela é registrada no teste com o motivo escrito.
 
+## O material é visual, como o ISLP
+
+Pedido do autor, e é decisão pedagógica, não de acabamento: **o ISLP ensina por figura**. Quase todo conceito do livro tem um gráfico que o carrega — a flexibilidade contra o MSE de teste (2.9 a 2.12), o ajuste de mínimos quadrados (3.1), o caminho dos coeficientes do ridge e do lasso (6.4 e 6.6), a partição do plano por uma árvore (8.3), a margem de um SVM (9.3), o biplot de componentes principais (12.2). O material segue isso.
+
+### A regra
+
+**Toda seção tem pelo menos uma figura que carrega a ideia.** Figura que só decora não entra; figura que substitui um parágrafo entra. Onde o ISLP tem uma figura canônica para o conceito, a nossa **reproduz a ideia daquela figura** — com o nosso código, os nossos dados e legenda em português —, e o callout de correspondência já diz de que seção ela vem.
+
+Isso é um salto em relação ao que existe: hoje só os capítulos 3 e 5 têm gráficos, e três chunks no material inteiro definem `figsize` na mão.
+
+### Um estilo compartilhado, e por que ele é obrigatório
+
+O site tem tema claro **e escuro** (`cosmo` e `darkly`), e figura de matplotlib com fundo branco estoura no escuro. Setenta seções produzindo cada uma o seu gráfico, cada chunk escolhendo o próprio tamanho e as próprias cores, dá um material que parece montado por dez pessoas.
+
+Entra `estilo-figuras.mplstyle`, na raiz, aplicado por uma linha no chunk de setup de toda seção que desenha. Ele fixa tamanho, malha, fontes e o ciclo de cores. **Critério de aceitação, a medir na hora de escolher os valores:** fundo transparente, e texto de eixo, marcas e cores de série legíveis nos dois temas — contraste conferido contra `#FFFFFF` e contra o fundo do `darkly`, não estimado no olho.
+
+A paleta sai de onde as páginas de `apoio/` já tiram a delas: os azuis do logo da UnDF (`#2264AF`, `#4195D1`, `#8FCEF1`, navy `#27316E`) sobre o fundo e o texto do `cosmo`. A regra de leitura das páginas de apoio — **azul é o terreno, laranja é o que se move** — vale também para as figuras: o dado é azul, o que o modelo faz por cima dele é quente.
+
+Antes de escrever o código de qualquer gráfico, **carregue a skill `dataviz`**. Ela existe para exatamente isto: escolher a forma do gráfico, a paleta e a legenda de modo que setenta figuras leiam como um sistema só.
+
+### As páginas interativas de `apoio/`
+
+As duas páginas do capítulo 5 mostram o que uma página interativa faz por uma aula: o aluno mexe no passo e vê a trajetória mudar, e a lição chega antes da fórmula. Elas devem ser usadas **sempre que ajudarem** — com um critério, porque o custo é real.
+
+**O critério: a página se justifica quando a lição é o que muda ao girar um botão.** Flexibilidade, λ, *k*, profundidade da árvore, `C` do SVM — parâmetros cuja variação *é* o conteúdo. Onde o conceito é estático, uma figura basta e a página seria enfeite caro.
+
+**O custo, medido:** `apoio/gradiente-descendente.html` tem 2.069 linhas e `apoio/lote-minibatch-estocastico.html`, 1.160 — HTML e JavaScript escritos à mão, sem build. Cada página custa perto de um capítulo. Por isso a lista abaixo é **priorizada, não prometida**: as quatro primeiras valem o preço, e o que passar disso é bônus, escrito só se houver folga.
+
+| Prioridade | Capítulo | A página | Figura do ISLP que ela anima |
+|---|---|---|---|
+| 1 | 7 | Flexibilidade contra erro: mover a flexibilidade e ver o MSE de treino cair enquanto o de teste faz a curva em U | 2.9 a 2.12 |
+| 2 | 11 | Caminho dos coeficientes: mover λ e ver o ridge encolher tudo enquanto o lasso zera coeficientes um a um | 6.4, 6.6 |
+| 3 | 12 | Árvore e partição: crescer e podar uma árvore vendo o plano se dividir junto | 8.3 |
+| 4 | 9 | Fronteiras de decisão: logística, LDA, QDA e *k*-vizinhos sobre os mesmos pontos, com *k* ajustável | 2.16, 2.17, 4.x |
+| bônus | 15 | *k*-means passo a passo, e o dendrograma com o corte móvel | 12.8, 12.11 |
+| bônus | 16 | Margem, `C` e kernel | 9.3, 9.7 |
+
+Uma página nova **copia o bloco `:root` das duas existentes** em vez de inventar outra paleta, entra em `project.resources` no `_quarto.yml`, e é linkada do `index.qmd` do capítulo — relativo no `.qmd`, absoluto no notebook, que é o que `test_toda_pagina_de_apoio_esta_publicada_e_linkada_certo` cobra.
+
+### Seguir o ISLP de perto
+
+O pedido do autor é explícito, e se traduz em três compromissos verificáveis:
+
+- **A notação é a do livro**: *n* observações, *p* preditores, `X` e `y`, *f* e *f̂*, RSS, R², MSE. Nada de renomear por gosto.
+- **Os exemplos são os do livro**, com os mesmos conjuntos de dados, para o aluno poder abrir o PDF no mesmo ponto. As exceções são registradas nesta spec e têm motivo — hoje só o `Boston`, substituído.
+- **A ordem interna do capítulo é a do livro.** O mapa de seções acima já foi montado assim, e o callout de correspondência amarra cada seção ao seu número no ISLP.
+
 ## Dados e dependências
 
 **Nenhum byte vem da rede em tempo de render** — a regra sobrevive intacta. Os conjuntos do ISLP são baixados **uma vez** do site do livro por `scripts/baixar-dados.py` e commitados em `dados/`, com a proveniência de cada um em `dados/README.md`.
@@ -221,6 +268,8 @@ Conjuntos previstos: `Advertising`, `Auto`, `Carseats`, `Credit`, `Default`, `Sm
 | `test_um_notebook_por_capitulo` | passa a esperar 17 |
 | **novo** `test_toda_secao_cita_o_islp` | todo `.qmd` de seção dos capítulos 7 a 16 traz `@james2023`. Os capítulos 1 a 5 estão fora da varredura (são da abordagem antiga e citam o Grus); os capítulos 6 e 17 são exceção registrada com motivo escrito, por não terem correspondência no ISLP |
 | **novo** `test_nenhum_chunk_executavel_usa_biblioteca_proibida` | `statsmodels`, `torch` e o pacote `ISLP` não aparecem em chunk que executa; `scipy` só na exceção registrada |
+| **novo** `test_todo_chunk_que_desenha_aplica_o_estilo` | todo chunk que chama `plt.` aplica `estilo-figuras.mplstyle`; sem isso uma figura sai com o fundo branco padrão e estoura no tema escuro |
+| **novo** `test_toda_secao_tem_figura` | todo `.qmd` de seção dos capítulos 6 a 17 produz ao menos uma figura; seção sem figura precisa estar registrada com o motivo escrito |
 | `test_o_conteudo_nao_comenta_a_propria_escrita` | intacto, e vale para todo capítulo novo |
 | `test_todo_link_interno_para_qmd_resolve` | intacto |
 | `test_scratch.py`, `test_gradiente.py` | intactos — são dos capítulos 1 a 5 |
@@ -236,7 +285,7 @@ Continuam intocados, como a spec da ruptura fixou, e continuam citando o Grus. A
 
 **O capítulo 6 é escrito primeiro e com urgência: a aula é em 16/09.** Ele é escrito antes dos demais e, uma vez revisado, **passa a ser o modelo de estilo da casa** — o papel que o capítulo 9 tinha na abordagem antiga. Abertura de seção, posição dos callouts, formato de citação, justificativa de semente em chunk estocástico: quem escrever o capítulo 8 copia a forma do 6 em vez de reinventá-la.
 
-1. **Fundação** — `references.bib` com `james2023`; `LIVRO` com os 17 capítulos; stubs gerados e registrados no `_quarto.yml`; testes novos; `scipy` declarado; `scripts/baixar-dados.py` estendido e os dados commitados.
+1. **Fundação** — `references.bib` com `james2023`; `LIVRO` com os 17 capítulos; stubs gerados e registrados no `_quarto.yml`; testes novos; `scipy` declarado; `estilo-figuras.mplstyle` na raiz, com os valores medidos contra os dois temas; `scripts/baixar-dados.py` estendido e os dados commitados.
 2. **Capítulo 6**, com prioridade sobre tudo. Revisado, ele vira o modelo de estilo.
 3. **Capítulos 7, 8 e 9, um por vez, na ordem do livro** — planejador, implementador, revisor, correções, como nas reescritas anteriores. A ordem importa: cada capítulo usa o vocabulário e os dados do anterior.
 4. **Capítulo 17**, fora de ordem, porque tem prazo: as instruções do seminário saem em 07/10 e o HPE é em 14/10. Ele é escrito logo depois do capítulo 9, e suas seções finais apontam para os capítulos 10 e 11 ainda por vir — o que é legítimo, porque os grupos só modelam de fato em novembro.
@@ -250,3 +299,5 @@ Continuam intocados, como a spec da ruptura fixou, e continuam citando o Grus. A
 - **A reescrita dos capítulos 1 a 5.**
 - **A poda das dependências** que sobraram da abordagem antiga.
 - **A redação da avaliação** no `index.qmd`, que hoje fala em "os modelos vistos ao longo do semestre" — genérica o bastante para sobreviver, mas que ganha precisão quando os capítulos existirem.
+- **As duas páginas de `apoio/` marcadas como bônus** (capítulos 15 e 16), que só são escritas se houver folga depois dos capítulos.
+- **As figuras dos capítulos 1 a 5**, que hoje não usam estilo nenhum e ficam fora de padrão quando o `estilo-figuras.mplstyle` existir. Entram na rodada de reescrita daqueles capítulos.
