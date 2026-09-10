@@ -1,5 +1,35 @@
 # Conjuntos de Dados
 
+## `estados.csv` — 27 unidades federativas
+
+População e taxa de homicídios de **2024**.
+
+| Coluna | Fonte |
+|---|---|
+| `Estado`, `Sigla` | IBGE — [API de localidades](https://servicodados.ibge.gov.br/api/v1/localidades/estados) |
+| `Populacao` | IBGE — SIDRA, tabela 6579, variável 9324, ano 2024 |
+| `Taxa.Homicidios` | Atlas da Violência (Ipea/FBSP), 2024 — por 100 mil habitantes |
+
+## `alugueis.csv` — 10.692 imóveis para alugar em 5 cidades
+
+São Paulo, Rio de Janeiro, Belo Horizonte, Porto Alegre e Campinas.
+
+Fonte: *Brazilian houses to rent* (v2), publicado no Kaggle por rubenssjr sob
+**CC0** (domínio público). Só os nomes das colunas e os dois campos binários
+foram traduzidos para o português.
+
+**Nada foi limpo, de propósito.** A coluna `andar` traz `"-"` em 2.461 das
+10.692 linhas (23%), o que faz o `pandas` lê-la como `object` em vez de
+número — é a armadilha que a seção 6.3 usa para mostrar que a inferência de
+tipo é heurística, não garantia. Os outliers também ficaram: há um imóvel de
+46.335 m² e um condomínio de R$ 1.117.000.
+
+## `cidades.csv` — as 5 cidades, com UF e região
+
+Escrito à mão. Existe para a seção 6.5 ter um `merge` de verdade: liga
+`alugueis.csv` a `estados.csv` pela sigla. São Paulo e Campinas dividem a
+mesma UF, então a junção é um muitos-para-um real.
+
 Todos os arquivos deste diretório são **commitados**. Nenhum é baixado em tempo
 de render: um livro que faz chamadas de rede a cada render é frágil — a página
 raspada muda de layout, a API sai do ar, e o material quebra sem ninguém ter

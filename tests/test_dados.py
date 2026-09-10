@@ -12,6 +12,9 @@ ESPERADOS = [
     "iris.data",
     "spam-assuntos.csv",
     "imagem-cores.jpg",
+    "estados.csv",
+    "alugueis.csv",
+    "cidades.csv",
 ]
 
 
@@ -46,3 +49,17 @@ def test_dados_README_documenta_cada_conjunto():
     texto = (DADOS / "README.md").read_text()
     for nome in ESPERADOS + ["mnist"]:
         assert nome in texto, f"dados/README.md não menciona {nome}"
+
+
+def test_alugueis_preserva_a_armadilha_do_andar():
+    """A seção 6.3 ensina sobre esta linha exata; se ela sumir, a seção mente.
+
+    Alguém "consertando" o CSV — trocando os "-" por vazio, por exemplo — faria
+    o pandas ler `andar` como número e a seção passaria a explicar um problema
+    que o arquivo já não tem.
+    """
+    import csv
+    with (RAIZ / "dados" / "alugueis.csv").open(encoding="utf-8") as f:
+        linhas = list(csv.DictReader(f))
+    assert len(linhas) == 10692
+    assert sum(1 for l in linhas if l["andar"] == "-") == 2461
