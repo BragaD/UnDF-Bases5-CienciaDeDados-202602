@@ -57,6 +57,28 @@ Isto não é "usar biblioteca porque é mais fácil". É a decisão de que a com
 
 **A fronteira `.to_numpy()` morreu com a spec de pandas, e não volta.** O `scikit-learn` aceita `DataFrame` direto e preserva os nomes das colunas em `feature_names_in_` — passar a tabela é melhor que convertê-la, e o nome da coluna sobrevive até a importância de variáveis do capítulo 13.
 
+### Emenda de 2026-09-10: o dado fala português
+
+O autor pediu, ainda no capítulo 7:
+
+> *"uma coisa importante para todos os capítulos a partir do 6: tradução para o português dos dados. seja o nome das colunas, das variáveis ou das categorias. melhor fazer agora que ainda foram pouco usados do que ter que refatorar os capítulos futuros."*
+
+**Do capítulo 6 em diante, o dado que o aluno vê está em português** — nome de coluna, nome de variável no código, e valor de categoria. O material é escrito para uma turma que a spec já reconhece como sem base sólida de Python; obrigá-la a decorar que `sales` é venda, além de aprender o que é um modelo, é atrito sem contrapartida.
+
+**A convenção é a que o `alugueis.csv` já usava** e que os demais destoavam: **minúsculas, `snake_case`, sem acento** no nome da coluna (`taxa_homicidios`, `area_m2`, `seguro_incendio`). O **valor** de categoria mantém a grafia correta, com acento (`São Paulo`, `não`).
+
+**O nome do arquivo não muda.** `Advertising.csv` continua `Advertising.csv` — é por ele que o aluno acha o conjunto no site do ISLP, e é a ponte com o livro-texto. O `dados/README.md` guarda a tabela **de-para** de cada conjunto traduzido, para que a correspondência com o livro seja sempre recuperável.
+
+**Consequência que vale registrar:** o código deste material deixa de ser copiável para dentro dos labs do ISLP, e vice-versa. É custo assumido — a spec já deu precedência à fidelidade ao *conteúdo* do capítulo, não à literalidade do código, e um aluno que precise do lab original tem o nome do arquivo e a tabela de-para.
+
+**A coluna de índice do R sai.** Os CSV do ISLP trazem uma primeira coluna sem nome, resto do `write.csv` do R. Enquanto o dado era cópia literal da fonte, mantê-la era coerente; **a partir do momento em que o arquivo é traduzido, ele já não é o arquivo da fonte**, e conservar um índice sem significado é ruído que o aluno contorna para sempre. A lição de "confira o que o arquivo traz antes de confiar nele" continua no capítulo 6, sobre dado real, onde ela é verdadeira.
+
+### Poda: `dados/` guarda o que o material usa
+
+Junto da tradução, o autor decidiu **remover de `dados/` os conjuntos da abordagem abandonada**. Verificado: `stocks.csv`, `comma_delimited_stock_prices.csv`, `getting-data.html`, `iris.data`, `spam-assuntos.csv`, `imagem-cores.jpg` e `mnist/` **não são lidos por nenhum arquivo de `content/`**. Saem, com os testes que os cobravam, e o `dados/` passa de 14 MB para uma fração disso.
+
+Recuperar qualquer um é `git checkout` no histórico — eles ficam lá, e as entradas correspondentes saem de `scripts/baixar-dados.py` para o script não os ressuscitar na próxima execução. Se um capítulo futuro quiser o iris ou o MNIST, ele os traz de volta na sua vez, já traduzidos.
+
 ## A ementa
 
 Onze aulas de conteúdo, doze capítulos novos. A aula de gradiente descendente ocorreu em 09/09, uma semana à frente do cronograma publicado, então a aula 5 (16/09) abre a estrutura nova.
