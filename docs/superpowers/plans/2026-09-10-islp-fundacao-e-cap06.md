@@ -969,7 +969,16 @@ Conteúdo obrigatório, e a ordem importa porque é uma narrativa de descoberta:
 
 1. `pd.read_csv("dados/alugueis.csv")`, `shape` → `(10692, 13)`, `head()`.
 2. `dtypes` — e a surpresa: **`andar` veio como `object`**, no meio de doze colunas que o `pandas` tipou certo.
-3. **Mostrar o estrago antes de explicar.** `alugueis["andar"].mean()` levanta `TypeError`. Use um chunk com `#| error: true` para a exceção aparecer na página em vez de derrubar o render — a mensagem de erro é o conteúdo aqui.
+3. **Mostrar o estrago antes de explicar.** `alugueis["andar"].mean()` levanta `TypeError`. Capture e imprima **truncado**:
+
+```python
+try:
+    alugueis["andar"].mean()
+except TypeError as erro:
+    print("TypeError:", str(erro)[:90], "...")
+```
+
+**Não use `#| error: true`.** Duas razões, as duas medidas: `scripts/executar-secoes.py:80` e `scripts/executar-notebooks.py:40` constroem o `NotebookClient` **sem** `allow_errors`, e `scripts/gerar-notebooks.py` só entende a opção `eval` — uma célula que levanta exceção mata a verificação e o `make notebooks-teste`. E a mensagem real do `TypeError` traz a coluna inteira concatenada: cerca de **8.000 caracteres** de lixo, que iriam parar na página publicada. O truncamento não é economia de espaço — é o que torna o erro legível.
 4. **Descobrir a causa:** `alugueis["andar"].unique()[:10]` mostra o `"-"`. `(alugueis["andar"] == "-").sum()` dá **2.461**, que é **23%** das linhas.
 5. **Por que o `pandas` não pegou:** ele tem uma lista padrão de marcadores nulos (`NA`, `NaN`, `null`, `n/a`, campo vazio...) e `"-"` não está nela. Uma coluna com um único valor não numérico vira `object` inteira.
 6. **Os dois consertos**, e quando usar cada um:
@@ -1001,9 +1010,9 @@ EOF
 
 Esperado: `(10692, 13)`, `object`, `2461`, `23%`, `float64`, `2461` nulos, média `6.58`. **Se algum número da prosa não bater com esta saída, a prosa está errada, não o dado.**
 
-- [ ] **Step 3: Confirmar que o chunk de erro não derruba o render**
+- [ ] **Step 3: Confirmar que nenhuma célula levanta exceção**
 
-O chunk do `TypeError` precisa de `#| error: true`. Sem ele, `executar-secoes.py` aborta. Se o Step 2 falhar com `TypeError`, é isso.
+`executar-secoes.py` aborta na primeira exceção não capturada — é o principal valor dele. Se o Step 2 falhar com `TypeError`, o `try/except` do item 3 não foi escrito ou não envolve a chamada certa.
 
 - [ ] **Step 4: Remover a exceção, regerar e rodar**
 
