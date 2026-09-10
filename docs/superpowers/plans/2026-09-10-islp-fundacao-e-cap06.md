@@ -1328,6 +1328,74 @@ Render limpo, sem aviso de link, e as figuras conferidas nos dois temas."
 
 ---
 
+### Task 12: O `CLAUDE.md` alcança a realidade
+
+O `CLAUDE.md` foi escrito quando as fontes ainda não tinham sido escolhidas, e hoje **mente sobre o estado do repositório** — um implementador da Task 5 o sinalizou depois de encontrar a divergência sozinho. Ele afirma cinco capítulos, 26 `.qmd` e 43 testes, e diz que nenhum capítulo novo deve ser escrito antes de as fontes serem definidas. As fontes foram definidas, e o capítulo 6 existe.
+
+Isto é a última task porque só aqui os números finais são conhecidos.
+
+**Files:**
+- Modify: `CLAUDE.md`
+
+**Interfaces:**
+- Consumes: o estado final do repositório, depois da Task 11.
+- Produces: nada que outra task consuma.
+
+- [ ] **Step 1: Medir o estado real, sem estimar**
+
+```bash
+export MPLBACKEND=Agg PYTHONHASHSEED=0
+echo "capítulos: $(ls -d content/cap* | wc -l)"
+echo "qmd: $(find content -name '*.qmd' | wc -l)"
+echo "seções: $(find content -name '*.qmd' ! -name index.qmd | wc -l)"
+echo "notebooks: $(ls notebooks/*.ipynb | wc -l)"
+.venv/bin/pytest tests/ -q 2>&1 | tail -1
+```
+
+Use **esses** números no texto, não os do plano.
+
+- [ ] **Step 2: Reescrever a seção "Estado atual"**
+
+Ela precisa dizer: que a fonte é o ISLP (`@james2023`, PDF em `livros/`), com a spec `docs/superpowers/specs/2026-09-10-estrutura-nova-islp-design.md` mandando; que o capítulo 6 está escrito e é o **modelo de estilo da casa** — quem for escrever o capítulo 7 lê `content/cap06/` inteiro antes; que os capítulos 1 a 5 são de abordagem anterior, continuam citando o Grus e estão fora dos guardas novos; e quais capítulos faltam, com a ementa da spec.
+
+**Apague** a seção "Nenhum capítulo novo antes das fontes" — ela cumpriu a função.
+
+- [ ] **Step 3: Acrescentar a pedagogia nova**
+
+Uma seção curta com: a tese (*o modelo é uma ferramenta que se escolhe, se ajusta e se julga*), `scikit-learn` de ponta a ponta sem nada à mão, nada de inferência, a tabela do que é proibido em chunk executável (`statsmodels`, `torch`, o pacote `ISLP`, `scipy` fora da exceção), a regra de citação com número de seção do ISLP, e a regra da figura obrigatória com `estilo-figuras.mplstyle`.
+
+- [ ] **Step 4: Corrigir os números espalhados pelo arquivo**
+
+Busque e atualize todas as ocorrências: a contagem de testes, a de capítulos, seções e arquivos, a lista de arquivos de teste (que ganhou guardas novos), e a menção a `make notebooks-teste`.
+
+```bash
+grep -nE "43 testes|26 \`|21 seções|Cinco capítulos|5 capítulos" CLAUDE.md
+```
+
+Esperado ao fim: nenhuma linha.
+
+- [ ] **Step 5: Rodar a suíte e commitar**
+
+```bash
+export MPLBACKEND=Agg PYTHONHASHSEED=0
+.venv/bin/pytest tests/ -q
+```
+
+```bash
+git add CLAUDE.md
+git commit -m "docs: o CLAUDE.md alcança a realidade
+
+Ele foi escrito antes de as fontes serem escolhidas e afirmava cinco
+capítulos, 26 .qmd e 43 testes, mandando não escrever capítulo novo. As
+fontes foram escolhidas, o capítulo 6 existe, e os números eram outros.
+
+Entra a tese nova, a lista do que é proibido em chunk executável, a
+regra de citação com número de seção do ISLP e a da figura obrigatória.
+O capítulo 6 passa a ser o modelo de estilo da casa."
+```
+
+---
+
 ## O que vem depois deste plano
 
 Os capítulos 7 a 17 **não** entram aqui. Cada um ganha o seu próprio plano em `docs/superpowers/plans/2026-09-10-islp-capNN.md`, escrito quando chegar a vez, no processo que as reescritas anteriores fixaram: um planejador com o mapa do capítulo no prompt, um implementador, um revisor que lê o capítulo inteiro com uma pergunta só — *o texto condiz com o que foi escrito?* — e o implementador corrigindo. **Um capítulo por vez**, sequencial; despachar todos em paralelo já estourou o limite de sessão da API sem produzir nada.
