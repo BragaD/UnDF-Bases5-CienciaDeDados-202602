@@ -13,11 +13,28 @@ Uso:
 esperado existe em disco E aparece no `_quarto.yml`. Um capítulo novo entra
 aqui primeiro.
 """
+import importlib.util
 import sys
 from pathlib import Path
 
 RAIZ = Path(__file__).resolve().parent.parent
 CONTENT = RAIZ / "content"
+
+
+def _carregar_apelido():
+    """Importa `apelido` de scripts/gerar-notebooks.py (o hífen impede `import` normal).
+
+    Mesmo padrão de `tests/test_notebooks.py:carregar_gerador` — importar por
+    caminho em vez de duplicar a tabela de acentos aqui.
+    """
+    caminho = RAIZ / "scripts" / "gerar-notebooks.py"
+    spec = importlib.util.spec_from_file_location("gerar_notebooks", caminho)
+    modulo = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(modulo)
+    return modulo.apelido
+
+
+apelido = _carregar_apelido()
 
 # (nosso_num, titulo_capitulo, islp_cap, [(arquivo, titulo_secao, islp_secao), ...])
 #
@@ -95,7 +112,10 @@ def stub_index(nosso: int, titulo: str, islp_cap, secoes) -> str:
             ":::",
             "",
         ]
+    notebook = f"cap{nosso:02d}-{apelido(titulo)}.ipynb"
     linhas += [
+        f"📓 [**Abrir o notebook deste capítulo no Colab ↗**](https://colab.research.google.com/github/BragaD/UnDF-Bases5-CienciaDeDados-202602/blob/main/notebooks/{notebook}) — só o código, pronto para rodar.",
+        "",
         "::: {.callout-warning}",
         "## Em construção",
         "A visão geral deste capítulo ainda será escrita.",
