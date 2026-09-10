@@ -17,7 +17,16 @@ O que existe hoje:
 
 ### Antes de escrever um capítulo
 
-**Leia `content/cap06/` inteiro primeiro.** Foi o primeiro capítulo escrito sob a spec do ISLP, e fixa a forma: abertura de seção sem "nesta seção veremos", o chunk de setup aplicando `estilo-figuras.mplstyle`, a posição dos callouts `::: {.conceito}` e `::: {.exemplo}`, e a regra de que todo número afirmado na prosa sai da saída de um chunk, nunca da cabeça de quem escreve. Um capítulo novo que copiar essa forma economiza rodadas de revisão; um que reinventar a forma provavelmente repete um erro que o cap. 6 já pagou.
+**Leia `content/cap06/` inteiro primeiro.** Foi o primeiro capítulo escrito sob a spec do ISLP, e fixa a forma: abertura de seção sem "nesta seção veremos", o chunk de setup aplicando `estilo-figuras.mplstyle`, a posição dos callouts `::: {.conceito}` e `::: {.exemplo}`. Um capítulo novo que copiar essa forma economiza rodadas de revisão; um que reinventar a forma provavelmente repete um erro que o cap. 6 já pagou.
+
+**Todo número afirmado na prosa sai da saída de um chunk.** Duas exceções, e só duas:
+
+1. **Aritmética sobre números impressos na mesma seção** — uma diferença, uma soma, uma razão, ou o arredondamento de uma delas. A prosa precisa **nomear os dois operandos**, para o leitor refazer a conta na página. Número de outra seção não vale: o kernel é outro e o leitor não tem os dois à vista.
+2. Nada mais.
+
+**Superlativo e comparação NÃO são aritmética.** "o maior", "a maior distância", "mais que o dobro", "o mais barato", "nenhum passa de" são afirmações sobre a **tabela inteira**, e é aí que quem escreve chuta com aparência de ter conferido. Um superlativo exige o chunk que ordena, conta ou compara — mesmo quando a tabela está impressa logo acima.
+
+A cicatriz: a seção 6.5 afirmou que São Paulo tinha a maior distância entre média e mediana; era Belo Horizonte, e a tabela que desmentia estava impressa no chunk acima.
 
 ### O que falta
 

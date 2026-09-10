@@ -86,7 +86,7 @@ LIVRO = [
 ]
 
 
-def stub_secao(titulo: str, islp_secao) -> str:
+def stub_secao(titulo: str, islp_secao: str | None) -> str:
     correspondencia = ""
     if islp_secao is not None:
         correspondencia = (
@@ -103,7 +103,7 @@ O conteúdo desta seção ainda será escrito.
 """
 
 
-def stub_index(nosso: int, titulo: str, islp_cap, secoes) -> str:
+def stub_index(nosso: int, titulo: str, islp_cap: int | None, secoes) -> str:
     linhas = [f"# {titulo}", ""]
     if islp_cap is not None:
         linhas += [

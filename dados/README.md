@@ -8,7 +8,7 @@ População e taxa de homicídios de **2024**.
 |---|---|
 | `Estado`, `Sigla` | IBGE — [API de localidades](https://servicodados.ibge.gov.br/api/v1/localidades/estados) |
 | `Populacao` | IBGE — SIDRA, tabela 6579, variável 9324, ano 2024 |
-| `Taxa.Homicidios` | Atlas da Violência (Ipea/FBSP), 2024 — por 100 mil habitantes |
+| `Taxa.Homicidios` | Atlas da Violência (Ipea/FBSP), edição de 2024 — por 100 mil habitantes |
 
 ## `alugueis.csv` — 10.692 imóveis para alugar em 5 cidades
 
