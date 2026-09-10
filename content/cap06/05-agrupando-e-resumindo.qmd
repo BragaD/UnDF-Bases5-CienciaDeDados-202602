@@ -1,6 +1,136 @@
 # Agrupando e Resumindo
 
-::: {.callout-warning}
-## Em construção
-O conteúdo desta seção ainda será escrito.
+A seção anterior fechou com `alugueis` inteira, as 10.692 linhas mantidas, e uma coluna nova, `aluguel_por_m2`, dividindo o aluguel pela área de cada imóvel. O que falta é olhar para essa tabela não imóvel a imóvel, mas cidade a cidade: quanto custa alugar em cada uma, o que muda de uma para outra, e como trazer para dentro dela o que outras tabelas sabem sobre essas cinco cidades.
+
+```{python}
+#| label: setup
+#| include: false
+import matplotlib.pyplot as plt
+import pandas as pd
+
+plt.style.use("estilo-figuras.mplstyle")
+pd.set_option("display.max_columns", None)
+```
+
+```{python}
+#| label: leitura
+alugueis = pd.read_csv("dados/alugueis.csv", na_values=["-"])
+alugueis["aluguel_por_m2"] = alugueis["aluguel"] / alugueis["area_m2"]
+alugueis.shape
+```
+
+## Duas formas de resumir, dois tipos de coluna
+
+`describe()` resume o que é contínuo — média, desvio, quartis:
+
+```{python}
+#| label: describe-numerico
+alugueis.describe()
+```
+
+`cidade` não é uma dessas colunas. É categórica, e a pergunta que cabe a ela não é "qual é a média", é "quantos de cada":
+
+```{python}
+#| label: value-counts-cidade
+alugueis["cidade"].value_counts()
+```
+
+```{python}
+#| label: pct-sao-paulo
+round(100 * alugueis["cidade"].value_counts()["São Paulo"] / len(alugueis), 1)
+```
+
+São Paulo sozinha responde por 55,1% dos 10.692 imóveis — mais da metade da tabela é de uma cidade só. É a mesma distinção que a seção 6.1 fez entre dado quantitativo e qualitativo: `describe()` não teria o que fazer com `cidade`, e `value_counts()` não teria o que fazer com `aluguel`.
+
+## Mediana contra média, cidade por cidade
+
+A seção anterior deixou de propósito o imóvel de R$ 45.000 mensais e o condomínio de R$ 1.117.000 dentro de `alugueis`, porque descartá-los seria decidir por um lado sem prova. O preço desse adiamento aparece agora: qualquer média calculada sobre `aluguel` carrega esses valores junto.
+
+```{python}
+#| label: groupby-mediana-media
+mediana_media = alugueis.groupby("cidade")["aluguel"].agg(["median", "mean"]).round(2)
+mediana_media
+```
+
+```{python}
+#| label: mediana-menor-que-media
+(mediana_media["mean"] > mediana_media["median"]).all()
+```
+
+Nas cinco cidades, sem exceção, a média fica acima da mediana. Em São Paulo a distância é maior em valor absoluto — mediana de R$ 3.400 contra média de R$ 4.652,79:
+
+```{python}
+#| label: diferenca-sp
+round(mediana_media.loc["São Paulo", "mean"] - mediana_media.loc["São Paulo", "median"], 2)
+```
+
+R$ 1.252,79 de diferença, numa cidade só. É por isso que o resumo por cidade, daqui em diante, usa a mediana: ela não se importa com os poucos imóveis que puxam a média para cima.
+
+## Uma tabela por cidade
+
+`agg` com várias funções e várias colunas de uma vez produz, numa chamada, o que seria preciso montar coluna a coluna: contagem, mediana do aluguel e mediana do aluguel por metro quadrado, para cada cidade.
+
+```{python}
+#| label: agg-resultado-por-cidade
+resultado = alugueis.groupby("cidade").agg(
+    contagem=("aluguel", "count"),
+    aluguel_mediano=("aluguel", "median"),
+    aluguel_por_m2_mediano=("aluguel_por_m2", "median"),
+).round(2).sort_values("aluguel_por_m2_mediano")
+resultado
+```
+
+A coluna `contagem` é o mesmo número que `value_counts()` já tinha mostrado, agora ao lado do preço. Ordenada pelo aluguel por metro quadrado, a tabela por si só responde onde o metro quadrado é mais barato e onde é mais caro:
+
+```{python}
+#| label: fig-aluguel-por-m2-por-cidade
+#| fig-cap: "Mediana do aluguel por m² em cada cidade, da mais barata à mais cara"
+fig, ax = plt.subplots(figsize=(7, 4))
+ax.barh(resultado.index, resultado["aluguel_por_m2_mediano"])
+ax.set_xlabel("aluguel por m² (R$, mediana)")
+plt.tight_layout()
+plt.show()
+```
+
+## Juntando outras tabelas: o `merge` que não pode multiplicar linha
+
+`alugueis` não sabe em que estado cada cidade fica, nem quantas pessoas vivem lá — isso está em `dados/cidades.csv` e `dados/estados.csv`. Um `merge` costura essas tabelas pela coluna que elas têm em comum, e é exatamente aí que mora um erro fácil de cometer e fácil de não perceber: se a chave do `merge` se repetir do lado que está sendo trazido, cada repetição gera uma cópia da linha original. A tabela cresce, e nada na tela avisa — o `merge` roda, devolve algo, e o algo é silenciosamente errado. A defesa é olhar o `shape` antes e depois de todo `merge`, sempre.
+
+```{python}
+#| label: merge-cidades
+cidades = pd.read_csv("dados/cidades.csv")
+shape_antes = alugueis.shape
+alugueis = alugueis.merge(cidades, on="cidade")
+shape_antes, alugueis.shape
+```
+
+De (10692, 14) para (10692, 16): as mesmas 10.692 linhas, com `Sigla` e `regiao` a mais. `cidades` tem uma linha por cidade — a chave não se repete do lado trazido, e por isso o `merge` não multiplicou nada.
+
+```{python}
+#| label: merge-estados
+estados = pd.read_csv("dados/estados.csv")[["Sigla", "Populacao"]]
+shape_antes = alugueis.shape
+alugueis = alugueis.merge(estados, on="Sigla")
+shape_antes, alugueis.shape
+```
+
+De novo, a contagem de linhas não muda: (10692, 16) vira (10692, 17), só com `Populacao` a mais. `estados` também tem uma linha por sigla, então cada linha de `alugueis` encontra exatamente uma correspondência do outro lado.
+
+Nenhum dos dois `merge` multiplicou linha — mas isso não quer dizer que a chave usada identifique a cidade. `Sigla` identifica o **estado**, e duas das cinco cidades, São Paulo e Campinas, dividem o mesmo estado:
+
+```{python}
+#| label: sp-campinas-mesma-uf
+alugueis.loc[alugueis["cidade"].isin(["São Paulo", "Campinas"]), ["cidade", "Sigla", "Populacao"]].drop_duplicates()
+```
+
+As duas linhas trazem `Populacao` igual — 45.973.194 —, porque é a população do estado de São Paulo inteiro, não da cidade. Um `merge` correto pela contagem de linhas ainda pode juntar a coisa errada com a coisa certa: `Populacao`, a partir daqui, descreve o estado onde o imóvel está, não o município.
+
+::: {.conceito}
+Um `merge` de muitos-para-um — muitas linhas de um lado, uma correspondência só do outro — não muda o número de linhas: cada linha do lado "muitos" encontra exatamente uma parceira e sai dali com as colunas novas coladas. Se a contagem de linhas depois do `merge` for maior do que antes, a chave se repete no lado que deveria ser único, e cada repetição multiplicou uma linha que já existia. É por isso que conferir o `shape` antes e depois não é cautela de sobra: é o único jeito de saber, olhando, se o `merge` fez o que parecia fazer.
 :::
+
+::: {.exemplo}
+São Paulo e Campinas mostram o outro lado do mesmo cuidado: o `merge` pela `Sigla` não multiplicou nenhuma linha — e mesmo assim juntou uma informação de estado a uma tabela de cidades, fazendo duas cidades bem diferentes em tamanho carregarem o mesmo número de população. A contagem de linhas certa não garante que a coluna trazida signifique o que parece significar para cada linha.
+:::
+
+`alugueis` termina esta seção com 10.692 linhas e 17 colunas — a mesma tabela do início, mais o que `cidades.csv` e `estados.csv` acrescentaram. É essa tabela que a próxima seção decide como entregar a um modelo.
