@@ -1310,7 +1310,13 @@ quarto render 2>&1 | grep -E "Unable to resolve|ERROR|Output created"
 
 Esperado: **só** `Output created: _book/index.html`. Qualquer `Unable to resolve link target` é link quebrado e precisa ser corrigido antes do commit — `test_todo_link_interno_para_qmd_resolve` existe para isso, mas o render pega também os links para recursos.
 
-- [ ] **Step 6: Abrir a página no tema escuro**
+- [ ] **Step 6: Conferir a tabela dentro do callout, e a página no tema escuro**
+
+Duas coisas nesta página renderizada, e a primeira só pode ser vista aqui:
+
+**A tabela markdown dentro de `::: {.conceito}`**, em `content/cap06/01-elementos-de-dados-estruturados.qmd`. É o **primeiro uso desse padrão no repositório** — nenhuma outra seção põe tabela dentro de um callout —, e `executar-secoes.py` não o testa, porque ele só executa Python e não renderiza. Abra `_book/content/cap06/01-elementos-de-dados-estruturados.html` e confirme que a tabela saiu como tabela, dentro da caixa azul, e não como texto cru com barras verticais. Se tiver quebrado, tire a tabela do callout — não invente sintaxe.
+
+**As figuras nos dois temas.** O estilo foi feito para tema claro e escuro, e este é o único momento em que isso é conferido de fato. Troque para o tema escuro no seletor do topo e confirme que eixos, rótulos e barras continuam legíveis. Se alguma figura aparecer como um retângulo branco, o `savefig.transparent` não pegou naquele chunk.
 
 O estilo de figura foi feito para os dois temas, e este é o único momento em que isso é conferido de fato. Abra `_book/content/cap06/01-elementos-de-dados-estruturados.html`, troque para o tema escuro no seletor do topo e confirme que os eixos, os rótulos e as barras continuam legíveis. Se alguma figura aparecer como um retângulo branco, o `savefig.transparent` não pegou naquele chunk.
 
