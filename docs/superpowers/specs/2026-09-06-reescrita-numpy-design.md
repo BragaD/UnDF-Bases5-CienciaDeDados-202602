@@ -1,5 +1,10 @@
 # Reescrita dos capítulos 6–17 com numpy
 
+> **SUPERADA em 2026-09-10** por `2026-09-10-ruptura-com-o-grus-design.md`, por inteiro.
+> Os capítulos 6 a 17 que esta spec governava saíram do livro e estão em `arquivo/grus/`,
+> junto com o pacote `scratch_np/`. Nada aqui vale para o material novo. Fica como registro
+> do que foi decidido e medido enquanto valeu.
+
 **Data:** 2026-09-06
 **Status:** decidido pelo autor; este documento fixa as consequências
 **Branch:** `reescrita-numpy`

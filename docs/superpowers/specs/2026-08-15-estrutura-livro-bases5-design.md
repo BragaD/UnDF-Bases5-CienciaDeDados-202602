@@ -1,5 +1,13 @@
 # Estrutura do livro Bases 5 — Ciência de Dados
 
+> **SUPERADA EM PARTE em 2026-09-10** por `2026-09-10-ruptura-com-o-grus-design.md`.
+> Morreu tudo que vem do Grus: a identidade "abrir as caixas-pretas", o escopo (Grus 1–4 e
+> 8–20), a numeração de 17 capítulos, a tabela de correspondência, a tese "tudo em Python
+> puro" e a regra de citação. **Continua valendo a infraestrutura**: Quarto book, container
+> Docker com `uv`, CI de cinco jobs, dados commitados sem rede em tempo de render, semente
+> em todo chunk estocástico, notebooks de aula derivados dos `.qmd`, `apoio/`, `atividades/`
+> e a suíte de invariantes.
+
 **Data:** 2026-08-15
 **Status:** aprovado no brainstorming, pendente de revisão do autor
 

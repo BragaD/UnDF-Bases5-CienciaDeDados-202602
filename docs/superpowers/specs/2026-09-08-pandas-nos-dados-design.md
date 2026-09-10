@@ -1,5 +1,12 @@
 # pandas no trabalho com dados
 
+> **SUPERADA em 2026-09-10** por `2026-09-10-ruptura-com-o-grus-design.md`, por inteiro.
+> Governava os capítulos 6 a 17, que saíram do livro e estão em `arquivo/grus/`. A fronteira
+> `.to_numpy()`, o bloco *O DataFrame* da seção 6.1 e o *De listas a arrays* da 7.1 morreram
+> com eles. Fica como registro — inclusive das armadilhas medidas (`flavor="bs4"` em
+> `read_html`; `N/D` fora da lista padrão de `na_values`), que continuam verdadeiras sobre o
+> `pandas` e podem poupar tempo ao material novo.
+
 **Data:** 2026-09-08
 **Status:** decidido pelo autor; este documento fixa as regras e a execução
 **Implementação:** em curso na branch `pandas-nos-dados` — fundação e capítulos 6, 7 e 8 concluídos (ver a nota de correção no fim)
