@@ -177,7 +177,7 @@ def test_livro_completo_21_secoes_26_arquivos():
     hrefs = hrefs_registrados()
     total_arquivos = 0
     total_secoes = 0
-    for nosso, _titulo, secoes in livro:
+    for nosso, _titulo, _islp_cap, secoes in livro:
         d = CONTENT / f"cap{nosso:02d}"
 
         index = d / "index.qmd"
@@ -186,7 +186,7 @@ def test_livro_completo_21_secoes_26_arquivos():
         assert href_index in hrefs, f"{href_index} não registrado no _quarto.yml"
         total_arquivos += 1
 
-        for arquivo, _titulo_secao in secoes:
+        for arquivo, _titulo_secao, _islp_secao in secoes:
             secao = d / f"{arquivo}.qmd"
             assert secao.is_file(), f"falta {secao.relative_to(RAIZ)}"
             href_secao = str(secao.relative_to(RAIZ))
