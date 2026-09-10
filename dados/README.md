@@ -51,11 +51,12 @@ docker compose run --rm --no-deps livro python scripts/baixar-dados.py
 | `mnist/` | 16 | [MNIST](https://ossci-datasets.s3.amazonaws.com/mnist/) |
 | `imagem-cores.jpg` | 17 | [Wikimedia Commons](https://commons.wikimedia.org/wiki/File:Piet_Mondriaan,_1930_-_Mondrian_Composition_II_in_Red,_Blue,_and_Yellow.jpg) — Piet Mondriaan, *Composition II in Red, Blue, and Yellow* (1930); domínio público (autor falecido em 1944 — PD-old, PD-Art, PD-US por publicação pré-1931); redimensionada para no máximo 600 px no lado maior |
 
-## `Advertising.csv`, `Income1.csv`, `Income2.csv` — os três do capítulo 7
+## `Advertising.csv`, `Income1.csv`, `Income2.csv` — os três do capítulo 7 (ISLP)
 
-Do site oficial de @james2023, *An Introduction to Statistical Learning*
-(`statlearning.com/s/`). O capítulo 7 usa os três; o resto do capítulo roda
-sobre dado simulado.
+Do [site oficial de @james2023](https://www.statlearning.com/s/), *An
+Introduction to Statistical Learning*. O capítulo 7 atual (*O que é
+aprendizado estatístico*, ISLP) usa os três; o resto do capítulo roda sobre
+dado simulado.
 
 | Coluna | `Advertising.csv` | `Income1.csv` | `Income2.csv` |
 |---|---|---|---|
