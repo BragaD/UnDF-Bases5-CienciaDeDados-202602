@@ -12,7 +12,7 @@ O que existe hoje:
 
 - **Cinco capítulos**, 21 seções + 5 `index.qmd` = **26 `.qmd`**, todos registrados em `_quarto.yml`: Introdução, Um Curso Rápido de Python, Visualizando Dados, Álgebra Linear, Gradiente Descendente. São os que a turma já cursou.
 - **`arquivo/grus/`** — os capítulos 6 a 17 como estavam, os notebooks derivados deles, o pacote `scratch_np/` e os planos das duas reescritas que morreram. Está no `.quartoignore`, fora da suíte, e **não é fonte para nada**.
-- Container Docker (Quarto + `uv`), CI publicando em `gh-pages`, **42 testes** (`make teste`) guardando os invariantes.
+- Container Docker (Quarto + `uv`), CI publicando em `gh-pages`, **43 testes** (`make teste`) guardando os invariantes.
 - `notebooks/` com um `.ipynb` por capítulo para a aula, `atividades/` com o PID e as listas, `apoio/` com páginas HTML interativas para projetar em aula.
 
 ### Nenhum capítulo novo antes das fontes
@@ -82,7 +82,7 @@ make lock             # regenera uv.lock após editar pyproject.toml
 make clean            # remove _book/, _freeze/, .quarto/ e o lixo de render abortado
 ```
 
-**`make teste` roda `pytest tests/`** — 42 testes em sete arquivos: `test_estrutura.py` (registro no `_quarto.yml`, caminhos de dados, os totais de 5 capítulos / 21 seções / 26 arquivos contra o `LIVRO` de `scripts/gerar-stubs.py`, e a regra editorial acima), `test_scratch.py` (o pacote vendorizado — inclusive um hash SHA-256 travando que `scratch/` continua verbatim upstream), `test_dados.py` (os conjuntos commitados), `test_freeze.py` (o cache envenenado), `test_gradiente.py` (toda subida de gradiente tem motivo registrado), `test_notebooks.py` (os notebooks de aula não podem defasar dos `.qmd`) e `test_atividades.py` (o gabarito não pode vazar para o site).
+**`make teste` roda `pytest tests/`** — 43 testes em sete arquivos: `test_estrutura.py` (registro no `_quarto.yml`, caminhos de dados, os totais de 5 capítulos / 21 seções / 26 arquivos contra o `LIVRO` de `scripts/gerar-stubs.py`, todo link interno para `.qmd` resolvendo, e a regra editorial acima), `test_scratch.py` (o pacote vendorizado — inclusive um hash SHA-256 travando que `scratch/` continua verbatim upstream), `test_dados.py` (os conjuntos commitados), `test_freeze.py` (o cache envenenado), `test_gradiente.py` (toda subida de gradiente tem motivo registrado), `test_notebooks.py` (os notebooks de aula não podem defasar dos `.qmd`) e `test_atividades.py` (o gabarito não pode vazar para o site).
 
 É o que garante a regra "todo `.qmd` novo precisa ser registrado em `_quarto.yml`" — sem essa suíte, um arquivo esquecido no YAML só aparece quando alguém percebe a seção faltando no site publicado.
 
