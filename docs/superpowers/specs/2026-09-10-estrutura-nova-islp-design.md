@@ -20,6 +20,22 @@ O que a disciplina ensina é **escolher, ajustar e julgar** — não implementar
 - **Nada de inferência.** Erro-padrão de coeficiente, estatística *t*, valor-p e teste de hipótese ficam fora — decisão explícita do autor. Isso enxuga o ISLP 3.1.2 e 3.1.3 e elimina o capítulo 13 do livro. Consequência: **`statsmodels` não entra**, e o capítulo de regressão avalia o ajuste por R² e erro, não por significância de coeficiente.
 - **O pacote `ISLP` não entra.** Ele existe para os labs do livro (`load_data`, `ModelSpec`), traz uma API que só existe ali e quebraria a regra de dados commitados. Os conjuntos do ISLP entram como CSV em `dados/`.
 
+### Emenda de 2026-09-10, no início do capítulo 7: a fidelidade ao ISLP tem precedência
+
+O autor pediu, ao abrir o capítulo 7: *"não se prenda muito na exigência de só scikit-learn. pode seguir bem o capítulo do ISLP."*
+
+A regra do `scikit-learn` de ponta a ponta existia para impedir que o material voltasse a implementar algoritmo à mão. **Ela não existe para deformar o conteúdo do livro-texto**, e no capítulo 2 do ISLP ela deformaria: o lab é um tutorial de `numpy`, e as figuras 2.9 a 2.12 — o coração do capítulo — são construídas com *smoothing splines*, que o `scikit-learn` não tem.
+
+Portanto: **quando a fidelidade ao capítulo do ISLP e a preferência pelo `scikit-learn` colidirem, ganha a fidelidade.** Uma biblioteca que o conteúdo do capítulo exige entra, **registrada em `BIBLIOTECA_LIBERADA` com o motivo escrito** — o mesmo mecanismo que já libera o `scipy` para o dendrograma do capítulo 15.
+
+O que a emenda **não** afrouxa:
+
+- **Nada de inferência.** Segue valendo: sem erro-padrão de coeficiente, sem estatística *t*, sem valor-p. Não é regra de ferramenta, é de escopo da disciplina.
+- **Nada de algoritmo de aprendizado escrito à mão.** A tese continua sendo escolher, ajustar e julgar.
+- **Biblioteca entra por necessidade, não por conveniência.** Se o `scikit-learn` faz o que a seção precisa, é ele que se usa. A exceção é para o que ele não faz.
+- **`statsmodels` segue fora**, porque o que ele acrescentaria é justamente a inferência que a disciplina não faz.
+- **O pacote `ISLP` segue fora**, porque quebraria a regra de dados commitados.
+
 Isto não é "usar biblioteca porque é mais fácil". É a decisão de que a competência a formar é a de quem **usa** o ferramental, e o tempo de aula é escasso: onze encontros para cobrir regressão, classificação, reamostragem, regularização, árvores, ensembles, redes e não supervisionado.
 
 ### O que segue proibido
@@ -40,7 +56,7 @@ Onze aulas de conteúdo, doze capítulos novos. A aula de gradiente descendente 
 | Aula | Data | Capítulo | ISLP |
 |---|---|---|---|
 | 5 | 16/09 | 6 — Dados: tipos, dados retangulares e `pandas` | — |
-| 6 | 23/09 | 7 — O que é aprendizado estatístico | 2 |
+| 6 | 23/09 | 7 — O que é aprendizado estatístico | 2 (inclusive o lab 2.3) |
 | 7 | 30/09 | 8 — Regressão linear | 3 |
 | 8 | 07/10 | 9 — Classificação | 4 |
 | 9 | 14/10 | **HPE** — grupos no seminário, com o capítulo 17 de roteiro | — |
@@ -69,7 +85,7 @@ Onze aulas de conteúdo, doze capítulos novos. A aula de gradiente descendente 
 
 ## Os capítulos, seção a seção
 
-São **70 seções novas**. O material fecha com **17 capítulos, 91 seções, 108 `.qmd`**.
+São **71 seções novas**. O material fecha com **17 capítulos, 92 seções, 109 `.qmd`**.
 
 ### 6 — Dados: tipos, dados retangulares e `pandas` (6 seções, sem ISLP)
 
@@ -82,16 +98,19 @@ São **70 seções novas**. O material fecha com **17 capítulos, 91 seções, 1
 
 É o único capítulo modelado no livro irmão, e o único que usa dado brasileiro (ver "Dados e dependências").
 
-### 7 — O que é aprendizado estatístico (6 seções, ISLP 2)
+### 7 — O que é aprendizado estatístico (7 seções, ISLP 2)
 
-1. Estimar *f*: predição e inferência — ISLP 2.1, 2.1.1
-2. Como estimar *f*: paramétrico e não paramétrico — 2.1.2
-3. Precisão contra interpretabilidade — 2.1.3
-4. Supervisionado e não supervisionado, regressão e classificação — 2.1.4, 2.1.5
-5. Medindo a qualidade do ajuste, e o compromisso viés-variância — 2.2.1, 2.2.2
-6. Classificação: taxa de erro e o classificador de Bayes — 2.2.3
+1. O array: forma, fatias, máscaras, reduções e sorteio — ISLP 2.3
+2. Estimar *f*: predição e inferência — 2.1, 2.1.1
+3. Como estimar *f*: paramétrico e não paramétrico — 2.1.2
+4. Precisão contra interpretabilidade — 2.1.3
+5. Supervisionado e não supervisionado, regressão e classificação — 2.1.4, 2.1.5
+6. Medindo a qualidade do ajuste, e o compromisso viés-variância — 2.2.1, 2.2.2
+7. Classificação: taxa de erro e o classificador de Bayes — 2.2.3
 
 É o capítulo que fixa `train_test_split` e a distinção treino/teste, usada por todos os seguintes.
+
+**A seção 7.1 é o lab 2.3 do ISLP**, e existe pela mesma razão que o bloco do `DataFrame` no capítulo 6: **todo estimador do `scikit-learn` devolve `ndarray`**, e sem uma apresentação o material passaria onze capítulos usando um objeto que ninguém apresentou. A turma não tem base de Python — a spec parte disso. É apresentação curta e a serviço do resto, não um tutorial de `numpy`.
 
 ### 8 — Regressão linear (7 seções, ISLP 3)
 
