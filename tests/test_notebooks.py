@@ -157,7 +157,11 @@ def test_a_celula_de_preparo_vem_antes_de_quem_depende_dela():
 
 
 def test_todo_chunk_executavel_do_livro_virou_celula():
-    """19 chunks que executam moram dentro de callouts; nenhum pode virar texto.
+    """Chunks que executam moram dentro de callouts; nenhum pode virar texto.
+
+    Um conversor que trate todo `:::` como texto transforma esses chunks em
+    markdown — e aí o notebook abre, executa, e quebra várias células adiante
+    num NameError que não aponta para a causa.
 
     A contagem esperada é: os chunks do capítulo, mais a célula de preparo,
     mais — só no capítulo do onboarding — os chunks do texto de onboarding.
