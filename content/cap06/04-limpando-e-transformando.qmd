@@ -31,7 +31,24 @@ Só `andar`, com 2.461 nulos — o mesmo número que a seção anterior contou c
 
 ## Nulo não é uma coisa só
 
-O reflexo depois de ver uma coluna com nulo é `dropna()`. Aqui ele erraria a pergunta: os anúncios desta base cobrem tanto apartamento quanto casa, e uma casa não tem andar — não porque o dado faltou, mas porque a pergunta "em que andar fica" não se aplica a um imóvel térreo por definição. O traço no arquivo original não era um vazio a preencher: era a resposta certa, escrita de um jeito que o `pandas` não reconhecia como número.
+O reflexo depois de ver uma coluna com nulo é `dropna()`. Antes de aplicá-lo, vale perguntar o que esse nulo está dizendo — e a própria tabela responde, se for comparada consigo mesma. `condominio` e `area_m2` entre as linhas em que `andar` é nulo e as linhas em que não é:
+
+```{python}
+#| label: andar-nulo-mediana-por-grupo
+alugueis.groupby(alugueis["andar"].isna())[["condominio", "area_m2"]].median()
+```
+
+Nas linhas com `andar` nulo, a mediana de `condominio` é 0 e a de `area_m2` é 190 m². Nas linhas com `andar` preenchido, a mediana de `condominio` sobe para 750 e a de `area_m2` cai para 80 m². A proporção de imóveis sem condomínio nenhum aprofunda o mesmo padrão:
+
+```{python}
+#| label: andar-nulo-proporcao-condominio-zero
+mascara = alugueis["andar"].isna()
+zero_nulo = round(100 * (alugueis.loc[mascara, "condominio"] == 0).sum() / mascara.sum(), 1)
+zero_preenchido = round(100 * (alugueis.loc[~mascara, "condominio"] == 0).sum() / (~mascara).sum(), 1)
+zero_nulo, zero_preenchido
+```
+
+84,4% das linhas com `andar` nulo têm `condominio` igual a zero, contra 3,6% das linhas com `andar` preenchido. Um imóvel sem condomínio e maior que a mediana é o perfil de uma casa, não de um apartamento. O arquivo não traz uma coluna de tipo de imóvel — o que ele traz é esse padrão, repetido em duas variáveis diferentes, e é ele, não uma afirmação de cabeça, que sustenta a leitura de que `andar` nulo aqui não é o dado faltando: é o imóvel não ter andar, porque é uma casa. Vale a ressalva: isso é evidência forte, não prova — ninguém confere linha por linha se cada uma dessas 2.461 é mesmo uma casa. É a mesma leitura que se faz de qualquer dado sem rótulo direto: somar sinais indiretos até que só uma explicação os explique todos ao mesmo tempo.
 
 Isso muda a decisão. Descartar essas 2.461 linhas jogaria fora informação que não estava ausente — o imóvel existe, o aluguel existe, só o andar não faz sentido para ele. Preencher com 0 é a escolha coerente com o que o dado significa: 0 é o andar de quem não tem andar, o térreo, que é exatamente o que uma casa é.
 
@@ -66,15 +83,23 @@ alugueis["andar"].isna().sum()
 alugueis.duplicated().sum()
 ```
 
-358 linhas repetem, em todas as 13 colunas, uma linha que já apareceu antes. Contando também as primeiras ocorrências de cada grupo repetido:
+358 linhas repetem, em todas as 13 colunas, uma linha que já apareceu antes. Contando também as primeiras ocorrências de cada grupo repetido, e quantos grupos distintos existem:
 
 ```{python}
 #| label: duplicadas-grupos
 repetidos = alugueis[alugueis.duplicated(keep=False)]
-len(repetidos)
+grupos = repetidos.groupby(list(alugueis.columns), dropna=False).ngroups
+len(repetidos), grupos, 2 * grupos
 ```
 
-604 linhas — mais que o dobro de 358 —, o que já diz que alguns grupos têm mais de duas cópias, não só pares. Um exemplo:
+604 linhas, distribuídas em 246 grupos. Se cada grupo fosse só um par, seriam 2 × 246 = 492 linhas — e sobram:
+
+```{python}
+#| label: duplicadas-grupos-excedente
+len(repetidos) - 2 * grupos
+```
+
+112 linhas além do que pares explicariam sozinhos: são elas que vêm de grupos com três cópias ou mais, não só duas. Um exemplo:
 
 ```{python}
 #| label: duplicadas-exemplo
@@ -103,14 +128,14 @@ razao_condominio = round(alugueis["condominio"].max() / alugueis["condominio"].m
 razao_area, razao_condominio
 ```
 
-O máximo de `area_m2` é 515 vezes a mediana da própria coluna; o de `condominio`, 1.995 vezes. E o topo de `area_m2` não é um ponto isolado, são três:
+O máximo de `area_m2` é 515 vezes a mediana da própria coluna; o de `condominio`, 1.995 vezes. E o topo de `area_m2` não é um ponto isolado — os cinco maiores:
 
 ```{python}
-#| label: outliers-area-top3
-alugueis["area_m2"].sort_values(ascending=False).head(3).tolist()
+#| label: outliers-area-top5
+alugueis["area_m2"].sort_values(ascending=False).head(5).tolist()
 ```
 
-46.335, 24.606 e 12.732 m² — todos acima de dez mil metros quadrados, muito à frente do quarto maior, que já cai para 2.000 m². Em `condominio`, o maior valor não é um ponto isolado no outro sentido: ele se repete.
+46.335, 24.606 e 12.732 m² são os três imóveis acima de dez mil metros quadrados. O quarto e o quinto maior já caem bem abaixo disso — e empatam entre si, os dois em exatos 2.000 m². Em `condominio`, o maior valor não é um ponto isolado no outro sentido: ele se repete.
 
 ```{python}
 #| label: outliers-condominio-repeticao
