@@ -349,9 +349,7 @@ ESTILO = 'plt.style.use("estilo-figuras.mplstyle")'
 
 # Seções sem figura, e por quê. Cada entrada é uma decisão registrada, não um
 # esquecimento — daí o dicionário em vez de uma lista.
-SECOES_SEM_FIGURA: dict[str, str] = {
-    "cap07/07-classificacao-e-o-classificador-de-bayes.qmd": "stub; a figura entra quando a seção for escrita",
-}
+SECOES_SEM_FIGURA: dict[str, str] = {}
 
 # Usos de biblioteca proibida liberados: arquivo -> (biblioteca, motivo).
 # `scipy` deixa de ser proibido em pontos específicos, registrados aqui um a
