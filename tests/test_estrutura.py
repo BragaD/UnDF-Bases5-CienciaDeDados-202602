@@ -350,21 +350,30 @@ ESTILO = 'plt.style.use("estilo-figuras.mplstyle")'
 # Seções sem figura, e por quê. Cada entrada é uma decisão registrada, não um
 # esquecimento — daí o dicionário em vez de uma lista.
 SECOES_SEM_FIGURA: dict[str, str] = {
-    "cap07/06-qualidade-do-ajuste-e-vies-variancia.qmd": "stub; a figura entra quando a seção for escrita",
     "cap07/07-classificacao-e-o-classificador-de-bayes.qmd": "stub; a figura entra quando a seção for escrita",
 }
 
 # Usos de biblioteca proibida liberados: arquivo -> (biblioteca, motivo).
-# `scipy` volta a ser permitido em um lugar só, o dendrograma da seção 15.5,
-# porque desenhar a árvore É a lição daquela seção e o AgglomerativeClustering
-# do scikit-learn agrupa sem desenhar.
-BIBLIOTECA_LIBERADA: dict[str, tuple[str, str]] = {}
+# `scipy` deixa de ser proibido em pontos específicos, registrados aqui um a
+# um: a seção 7.6 usa smoothing splines (make_smoothing_spline) para as
+# figuras 2.9 a 2.12 do ISLP, que o scikit-learn não sabe ajustar; e a seção
+# 15.5, quando existir, vai liberar scipy.cluster.hierarchy para o
+# dendrograma — desenhar a árvore É a lição daquela seção, e o
+# AgglomerativeClustering do scikit-learn agrupa sem desenhar.
+BIBLIOTECA_LIBERADA: dict[str, tuple[str, str]] = {
+    "cap07/06-qualidade-do-ajuste-e-vies-variancia.qmd": (
+        "scipy",
+        "smoothing spline da figura 2.9 do ISLP (make_smoothing_spline); o "
+        "scikit-learn não tem equivalente, e a fidelidade ao capítulo 2 do "
+        "ISLP tem precedência sobre a preferência pelo scikit-learn",
+    ),
+}
 
 PROIBIDAS = {
     "statsmodels": "a disciplina não faz inferência — sem erro-padrão, t nem valor-p",
     "torch": "redes convolucionais e recorrentes são da disciplina de Deep Learning",
     "ISLP": "o pacote dos autores traz uma API que só existe no livro e quebra a regra de dados commitados",
-    "scipy": "não é ferramenta da disciplina; a exceção do dendrograma vai em BIBLIOTECA_LIBERADA",
+    "scipy": "não é ferramenta da disciplina por padrão; as exceções pontuais vão em BIBLIOTECA_LIBERADA",
 }
 
 
