@@ -4,7 +4,132 @@
 Esta seção corresponde à seção 2.1.2 de @james2023.
 :::
 
-::: {.callout-warning}
-## Em construção
-O conteúdo desta seção ainda será escrito.
+A seção anterior fechou perguntando como, afinal, se estima `f` — a partir só do que se observa, sem acesso à função que gerou o dado. Há duas respostas bem diferentes para essa pergunta, e a diferença entre elas está inteira numa escolha que se faz antes de olhar qualquer ponto: assumir uma forma para `f`, ou deixar o dado decidir a forma sozinho.
+
+```{python}
+#| label: setup
+#| include: false
+import matplotlib.pyplot as plt
+import numpy as np
+import pandas as pd
+from sklearn.linear_model import LinearRegression
+from sklearn.metrics import mean_squared_error
+from sklearn.neighbors import KNeighborsRegressor
+from sklearn.pipeline import make_pipeline
+from sklearn.preprocessing import StandardScaler
+
+plt.style.use("estilo-figuras.mplstyle")
+```
+
+## O caminho paramétrico: assumir uma forma
+
+O caminho paramétrico começa assumindo uma forma para `f` — uma reta, um plano, qualquer função que se escreva com um número fixo e pequeno de parâmetros — e troca o problema de estimar uma função inteira, livre para assumir qualquer formato, pelo problema bem mais simples de estimar esses poucos números. A vantagem é direta: poucos parâmetros pedem pouco dado, porque cada ponto observado ajuda a fixar todos eles ao mesmo tempo. O risco mora na mesma decisão: se a forma escolhida não é parecida com a `f` verdadeira, nenhuma quantidade de dado, nem cuidado nenhum no ajuste, conserta — o erro já está embutido na forma, antes mesmo de o primeiro ponto entrar na conta.
+
+`Income2`, outro conjunto simulado do ISLP, dá o exemplo: a renda de trinta pessoas contra dois preditores, não um só como em `Income1` na seção anterior.
+
+```{python}
+#| label: leitura-income2
+renda2 = pd.read_csv("dados/Income2.csv")
+renda2.shape, renda2.columns.tolist()
+```
+
+Trinta linhas, três colunas: `escolaridade` e `senioridade` são os preditores, `renda` é a resposta, em milhares de dólares. Com dois preditores, a forma paramétrica mais simples deixa de ser uma reta e passa a ser um plano — renda como combinação linear de escolaridade e senioridade.
+
+```{python}
+#| label: ajuste-plano
+X = renda2[["escolaridade", "senioridade"]]
+y = renda2["renda"]
+
+plano = LinearRegression().fit(X, y)
+[round(float(coeficiente), 3) for coeficiente in plano.coef_], round(float(plano.intercept_), 2)
+```
+
+O `LinearRegression` do `scikit-learn` ajusta exatamente essa forma: um plano com coeficiente 5,896 para escolaridade, 0,173 para senioridade, e intercepto -50,09. Três números — só três — descrevem a superfície inteira. Não importa se o dado tivesse trinta pontos ou trinta mil: mais dado deixaria a estimativa mais precisa, mas não mudaria quantos parâmetros o modelo tem.
+
+## O caminho não paramétrico: deixar o dado dizer
+
+O caminho não paramétrico não assume forma nenhuma para `f`: em vez de resumir a relação em poucos números, deixa a vizinhança de cada ponto decidir o valor previsto ali. *k* vizinhos mais próximos (k-NN) é o exemplo mais simples da família: para prever a renda de alguém com uma combinação de escolaridade e senioridade, ele procura as pessoas mais parecidas no dado observado e tira a média das rendas delas — sem supor que a relação seja um plano, uma curva suave ou qualquer coisa com nome fechado. A vantagem é acertar formas que o plano erraria de largada, porque nada na conta impõe retidão a `f`; o custo é precisar de muito mais dado para que essa liberdade compense e, se a flexibilidade for longe demais, ajustar não à relação verdadeira, mas ao ruído específico das trinta pessoas que compõem esta amostra.
+
+```{python}
+#| label: faixas-das-colunas
+renda2[["escolaridade", "senioridade"]].agg(["min", "max"]).round(1)
+```
+
+Escolaridade varia de 10 a 21,6 anos; senioridade, de 20 a 187,6. k-NN decide "vizinho mais próximo" por distância, e com as duas colunas em escalas tão diferentes, a distância sem ajuste seria dominada pela que se move em dezenas — a senioridade —, deixando a escolaridade quase sem voz na conta. O ajuste a seguir entra num `Pipeline` que primeiro padroniza as duas colunas, para nenhuma dominar a outra só por causa da unidade em que foi medida.
+
+```{python}
+#| label: ajuste-flexivel-e-erro
+flexivel = make_pipeline(StandardScaler(), KNeighborsRegressor(n_neighbors=3)).fit(X, y)
+
+mse_plano = mean_squared_error(y, plano.predict(X))
+mse_flexivel = mean_squared_error(y, flexivel.predict(X))
+
+erro_treino = pd.Series(
+    {"plano": mse_plano, "k-NN flexível (k=3)": mse_flexivel}
+).sort_values()
+erro_treino.round(2)
+```
+
+Sobre os mesmos trinta pontos que o ajustaram, o k-NN flexível erra menos que o plano: 36,69 de erro quadrático médio contra 46,48. A superfície que não assume forma nenhuma encosta mais perto do dado observado do que o plano, rígido, consegue chegar — é exatamente a vantagem que a flexibilidade promete.
+
+Só que a mesma flexibilidade que aproxima o ajuste do dado observado pode ir longe demais. Levando o k-NN ao extremo — prever com um único vizinho, em vez da média de três:
+
+```{python}
+#| label: memoriza-o-ruido
+memoriza = make_pipeline(StandardScaler(), KNeighborsRegressor(n_neighbors=1)).fit(X, y)
+round(mean_squared_error(y, memoriza.predict(X)), 2)
+```
+
+o erro sobre o próprio dado de treino cai a exatamente zero. Faz sentido: com um vizinho só, a renda prevista para cada pessoa é a renda daquela mesma pessoa — ela é o seu próprio vizinho mais próximo, a distância zero. O modelo não aprendeu nada sobre como escolaridade e senioridade se relacionam com renda; decorou as trinta respostas que já tinha. Essa armadilha tem nome — *overfitting* —, e é o preço que a flexibilidade cobra quando nada a segura: ajustar tão perto do dado observado que o modelo passa a repetir o ruído daquela amostra específica, em vez da relação que a gerou. A seção 7.6 mede isso a sério, contra dado que o modelo não viu durante o ajuste; aqui fica só o nome e o sintoma.
+
+::: {.conceito}
+| | Paramétrico | Não paramétrico |
+|---|---|---|
+| Forma de `f` | assumida antes de ver o dado (reta, plano, ...) | não assumida — o dado decide |
+| O que se estima | um número fixo de parâmetros | a superfície inteira |
+| Quanto dado exige | pouco | muito mais |
+| Risco principal | a forma errada, que nenhum dado corrige | decorar o ruído da amostra (*overfitting*) |
 :::
+
+## A rigidez de um contra a flexibilidade do outro
+
+A diferença fica mais clara em figura do que em número: as mesmas trinta pessoas, com a superfície que cada ajuste prevê para qualquer combinação de escolaridade e senioridade, não só as observadas.
+
+```{python}
+#| label: fig-plano-e-flexivel
+#| fig-cap: "Renda prevista para toda combinação de escolaridade e senioridade em `Income2`, pelo plano paramétrico (esquerda) e pelo k-NN flexível com k=3 (direita). Os pontos são as trinta pessoas observadas. As faixas retas e paralelas do plano não têm como acompanhar cada aglomerado de pontos; a superfície flexível dobra ao redor deles."
+grade_escolaridade = np.linspace(X["escolaridade"].min(), X["escolaridade"].max(), 60)
+grade_senioridade = np.linspace(X["senioridade"].min(), X["senioridade"].max(), 60)
+malha_e, malha_s = np.meshgrid(grade_escolaridade, grade_senioridade)
+grade = pd.DataFrame({"escolaridade": malha_e.ravel(), "senioridade": malha_s.ravel()})
+
+superficie_plano = plano.predict(grade).reshape(malha_e.shape)
+superficie_flexivel = flexivel.predict(grade).reshape(malha_e.shape)
+
+niveis = np.linspace(
+    min(superficie_plano.min(), superficie_flexivel.min()),
+    max(superficie_plano.max(), superficie_flexivel.max()),
+    13,
+)
+
+fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(11, 4.5))
+
+ax1.contourf(malha_e, malha_s, superficie_plano, levels=niveis, cmap="Blues")
+ax1.scatter(X["escolaridade"], X["senioridade"], color="C1", s=18, edgecolor="white", linewidth=0.6)
+ax1.set_xlabel("escolaridade")
+ax1.set_ylabel("senioridade")
+ax1.set_title("paramétrico: o plano")
+
+mapa = ax2.contourf(malha_e, malha_s, superficie_flexivel, levels=niveis, cmap="Blues")
+ax2.scatter(X["escolaridade"], X["senioridade"], color="C1", s=18, edgecolor="white", linewidth=0.6)
+ax2.set_xlabel("escolaridade")
+ax2.set_ylabel("senioridade")
+ax2.set_title("não paramétrico: k-NN (k=3)")
+
+barra = fig.colorbar(mapa, ax=[ax1, ax2], shrink=0.85, pad=0.02)
+barra.set_label("renda prevista")
+
+plt.show()
+```
+
+O plano nunca se curva, e é exatamente por isso que ele erra pouco: três números não têm como acompanhar cada solavanco do dado, só a tendência geral. O k-NN se curva ao redor de cada aglomerado de pontos, e é por isso que ele decora — sem outra coisa dizendo até onde ir, nada o impede de seguir cada ponto isoladamente até o extremo que os números acima já mostraram. Essa flexibilidade tem outro preço, além do dado que ela exige: um modelo que se adapta tão de perto ao que observou fica mais difícil de ler — não sobra um coeficiente único para dizer "mais um ano de escolaridade vale tanto de renda". É esse compromisso, entre acertar mais e entender menos, que a próxima seção discute.
