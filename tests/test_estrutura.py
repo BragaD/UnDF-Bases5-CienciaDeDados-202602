@@ -513,3 +513,64 @@ def test_toda_excecao_de_correspondencia_tem_motivo_e_capitulo_real():
     for cap, motivo in SEM_CORRESPONDENCIA_NO_ISLP.items():
         assert (CONTENT / cap).is_dir(), f"{cap} não existe"
         assert len(motivo) > 40, f"exceção de {cap} sem motivo de verdade"
+
+
+# Cabeçalhos de antes da tradução "o dado fala português" (2026-09-10) — ver
+# dados/README.md pela tabela de-para completa. Um nome antigo não pode mais
+# aparecer como IDENTIFICADOR em nenhum .qmd dos capítulos 6 em diante.
+#
+# O caso que criou este teste: a 6.3 (03-lendo-e-tipando-um-arquivo-real.qmd)
+# citava, em prosa, "a seção 6.1 converteu `Sigla` em category" — só que a 6.1
+# já tinha sido traduzida (582ed86) e chamava a coluna de `sigla`. Nada
+# detectava a referência cruzada apodrecida: test_colunas_estao_em_portugues
+# (test_dados.py) só olha o cabeçalho do CSV; scripts/executar-secoes.py só
+# executa código, e a 6.3 nem lê estados.csv, então a tradução não tinha
+# motivo para abri-la. Só apareceu quando alguém abriu a página renderizada —
+# numa tradução maior, ninguém abre todas.
+NOMES_ANTIGOS_DE_COLUNA = [
+    "Populacao",
+    "Taxa.Homicidios",
+    "Sigla",
+    "Estado",
+    "Education",
+    "Income",
+    "sales",
+    "newspaper",
+    "TV",
+]
+
+
+def _cita_como_identificador(nome: str, texto: str) -> bool:
+    """`nome` aparece colado a um delimitador dos dois lados — crase ou aspas.
+
+    O delimitador colado é o que separa identificador de palavra solta, e faz
+    a lista funcionar sem exceção nenhuma para os dois falsos positivos que
+    importam aqui: `Income1`/`Income2` (nome de ARQUIVO legítimo, ponte com o
+    ISLP, nunca muda) nunca fecham exatamente em `Income` + delimitador — sobra
+    sempre o "1" ou o "2" antes da crase ou da aspa; e "TV" em prosa corrente
+    ("investimento em TV, rádio e jornal") não tem crase nem aspas ao redor,
+    então não bate. Um nome só conta quando alguém o tratou como o nome de uma
+    coluna, dentro de crase (`` `Sigla` ``) ou como string num chunk
+    (`"Sigla"`, `'Sigla'`).
+    """
+    termo = re.escape(nome)
+    padrao = re.compile(rf"`{termo}`|\"{termo}\"|'{termo}'")
+    return padrao.search(texto) is not None
+
+
+def test_nenhum_qmd_cita_nome_de_coluna_anterior_a_traducao():
+    """Guarda contra a referência cruzada desatualizada — a cicatriz da 6.3.
+
+    Os capítulos 1 a 5 ficam fora: são de outra abordagem e não passaram pela
+    tradução "o dado fala português".
+    """
+    achados = []
+    for p in qmds_dos_capitulos_novos():
+        texto = p.read_text(encoding="utf-8")
+        for nome in NOMES_ANTIGOS_DE_COLUNA:
+            if _cita_como_identificador(nome, texto):
+                achados.append(f"{p.relative_to(RAIZ)}: {nome}")
+    assert not achados, (
+        "nome de coluna anterior à tradução, citado como identificador "
+        "(veja dados/README.md pela tabela de-para): " + ", ".join(sorted(achados))
+    )
