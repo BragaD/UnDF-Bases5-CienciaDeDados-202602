@@ -43,6 +43,12 @@ apelido = _carregar_apelido()
 # seções — 3.3.1, 8.2.2, 12.4.1 estão no sumário —, então o callout de
 # abertura cita o número. Os capítulos 1 a 5 são de outra abordagem e não
 # citam o ISLP; o 6 e o 17 não têm correspondência nele.
+#
+# `islp_secao` é `None`, uma `str` ("2.1.2") ou uma `tuple[str, ...]`
+# ("2.1.4", "2.1.5") quando a nossa seção cobre mais de uma subseção do
+# ISLP — comum a partir do capítulo 8, onde quase toda seção nossa mapeia
+# para mais de uma subseção. `stub_secao` cuida da concordância (singular
+# contra plural) a partir do tipo.
 LIVRO = [
     (1, "Introdução", None, [
         ("01-a-ascensao-dos-dados", "A Ascensão dos Dados", None),
@@ -85,22 +91,37 @@ LIVRO = [
     ]),
     (7, "O que é Aprendizado Estatístico", 2, [
         ("01-o-array", "O Array", "2.3"),
-        ("02-estimar-f", "Estimar f: Predição e Inferência", "2.1"),
+        ("02-estimar-f", "Estimar f: Predição e Inferência", ("2.1", "2.1.1")),
         ("03-parametrico-e-nao-parametrico", "Paramétrico e Não Paramétrico", "2.1.2"),
         ("04-precisao-contra-interpretabilidade", "Precisão contra Interpretabilidade", "2.1.3"),
-        ("05-supervisionado-e-nao-supervisionado", "Supervisionado e Não Supervisionado", "2.1.4"),
-        ("06-qualidade-do-ajuste-e-vies-variancia", "Qualidade do Ajuste e o Compromisso Viés-Variância", "2.2.1"),
+        ("05-supervisionado-e-nao-supervisionado", "Supervisionado e Não Supervisionado", ("2.1.4", "2.1.5")),
+        ("06-qualidade-do-ajuste-e-vies-variancia", "Qualidade do Ajuste e o Compromisso Viés-Variância", ("2.2.1", "2.2.2")),
         ("07-classificacao-e-o-classificador-de-bayes", "Classificação e o Classificador de Bayes", "2.2.3"),
     ]),
 ]
 
 
-def stub_secao(titulo: str, islp_secao: str | None) -> str:
+def _citacao_islp(islp_secao: str | tuple[str, ...]) -> str:
+    """Formata a frase do callout de correspondência, com a concordância certa.
+
+    Uma seção só: "corresponde à seção 2.1.2". Mais de uma: "corresponde às
+    seções 2.1.4 e 2.1.5" (ou, com três ou mais, "2.2.1, 2.2.2 e 2.2.3").
+    """
+    if isinstance(islp_secao, str):
+        return f"Esta seção corresponde à seção {islp_secao} de @james2023."
+    secoes = list(islp_secao)
+    if len(secoes) == 1:
+        return f"Esta seção corresponde à seção {secoes[0]} de @james2023."
+    juntas = ", ".join(secoes[:-1]) + f" e {secoes[-1]}"
+    return f"Esta seção corresponde às seções {juntas} de @james2023."
+
+
+def stub_secao(titulo: str, islp_secao: str | tuple[str, ...] | None) -> str:
     correspondencia = ""
     if islp_secao is not None:
         correspondencia = (
             "\n::: {.callout-note}\n"
-            f"Esta seção corresponde à seção {islp_secao} de @james2023.\n"
+            f"{_citacao_islp(islp_secao)}\n"
             ":::\n"
         )
     return f"""# {titulo}
