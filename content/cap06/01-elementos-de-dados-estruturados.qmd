@@ -40,11 +40,11 @@ estados = pd.read_csv("dados/estados.csv")
 estados.dtypes
 ```
 
-O `pandas` acerta metade da tarefa sozinho, só olhando a forma dos valores: `Populacao` vira `int64` — é contagem, portanto numérico discreto —, e `Taxa.Homicidios` vira `float64` — é uma taxa, portanto numérico contínuo. `Estado` e `Sigla` viram `object`, o tipo genérico de texto que o `pandas` usa quando não sabe o que mais dizer sobre uma coluna: ele enxerga strings, não que "RO" e "AC" vêm de um conjunto fechado de rótulos possíveis. É inferência sobre a *forma* do valor, não sobre o que ele *significa* — só quem lê o dado sabe que `Sigla` é categórico nominal.
+O `pandas` acerta metade da tarefa sozinho, só olhando a forma dos valores: `populacao` vira `int64` — é contagem, portanto numérico discreto —, e `taxa_homicidios` vira `float64` — é uma taxa, portanto numérico contínuo. `estado` e `sigla` viram `object`, o tipo genérico de texto que o `pandas` usa quando não sabe o que mais dizer sobre uma coluna: ele enxerga strings, não que "RO" e "AC" vêm de um conjunto fechado de rótulos possíveis. É inferência sobre a *forma* do valor, não sobre o que ele *significa* — só quem lê o dado sabe que `sigla` é categórico nominal.
 
 ```{python}
 #| label: linhas-e-siglas
-len(estados), estados["Sigla"].nunique()
+len(estados), estados["sigla"].nunique()
 ```
 
 As 27 linhas trazem 27 siglas distintas — nenhuma se repete.
@@ -56,8 +56,8 @@ Dizer ao `pandas` o que já se sabe sobre a coluna é uma linha:
 ```{python}
 #| label: sigla-category
 antes = estados.memory_usage(deep=True)
-estados["Sigla"] = estados["Sigla"].astype("category")
-estados["Sigla"].cat.categories
+estados["sigla"] = estados["sigla"].astype("category")
+estados["sigla"].cat.categories
 ```
 
 Antes de acreditar que a conversão economiza alguma coisa, meça. Comparando o consumo de memória coluna a coluna, de antes para depois:
@@ -73,7 +73,7 @@ comparacao["variação (%)"] = (
 comparacao
 ```
 
-`Sigla` sobe de 1.377 para 2.476 bytes — quase 80% a mais —, e como nenhuma outra coluna muda, o `DataFrame` inteiro sobe de 3.694 para 4.793 bytes, quase 30% a mais. Com 27 valores todos distintos, não há repetição nenhuma para o `category` amortizar: o array de códigos mais o índice de categorias, por cima do que já existia, custam mais do que os ponteiros de texto do `object`. O ganho aqui é **semântico, não de memória** — e, sem repetição para amortizar, nem podia ser: o que muda é que operações que só fazem sentido sobre um conjunto fechado de rótulos passam a existir, como listar as categorias possíveis ou recusar um valor que não está entre elas. A economia de memória aparece quando poucos valores se repetem em muitas linhas — é o caso que a seção 6.3 mostra, ao tipar uma coluna de cidade.
+`sigla` sobe de 1.377 para 2.476 bytes — quase 80% a mais —, e como nenhuma outra coluna muda, o `DataFrame` inteiro sobe de 3.694 para 4.793 bytes, quase 30% a mais. Com 27 valores todos distintos, não há repetição nenhuma para o `category` amortizar: o array de códigos mais o índice de categorias, por cima do que já existia, custam mais do que os ponteiros de texto do `object`. O ganho aqui é **semântico, não de memória** — e, sem repetição para amortizar, nem podia ser: o que muda é que operações que só fazem sentido sobre um conjunto fechado de rótulos passam a existir, como listar as categorias possíveis ou recusar um valor que não está entre elas. A economia de memória aparece quando poucos valores se repetem em muitas linhas — é o caso que a seção 6.3 mostra, ao tipar uma coluna de cidade.
 
 ## Ordem sem distância: o categórico ordinal
 
@@ -82,7 +82,7 @@ Nem todo categórico é nominal. Uma faixa de população tem ordem — "6 a 15 
 ```{python}
 #| label: faixa-ordinal
 faixa = pd.cut(
-    estados["Populacao"],
+    estados["populacao"],
     bins=[0, 2_000_000, 6_000_000, 15_000_000, 50_000_000],
     labels=["até 2 milhões", "2 a 6 milhões", "6 a 15 milhões", "mais de 15 milhões"],
     ordered=True,
@@ -105,12 +105,12 @@ Pedir a mesma comparação a uma coluna nominal não tem resposta, e o `pandas` 
 ```{python}
 #| label: comparar-nominal
 try:
-    estados["Sigla"] < "SP"
+    estados["sigla"] < "SP"
 except TypeError as erro:
     print(erro)
 ```
 
-Sem ordem declarada, "menor que" não está definido para `Sigla` — é a mesma pergunta que devolveria um número, e uma falsa sensação de precisão, se a coluna tivesse ficado como texto solto em vez de `category`.
+Sem ordem declarada, "menor que" não está definido para `sigla` — é a mesma pergunta que devolveria um número, e uma falsa sensação de precisão, se a coluna tivesse ficado como texto solto em vez de `category`.
 :::
 
 ## O tipo escolhe o gráfico
@@ -122,12 +122,12 @@ A mesma distinção decide o gráfico. Um categórico com um número por rótulo
 #| fig-cap: "Um categórico (a unidade federativa) pede barras; um contínuo (a taxa de homicídios) pede histograma — o tipo escolhe o gráfico"
 fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(11, 4.5))
 
-top10 = estados.nlargest(10, "Populacao").sort_values("Populacao")
-ax1.barh(top10["Estado"], top10["Populacao"] / 1e6)
+top10 = estados.nlargest(10, "populacao").sort_values("populacao")
+ax1.barh(top10["estado"], top10["populacao"] / 1e6)
 ax1.set_xlabel("população (milhões)")
 ax1.set_title("10 maiores populações")
 
-ax2.hist(estados["Taxa.Homicidios"], bins=8)
+ax2.hist(estados["taxa_homicidios"], bins=8)
 ax2.set_xlabel("taxa de homicídios (por 100 mil hab.)")
 ax2.set_ylabel("estados")
 ax2.set_title("distribuição da taxa de homicídios")

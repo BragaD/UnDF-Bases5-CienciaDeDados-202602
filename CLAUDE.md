@@ -73,7 +73,7 @@ São da abordagem anterior: citam o Grus, não o ISLP, e ficam **fora dos guarda
 |---|---|
 | `scikit-learn` inteiro: estimadores, `Pipeline`, `ColumnTransformer`, `GridSearchCV`, métricas | `statsmodels` — a disciplina não faz inferência |
 | `pandas` para todo trabalho de dado, `numpy` para conta de array, `matplotlib` para todo gráfico | o pacote `ISLP`; `torch` (redes convolucionais e recorrentes são da disciplina de Deep Learning) |
-| | `scipy`, **exceto** a exceção registrada do dendrograma do capítulo 15 |
+| | `scipy`, **exceto** as exceções registradas em `BIBLIOTECA_LIBERADA`: o *smoothing spline* da seção 7.6 e o dendrograma do capítulo 15 |
 
 `test_nenhum_chunk_executavel_usa_biblioteca_proibida` trava a tabela da direita; qualquer uma delas pode aparecer só num bloco ```` ```python ```` que **não executa**, para mostrar o que existe lá fora sem passar a depender.
 
