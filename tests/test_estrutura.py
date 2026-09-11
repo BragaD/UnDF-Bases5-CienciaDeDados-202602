@@ -537,6 +537,7 @@ NOMES_ANTIGOS_DE_COLUNA = [
     "Sigla",
     "Estado",
     "Education",
+    "Seniority",
     "Income",
     "sales",
     "newspaper",
