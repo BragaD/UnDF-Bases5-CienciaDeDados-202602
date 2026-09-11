@@ -63,6 +63,8 @@ Trezentos pontos, gerados por uma função conhecida — soma de uma tendência 
 
 `ruido_padrao` não é um detalhe descartável: é o desvio padrão de $\epsilon$, e $\text{Var}(\epsilon) = \text{ruido\_padrao}^2$ é exatamente o piso irredutível que a seção 7.2 descreveu sem poder desenhar. Aqui dá para desenhar, porque foi quem escreveu este material que escolheu o número.
 
+Os 90 pontos de teste bastam para o que vem a seguir: comparar três ajustes específicos entre si. Não bastam para a varredura da próxima seção, que precisa medir com precisão se uma curva cruza ou não o piso — e volta a esse ponto quando chegar lá.
+
 ## Três ajustes, três flexibilidades
 
 Com $f$ verdadeira conhecida, dá para comparar ajustes de rigidez bem diferente contra ela, não só contra o dado. O mais rígido dos três é uma reta — `LinearRegression`, a mesma ferramenta que a seção 7.3 usou em `Income2`. Os outros dois são *smoothing splines*: uma curva suave, ajustada minimizando a soma dos resíduos ao quadrado mais uma penalidade sobre a curvatura da própria curva, controlada por um parâmetro $\lambda$. Quanto maior $\lambda$, mais a curvatura pesa contra o ajuste e mais a curva se aproxima de uma reta; quanto menor $\lambda$, menos a curvatura pesa, e mais livre a curva fica para dobrar atrás de cada ponto.
@@ -122,7 +124,18 @@ Repare que o MSE de **treino** só cai conforme a flexibilidade cresce — 5,83,
 
 ## A curva em U, e o piso que ela não fura
 
-Três ajustes já bastam para sugerir o formato em U do MSE de teste; uma varredura em $\lambda$, do mais rígido ao mais flexível, mostra a curva inteira.
+Três ajustes já bastam para sugerir o formato em U do MSE de teste; uma varredura em $\lambda$, do mais rígido ao mais flexível, mostra a curva inteira. Só que o MSE de teste, medido sobre poucos pontos, é ele mesmo uma variável aleatória — com os 90 pontos já separados, ele pode cair abaixo do piso irredutível por sorte da amostra, sem que o piso tenha sido furado de verdade. O próprio @james2023 evita esse problema medindo a curva de teste sobre um conjunto de teste bem maior; a mesma simulação que dá acesso a $f$ permite gerar um.
+
+```{python}
+#| label: teste-grande
+n_teste_grande = 5000
+x_teste_grande = rng.uniform(0, 10, size=n_teste_grande)
+ruido_teste_grande = rng.normal(0, ruido_padrao, size=n_teste_grande)
+y_teste_grande = f_verdadeiro(x_teste_grande) + ruido_teste_grande
+x_teste_grande.shape
+```
+
+Cinco mil pontos novos, da mesma $f$ e do mesmo `ruido_padrao` — nunca usados para ajustar nada, só para medir a varredura a seguir com a precisão que 90 pontos não entregam.
 
 ```{python}
 #| label: curva-u
@@ -138,7 +151,8 @@ mse_treino = np.array(
 mse_teste = np.array(
     [
         mean_squared_error(
-            y_teste, make_smoothing_spline(x_treino_ordenado, y_treino_ordenado, lam=l)(x_teste)
+            y_teste_grande,
+            make_smoothing_spline(x_treino_ordenado, y_treino_ordenado, lam=l)(x_teste_grande),
         )
         for l in lambdas
     ]
@@ -157,7 +171,7 @@ piso, round(float(lambda_minimo), 2), round(float(mse_teste_minimo), 2), treino_
 
 ```{python}
 #| label: fig-curva-u
-#| fig-cap: "MSE de treino e de teste contra a flexibilidade do spline (λ decrescente, escala log). O treino cai sem parar; o teste cai, toca um mínimo perto de λ=0,56 e volta a subir. A linha tracejada é Var(ε) — o piso irredutível que este material conhece porque gerou o próprio ruído — e a curva de teste nunca desce abaixo dela."
+#| fig-cap: "MSE de treino e de teste (este sobre os 5.000 pontos do conjunto de teste grande) contra a flexibilidade do spline (λ decrescente, escala log). O treino cai sem parar; o teste cai, toca um mínimo perto de λ=0,30 e volta a subir. A linha tracejada é Var(ε) — o piso irredutível que este material conhece porque gerou o próprio ruído — e a curva de teste nunca desce abaixo dela."
 fig, ax = plt.subplots()
 ax.plot(lambdas, mse_treino, linewidth=2, label="MSE treino")
 ax.plot(lambdas, mse_teste, linewidth=2, label="MSE teste")
@@ -171,7 +185,7 @@ plt.tight_layout()
 plt.show()
 ```
 
-Ao longo dos 60 valores de $\lambda$ varridos, o MSE de treino cai sem interrupção — confirmado pelo chunk acima, `treino_sempre_cai` é `True`. O de teste não: desce de um extremo rígido, toca o mínimo, 2,31, perto de $\lambda=0,56$ — quase o mesmo ponto que o spline moderado, escolhido às cegas na seção anterior, já ocupava — e volta a subir do outro lado, onde a flexibilidade passa a perseguir ruído. Em nenhum dos 60 pontos o MSE de teste desce abaixo de `piso = 2.25`, a variância do ruído que este material mesmo gerou — `teste_nunca_fura_piso` é `True`. É o piso que a seção 7.2 descreveu sem poder mostrar: nenhuma flexibilidade, por maior que seja, empurra o erro esperado abaixo da parte do problema que o próprio ajuste não controla.
+Ao longo dos 60 valores de $\lambda$ varridos, o MSE de treino cai sem interrupção — confirmado pelo chunk acima, `treino_sempre_cai` é `True`. O de teste não: desce de um extremo rígido, toca o mínimo, 2,41, perto de $\lambda=0,30$ — na mesma vizinhança do spline moderado ($\lambda=0,5$), escolhido às cegas na seção anterior, sem estar exatamente no mesmo ponto — e volta a subir do outro lado, onde a flexibilidade passa a perseguir ruído. Em nenhum dos 60 pontos, medidos contra os cinco mil pontos do conjunto de teste grande, o MSE de teste desce abaixo de `piso = 2.25`, a variância do ruído que este material mesmo gerou — `teste_nunca_fura_piso` é `True`. É o piso que a seção 7.2 descreveu sem poder mostrar: nenhuma flexibilidade, por maior que seja, empurra o erro esperado abaixo da parte do problema que o próprio ajuste não controla.
 
 ## A decomposição viés-variância
 
