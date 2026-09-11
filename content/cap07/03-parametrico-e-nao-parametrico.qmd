@@ -15,8 +15,6 @@ import pandas as pd
 from sklearn.linear_model import LinearRegression
 from sklearn.metrics import mean_squared_error
 from sklearn.neighbors import KNeighborsRegressor
-from sklearn.pipeline import make_pipeline
-from sklearn.preprocessing import StandardScaler
 
 plt.style.use("estilo-figuras.mplstyle")
 ```
@@ -52,17 +50,18 @@ O caminho não paramétrico não assume forma nenhuma para `f`: em vez de resumi
 
 ```{python}
 #| label: faixas-das-colunas
-renda2[["escolaridade", "senioridade"]].agg(["min", "max"]).round(1)
+X.agg(["mean", "std"]).round(1)
 ```
 
-Escolaridade varia de 10 a 21,6 anos; senioridade, de 20 a 187,6. k-NN decide "vizinho mais próximo" por distância, e com as duas colunas em escalas tão diferentes, a distância sem ajuste seria dominada pela que se move em dezenas — a senioridade —, deixando a escolaridade quase sem voz na conta. O ajuste a seguir entra num `Pipeline` que primeiro padroniza as duas colunas, para nenhuma dominar a outra só por causa da unidade em que foi medida.
+Escolaridade tem média 16,4 anos e desvio padrão 3,8; senioridade, média 93,9 e desvio padrão 55,7 — uma dispersão bem maior, na mesma unidade de anos. k-NN decide "vizinho mais próximo" por distância, e com as duas colunas nessa escala tão diferente, a distância sem ajuste seria dominada pela que varia mais — a senioridade —, deixando a escolaridade quase sem voz na conta. A padronização resolve isso subtraindo a média e dividindo pelo desvio padrão de cada coluna:
 
 ```{python}
 #| label: ajuste-flexivel-e-erro
-flexivel = make_pipeline(StandardScaler(), KNeighborsRegressor(n_neighbors=3)).fit(X, y)
+padronizado = (X - X.mean()) / X.std()
+flexivel = KNeighborsRegressor(n_neighbors=3).fit(padronizado, y)
 
 mse_plano = mean_squared_error(y, plano.predict(X))
-mse_flexivel = mean_squared_error(y, flexivel.predict(X))
+mse_flexivel = mean_squared_error(y, flexivel.predict(padronizado))
 
 erro_treino = pd.Series(
     {"plano": mse_plano, "k-NN flexível (k=3)": mse_flexivel}
@@ -76,8 +75,8 @@ Só que a mesma flexibilidade que aproxima o ajuste do dado observado pode ir lo
 
 ```{python}
 #| label: memoriza-o-ruido
-memoriza = make_pipeline(StandardScaler(), KNeighborsRegressor(n_neighbors=1)).fit(X, y)
-round(mean_squared_error(y, memoriza.predict(X)), 2)
+memoriza = KNeighborsRegressor(n_neighbors=1).fit(padronizado, y)
+round(mean_squared_error(y, memoriza.predict(padronizado)), 2)
 ```
 
 o erro sobre o próprio dado de treino cai a exatamente zero. Faz sentido: com um vizinho só, a renda prevista para cada pessoa é a renda daquela mesma pessoa — ela é o seu próprio vizinho mais próximo, a distância zero. O modelo não aprendeu nada sobre como escolaridade e senioridade se relacionam com renda; decorou as trinta respostas que já tinha. Essa armadilha tem nome — *overfitting* —, e é o preço que a flexibilidade cobra quando nada a segura: ajustar tão perto do dado observado que o modelo passa a repetir o ruído daquela amostra específica, em vez da relação que a gerou. A seção 7.6 mede isso a sério, contra dado que o modelo não viu durante o ajuste; aqui fica só o nome e o sintoma.
@@ -93,7 +92,7 @@ o erro sobre o próprio dado de treino cai a exatamente zero. Faz sentido: com u
 
 ## A rigidez de um contra a flexibilidade do outro
 
-A diferença fica mais clara em figura do que em número: as mesmas trinta pessoas, com a superfície que cada ajuste prevê para qualquer combinação de escolaridade e senioridade, não só as observadas.
+A diferença fica mais clara em figura do que em número: as mesmas trinta pessoas, com a superfície que cada ajuste prevê para qualquer combinação de escolaridade e senioridade, não só as observadas. Os pontos da malha abaixo também precisam de padronização antes de passar pelo k-NN — e usam a média e o desvio padrão do próprio treino (`X.mean()`, `X.std()`), nunca recalculados sobre a malha, porque é essa régua, e só essa, que o ajuste aprendeu.
 
 ```{python}
 #| label: fig-plano-e-flexivel
@@ -102,9 +101,10 @@ grade_escolaridade = np.linspace(X["escolaridade"].min(), X["escolaridade"].max(
 grade_senioridade = np.linspace(X["senioridade"].min(), X["senioridade"].max(), 60)
 malha_e, malha_s = np.meshgrid(grade_escolaridade, grade_senioridade)
 grade = pd.DataFrame({"escolaridade": malha_e.ravel(), "senioridade": malha_s.ravel()})
+grade_padronizada = (grade - X.mean()) / X.std()
 
 superficie_plano = plano.predict(grade).reshape(malha_e.shape)
-superficie_flexivel = flexivel.predict(grade).reshape(malha_e.shape)
+superficie_flexivel = flexivel.predict(grade_padronizada).reshape(malha_e.shape)
 
 niveis = np.linspace(
     min(superficie_plano.min(), superficie_flexivel.min()),
