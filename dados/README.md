@@ -130,6 +130,9 @@ Categorias também traduzidas: `No`/`Yes` viram `não`/`sim` em
 `imovel_proprio`, `estudante` e `casado`; em `regiao`, `East`/`South`/`West`
 viram `Leste`/`Sul`/`Oeste`.
 
+Unidades das colunas monetárias, como documentadas pelo ISLP: `renda` está
+em milhares de dólares; `limite` e `saldo` estão em dólares.
+
 **`Auto.csv`** — 397 automóveis, consumo e características técnicas.
 
 | Original (R) | Traduzida |
