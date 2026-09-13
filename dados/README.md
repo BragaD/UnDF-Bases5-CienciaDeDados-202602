@@ -91,6 +91,67 @@ mostrar, ao lado do ajuste, o erro que nenhum modelo consegue eliminar —
 coisa que não é possível fazer com dado real, onde o *f* verdadeiro é
 justamente o que se está tentando estimar.
 
+## `Credit.csv`, `Auto.csv` — os dois do capítulo 8 (ISLP)
+
+Do mesmo [site oficial de @james2023](https://www.statlearning.com/s/). O
+capítulo 8 (*Regressão Linear*, ISLP 3) usa os dois: `Credit` traz o
+preditor qualitativo e a colinearidade; `Auto` traz o termo não linear e o
+diagnóstico de resíduo.
+
+A coleta é feita pelo mesmo `scripts/baixar-dados.py`, que baixa a versão
+original em inglês:
+
+```bash
+docker compose run --rm --no-deps livro python scripts/baixar-dados.py
+```
+
+Depois do download, os cabeçalhos são traduzidos à mão. É essa tabela de-para
+que mantém a ponte com o livro-texto — o **nome do arquivo** não muda, só o
+cabeçalho:
+
+**`Credit.csv`** — 400 clientes, renda, uso de crédito e dados
+sociodemográficos. Não tem coluna de índice do R, só cabeçalho.
+
+| Original (R) | Traduzida |
+|---|---|
+| `Income` | `renda` |
+| `Limit` | `limite` |
+| `Rating` | `pontuacao` |
+| `Cards` | `cartoes` |
+| `Age` | `idade` |
+| `Education` | `escolaridade` |
+| `Own` | `imovel_proprio` |
+| `Student` | `estudante` |
+| `Married` | `casado` |
+| `Region` | `regiao` |
+| `Balance` | `saldo` |
+
+Categorias também traduzidas: `No`/`Yes` viram `não`/`sim` em
+`imovel_proprio`, `estudante` e `casado`; em `regiao`, `East`/`South`/`West`
+viram `Leste`/`Sul`/`Oeste`.
+
+Unidades das colunas monetárias, como documentadas pelo ISLP: `renda` está
+em milhares de dólares; `limite` e `saldo` estão em dólares.
+
+**`Auto.csv`** — 397 automóveis, milhas por galão e características técnicas.
+
+| Original (R) | Traduzida |
+|---|---|
+| `mpg` | `milhas_por_galao` |
+| `cylinders` | `cilindros` |
+| `displacement` | `cilindrada` |
+| `horsepower` | `potencia` |
+| `weight` | `peso` |
+| `acceleration` | `aceleracao` |
+| `year` | `ano` |
+| `origin` | `origem` |
+| `name` | `nome` |
+
+Só o cabeçalho muda: `origem` fica com o código numérico do livro (1, 2, 3),
+e `nome`, nome próprio de modelo de carro, fica em inglês. **Os cinco `?` de
+`potencia` foram preservados de propósito** — são a armadilha de tipo que uma
+das seções do capítulo usa, e o ISLP trabalha com as 392 linhas restantes.
+
 ## O que saiu
 
 Os conjuntos da abordagem de obtenção de dados abandonada — `stocks.csv`,

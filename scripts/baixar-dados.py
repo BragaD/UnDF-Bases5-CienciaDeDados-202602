@@ -32,8 +32,11 @@ def baixar(url: str, destino: Path) -> None:
 # verdadeiro é conhecido. Os cabeçalhos são traduzidos manualmente depois do
 # download — ver a tabela de-para em dados/README.md — e este script baixa
 # sempre a versão original em inglês, com o índice do R.
+# `Credit` e `Auto` entram com o capítulo 8 (ISLP 3): o primeiro é o exemplo
+# de preditor qualitativo e de colinearidade, o segundo o de termo não linear
+# e o de diagnóstico de resíduo.
 BASE_ISLP = "https://www.statlearning.com/s/"
-for nome in ["Advertising", "Income1", "Income2"]:
+for nome in ["Advertising", "Income1", "Income2", "Credit", "Auto"]:
     baixar(BASE_ISLP + f"{nome}.csv", DADOS / f"{nome}.csv")
 
 print("---")

@@ -1,0 +1,148 @@
+# Avaliando o Ajuste: R² e Erro
+
+::: {.callout-note}
+Esta seção corresponde à seção 3.1.3 de @james2023.
+:::
+
+Ajustar uma reta por mínimos quadrados sempre dá um $\hat\beta_0$ e um $\hat\beta_1$ — a seção anterior encontrou o par que minimiza RSS para `vendas ~ tv` e não sobrou nenhum outro candidato menor. A pergunta muda agora: o quanto essa reta *serve*. Duas medidas respondem isso, cada uma de um jeito, e as duas partem do mesmo RSS.
+
+```{python}
+#| label: setup
+#| include: false
+import matplotlib.pyplot as plt
+import numpy as np
+import pandas as pd
+from sklearn.linear_model import LinearRegression
+from sklearn.metrics import mean_squared_error, r2_score
+
+plt.style.use("estilo-figuras.mplstyle")
+
+propaganda = pd.read_csv("dados/Advertising.csv")
+X = propaganda[["tv"]]
+y = propaganda["vendas"]
+modelo = LinearRegression().fit(X, y)
+yhat = modelo.predict(X)
+```
+
+## O erro típico de previsão: RSE
+
+O erro-padrão residual (RSE) resume o RSS como um único número, na mesma unidade da resposta. É a raiz do RSS dividido não por $n$, e sim por $n-2$ — a reta já consumiu dois parâmetros, $\hat\beta_0$ e $\hat\beta_1$, antes de sobrar erro para medir:
+
+$$
+\text{RSE} = \sqrt{\frac{\text{RSS}}{n-2}}
+$$
+
+```{python}
+#| label: rse-conta
+n = len(y)
+n_menos_2 = n - 2
+rss = float(((y - yhat) ** 2).sum())
+rse_mao = float(np.sqrt(rss / n_menos_2))
+rse_mil_unidades = round(rse_mao * 1000)
+
+mse_sklearn = mean_squared_error(y, yhat)
+rse_via_mse = float(np.sqrt(mse_sklearn * n / n_menos_2))
+
+vendas_media = float(y.mean())
+percentual_erro = rse_mao / vendas_media * 100
+
+(
+    n,
+    n_menos_2,
+    round(rss, 2),
+    round(rse_mao, 4),
+    round(rse_via_mse, 4),
+    bool(np.isclose(rse_mao, rse_via_mse)),
+    rse_mil_unidades,
+    round(vendas_media, 4),
+    round(percentual_erro, 2),
+)
+```
+
+Duzentos mercados, `n_menos_2 = 198` depois de descontar os dois parâmetros que a reta gastou para se ajustar: RSS, 2.102,53, dividido por 198 e com a raiz, dá 3,2587. `mean_squared_error` calcula o mesmo RSS já dividido por $n$ — não por $n-2$ —, então recuperar o RSE a partir dele exige desfazer essa divisão antes de tirar a raiz; feito isso, os dois caminhos batem: 3,2587 nos dois casos, `True`.
+
+Vendas está em milhares de unidades, então 3,2587 quer dizer que a venda observada de um mercado típico se afasta da reta em cerca de 3.259 unidades — para cima ou para baixo, em média. Contra a venda média de 14,0225 mil unidades, esses 3,2587 mil unidades representam 23,24% dela: é esse o tamanho do erro típico de previsão, relativo à própria escala do que se está prevendo.
+
+## R²: a proporção de variância explicada
+
+RSE vem na unidade de `vendas`, e 3,2587 só diz alguma coisa a quem sabe a escala de vendas — não dá para comparar direto com o RSE de um modelo cuja resposta é medida em outra unidade. R² resolve isso descartando a unidade: é a fração do TSS — a variância total da resposta, antes de qualquer reta — que a regressão explica.
+
+$$
+\text{TSS} = \sum_{i=1}^n (y_i - \bar y)^2, \qquad R^2 = 1 - \frac{\text{RSS}}{\text{TSS}}
+$$
+
+```{python}
+#| label: r2-conta
+tss = float(((y - vendas_media) ** 2).sum())
+explicada = tss - rss
+
+r2_mao = 1 - rss / tss
+r2_sklearn = float(r2_score(y, yhat))
+r2_via_score = float(modelo.score(X, y))
+
+(
+    round(tss, 2),
+    round(explicada, 2),
+    round(r2_mao, 4),
+    round(r2_sklearn, 4),
+    round(r2_via_score, 4),
+    bool(np.isclose(r2_mao, r2_sklearn) and np.isclose(r2_mao, r2_via_score)),
+    round(r2_mao * 100, 2),
+)
+```
+
+TSS, a variância total de vendas antes de qualquer reta, sai 5.417,15; descontado o RSS de 2.102,53, sobram 3.314,62 de variância que a reta explica. A conta à mão, `r2_score` e `.score()` — os três caminhos para o mesmo número — concordam em 0,6119: `True`. Uma reta que usa só o investimento em TV explica 61,19% da variância de vendas, sem que esse número carregue unidade nenhuma — é isso que o torna comparável entre modelos onde o RSE não é.
+
+::: {.conceito}
+O **erro-padrão residual** (RSE) é a raiz de $\text{RSS}/(n-2)$: o tamanho típico do resíduo, na unidade da resposta. O **R²** é $1 - \text{RSS}/\text{TSS}$: a fração da variância da resposta que o modelo explica, sempre entre 0 e 1 e sem unidade — o que o torna comparável de um modelo para outro, mesmo quando o RSE não é.
+:::
+
+R² alto não garante que o modelo seja bom, nem R² baixo que ele seja ruim: os dois dependem de quanto do problema é o $\mathrm{Var}(\epsilon)$ que o capítulo anterior chamou de piso irredutível — nenhuma reta, nem a melhor possível, explica a parte da variância que é ruído puro.
+
+## O que a reta previu contra o que cada mercado vendeu
+
+```{python}
+#| label: verificacao-figura
+soma_confere = bool(np.isclose(rss + explicada, tss))
+explicada_maior_que_rss = bool(explicada > rss)
+soma_confere, explicada_maior_que_rss
+```
+
+RSS mais a parte explicada soma de volta o TSS — `soma_confere` é `True` — e a parte explicada é maior que a não explicada, `explicada_maior_que_rss` também `True`, o mesmo fato que R² > 0,5 já dizia.
+
+```{python}
+#| label: fig-previsto-observado-e-decomposicao
+#| fig-cap: "À esquerda, previsto contra observado para os duzentos mercados de Advertising, com a diagonal de previsão perfeita: a distância vertical de cada ponto até ela é o resíduo daquele mercado. À direita, o TSS decomposto em RSS (não explicada) e a parte que a reta explica, com R² anotado como a fração de cima."
+fig, (ax_diag, ax_barra) = plt.subplots(1, 2, figsize=(9, 4.2))
+
+limite = (min(y.min(), yhat.min()) - 1, max(y.max(), yhat.max()) + 1)
+ax_diag.plot(limite, limite, color="C1", linewidth=1.5, label="previsão perfeita")
+ax_diag.scatter(y, yhat, color="C0", s=16, alpha=0.7, label="mercado")
+ax_diag.set_xlim(limite)
+ax_diag.set_ylim(limite)
+ax_diag.set_aspect("equal")
+ax_diag.set_xlabel("vendas observadas (mil unidades)")
+ax_diag.set_ylabel("vendas previstas (mil unidades)")
+ax_diag.legend()
+
+ax_barra.bar(0, rss, color="C1", label="RSS (não explicada)")
+ax_barra.bar(0, explicada, bottom=rss, color="C0", label="explicada (TSS − RSS)")
+ax_barra.annotate(
+    f"R² = {r2_mao:.3f}",
+    xy=(0, rss + explicada / 2),
+    xytext=(0.55, rss + explicada / 2),
+    va="center",
+    fontsize=9,
+    arrowprops={"arrowstyle": "-", "linewidth": 0.8},
+)
+ax_barra.set_xlim(-0.6, 1.6)
+ax_barra.set_xticks([0])
+ax_barra.set_xticklabels(["TSS"])
+ax_barra.set_ylabel("soma de quadrados")
+ax_barra.legend(loc="upper right")
+
+plt.tight_layout()
+plt.show()
+```
+
+À esquerda, cada ponto é um mercado: quanto mais perto da diagonal, menor o resíduo que a seção anterior somou ao quadrado para formar o RSS. À direita, a mesma barra que soma TSS — verificado acima — dividida nas duas parcelas que R² compara: o pedaço laranja é o RSS que a reta deixou sem explicar, o azul é a fatia que R² = 0,612 mede como proporção do todo.

@@ -11,6 +11,8 @@ ESPERADOS = [
     "Advertising.csv",
     "Income1.csv",
     "Income2.csv",
+    "Credit.csv",
+    "Auto.csv",
 ]
 
 COLUNAS_ESPERADAS = {
@@ -19,6 +21,14 @@ COLUNAS_ESPERADAS = {
     "Advertising.csv": ["tv", "radio", "jornal", "vendas"],
     "Income1.csv": ["escolaridade", "renda"],
     "Income2.csv": ["escolaridade", "senioridade", "renda"],
+    "Credit.csv": [
+        "renda", "limite", "pontuacao", "cartoes", "idade", "escolaridade",
+        "imovel_proprio", "estudante", "casado", "regiao", "saldo",
+    ],
+    "Auto.csv": [
+        "milhas_por_galao", "cilindros", "cilindrada", "potencia", "peso",
+        "aceleracao", "ano", "origem", "nome",
+    ],
 }
 
 
@@ -45,6 +55,23 @@ def test_alugueis_preserva_a_armadilha_do_andar():
         linhas = list(csv.DictReader(f))
     assert len(linhas) == 10692
     assert sum(1 for l in linhas if l["andar"] == "-") == 2461
+
+
+def test_auto_preserva_a_armadilha_da_potencia():
+    """A seção 8.5 ensina sobre estas cinco linhas exatas; se elas sumirem, a
+    seção mente.
+
+    Alguém "consertando" o CSV — preenchendo os `?` com a mediana, por
+    exemplo — faria `potencia` chegar como número direto do `read_csv` e a
+    seção passaria a explicar uma conversão de tipo que o arquivo já não
+    precisa. O ISLP trabalha com as 392 linhas que sobram depois de
+    descartar essas cinco.
+    """
+    import csv
+    with (RAIZ / "dados" / "Auto.csv").open(encoding="utf-8") as f:
+        linhas = list(csv.DictReader(f))
+    assert len(linhas) == 397
+    assert sum(1 for l in linhas if l["potencia"] == "?") == 5
 
 
 def test_colunas_estao_em_portugues():

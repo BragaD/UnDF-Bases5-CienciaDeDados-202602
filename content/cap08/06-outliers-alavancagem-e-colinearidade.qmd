@@ -1,0 +1,407 @@
+# Outliers, Alavancagem e Colinearidade
+
+::: {.callout-note}
+Esta seção corresponde à seção 3.3.3 de @james2023.
+:::
+
+A seção 8.5 comparou reta, parábola e polinômio de grau 5 ajustados a `potencia`, olhando tanto para o R² de cada um quanto para o quanto a curva de grau 5 ondula nas pontas. Nenhuma dessas duas medidas, porém, diz se o erro que sobra num ajuste tem um padrão que uma curva melhor teria capturado, se um único carro está puxando o ajuste sozinho, ou se dois preditores andam tão juntos que seus coeficientes deixaram de significar algo isolado. Esta seção olha para essas perguntas — o padrão que sobra no resíduo, o outlier, a alavancagem e a colinearidade —, e o instrumento comum às quatro é o gráfico.
+
+```{python}
+#| label: setup
+#| include: false
+import matplotlib.pyplot as plt
+import numpy as np
+import pandas as pd
+from sklearn.linear_model import LinearRegression
+from sklearn.metrics import r2_score
+
+plt.style.use("estilo-figuras.mplstyle")
+
+auto = pd.read_csv("dados/Auto.csv")
+auto["potencia"] = pd.to_numeric(auto["potencia"], errors="coerce")
+auto = auto.dropna(subset=["potencia"]).reset_index(drop=True)
+auto["potencia2"] = auto["potencia"] ** 2
+```
+
+## O resíduo contra o previsto: onde a reta ainda erra
+
+```{python}
+#| label: modelos-potencia
+y_milhas = auto["milhas_por_galao"].to_numpy()
+n = len(auto)
+
+X1 = auto[["potencia"]]
+modelo1 = LinearRegression().fit(X1, y_milhas)
+previsto1 = modelo1.predict(X1)
+residuo1 = y_milhas - previsto1
+rse1 = float(np.sqrt((residuo1**2).sum() / (n - 1 - 1)))
+r2_1 = float(r2_score(y_milhas, previsto1))
+
+X2 = auto[["potencia", "potencia2"]]
+modelo2 = LinearRegression().fit(X2, y_milhas)
+previsto2 = modelo2.predict(X2)
+residuo2 = y_milhas - previsto2
+rse2 = float(np.sqrt((residuo2**2).sum() / (n - 2 - 1)))
+r2_2 = float(r2_score(y_milhas, previsto2))
+
+n, round(r2_1, 2), round(rse1, 2), round(r2_2, 2), round(rse2, 2)
+```
+
+Restam os 392 carros que a 8.5 já deixou sem o `"?"` de `potencia`. Ajustada só contra `potencia`, a reta explica 0,61 da variância de `milhas_por_galao`, com erro típico de 4,91 milhas por galão; somando `potencia²`, o R² sobe para 0,69 e o erro cai para 4,37. Essas duas medidas dizem o quanto o modelo erra em média — não dizem se o erro que sobra tem um padrão que a reta deveria ter capturado. Para isso serve o resíduo contra o previsto, não a resposta bruta.
+
+```{python}
+#| label: fig-residuo-previsto
+#| fig-cap: "Resíduo contra o valor previsto, para o ajuste de milhas_por_galao sobre potencia (esquerda) e sobre potencia e potencia² (direita), nos 392 carros com potencia numérica. A linha laranja liga a média do resíduo em cada uma de oito faixas do valor previsto: à esquerda ela desce e sobe de novo, desenhando o U que indica não linearidade; à direita as médias ficam bem mais próximas de zero — embora a faixa mais alta ainda chegue a -2,94 —, sem o formato de U."
+def medias_por_faixa(previsto, residuo, n_faixas=8):
+    faixa = pd.cut(previsto, n_faixas)
+    df = pd.DataFrame({"previsto": previsto, "residuo": residuo, "faixa": faixa})
+    return df.groupby("faixa", observed=True).agg(
+        previsto_medio=("previsto", "mean"), residuo_medio=("residuo", "mean")
+    )
+
+medias1 = medias_por_faixa(previsto1, residuo1)
+medias2 = medias_por_faixa(previsto2, residuo2)
+
+fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(10, 4.3), sharey=True)
+for ax, previsto, residuo, medias, titulo in [
+    (ax1, previsto1, residuo1, medias1, "grau 1"),
+    (ax2, previsto2, residuo2, medias2, "grau 2"),
+]:
+    ax.axhline(0, color="C2", linewidth=1, linestyle="--")
+    ax.scatter(previsto, residuo, color="C0", s=14, alpha=0.4)
+    ax.plot(
+        medias["previsto_medio"], medias["residuo_medio"],
+        color="C1", linewidth=2, marker="o", markersize=6,
+    )
+    ax.set_title(titulo)
+    ax.set_xlabel("previsto (milhas por galão)")
+ax1.set_ylabel("resíduo")
+plt.tight_layout()
+plt.show()
+```
+
+```{python}
+#| label: variacao-do-residuo-medio
+desvio_medias1 = float(medias1["residuo_medio"].std(ddof=0))
+desvio_medias2 = float(medias2["residuo_medio"].std(ddof=0))
+
+round(desvio_medias1, 2), round(desvio_medias2, 2)
+```
+
+O formato conta a história: à esquerda, as oito médias por faixa desenham um U — alta nas duas pontas, negativa no meio —, e o desvio-padrão entre elas é 3,15; à direita, `potencia²` já resolveu boa parte desse padrão, e o mesmo desvio-padrão cai para 1,38. Sobra menos estrutura para o modelo explicar depois de somar o termo quadrático.
+
+## O ponto que o modelo erra sozinho: outlier
+
+::: {.conceito}
+O **resíduo padronizado** de uma observação é o resíduo dividido pelo erro-padrão da regressão (RSE) daquele ajuste, $e_i / \text{RSE}$. O ISLP usa uma versão mais refinada, que divide cada resíduo pelo seu próprio erro-padrão estimado — o **resíduo estudentizado** — e aponta valores acima de 3 em módulo como possíveis outliers: um ponto cuja resposta observada está longe da prevista, mesmo depois de descontar a escala típica do erro.
+:::
+
+```{python}
+#| label: residuo-padronizado
+residuo_padronizado = residuo2 / rse2
+idx_pior = int(np.argmax(np.abs(residuo_padronizado)))
+nome_pior = auto.loc[idx_pior, "nome"]
+pior_valor = float(residuo_padronizado[idx_pior])
+n_acima_de_3 = int((np.abs(residuo_padronizado) > 3).sum())
+segundo_pior_valor = float(np.sort(np.abs(residuo_padronizado))[-2])
+
+nome_pior, round(pior_valor, 2), n_acima_de_3, round(segundo_pior_valor, 2)
+```
+
+O maior resíduo padronizado, em valor absoluto, é o do `datsun 280-zx`: 3,63, acima do corte de 3 que o ISLP usa para sinalizar um possível outlier. Mas ele não está isolado do resto: cinco dos 392 carros passam de 3 em módulo, e o segundo colocado, 3,38, fica a menos de 0,3 de distância do primeiro — um candidato a outlier, não um ponto isolado do resto como no exemplo do livro-texto.
+
+```{python}
+#| label: efeito-de-remover-o-pior-ponto
+mascara_sem_pior = np.ones(n, dtype=bool)
+mascara_sem_pior[idx_pior] = False
+
+modelo2_sem_pior = LinearRegression().fit(X2[mascara_sem_pior], y_milhas[mascara_sem_pior])
+previsto2_sem_pior = modelo2_sem_pior.predict(X2[mascara_sem_pior])
+r2_2_sem_pior = float(r2_score(y_milhas[mascara_sem_pior], previsto2_sem_pior))
+
+coef_potencia_antes = float(modelo2.coef_[0])
+coef_potencia_depois = float(modelo2_sem_pior.coef_[0])
+
+round(r2_2, 2), round(r2_2_sem_pior, 2), round(coef_potencia_antes, 2), round(coef_potencia_depois, 2)
+```
+
+Tirar só esse carro e reajustar muda pouco: o R² sobe de 0,69 para 0,70, e o coeficiente de `potencia` continua em -0,47 nas duas casas decimais. É um outlier fraco — desvia bastante em y, mas não desloca o ajuste porque o seu valor de `potencia` não é incomum: como a medição logo adiante mostra, a alavancagem desse carro fica abaixo da média das 392 observações. Um outlier de alta alavancagem desloca o ajuste; um outlier de baixa alavancagem, como este, não.
+
+## Alavancagem: quando o exagero está no eixo x
+
+::: {.conceito}
+A **alavancagem** $h_{ii}$ de uma observação mede o quão incomum é o seu valor de preditor — não o quão longe a resposta observada fica da prevista. Em regressão simples, o ISLP dá a fórmula fechada, a equação (3.37) do livro-texto:
+
+$$
+h_i = \frac{1}{n} + \frac{(x_i - \bar{x})^2}{\displaystyle\sum_{i'=1}^{n} (x_{i'} - \bar{x})^2}.
+$$
+
+$h_i$ cresce com a distância de $x_i$ à média. Com mais de um preditor, a extensão é a **matriz chapéu** (*hat matrix*):
+
+$$
+H = X (X^\top X)^{-1} X^\top, \qquad h_{ii} = H_{ii},
+$$
+
+em que $X$ tem uma coluna de 1 para o intercepto e uma coluna para cada preditor. $h_{ii}$ está sempre entre $1/n$ e 1, e sua média sobre as $n$ observações é sempre $(p+1)/n$, com $p$ preditores.
+:::
+
+```{python}
+#| label: matriz-chapeu
+X_design = np.column_stack([np.ones(n), X2.to_numpy()])
+H = X_design @ np.linalg.inv(X_design.T @ X_design) @ X_design.T
+alavancagem = np.diag(H)
+
+p = X2.shape[1]
+media_alavancagem = float(alavancagem.mean())
+alavancagem_esperada = (p + 1) / n
+alavancagem_bate_com_formula = bool(np.isclose(media_alavancagem, alavancagem_esperada))
+
+round(media_alavancagem, 4), round(alavancagem_esperada, 4), alavancagem_bate_com_formula
+```
+
+A média das 392 alavancagens, 0,0077, bate com $(p+1)/n$ para $p=2$ preditores — `alavancagem_bate_com_formula` confirma `True`. Não é um acaso deste ajuste em particular; é o que a fórmula promete para qualquer regressão linear.
+
+```{python}
+#| label: nenhum-carro-e-outlier-e-alta-alavancagem
+limiar_alavancagem = 3 * media_alavancagem
+alta_alavancagem = alavancagem > limiar_alavancagem
+e_outlier = np.abs(residuo_padronizado) > 3
+
+n_alta_alavancagem = int(alta_alavancagem.sum())
+maior_residuo_entre_alta_alavancagem = float(np.max(np.abs(residuo_padronizado[alta_alavancagem])))
+maior_alavancagem_entre_outliers = float(np.max(alavancagem[e_outlier]))
+nenhum_carro_e_os_dois = bool(not np.any(alta_alavancagem & e_outlier))
+
+(
+    n_alta_alavancagem,
+    round(maior_residuo_entre_alta_alavancagem, 2),
+    round(maior_alavancagem_entre_outliers, 4),
+    nenhum_carro_e_os_dois,
+)
+```
+
+Um critério usual para "alavancagem alta" é passar do triplo da média: dos 15 carros que passam desse limiar, o maior resíduo padronizado em módulo é 2,76 — abaixo do corte de outlier; dos 5 carros com resíduo padronizado acima de 3, a maior alavancagem é 0,0076 — abaixo da própria média. `nenhum_carro_e_os_dois` confirma `True`: nenhum carro deste conjunto combina os dois problemas ao mesmo tempo, o que a figura a seguir mostra.
+
+```{python}
+#| label: fig-residuo-alavancagem
+#| fig-cap: "Resíduo padronizado contra alavancagem, para os 392 carros no ajuste com potencia e potencia². O ponto laranja é o pior resíduo (datsun 280-zx); o ponto roxo é a maior alavancagem (pontiac grand prix). São problemas diferentes, e nenhum carro combina os dois."
+idx_maior_alavancagem = int(np.argmax(alavancagem))
+nome_maior_alavancagem = auto.loc[idx_maior_alavancagem, "nome"]
+
+fig, ax = plt.subplots()
+ax.axhline(0, color="C2", linewidth=1, linestyle="--")
+ax.scatter(alavancagem, residuo_padronizado, color="C0", s=16, alpha=0.45)
+ax.scatter([alavancagem[idx_pior]], [residuo_padronizado[idx_pior]], color="C1", s=55, zorder=3)
+ax.annotate(
+    nome_pior, xy=(alavancagem[idx_pior], residuo_padronizado[idx_pior]),
+    xytext=(8, 4), textcoords="offset points", fontsize=8,
+)
+ax.scatter(
+    [alavancagem[idx_maior_alavancagem]], [residuo_padronizado[idx_maior_alavancagem]],
+    color="C3", s=55, zorder=3,
+)
+ax.annotate(
+    nome_maior_alavancagem,
+    xy=(alavancagem[idx_maior_alavancagem], residuo_padronizado[idx_maior_alavancagem]),
+    xytext=(8, 4), textcoords="offset points", fontsize=8,
+)
+ax.set_xlabel("alavancagem")
+ax.set_ylabel("resíduo padronizado")
+plt.tight_layout()
+plt.show()
+```
+
+```{python}
+#| label: leverage-vs-outlier-comparacao
+alavancagem_do_pior_residuo = float(alavancagem[idx_pior])
+maior_alavancagem = float(alavancagem[idx_maior_alavancagem])
+residuo_padronizado_da_maior_alavancagem = float(residuo_padronizado[idx_maior_alavancagem])
+potencia_da_maior_alavancagem = float(auto.loc[idx_maior_alavancagem, "potencia"])
+potencia_e_a_maior_do_conjunto = bool(potencia_da_maior_alavancagem == auto["potencia"].max())
+
+(
+    round(alavancagem_do_pior_residuo, 4),
+    round(maior_alavancagem, 2),
+    round(residuo_padronizado_da_maior_alavancagem, 2),
+    potencia_da_maior_alavancagem,
+    potencia_e_a_maior_do_conjunto,
+)
+```
+
+O `datsun 280-zx`, o pior resíduo, tem alavancagem 0,0066 — abaixo da média 0,0077: seu problema é só em y, o valor previsto para a sua `potencia`. Do outro lado, o `pontiac grand prix` tem a maior alavancagem do conjunto, 0,09, e `potencia_e_a_maior_do_conjunto` confirma por quê: sua `potencia`, 230 hp, é a mais alta entre os 392 carros. Mas seu resíduo padronizado é só 0,28, longe do corte de 3 — os dois carros ilustram, cada um do seu lado, o que o chunk anterior já tinha confirmado para o conjunto inteiro.
+
+Tirar o pior resíduo mexeu pouco no ajuste. Resta a mesma pergunta para o outro carro: a maior alavancagem do conjunto desloca o ajuste sozinha?
+
+```{python}
+#| label: efeito-de-remover-a-maior-alavancagem
+mascara_sem_alavancagem = np.ones(n, dtype=bool)
+mascara_sem_alavancagem[idx_maior_alavancagem] = False
+
+modelo2_sem_alavancagem = LinearRegression().fit(
+    X2[mascara_sem_alavancagem], y_milhas[mascara_sem_alavancagem]
+)
+previsto2_sem_alavancagem = modelo2_sem_alavancagem.predict(X2[mascara_sem_alavancagem])
+r2_2_sem_alavancagem = float(r2_score(y_milhas[mascara_sem_alavancagem], previsto2_sem_alavancagem))
+coef_potencia_sem_alavancagem = float(modelo2_sem_alavancagem.coef_[0])
+
+(
+    round(r2_2, 4),
+    round(r2_2_sem_alavancagem, 4),
+    round(coef_potencia_antes, 4),
+    round(coef_potencia_sem_alavancagem, 4),
+)
+```
+
+Reajustando sem o `pontiac grand prix`, o R² vai de 0,6876 a 0,6869 e o coeficiente de `potencia`, de -0,4662 a -0,4641 — uma alavancagem alta dá a uma observação a *chance* de puxar o ajuste, e não a garantia de que ela puxe: para puxar de fato, ela precisaria também cair longe da curva, e este carro não cai.
+
+## Colinearidade: quando dois preditores quase se confundem
+
+```{python}
+#| label: leitura-credit
+credit = pd.read_csv("dados/Credit.csv")
+y_saldo = credit["saldo"].to_numpy().astype(float)
+
+correlacoes_credit = credit[["limite", "pontuacao", "idade"]].corr()
+correlacoes_credit.round(3)
+```
+
+`limite` e `pontuacao` correlacionam a 0,997 — quase 1, mas não exatamente, como o VIF adiante confirma —; `limite` e `idade`, a 0,10. Um sobe junto com o outro; o outro não tem relação visível com nenhum dos dois.
+
+```{python}
+#| label: modelos-colinearidade
+X_idade_limite = credit[["idade", "limite"]]
+modelo_idade_limite = LinearRegression().fit(X_idade_limite, y_saldo)
+
+X_pontuacao_limite = credit[["pontuacao", "limite"]]
+modelo_pontuacao_limite = LinearRegression().fit(X_pontuacao_limite, y_saldo)
+
+coef_idade = float(modelo_idade_limite.coef_[0])
+coef_limite_com_idade = float(modelo_idade_limite.coef_[1])
+coef_pontuacao = float(modelo_pontuacao_limite.coef_[0])
+coef_limite_com_pontuacao = float(modelo_pontuacao_limite.coef_[1])
+
+round(coef_idade, 2), round(coef_limite_com_idade, 2), round(coef_pontuacao, 2), round(coef_limite_com_pontuacao, 2)
+```
+
+Com `idade`, o coeficiente de `limite` é 0,17 (o de `idade`, -2,29): mais um dólar de limite está associado a 0,17 dólar a mais de saldo, mantendo a idade fixa. Trocando `idade` por `pontuacao` — que anda junto com `limite` — o coeficiente de `limite` cai para 0,02, e o de `pontuacao` sobe para 2,20. `limite` não perdeu poder explicativo: a colinearidade só redistribuiu o crédito entre os dois preditores que se sobrepõem, e não há como separar, só olhando os coeficientes, quanto é de cada um.
+
+::: {.conceito}
+O **fator de inflação da variância** (VIF) de um preditor $X_j$ é
+
+$$
+\text{VIF}(\hat\beta_j) = \frac{1}{1 - R^2_{X_j \mid X_{-j}}},
+$$
+
+em que $R^2_{X_j \mid X_{-j}}$ é o R² da regressão de $X_j$ sobre todos os demais preditores — uma conta de R², não uma estatística de teste. VIF = 1 é ausência completa de colinearidade; o ISLP usa 5 ou 10 como referência para um VIF problemático.
+:::
+
+```{python}
+#| label: vif-credit
+def vif(preditor, tabela, todos):
+    outros = [c for c in todos if c != preditor]
+    modelo_aux = LinearRegression().fit(tabela[outros], tabela[preditor])
+    r2_aux = r2_score(tabela[preditor], modelo_aux.predict(tabela[outros]))
+    return 1 / (1 - r2_aux)
+
+preditores_vif = ["idade", "limite", "pontuacao"]
+vif_idade = vif("idade", credit, preditores_vif)
+vif_limite = vif("limite", credit, preditores_vif)
+vif_pontuacao = vif("pontuacao", credit, preditores_vif)
+
+round(vif_idade, 2), round(vif_limite, 2), round(vif_pontuacao, 2)
+```
+
+`idade` sai com VIF 1,01 — sem colinearidade —; `limite` e `pontuacao` saem com 160,59 e 160,67, muito acima da referência de 5 a 10 que o ISLP usa para um VIF problemático. A correlação já mostrava os dois andando juntos; o VIF põe número nisso, e quanto mais alto ele é, mais larga fica a faixa de pares de coeficientes que quase empatam em RSS.
+
+A seção 8.1 mostrou que RSS, como função dos coeficientes, é um vale com um único fundo. Colinearidade não muda isso — ainda há um único mínimo —, mas muda o formato do vale ao redor dele.
+
+```{python}
+#| label: fig-rss-colinearidade
+#| fig-cap: "Curvas de nível do RSS da regressão de saldo sobre dois preditores, em função dos coeficientes desses dois preditores — o intercepto fica fixo na média de saldo. Esquerda: idade e limite, que quase não se correlacionam — o vale é uma elipse fechada e comparativamente redonda. Direita: pontuacao e limite, que correlacionam a 0,997 — o vale vira uma calha comprida e estreita, na diagonal: muitos pares (β_pontuacao, β_limite) quase empatam em RSS. As escalas de β_limite dos dois painéis são diferentes — a calha da direita ocupa uma faixa bem mais larga do eixo —, então parecer mais fina não significa mais precisa: é a mesma largura relativa, numa escala maior. O ponto marca o par que minimiza RSS em cada ajuste."
+def grade_rss(preditores, k=8, pontos=700, niveis_relativos=(0.02, 0.05, 0.1, 0.2, 0.4)):
+    X = credit[preditores].to_numpy(dtype=float)
+    Xc = X - X.mean(axis=0)
+    yc = y_saldo - y_saldo.mean()
+    M = Xc.T @ Xc
+    M_inv = np.linalg.inv(M)
+    beta_hat = np.linalg.lstsq(Xc, yc, rcond=None)[0]
+    rss_min = float(((yc - Xc @ beta_hat) ** 2).sum())
+
+    largura0 = np.sqrt(0.01 * rss_min * M_inv[0, 0])
+    largura1 = np.sqrt(0.01 * rss_min * M_inv[1, 1])
+    grade0 = np.linspace(beta_hat[0] - k * largura0, beta_hat[0] + k * largura0, pontos)
+    grade1 = np.linspace(beta_hat[1] - k * largura1, beta_hat[1] + k * largura1, pontos)
+    malha0, malha1 = np.meshgrid(grade0, grade1)
+    d0, d1 = malha0 - beta_hat[0], malha1 - beta_hat[1]
+    rss = rss_min + M[0, 0] * d0**2 + 2 * M[0, 1] * d0 * d1 + M[1, 1] * d1**2
+    niveis = rss_min * (1 + np.array(niveis_relativos))
+    return malha0, malha1, rss, niveis, beta_hat
+
+larguras_das_curvas = [2.2, 1.8, 1.4, 1.0, 0.7]
+
+fig, (ax_a, ax_b) = plt.subplots(1, 2, figsize=(10, 4.6))
+contornos_pares = []
+for ax, preditores, rotulos in [
+    (ax_a, ["idade", "limite"], ("coeficiente de idade", "coeficiente de limite")),
+    (ax_b, ["pontuacao", "limite"], ("coeficiente de pontuacao", "coeficiente de limite")),
+]:
+    malha0, malha1, rss, niveis, beta_hat = grade_rss(preditores)
+    contornos = ax.contour(malha0, malha1, rss, levels=niveis, colors="C0", linewidths=larguras_das_curvas)
+    ax.scatter([beta_hat[0]], [beta_hat[1]], color="C1", s=35, zorder=3)
+    ax.set_xlabel(rotulos[0])
+    ax.set_ylabel(rotulos[1])
+    contornos_pares.append(contornos)
+plt.tight_layout()
+plt.show()
+```
+
+```{python}
+#| label: curvas-fechadas-colinearidade
+def conta_fechadas(contornos):
+    total, fechadas = 0, 0
+    for segmentos_do_nivel in contornos.allsegs:
+        for segmento in segmentos_do_nivel:
+            if len(segmento) == 0:
+                continue
+            total += 1
+            if np.allclose(segmento[0], segmento[-1]):
+                fechadas += 1
+    return total, fechadas
+
+total_a, fechadas_a = conta_fechadas(contornos_pares[0])
+total_b, fechadas_b = conta_fechadas(contornos_pares[1])
+
+total_a, fechadas_a, total_b, fechadas_b
+```
+
+As cinco curvas de cada painel fecham: `fechadas_a` e `fechadas_b` batem com `total_a` e `total_b` — 5 de 5 nos dois casos. Nenhuma é ladeira aberta se confundindo com vale, nem no par redondo nem no par esticado.
+
+```{python}
+#| label: largura-da-faixa-quase-minima
+def largura_beta_limite(preditores, eps):
+    X = credit[preditores].to_numpy(dtype=float)
+    Xc = X - X.mean(axis=0)
+    yc = y_saldo - y_saldo.mean()
+    M = Xc.T @ Xc
+    M_inv = np.linalg.inv(M)
+    beta_hat = np.linalg.lstsq(Xc, yc, rcond=None)[0]
+    rss_min = float(((yc - Xc @ beta_hat) ** 2).sum())
+    return 2 * float(np.sqrt(eps * rss_min * M_inv[1, 1]))
+
+def razao_larguras(eps):
+    return largura_beta_limite(["pontuacao", "limite"], eps) / largura_beta_limite(["idade", "limite"], eps)
+
+largura_idade_limite = largura_beta_limite(["idade", "limite"], 0.01)
+largura_pontuacao_limite = largura_beta_limite(["pontuacao", "limite"], 0.01)
+razao_com_1_por_cento = razao_larguras(0.01)
+razao_com_5_por_cento = razao_larguras(0.05)
+razao_invariante_em_eps = bool(np.isclose(razao_com_1_por_cento, razao_com_5_por_cento))
+
+round(largura_idade_limite, 2), round(largura_pontuacao_limite, 2), round(razao_com_1_por_cento, 2), razao_invariante_em_eps
+```
+
+A largura mede a calha diretamente: fixando o outro coeficiente no valor que melhor cabe, a faixa de $\beta_{\text{limite}}$ que ainda deixa RSS a até 1% do mínimo mede 0,02 no par (idade, limite) e 0,25 no par (pontuacao, limite) — 12,70 vezes mais larga. O limiar de 1% é só uma janela para medir; a razão entre as duas larguras não depende dele, porque as duas larguras crescem com $\sqrt{\varepsilon}$ e o $\varepsilon$ cancela na divisão — repetindo a conta com 5% em vez de 1%, `razao_invariante_em_eps` confirma `True`. É essa largura que a calha da figura desenha: quanto mais colinear o par, mais larga é a faixa de pares de coeficientes que o dado observado quase não distingue — e é isso que torna os coeficientes instáveis.
+
+## Quatro problemas, um instrumento comum
+
+Não linearidade, outlier, alavancagem e colinearidade não vêm sempre juntos. Neste capítulo, o U do resíduo linear tinha causa clara — faltava `potencia²` — e diminui bastante ao corrigi-la, com o desvio-padrão das médias por faixa caindo de 3,15 para 1,38; o outlier e a maior alavancagem recaíram sobre carros diferentes, e tirar qualquer um dos dois e reajustar mexeu pouco no R² — de 0,69 para 0,70 sem o outlier, de 0,6876 para 0,6869 sem a maior alavancagem —, nenhum com força para deslocar o ajuste sozinho; e foi só em `Credit`, com dois preditores que andam quase colados, que a colinearidade apareceu, alargando em mais de doze vezes a faixa de coeficientes que quase empatam em RSS. Cada um pede o instrumento certo para se revelar — um gráfico, nos três primeiros; um número, o VIF, na colinearidade —, e nenhum aparece só olhando R².

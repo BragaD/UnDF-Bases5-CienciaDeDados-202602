@@ -1,0 +1,239 @@
+# Interação e Termos Não Lineares
+
+::: {.callout-note}
+Esta seção corresponde à seção 3.3.2 de @james2023.
+:::
+
+A leitura que a seção 8.3 instalou — cada coeficiente mede o efeito do seu preditor mantendo os demais fixos — carrega duas suposições que até aqui ficaram sem exame. A primeira é que o efeito de um preditor não muda com o nível dos outros; a segunda é que esse efeito é constante ao longo de toda a faixa do preditor, ou seja, que a relação é uma reta. As duas têm nome — aditividade e linearidade — e as duas podem ser testadas em vez de assumidas. Esta seção testa as duas: primeiro solta a aditividade entre `tv` e `radio`, depois solta a linearidade entre `potencia` e `milhas_por_galao`.
+
+```{python}
+#| label: setup
+#| include: false
+import matplotlib.pyplot as plt
+import numpy as np
+import pandas as pd
+from sklearn.linear_model import LinearRegression
+from sklearn.metrics import r2_score
+from sklearn.pipeline import make_pipeline
+from sklearn.preprocessing import PolynomialFeatures, StandardScaler
+
+plt.style.use("estilo-figuras.mplstyle")
+```
+
+## O modelo aditivo assume demais
+
+```{python}
+#| label: leitura-advertising
+propaganda = pd.read_csv("dados/Advertising.csv")
+y_vendas = propaganda["vendas"]
+
+X_aditivo = propaganda[["tv", "radio"]]
+modelo_aditivo = LinearRegression().fit(X_aditivo, y_vendas)
+r2_aditivo = float(r2_score(y_vendas, modelo_aditivo.predict(X_aditivo)))
+
+round(r2_aditivo, 4)
+```
+
+O modelo aditivo de `tv` e `radio` — o mesmo que a seção 8.3 fechou apontando um padrão no resíduo — explica 0,8972 da variância de vendas. "Aditivo" é a palavra técnica para uma suposição específica: o quanto vendas sobe para cada dólar a mais em `tv` é sempre o mesmo $\hat\beta_1$, não importa quanto se gasta em `radio` — as duas mídias contribuem em paralelo, sem uma alterar o efeito da outra. É uma suposição conveniente, e nada nela garante que seja verdadeira.
+
+## Uma interação entre as duas mídias
+
+::: {.conceito}
+Um **termo de interação** soma ao modelo o produto de dois preditores, $X_1 \cdot X_2$. Ele relaxa a aditividade: reescrevendo $\beta_0 + \beta_1 X_1 + \beta_2 X_2 + \beta_3 X_1 X_2$ em função de $X_1$, o coeficiente que multiplica $X_1$ deixa de ser a constante $\beta_1$ e passa a ser $\beta_1 + \beta_3 X_2$ — um valor que muda com $X_2$. O efeito de um preditor passa a depender do nível do outro.
+:::
+
+```{python}
+#| label: coluna-interacao
+propaganda["tv_radio"] = propaganda["tv"] * propaganda["radio"]
+
+X_interacao = propaganda[["tv", "radio", "tv_radio"]]
+modelo_interacao = LinearRegression().fit(X_interacao, y_vendas)
+r2_interacao = float(r2_score(y_vendas, modelo_interacao.predict(X_interacao)))
+
+round(r2_interacao, 4)
+```
+
+```{python}
+#| label: comparacao-aditivo-interacao
+comparacao_interacao = pd.DataFrame(
+    {"R²": [r2_aditivo, r2_interacao]},
+    index=["aditivo (tv + radio)", "com interação (tv + radio + tv×radio)"],
+).round(4)
+interacao_supera_aditivo = bool(r2_interacao > r2_aditivo)
+pct_restante_explicado = round((r2_interacao - r2_aditivo) / (1 - r2_aditivo) * 100, 1)
+
+comparacao_interacao, interacao_supera_aditivo, pct_restante_explicado
+```
+
+`interacao_supera_aditivo` confirma que somar a coluna `tv_radio` sobe o R² — de 0,8972 para 0,9678. Da variância que ainda sobrava depois do modelo aditivo, 68,7% foi explicada pela interação.
+
+```{python}
+#| label: coeficientes-interacao
+coef_interacao = pd.Series(modelo_interacao.coef_, index=modelo_interacao.feature_names_in_)
+coef_interacao_mil = (coef_interacao * 1000).round(2)
+
+coef_interacao.round(4), coef_interacao_mil
+```
+
+Os três coeficientes ficam positivos: 0,0191 para `tv`, 0,0289 para `radio`, 0,0011 para `tv_radio`. Postos em dólares por mil — 19,10, 28,86 e 1,09 — eles compõem a leitura que o conceito acima descreveu em símbolos: cada mil dólares a mais em `tv`, mantendo `radio` fixo, está associado a (19,10 + 1,09 × radio) unidades a mais de venda; cada mil dólares a mais em `radio`, mantendo `tv` fixo, a (28,86 + 1,09 × tv) unidades a mais. O efeito de uma mídia cresce com o nível da outra — é essa a "sinergia" que o termo de interação captura, e é ela que falta ao modelo aditivo.
+
+::: {.conceito}
+O **princípio da hierarquia** diz que, se um termo de interação entra no modelo, os dois termos principais que o compõem entram junto — mesmo que o coeficiente de algum deles pareça pequeno diante do outro. A razão: `tv_radio` está correlacionada com `tv` e com `radio`, então excluir um dos dois muda o que a interação está de fato medindo. `tv` e `radio` continuam no modelo `tv + radio + tv_radio` acima por essa regra, não por terem coeficiente grande.
+:::
+
+## Interação com um preditor qualitativo
+
+A interação não pede que os dois preditores sejam numéricos. `Credit`, com a indicadora que a seção 8.4 introduziu para `estudante`, permite a mesma pergunta entre uma variável numérica e uma categórica: o efeito de `renda` sobre `saldo` é o mesmo para quem é estudante e para quem não é?
+
+```{python}
+#| label: leitura-credit
+credit = pd.read_csv("dados/Credit.csv")
+indicadora_estudante = pd.get_dummies(credit[["estudante"]], drop_first=True)
+credit["estudante_sim"] = indicadora_estudante["estudante_sim"].astype(int)
+y_saldo = credit["saldo"]
+
+credit.shape
+```
+
+```{python}
+#| label: modelo-credit-sem-interacao
+X_sem_interacao = credit[["renda", "estudante_sim"]]
+modelo_credit_sem = LinearRegression().fit(X_sem_interacao, y_saldo)
+coef_credit_sem = pd.Series(modelo_credit_sem.coef_, index=modelo_credit_sem.feature_names_in_)
+
+coef_credit_sem.round(2), round(float(modelo_credit_sem.intercept_), 2)
+```
+
+```{python}
+#| label: modelo-credit-com-interacao
+credit["renda_estudante"] = credit["renda"] * credit["estudante_sim"]
+
+X_com_interacao = credit[["renda", "estudante_sim", "renda_estudante"]]
+modelo_credit_com = LinearRegression().fit(X_com_interacao, y_saldo)
+coef_credit_com = pd.Series(modelo_credit_com.coef_, index=modelo_credit_com.feature_names_in_)
+inclinacao_estudante_com_interacao = round(float(coef_credit_com["renda"] + coef_credit_com["renda_estudante"]), 2)
+
+coef_credit_com.round(2), round(float(modelo_credit_com.intercept_), 2), inclinacao_estudante_com_interacao
+```
+
+Sem interação, `renda` vale 5,98 (dólares de saldo a mais por mil dólares de renda, mantendo o status de estudante fixo) e `estudante_sim` vale 382,67 — a mesma diferença entre estudantes e não estudantes, não importa a renda. Com a interação, `renda` sobe para 6,22, `estudante_sim` para 476,68, e `renda_estudante` sai negativo, -2,00: a inclinação de quem é estudante deixa de ser a de quem não é, e passa a ser 4,22 — mais baixa que a dos não estudantes. É exatamente a leitura que o modelo sem interação não permitia: ali as duas retas tinham a mesma inclinação por construção; aqui elas não têm mais.
+
+```{python}
+#| label: fig-interacao-credit
+#| fig-cap: "Saldo contra renda em Credit, para não estudantes e estudantes. Esquerda: modelo sem interação — as duas retas são paralelas. Direita: modelo com interação renda×estudante — as inclinações diferem. Os pontos são os 400 clientes observados."
+grade_renda = np.linspace(credit["renda"].min(), credit["renda"].max(), 100)
+grupos = [(0, "C0", "não"), (1, "C1", "sim")]
+
+fig, (ax_sem, ax_com) = plt.subplots(1, 2, figsize=(10, 4.3), sharey=True)
+
+for valor_grupo, cor, rotulo in grupos:
+    pontos = credit[credit["estudante_sim"] == valor_grupo]
+    ax_sem.scatter(pontos["renda"], pontos["saldo"], s=10, alpha=0.35, color=cor)
+    ax_com.scatter(pontos["renda"], pontos["saldo"], s=10, alpha=0.35, color=cor)
+
+    grade_sem = pd.DataFrame({"renda": grade_renda, "estudante_sim": valor_grupo})
+    ax_sem.plot(grade_renda, modelo_credit_sem.predict(grade_sem), color=cor, linewidth=2.4, label=rotulo)
+
+    grade_com = pd.DataFrame(
+        {"renda": grade_renda, "estudante_sim": valor_grupo, "renda_estudante": grade_renda * valor_grupo}
+    )
+    ax_com.plot(grade_renda, modelo_credit_com.predict(grade_com), color=cor, linewidth=2.4, label=rotulo)
+
+ax_sem.set_title("sem interação")
+ax_com.set_title("com interação")
+ax_sem.set_xlabel("renda (milhares de dólares)")
+ax_com.set_xlabel("renda (milhares de dólares)")
+ax_sem.set_ylabel("saldo (dólares)")
+ax_com.legend(title="estudante")
+plt.tight_layout()
+plt.show()
+```
+
+O painel esquerdo mostra o que a suposição sem interação força: duas retas com a mesma inclinação, deslocadas por 382,67 em saldo, em qualquer renda. O painel direito mostra o que a interação libera: a reta de quem é estudante nasce mais alta — 476,68 acima da de quem não é, em `renda` zero — mas sobe mais devagar, e a distância entre as duas retas encolhe à medida que a renda cresce.
+
+## Potência não anda em linha reta com milhas por galão
+
+`Auto` traz uma armadilha de tipo antes de qualquer regressão: a coluna `potencia`, que deveria ser número, chega como texto em cinco linhas.
+
+```{python}
+#| label: leitura-auto
+auto = pd.read_csv("dados/Auto.csv")
+n_auto_bruto = len(auto)
+n_potencia_interrogacao = int((auto["potencia"] == "?").sum())
+
+auto["potencia"] = pd.to_numeric(auto["potencia"], errors="coerce")
+auto = auto.dropna(subset=["potencia"]).reset_index(drop=True)
+n_auto_limpo = len(auto)
+
+n_auto_bruto, n_potencia_interrogacao, n_auto_limpo
+```
+
+São 397 carros no arquivo, e cinco trazem `potencia` como o texto `"?"` em vez de um número — é por isso que a coluna não chega como `float` de saída do `read_csv`. `pd.to_numeric(..., errors="coerce")` troca cada `"?"` por `NaN` em vez de derrubar a leitura inteira, e `dropna` descarta essas cinco linhas: restam 392 carros para o que segue.
+
+```{python}
+#| label: modelos-polinomiais
+X_potencia = auto[["potencia"]]
+y_milhas = auto["milhas_por_galao"]
+
+modelos_grau = {}
+r2_grau = {}
+for grau in (1, 2, 5):
+    modelo = make_pipeline(StandardScaler(), PolynomialFeatures(degree=grau, include_bias=False), LinearRegression())
+    modelo.fit(X_potencia, y_milhas)
+    modelos_grau[grau] = modelo
+    r2_grau[grau] = float(r2_score(y_milhas, modelo.predict(X_potencia)))
+
+comparacao_graus = pd.DataFrame(
+    {"R²": [r2_grau[1], r2_grau[2], r2_grau[5]]}, index=["grau 1 (reta)", "grau 2", "grau 5"]
+).round(4)
+melhora_grau2_sobre_grau1 = round(r2_grau[2] - r2_grau[1], 4)
+melhora_grau5_sobre_grau2 = round(r2_grau[5] - r2_grau[2], 4)
+
+comparacao_graus, melhora_grau2_sobre_grau1, melhora_grau5_sobre_grau2
+```
+
+`StandardScaler` entra antes de `PolynomialFeatures` no `Pipeline` porque `potencia` chega a valores acima de 200, e a quinta potência de um número desse tamanho deixa as colunas do modelo em escalas tão distintas que a solução de mínimos quadrados perde precisão — centralizar e normalizar antes de elevar à potência evita o problema, sem mudar a curva que sai no fim.
+
+A reta explica 0,6059 da variância de milhas por galão, e a parábola de grau 2 sobe para 0,6876. Essas quatro casas não bastam para refazer a melhora à mão — calculada sobre os R² completos, sem arredondar antes, a melhora de ir da reta para o grau 2 é 0,0816. Do grau 2 para o grau 5 o R² sobe só até 0,6967, uma melhora de 0,0092 pelo mesmo cálculo: três parâmetros a mais quase não mudam o quanto o modelo explica dos 392 carros que ele já viu.
+
+```{python}
+#| label: fig-auto-polinomios
+#| fig-cap: "milhas_por_galao contra potencia em Auto, com a reta (grau 1), a parábola (grau 2) e o polinômio de grau 5 ajustados sobre os 392 carros com potencia numérica. Na ponta direita da faixa, a curva de grau 5 volta a subir; a de grau 2 quase não sai do lugar."
+grade_potencia = pd.DataFrame({"potencia": np.linspace(X_potencia["potencia"].min(), X_potencia["potencia"].max(), 300)})
+cores_grau = {1: "C1", 2: "C0", 5: "C2"}
+rotulos_grau = {1: "grau 1", 2: "grau 2", 5: "grau 5"}
+
+fig, ax = plt.subplots()
+ax.scatter(auto["potencia"], auto["milhas_por_galao"], s=14, alpha=0.35, color="#6C757D")
+for grau in (1, 2, 5):
+    previsao = modelos_grau[grau].predict(grade_potencia)
+    ax.plot(grade_potencia["potencia"], previsao, color=cores_grau[grau], linewidth=2.2, label=rotulos_grau[grau])
+
+ax.set_xlabel("potência (hp)")
+ax.set_ylabel("milhas por galão")
+ax.legend()
+plt.tight_layout()
+plt.show()
+```
+
+```{python}
+#| label: auto-ondulacao
+previsao_grau2 = modelos_grau[2].predict(grade_potencia)
+previsao_grau5 = modelos_grau[5].predict(grade_potencia)
+depois_de_150 = (grade_potencia["potencia"] > 150).to_numpy()
+
+indice_minimo_grau2 = np.argmin(np.where(depois_de_150, previsao_grau2, np.inf))
+indice_minimo_grau5 = np.argmin(np.where(depois_de_150, previsao_grau5, np.inf))
+
+subida_grau2 = float(previsao_grau2[-1] - previsao_grau2[indice_minimo_grau2])
+subida_grau5 = float(previsao_grau5[-1] - previsao_grau5[indice_minimo_grau5])
+grau5_ondula_mais = bool(subida_grau5 > subida_grau2)
+
+round(subida_grau2, 2), round(subida_grau5, 2), grau5_ondula_mais
+```
+
+`grau5_ondula_mais` confirma o que a figura mostra: depois do ponto mais baixo de cada curva na metade final da faixa de potência, a de grau 2 sobe 2,03 milhas por galão até a ponta direita — quase reta —, enquanto a de grau 5 sobe 5,19, mais que o dobro, desenhando a curvatura extra que o R² por si só não deixava ver: um ganho de 0,0092 no ajuste veio acompanhado de uma curva que se dobra de volta para cima nas pontas, em vez de continuar a tendência de queda que os 392 pontos sugerem.
+
+## Ainda é regressão linear
+
+Os três modelos de `potencia` acima — reta, parábola, quinto grau — saíram do mesmo estimador que abriu o capítulo: `LinearRegression`, chamado dentro de um `Pipeline` que só troca as colunas de entrada, nunca o estimador. Um modelo com `potencia²` e `potencia⁵` continua sendo **regressão linear** porque "linear" descreve como o modelo soma seus parâmetros $\beta$ — cada um multiplicando uma coluna, todos somados —, não o formato da curva que esses parâmetros produzem quando a coluna multiplicada é ela mesma uma potência do preditor original. A curva pode dobrar; a soma por trás dela continua linear nos $\beta$.
