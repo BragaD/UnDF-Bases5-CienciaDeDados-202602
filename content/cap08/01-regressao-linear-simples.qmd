@@ -143,9 +143,9 @@ RSS, como soma de quadrados de uma função linear de $\beta_0$ e $\beta_1$, é 
 
 ```{python}
 #| label: fig-rss-contorno
-#| fig-cap: "Curvas de nível de RSS sobre (β0, β1), na regressão de vendas sobre tv em Advertising. O ponto marcado é (β̂0, β̂1); cada curva liga pares com o mesmo RSS, e todas se fecham ao redor desse único ponto — não há outro vale na grade."
-grade_beta0 = np.linspace(5.0, 9.0, 200)
-grade_beta1 = np.linspace(0.03, 0.065, 200)
+#| fig-cap: "Curvas de nível de RSS sobre (β0, β1), na regressão de vendas sobre tv em Advertising. O ponto marcado é (β̂0, β̂1); cada curva liga pares com o mesmo RSS, e as seis se fecham ao redor desse único ponto — não há outro vale na janela."
+grade_beta0 = np.linspace(3.5, 10.5, 300)
+grade_beta1 = np.linspace(0.02, 0.075, 300)
 malha_beta0, malha_beta1 = np.meshgrid(grade_beta0, grade_beta1)
 
 tv_np = tv.to_numpy()
@@ -153,8 +153,10 @@ vendas_np = vendas.to_numpy()
 residuo_grade = vendas_np - malha_beta0[:, :, None] - malha_beta1[:, :, None] * tv_np
 rss_grade = (residuo_grade ** 2).sum(axis=2)
 
+niveis_rss = np.array([2150.0, 2200.0, 2300.0, 2400.0, 2500.0, 2600.0])
+
 fig, ax = plt.subplots()
-contornos = ax.contour(malha_beta0, malha_beta1, rss_grade, levels=10, cmap="Blues")
+contornos = ax.contour(malha_beta0, malha_beta1, rss_grade, levels=niveis_rss, cmap="Blues")
 ax.scatter([beta0_sklearn], [beta1_sklearn], color="C1", s=40, zorder=3)
 ax.annotate(
     r"$(\hat\beta_0,\ \hat\beta_1)$",
@@ -171,10 +173,29 @@ plt.tight_layout()
 plt.show()
 ```
 
+A legenda promete curvas fechadas, então a afirmação se confere contando, não olhando: o próprio objeto que o `contour` devolve guarda, para cada nível, os segmentos de linha que desenhou, e um segmento fecha quando termina no mesmo ponto em que começou.
+
+```{python}
+#| label: curvas-fechadas
+segmentos_totais = 0
+segmentos_fechados = 0
+for segmentos_do_nivel in contornos.allsegs:
+    for segmento in segmentos_do_nivel:
+        if len(segmento) == 0:
+            continue
+        segmentos_totais += 1
+        if np.allclose(segmento[0], segmento[-1]):
+            segmentos_fechados += 1
+
+segmentos_totais, segmentos_fechados, segmentos_fechados == segmentos_totais
+```
+
+Seis níveis, seis segmentos desenhados, e os seis fecham: `segmentos_totais` e `segmentos_fechados` saem iguais, 6 e 6. Nenhuma curva sai cortada pela borda da janela — o que confirma, em vez de supor, que RSS tem um único vale nesta vizinhança de $(\hat\beta_0, \hat\beta_1)$.
+
 ```{python}
 #| label: minimo-real-contra-grade
 minimo_real_menor_que_grade = bool(rss_min < rss_grade.min())
 round(rss_min, 2), round(float(rss_grade.min()), 2), minimo_real_menor_que_grade
 ```
 
-O mínimo verdadeiro, 2.102,53, fica abaixo até do menor valor que a própria grade alcança, 2.102,54 — `minimo_real_menor_que_grade` é `True`. Nenhum dos 200×200 pontos testados coincide exatamente com $(\hat\beta_0, \hat\beta_1)$, só passa perto: é a fórmula fechada, não a grade, que encontra o fundo do vale de verdade. RSS diz qual par de coeficientes é o melhor entre os que este dado observou; não diz se essa reta presta para prever vendas em geral, nem quanto de vendas ela de fato explica.
+O mínimo verdadeiro, 2.102,53, fica abaixo até do menor valor que a própria grade alcança, 2.102,56 — `minimo_real_menor_que_grade` é `True`. Nenhum dos 300×300 pontos testados coincide exatamente com $(\hat\beta_0, \hat\beta_1)$, só passa perto: é a fórmula fechada, não a grade, que encontra o fundo do vale de verdade. RSS diz qual par de coeficientes é o melhor entre os que este dado observou; não diz se essa reta presta para prever vendas em geral, nem quanto de vendas ela de fato explica.
