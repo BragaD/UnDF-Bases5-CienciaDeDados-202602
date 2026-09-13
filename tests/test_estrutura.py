@@ -350,7 +350,6 @@ ESTILO = 'plt.style.use("estilo-figuras.mplstyle")'
 # Seções sem figura, e por quê. Cada entrada é uma decisão registrada, não um
 # esquecimento — daí o dicionário em vez de uma lista.
 SECOES_SEM_FIGURA: dict[str, str] = {
-    "cap08/02-avaliando-o-ajuste.qmd": "stub; a figura entra quando a seção for escrita",
     "cap08/03-regressao-multipla.qmd": "stub; a figura entra quando a seção for escrita",
     "cap08/04-preditores-qualitativos.qmd": "stub; a figura entra quando a seção for escrita",
     "cap08/05-interacao-e-termos-nao-lineares.qmd": "stub; a figura entra quando a seção for escrita",
