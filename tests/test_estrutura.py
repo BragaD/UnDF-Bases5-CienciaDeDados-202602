@@ -561,6 +561,17 @@ NOMES_ANTIGOS_DE_COLUNA = [
     # o nome entre crases ou aspas — o custo de falso positivo (prosa comum,
     # ou "name" como identificador genérico em outro contexto) supera o de
     # deixá-las fora da lista.
+    "Private",
+    "Apps",
+    "Accept",
+    "Enroll",
+    "Outstate",
+    "Expend",
+    # "Books", "Personal", "Terminal" e "PhD" (cabeçalhos originais de
+    # College) ficam de fora: são palavras que aparecem em prosa sem relação
+    # nenhuma com o conjunto. "Top10perc", "Room.Board", "S.F.Ratio",
+    # "Grad.Rate" e "F.Undergrad" também ficam de fora: não ocorrem em
+    # português nem por acidente, então o guarda não teria o que pegar.
 ]
 
 

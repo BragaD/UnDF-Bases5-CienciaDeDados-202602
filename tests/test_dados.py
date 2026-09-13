@@ -13,6 +13,7 @@ ESPERADOS = [
     "Income2.csv",
     "Credit.csv",
     "Auto.csv",
+    "College.csv",
 ]
 
 COLUNAS_ESPERADAS = {
@@ -28,6 +29,14 @@ COLUNAS_ESPERADAS = {
     "Auto.csv": [
         "milhas_por_galao", "cilindros", "cilindrada", "potencia", "peso",
         "aceleracao", "ano", "origem", "nome",
+    ],
+    "College.csv": [
+        "Unnamed: 0", "privada", "inscricoes", "aceitos", "matriculados",
+        "perc_top10", "perc_top25", "graduacao_integral", "graduacao_parcial",
+        "mensalidade_fora_do_estado", "moradia_e_alimentacao", "custo_livros",
+        "gastos_pessoais", "perc_doutores", "perc_titulacao_maxima",
+        "razao_aluno_professor", "perc_ex_alunos_doadores", "gasto_por_aluno",
+        "taxa_conclusao",
     ],
 }
 
@@ -72,6 +81,23 @@ def test_auto_preserva_a_armadilha_da_potencia():
         linhas = list(csv.DictReader(f))
     assert len(linhas) == 397
     assert sum(1 for l in linhas if l["potencia"] == "?") == 5
+
+
+def test_college_preserva_a_coluna_de_indice_do_R():
+    """A primeira coluna do College é o ASSUNTO de um exercício, não sujeira.
+
+    Nos demais conjuntos do ISLP a coluna de índice do R foi removida na
+    tradução. Aqui ela fica: o exercício 3 da lista computacional 1 (o 2.8 do
+    livro) leva o aluno a descobrir que a primeira coluna é o nome da
+    universidade e a reler o arquivo com `index_col=0`. Sem a coluna, o item
+    perde o objeto.
+    """
+    import csv
+    with (DADOS / "College.csv").open(encoding="utf-8") as f:
+        cabecalho = next(csv.reader(f))
+    assert cabecalho[0] == "Unnamed: 0", (
+        "a coluna de índice do College sumiu; o exercício 3 da lista 1 depende dela"
+    )
 
 
 def test_colunas_estao_em_portugues():
