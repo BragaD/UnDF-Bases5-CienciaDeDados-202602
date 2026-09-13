@@ -163,15 +163,28 @@ O cronograma perde "revisão para a prova" (aula 16), "Prova" (aula 17) e
 
 ### As datas de entrega
 
-A lista 1 cobre os capítulos 6, 7 e 8, dados nas aulas 5, 6 e 7 (16/09, 23/09 e
-30/09). **Entrega até 21/10 (aula 10)** — três semanas depois do capítulo 8, e
-depois do HPE de 14/10, para não competir com o trabalho dos grupos.
+**A regra, e ela é pedagógica:** cada lista é entregue **uma semana depois da
+aula do último capítulo que ela cobre**. A intenção do autor é que o aluno esteja
+sempre acompanhando o tema das aulas — uma lista que vence três semanas depois
+vira revisão tardia, e o aluno a faz olhando um assunto que a turma já deixou
+para trás.
 
-O formato das demais, derivado da ementa: cada lista cobre os capítulos dados
-desde a anterior, com entrega a cada duas aulas — listas 2 a 5 fechando em
-04/11, 18/11, 02/12 e 09/12, esta última na data que era da prova. **Só a data
-da lista 1 é fixada aqui**; as demais se confirmam quando cada lista for
-escrita, porque dependem dos capítulos existirem.
+A regra determina as cinco datas de uma vez, a partir da ementa:
+
+| Lista | Capítulos | Última aula coberta | Entrega |
+|:--:|---|---|---|
+| 1 | 6, 7 e 8 | aula 7 · 30/09 | **07/10** (aula 8) |
+| 2 | 9 e 10 | aula 10 · 21/10 | **28/10** (aula 11) |
+| 3 | 11 e 12 | aula 12 · 04/11 | **11/11** (aula 13) |
+| 4 | 13 e 14 | aula 14 · 18/11 | **25/11** (aula 15) |
+| 5 | 15 e 16 | aula 16 · 02/12 | **09/12** (aula 17) |
+
+A lista 1 é a única com três capítulos, porque é a primeira e alcança o que já
+foi dado. A lista 5 fecha em 09/12, a data que era da prova. O **capítulo 17**
+não entra em lista nenhuma: ele é o roteiro do seminário, não aula.
+
+**As datas são fixas; o conteúdo de cada lista não.** Os exercícios das listas 2
+a 5 saem quando os capítulos delas existirem.
 
 ## Testes
 
