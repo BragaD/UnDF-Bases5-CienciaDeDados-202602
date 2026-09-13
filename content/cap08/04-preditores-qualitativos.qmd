@@ -4,7 +4,155 @@
 Esta seção corresponde à seção 3.3.1 de @james2023.
 :::
 
-::: {.callout-warning}
-## Em construção
-O conteúdo desta seção ainda será escrito.
+Um coeficiente de regressão multiplica um número por outro, $\beta_j \cdot x_j$. Todo preditor usado até aqui neste capítulo era numérico — dólares, unidades, anos. `Credit`, o conjunto que esta seção introduz, tem quatro colunas que não são: `imovel_proprio`, `estudante` e `casado` valem `sim` ou `não`; `regiao` vale `Leste`, `Sul` ou `Oeste`. Nenhuma delas multiplica coeficiente nenhum do jeito que está — e é essa a pergunta que a seção resolve.
+
+```{python}
+#| label: setup
+#| include: false
+import matplotlib.pyplot as plt
+import numpy as np
+import pandas as pd
+from sklearn.linear_model import LinearRegression
+
+plt.style.use("estilo-figuras.mplstyle")
+```
+
+```{python}
+#| label: leitura-credit
+credit = pd.read_csv("dados/Credit.csv")
+credit.shape, credit.columns.tolist()
+```
+
+São 400 clientes e onze colunas: `renda`, `limite`, `pontuacao`, `cartoes`, `idade` e `escolaridade`, numéricas; `imovel_proprio`, `estudante` e `casado`, `sim`/`não`; `regiao`, com três categorias; e `saldo` — a dívida média no cartão de crédito de cada cliente, em dólares, a resposta que o resto da seção tenta prever a partir das quatro colunas categóricas.
+
+## O saldo médio, por ser estudante ou não
+
+A pergunta mais simples é a de duas categorias: quem é estudante carrega, em média, saldo diferente de quem não é? Uma variável indicadora responde trocando a categoria por um número.
+
+::: {.conceito}
+Uma **variável indicadora** (ou *dummy*) troca uma categoria por 0 ou 1: vale 1 quando a observação está no nível escolhido, 0 nos demais. Um preditor qualitativo com $k$ níveis entra no modelo como $k - 1$ indicadoras, nunca $k$ — a categoria que sobra sem indicadora própria é a **base**, e toda previsão para ela sai só do intercepto.
 :::
+
+```{python}
+#| label: dummy-estudante
+indicadora_estudante = pd.get_dummies(credit[["estudante"]], drop_first=True)
+indicadora_estudante.columns.tolist()
+```
+
+`drop_first=True` descarta a primeira categoria em ordem alfabética — `não` vem antes de `sim` — e fica só `estudante_sim`, que vale `True` para quem é estudante e `False` para quem não é. `não` é a base: toda observação sem a indicadora marcada pertence a ela.
+
+```{python}
+#| label: modelo-estudante
+modelo_estudante = LinearRegression().fit(indicadora_estudante, credit["saldo"])
+intercepto_estudante = float(modelo_estudante.intercept_)
+coef_estudante_sim = float(modelo_estudante.coef_[0])
+
+round(intercepto_estudante, 4), round(coef_estudante_sim, 4)
+```
+
+```{python}
+#| label: medias-por-estudante
+medias_estudante = credit.groupby("estudante")["saldo"].mean()
+diferenca_medias_estudante = float(medias_estudante["sim"] - medias_estudante["não"])
+estudantes_devem_mais = bool(diferenca_medias_estudante > 0)
+
+medias_estudante.round(4), round(diferenca_medias_estudante, 4), estudantes_devem_mais
+```
+
+O intercepto, 480,3694, é o saldo médio de quem não é estudante — a mesma média que a tabela acima mostra para `não`. O coeficiente, 396,4556, é a diferença entre as duas médias: 876,8250 − 480,3694 = 396,4556. `estudantes_devem_mais` confirma que quem é estudante carrega, em média, mais saldo que quem não é.
+
+## A base é uma escolha, e a previsão não sabe disso
+
+Trocar qual categoria fica sem indicadora — a base — é uma escolha de quem ajusta o modelo, não um fato sobre o dado. `get_dummies` descarta, por padrão, a primeira categoria em ordem alfabética; para inverter, basta listar as categorias na ordem desejada antes de gerar a indicadora.
+
+```{python}
+#| label: dummy-estudante-base-invertida
+estudante_ordenado = pd.Categorical(credit["estudante"], categories=["sim", "não"])
+indicadora_estudante_b = pd.get_dummies(pd.DataFrame({"estudante": estudante_ordenado}), drop_first=True)
+indicadora_estudante_b.columns.tolist()
+```
+
+```{python}
+#| label: modelo-estudante-base-invertida
+modelo_estudante_b = LinearRegression().fit(indicadora_estudante_b, credit["saldo"])
+intercepto_estudante_b = float(modelo_estudante_b.intercept_)
+coef_estudante_nao = float(modelo_estudante_b.coef_[0])
+
+round(intercepto_estudante_b, 4), round(coef_estudante_nao, 4)
+```
+
+Com `sim` como base, o intercepto salta para 876,825 — a média de quem é estudante — e o coeficiente muda de sinal, para -396,4556: a mesma diferença de antes, contada na direção oposta.
+
+```{python}
+#| label: previsoes-identicas
+previsao_original = modelo_estudante.predict(indicadora_estudante)
+previsao_invertida = modelo_estudante_b.predict(indicadora_estudante_b)
+previsoes_identicas = bool(np.allclose(previsao_original, previsao_invertida))
+
+previsoes_identicas
+```
+
+`previsoes_identicas` confirma que, apesar do intercepto e do coeficiente mudarem, as previsões para os 400 clientes são as mesmas nos dois ajustes — a escolha da base muda a leitura dos coeficientes, não o que o modelo prevê.
+
+## Região: quando a categoria tem mais de dois nomes
+
+`regiao` tem três categorias — `Leste`, `Sul` e `Oeste` —, não duas. Uma única indicadora não dá conta: sobra uma categoria sem representação. A regra do conceito acima vale de novo, com $k = 3$: entram $k - 1 = 2$ indicadoras.
+
+```{python}
+#| label: dummy-regiao
+indicadora_regiao = pd.get_dummies(credit[["regiao"]], drop_first=True)
+indicadora_regiao.columns.tolist()
+```
+
+Duas indicadoras, `regiao_Oeste` e `regiao_Sul`; `Leste` fica sem indicadora própria e é a base. Uma terceira indicadora, para `Leste`, seria redundante: quem não é `Oeste` nem `Sul` só pode ser `Leste`, e o valor dela já está determinado pelas outras duas.
+
+```{python}
+#| label: modelo-regiao
+modelo_regiao = LinearRegression().fit(indicadora_regiao, credit["saldo"])
+coeficientes_regiao = pd.Series(modelo_regiao.coef_, index=modelo_regiao.feature_names_in_)
+intercepto_regiao = float(modelo_regiao.intercept_)
+
+round(intercepto_regiao, 4), coeficientes_regiao.round(4)
+```
+
+```{python}
+#| label: medias-por-regiao
+medias_regiao = credit.groupby("regiao")["saldo"].mean()
+leste_tem_a_maior_media = bool(medias_regiao.idxmax() == "Leste")
+
+medias_regiao.round(4), leste_tem_a_maior_media
+```
+
+O intercepto, 531,0, é o saldo médio de quem mora no Leste — a base. Os coeficientes leem-se como diferenças contra essa base: -18,6863 para `Oeste` e -12,5025 para `Sul`, o mesmo que a tabela de médias mostra: 512,3137 − 531,0 = -18,6863 e 518,4975 − 531,0 = -12,5025. `leste_tem_a_maior_media` confirma que, das três regiões, é no Leste que o saldo médio é o mais alto.
+
+## O que o modelo prevê: a média do grupo, e só ela
+
+Com um único preditor qualitativo, o modelo não tem outra informação para usar: toda previsão é a média do grupo a que a observação pertence, e nada mais fino que isso. Para `estudante`, só existem duas previsões possíveis, 480,3694 e 876,8250; para `regiao`, só três, 531,0, 512,3137 e 518,4975.
+
+```{python}
+#| label: fig-saldo-por-categoria
+#| fig-cap: "Saldo de cada um dos 400 clientes, por estudante (esquerda) e por região (direita). Os pontos têm um deslocamento horizontal aleatório só para não empilhar; o traço laranja marca a média de cada grupo — a mesma que o intercepto e os coeficientes reproduzem."
+rng = np.random.default_rng(8)
+
+fig, (ax_estudante, ax_regiao) = plt.subplots(1, 2, figsize=(10, 4.3), sharey=True)
+
+paineis = [
+    (ax_estudante, "estudante", ["não", "sim"], medias_estudante),
+    (ax_regiao, "regiao", ["Leste", "Sul", "Oeste"], medias_regiao),
+]
+for eixo, coluna, ordem, medias in paineis:
+    for posicao, categoria in enumerate(ordem):
+        valores = credit.loc[credit[coluna] == categoria, "saldo"]
+        deslocamento = rng.uniform(-0.15, 0.15, size=len(valores))
+        eixo.scatter(posicao + deslocamento, valores, s=12, alpha=0.4, color="C0")
+        eixo.plot([posicao - 0.22, posicao + 0.22], [medias[categoria]] * 2, color="C1", linewidth=3)
+    eixo.set_xticks(range(len(ordem)))
+    eixo.set_xticklabels(ordem)
+    eixo.set_xlabel(coluna)
+
+ax_estudante.set_ylabel("saldo (dólares)")
+plt.tight_layout()
+plt.show()
+```
+
+O traço laranja fica na mesma altura para todo ponto do grupo: é essa reta plana, por categoria, que um preditor qualitativo sozinho consegue desenhar.
