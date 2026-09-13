@@ -44,22 +44,32 @@ indicadora_estudante.columns.tolist()
 ```{python}
 #| label: modelo-estudante
 modelo_estudante = LinearRegression().fit(indicadora_estudante, credit["saldo"])
-intercepto_estudante = float(modelo_estudante.intercept_)
-coef_estudante_sim = float(modelo_estudante.coef_[0])
+intercepto_estudante = round(float(modelo_estudante.intercept_), 2)
+coef_estudante_sim = round(float(modelo_estudante.coef_[0]), 2)
 
-round(intercepto_estudante, 4), round(coef_estudante_sim, 4)
+intercepto_estudante, coef_estudante_sim
 ```
 
 ```{python}
 #| label: medias-por-estudante
 medias_estudante = credit.groupby("estudante")["saldo"].mean()
-diferenca_medias_estudante = float(medias_estudante["sim"] - medias_estudante["não"])
+media_nao_estudante = round(float(medias_estudante["não"]), 2)
+media_sim_estudante = round(float(medias_estudante["sim"]), 2)
+diferenca_medias_estudante = round(media_sim_estudante - media_nao_estudante, 2)
 estudantes_devem_mais = bool(diferenca_medias_estudante > 0)
 
-medias_estudante.round(4), round(diferenca_medias_estudante, 4), estudantes_devem_mais
+media_nao_estudante, media_sim_estudante, diferenca_medias_estudante, estudantes_devem_mais
 ```
 
-O intercepto, 480,3694, é o saldo médio de quem não é estudante — a mesma média que a tabela acima mostra para `não`. O coeficiente, 396,4556, é a diferença entre as duas médias: 876,8250 − 480,3694 = 396,4556. `estudantes_devem_mais` confirma que quem é estudante carrega, em média, mais saldo que quem não é.
+```{python}
+#| label: modelo-bate-com-medias-estudante
+intercepto_bate_com_media = intercepto_estudante == media_nao_estudante
+coeficiente_bate_com_diferenca = coef_estudante_sim == diferenca_medias_estudante
+
+intercepto_bate_com_media, coeficiente_bate_com_diferenca
+```
+
+O modelo ajustado só com essa indicadora dá um intercepto de 480,37 e um coeficiente de 396,46. São os mesmos dois números que saem direto do dado, sem ajustar modelo nenhum: 480,37 é o saldo médio de quem não é estudante, e 396,46 é a diferença entre essa média e a de quem é, 876,83 (876,83 − 480,37 = 396,46). `intercepto_bate_com_media` e `coeficiente_bate_com_diferenca` confirmam a igualdade nos dois casos. `estudantes_devem_mais` confirma que quem é estudante carrega, em média, mais saldo que quem não é.
 
 ## A base é uma escolha, e a previsão não sabe disso
 
@@ -75,13 +85,13 @@ indicadora_estudante_b.columns.tolist()
 ```{python}
 #| label: modelo-estudante-base-invertida
 modelo_estudante_b = LinearRegression().fit(indicadora_estudante_b, credit["saldo"])
-intercepto_estudante_b = float(modelo_estudante_b.intercept_)
-coef_estudante_nao = float(modelo_estudante_b.coef_[0])
+intercepto_estudante_b = round(float(modelo_estudante_b.intercept_), 2)
+coef_estudante_nao = round(float(modelo_estudante_b.coef_[0]), 2)
 
-round(intercepto_estudante_b, 4), round(coef_estudante_nao, 4)
+intercepto_estudante_b, coef_estudante_nao
 ```
 
-Com `sim` como base, o intercepto salta para 876,825 — a média de quem é estudante — e o coeficiente muda de sinal, para -396,4556: a mesma diferença de antes, contada na direção oposta.
+Com `sim` como base, o intercepto salta para 876,83 — a mesma média de quem é estudante de antes — e o coeficiente muda de sinal, para -396,46: a mesma diferença de antes, contada na direção oposta.
 
 ```{python}
 #| label: previsoes-identicas
@@ -109,25 +119,30 @@ Duas indicadoras, `regiao_Oeste` e `regiao_Sul`; `Leste` fica sem indicadora pr�
 ```{python}
 #| label: modelo-regiao
 modelo_regiao = LinearRegression().fit(indicadora_regiao, credit["saldo"])
-coeficientes_regiao = pd.Series(modelo_regiao.coef_, index=modelo_regiao.feature_names_in_)
-intercepto_regiao = float(modelo_regiao.intercept_)
+coeficientes_regiao = dict(zip(modelo_regiao.feature_names_in_, modelo_regiao.coef_))
+coef_oeste = round(float(coeficientes_regiao["regiao_Oeste"]), 2)
+coef_sul = round(float(coeficientes_regiao["regiao_Sul"]), 2)
+intercepto_regiao = round(float(modelo_regiao.intercept_), 2)
 
-round(intercepto_regiao, 4), coeficientes_regiao.round(4)
+intercepto_regiao, coef_oeste, coef_sul
 ```
 
 ```{python}
 #| label: medias-por-regiao
 medias_regiao = credit.groupby("regiao")["saldo"].mean()
+media_leste = round(float(medias_regiao["Leste"]), 2)
+media_oeste = round(float(medias_regiao["Oeste"]), 2)
+media_sul = round(float(medias_regiao["Sul"]), 2)
 leste_tem_a_maior_media = bool(medias_regiao.idxmax() == "Leste")
 
-medias_regiao.round(4), leste_tem_a_maior_media
+media_leste, media_oeste, media_sul, leste_tem_a_maior_media
 ```
 
-O intercepto, 531,0, é o saldo médio de quem mora no Leste — a base. Os coeficientes leem-se como diferenças contra essa base: -18,6863 para `Oeste` e -12,5025 para `Sul`, o mesmo que a tabela de médias mostra: 512,3137 − 531,0 = -18,6863 e 518,4975 − 531,0 = -12,5025. `leste_tem_a_maior_media` confirma que, das três regiões, é no Leste que o saldo médio é o mais alto.
+O intercepto, 531,0, é o saldo médio de quem mora no Leste — a base. Os coeficientes leem-se como diferenças contra essa base: -18,69 para `Oeste` e -12,5 para `Sul`, o mesmo que a tabela de médias mostra: 512,31 − 531,0 = -18,69 e 518,5 − 531,0 = -12,5. `leste_tem_a_maior_media` confirma que, das três regiões, é no Leste que o saldo médio é o mais alto.
 
 ## O que o modelo prevê: a média do grupo, e só ela
 
-Com um único preditor qualitativo, o modelo não tem outra informação para usar: toda previsão é a média do grupo a que a observação pertence, e nada mais fino que isso. Para `estudante`, só existem duas previsões possíveis, 480,3694 e 876,8250; para `regiao`, só três, 531,0, 512,3137 e 518,4975.
+Com um único preditor qualitativo, o modelo não tem outra informação para usar: toda previsão é a média do grupo a que a observação pertence, e nada mais fino que isso. Para `estudante`, só existem duas previsões possíveis, 480,37 e 876,83; para `regiao`, só três, 531,0, 512,31 e 518,5.
 
 ```{python}
 #| label: fig-saldo-por-categoria
@@ -137,10 +152,10 @@ rng = np.random.default_rng(8)
 fig, (ax_estudante, ax_regiao) = plt.subplots(1, 2, figsize=(10, 4.3), sharey=True)
 
 paineis = [
-    (ax_estudante, "estudante", ["não", "sim"], medias_estudante),
-    (ax_regiao, "regiao", ["Leste", "Sul", "Oeste"], medias_regiao),
+    (ax_estudante, "estudante", ["não", "sim"], medias_estudante, "estudante"),
+    (ax_regiao, "regiao", ["Leste", "Sul", "Oeste"], medias_regiao, "região"),
 ]
-for eixo, coluna, ordem, medias in paineis:
+for eixo, coluna, ordem, medias, rotulo in paineis:
     for posicao, categoria in enumerate(ordem):
         valores = credit.loc[credit[coluna] == categoria, "saldo"]
         deslocamento = rng.uniform(-0.15, 0.15, size=len(valores))
@@ -148,7 +163,7 @@ for eixo, coluna, ordem, medias in paineis:
         eixo.plot([posicao - 0.22, posicao + 0.22], [medias[categoria]] * 2, color="C1", linewidth=3)
     eixo.set_xticks(range(len(ordem)))
     eixo.set_xticklabels(ordem)
-    eixo.set_xlabel(coluna)
+    eixo.set_xlabel(rotulo)
 
 ax_estudante.set_ylabel("saldo (dólares)")
 plt.tight_layout()
