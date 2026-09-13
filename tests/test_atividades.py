@@ -15,6 +15,8 @@ palavra "Resposta" não aparece nem descomprimindo os streams. Então os testes
 abaixo travam as três camadas que **são** verificáveis — o que o Quarto publica,
 o que o git versiona, e o que existe no diretório servido.
 """
+import importlib.util
+import json
 import re
 import subprocess
 from pathlib import Path
@@ -26,6 +28,18 @@ QUARTO_YML = RAIZ / "_quarto.yml"
 GITIGNORE = RAIZ / ".gitignore"
 
 MARCA = "gabarito"
+
+
+def carregar_gerador_de_lista():
+    """Importa scripts/gerar-lista.py (o hífen impede um `import` normal).
+
+    Mesmo padrão de `tests/test_notebooks.py:carregar_gerador`.
+    """
+    caminho = RAIZ / "scripts" / "gerar-lista.py"
+    spec = importlib.util.spec_from_file_location("gerar_lista", caminho)
+    modulo = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(modulo)
+    return modulo
 
 
 def ignorado(caminho: str) -> bool:
@@ -121,3 +135,64 @@ def test_todo_pdf_publicado_esta_linkado_no_site():
     for pdf in PUBLICO.glob("*.pdf"):
         rel = pdf.relative_to(RAIZ).as_posix()
         assert rel in texto, f"{rel} é publicado mas não está linkado em nenhum .qmd"
+
+
+# --------------------------------------------------------------------------
+# listas computacionais — sem gabarito, o notebook do Colab É o enunciado
+# --------------------------------------------------------------------------
+#
+# Três invariantes diferentes dos de cima, porque a lista computacional não
+# segue a maquinaria de dupla renderização (sem gabarito, sem PDF de
+# enunciado): o `.qmd` é fonte de um `.ipynb`, não de um PDF, e a "resposta
+# que vaza" aqui não é um bloco de gabarito — é uma célula que o professor
+# esqueceu de limpar antes de commitar.
+
+
+def test_a_lista_computacional_nao_defasou_da_fonte():
+    """Irmão de test_notebooks_estao_atualizados, e não a mesma varredura.
+
+    Aquela está presa a `content/` e alimenta os testes de total do livro, que
+    uma lista falsearia. O invariante é o mesmo: o .qmd é a fonte, o .ipynb é
+    derivado, e o aluno não pode abrir uma versão que a fonte já não tem.
+    """
+    gerar = carregar_gerador_de_lista()
+    for fonte in sorted(ATIVIDADES.glob("lista-comp-*.qmd")):
+        destino = fonte.with_suffix(".ipynb")
+        assert destino.exists(), f"falta o notebook de {fonte.name}"
+        em_memoria = gerar.serializa(gerar.normaliza(gerar.gerar_lista(fonte)))
+        assert em_memoria == destino.read_text(encoding="utf-8"), (
+            f"{destino.name} defasou de {fonte.name}; rode scripts/gerar-lista.py"
+        )
+
+
+def test_nenhuma_celula_de_resposta_vem_preenchida():
+    """O guarda contra commitar o notebook depois de conferi-lo executando.
+
+    A marca é literal: célula de código de resposta contém só `# sua resposta`,
+    célula de texto contém só `*sua resposta aqui*`.
+    """
+    for nb_path in sorted(ATIVIDADES.glob("lista-comp-*.ipynb")):
+        nb = json.loads(nb_path.read_text(encoding="utf-8"))
+        for i, celula in enumerate(nb["cells"]):
+            fonte = "".join(celula["source"]).strip()
+            if fonte.startswith("# sua resposta"):
+                assert fonte == "# sua resposta", (
+                    f"{nb_path.name}, célula {i}: resposta de código preenchida"
+                )
+            if "*sua resposta aqui*" in fonte:
+                assert fonte == "*sua resposta aqui*", (
+                    f"{nb_path.name}, célula {i}: resposta de texto preenchida"
+                )
+
+
+def test_nenhuma_celula_da_lista_guarda_saida():
+    """O mesmo invariante dos notebooks de aula, mais um motivo: saída entrega resposta."""
+    for nb_path in sorted(ATIVIDADES.glob("lista-comp-*.ipynb")):
+        nb = json.loads(nb_path.read_text(encoding="utf-8"))
+        for i, celula in enumerate(nb["cells"]):
+            if celula["cell_type"] != "code":
+                continue
+            assert not celula.get("outputs"), f"{nb_path.name}, célula {i}: saída commitada"
+            assert celula.get("execution_count") is None, (
+                f"{nb_path.name}, célula {i}: contador de execução commitado"
+            )

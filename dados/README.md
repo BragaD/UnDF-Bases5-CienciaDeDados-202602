@@ -147,10 +147,63 @@ em milhares de dólares; `limite` e `saldo` estão em dólares.
 | `origin` | `origem` |
 | `name` | `nome` |
 
-Só o cabeçalho muda: `origem` fica com o código numérico do livro (1, 2, 3),
-e `nome`, nome próprio de modelo de carro, fica em inglês. **Os cinco `?` de
+Só o cabeçalho muda: `origem` fica com o código numérico do livro — 1 para
+automóvel americano, 2 para europeu, 3 para japonês —, e `nome`, nome próprio
+de modelo de carro, fica em inglês. **Os cinco `?` de
 `potencia` foram preservados de propósito** — são a armadilha de tipo que uma
 das seções do capítulo usa, e o ISLP trabalha com as 392 linhas restantes.
+
+## `College.csv` — o conjunto da lista computacional 1
+
+Do mesmo [site oficial de @james2023](https://www.statlearning.com/s/). O
+exercício 3 da lista computacional 1 é o 2.8 do ISLP, e percorre o conjunto
+inteiro com `read_csv`, `describe` e uma matriz de dispersão.
+
+A coleta é feita pelo mesmo `scripts/baixar-dados.py`, que baixa a versão
+original em inglês:
+
+```bash
+docker compose run --rm --no-deps livro python scripts/baixar-dados.py
+```
+
+Depois do download, os cabeçalhos são traduzidos à mão. É essa tabela de-para
+que mantém a ponte com o livro-texto — o **nome do arquivo** não muda, só o
+cabeçalho:
+
+**`College.csv`** — 777 universidades americanas, com dados de inscrição,
+custo e corpo docente.
+
+| Original (R) | Traduzida |
+|---|---|
+| `Unnamed: 0` (índice do R) | **`Unnamed: 0` — preservada, não muda** |
+| `Private` | `privada` |
+| `Apps` | `inscricoes` |
+| `Accept` | `aceitos` |
+| `Enroll` | `matriculados` |
+| `Top10perc` | `perc_top10` |
+| `Top25perc` | `perc_top25` |
+| `F.Undergrad` | `graduacao_integral` |
+| `P.Undergrad` | `graduacao_parcial` |
+| `Outstate` | `mensalidade_fora_do_estado` |
+| `Room.Board` | `moradia_e_alimentacao` |
+| `Books` | `custo_livros` |
+| `Personal` | `gastos_pessoais` |
+| `PhD` | `perc_doutores` |
+| `Terminal` | `perc_titulacao_maxima` |
+| `S.F.Ratio` | `razao_aluno_professor` |
+| `perc.alumni` | `perc_ex_alunos_doadores` |
+| `Expend` | `gasto_por_aluno` |
+| `Grad.Rate` | `taxa_conclusao` |
+
+Categorias também traduzidas: em `privada`, `Yes`/`No` viram `sim`/`não`.
+
+**Diferente dos demais conjuntos do ISLP neste diretório, a coluna de índice
+do R foi preservada**, com o nome `Unnamed: 0` que o `pandas` gera para ela, e
+com os nomes de universidade em inglês — nome próprio não se traduz. Nos
+outros CSV (`Advertising`, `Income1`, `Income2`, `Credit`, `Auto`) essa coluna
+foi removida na tradução; aqui ela é o assunto do item (b) do exercício 3: o
+aluno descobre que a primeira coluna é o nome da universidade e relê o
+arquivo com `index_col=0`. Removê-la apagaria o exercício.
 
 ## O que saiu
 

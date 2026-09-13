@@ -35,8 +35,11 @@ def baixar(url: str, destino: Path) -> None:
 # `Credit` e `Auto` entram com o capítulo 8 (ISLP 3): o primeiro é o exemplo
 # de preditor qualitativo e de colinearidade, o segundo o de termo não linear
 # e o de diagnóstico de resíduo.
+# `College` entra com a lista computacional 1: o exercício 3 dela é o 2.8 do
+# ISLP, que percorre o conjunto inteiro com `read_csv`, `describe` e uma matriz
+# de dispersão.
 BASE_ISLP = "https://www.statlearning.com/s/"
-for nome in ["Advertising", "Income1", "Income2", "Credit", "Auto"]:
+for nome in ["Advertising", "Income1", "Income2", "Credit", "Auto", "College"]:
     baixar(BASE_ISLP + f"{nome}.csv", DADOS / f"{nome}.csv")
 
 print("---")
