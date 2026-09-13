@@ -1,0 +1,1163 @@
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Flexibilidade e Erro</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans+Condensed:wght@600&family=IBM+Plex+Sans:wght@400;500&display=swap">
+
+<style>
+/* ------------------------------------------------------------------ *
+ * Tokens — os mesmos de apoio/gradiente-descendente.html e de
+ * apoio/lote-minibatch-estocastico.html, para as três páginas de apoio
+ * serem visivelmente irmãs. Fundo e texto do tema `cosmo` (o do livro em
+ * modo claro); azuis amostrados do logo da UnDF.
+ *
+ * As cores das séries são as do ciclo de `estilo-figuras.mplstyle`, o
+ * mesmo das figuras do livro — então página e capítulo leem como um
+ * sistema só.
+ *
+ * A ORDEM DA PILHA do terceiro painel não é arbitrária: Var(ε) verde na
+ * base, viés² azul no meio, variância laranja no topo. Verde e laranja
+ * adjacentes dão ΔE 7,2 em deuteranopia (banda de piso); com o azul entre
+ * os dois o pior par sobe para 18,9. Medido, não estimado — e a ordem
+ * também é a certa de ler, com o piso embaixo.
+ * ------------------------------------------------------------------ */
+:root{
+  color-scheme: light;
+
+  --paper:    #FFFFFF;
+  --paper-2:  #EEF4FA;
+  --panel:    #FFFFFF;
+  --ink:      #373A3C;
+  --ink-2:    #5B6B76;
+  --ink-3:    #8A99A5;
+  --rule:     #DCE5EE;
+  --grid:     #EDF2F7;
+
+  --marca:    #2264AF;
+  --pontos:   #9CBBD6;   /* as 100 observações, ao fundo */
+
+  --f:        #2264AF;   /* a f verdadeira — o azul da marca */
+  --ajuste:   #D9480F;   /* o ajuste atual — o laranja, o que se move */
+  --vies:     #4195D1;   /* viés²      — azul claro do ciclo */
+  --varc:     #D9480F;   /* variância  — o mesmo laranja do ajuste */
+  --ruido:    #2F8F46;   /* Var(ε)     — o verde do ciclo */
+
+  --ok:       #2F8F46;
+  --warn:     #B26A00;
+  --bad:      #C0392B;
+
+  --sans: "IBM Plex Sans", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --cond: "IBM Plex Sans Condensed", "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+
+  --r: 3px;
+  --rail: 330px;
+}
+
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    color-scheme: dark;
+    --paper:   #12161B;
+    --paper-2: #1A2430;
+    --panel:   #171F27;
+    --ink:     #E6ECF2;
+    --ink-2:   #9BAAB8;
+    --ink-3:   #6E7F8D;
+    --rule:    #2A3743;
+    --grid:    #202B35;
+    --marca:   #6FB0E8;
+    --pontos:  #4E6D8A;
+    --f:       #6FB0E8;
+    --ajuste:  #FF7A45;
+    --vies:    #6FB0E8;
+    --varc:    #FF7A45;
+    --ruido:   #5FC27E;
+    --ok:      #5FC27E;
+    --warn:    #E0A93B;
+    --bad:     #F0736A;
+  }
+}
+:root[data-theme="dark"]{
+  color-scheme: dark;
+  --paper:   #12161B;
+  --paper-2: #1A2430;
+  --panel:   #171F27;
+  --ink:     #E6ECF2;
+  --ink-2:   #9BAAB8;
+  --ink-3:   #6E7F8D;
+  --rule:    #2A3743;
+  --grid:    #202B35;
+  --marca:   #6FB0E8;
+  --pontos:  #4E6D8A;
+  --f:       #6FB0E8;
+  --ajuste:  #FF7A45;
+  --vies:    #6FB0E8;
+  --varc:    #FF7A45;
+  --ruido:   #5FC27E;
+  --ok:      #5FC27E;
+  --warn:    #E0A93B;
+  --bad:     #F0736A;
+}
+
+*{ box-sizing: border-box; }
+[hidden]{ display: none !important; }
+
+body{
+  margin: 0;
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--sans);
+  font-size: 15px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+}
+
+:focus-visible{ outline: 2px solid var(--marca); outline-offset: 2px; }
+
+/* --------------------------------- topo --------------------------------- */
+
+.app{
+  max-width: 1360px;
+  margin: 0 auto;
+  padding: 22px 24px 40px;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.topbar{
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 24px;
+  flex-wrap: wrap;
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--rule);
+}
+
+.eyebrow{
+  margin: 0 0 2px;
+  font-family: var(--cond);
+  font-size: 11.5px;
+  font-weight: 600;
+  letter-spacing: .14em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+}
+
+h1{
+  margin: 0;
+  font-family: var(--cond);
+  font-weight: 600;
+  font-size: clamp(26px, 3.4vw, 38px);
+  line-height: 1.04;
+  letter-spacing: -.005em;
+  text-wrap: balance;
+}
+
+.topo-dir{ display: flex; align-items: flex-end; gap: 18px; flex-wrap: wrap; }
+
+.modos{
+  display: flex;
+  border: 1px solid var(--rule);
+  border-radius: var(--r);
+  overflow: hidden;
+  background: var(--panel);
+}
+.modos button{
+  font-family: var(--cond);
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: .04em;
+  padding: 8px 14px;
+  border: 0;
+  background: transparent;
+  color: var(--ink-2);
+  cursor: pointer;
+}
+.modos button + button{ border-left: 1px solid var(--rule); }
+.modos button[aria-selected="true"]{ background: var(--marca); color: var(--paper); }
+
+.relogio{
+  text-align: right;
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
+}
+.relogio .n{ font-size: 30px; line-height: 1; color: var(--ink); }
+.relogio .u{
+  display: block;
+  font-family: var(--cond);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+  margin-top: 4px;
+}
+
+/* -------------------------------- palco --------------------------------- */
+
+.stage{
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) var(--rail);
+  gap: 20px;
+  align-items: start;
+}
+
+.plot{ display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+
+.plates{ display: grid; gap: 12px; grid-template-columns: 1fr 1fr; }
+.plates.uma{ grid-template-columns: 1fr; }
+
+.plate{
+  position: relative;
+  background: var(--panel);
+  border: 1px solid var(--rule);
+  border-radius: var(--r);
+  overflow: hidden;
+}
+
+canvas.painel{ display: block; width: 100%; height: 400px; }
+canvas.baixo{ height: 300px; }
+
+.tag{
+  position: absolute;
+  top: 9px; left: 12px;
+  font-family: var(--cond);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+  pointer-events: none;
+}
+
+.carregando{
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  background: var(--panel);
+  font-family: var(--cond);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+}
+
+/* ----------------------------- transporte ------------------------------- */
+
+.transport{ display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+
+button.ctl{
+  font-family: var(--cond);
+  font-size: 13.5px;
+  font-weight: 600;
+  letter-spacing: .03em;
+  padding: 8px 14px;
+  border: 1px solid var(--rule);
+  border-radius: var(--r);
+  background: var(--panel);
+  color: var(--ink);
+  cursor: pointer;
+}
+button.ctl:hover{ border-color: var(--ink-3); }
+button.ctl:disabled{ opacity: .42; cursor: default; }
+button.ctl.primary{
+  background: var(--marca);
+  border-color: var(--marca);
+  color: var(--paper);
+}
+button.ctl.primary:hover{ filter: brightness(1.08); }
+
+.flex-linha{
+  flex: 1 1 320px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-family: var(--cond);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: .07em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+  min-width: 240px;
+}
+.flex-linha input{ flex: 1; accent-color: var(--ajuste); }
+
+/* --------------------------- linha de código ---------------------------- */
+
+.code{
+  margin: 0;
+  padding: 13px 15px;
+  background: var(--paper-2);
+  border: 1px solid var(--rule);
+  border-left: 3px solid var(--marca);
+  border-radius: var(--r);
+  font-family: var(--mono);
+  font-size: 12.5px;
+  line-height: 1.7;
+  color: var(--ink);
+  overflow-x: auto;
+  white-space: pre;
+  font-variant-ligatures: none;
+}
+.code .cm{ color: var(--ink-3); }
+.code .cv{ color: var(--vies); }
+.code .cr{ color: var(--varc); }
+.code .cn{ color: var(--ruido); }
+
+/* ---------------------------- trilho lateral ---------------------------- */
+
+.rail{
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--rule);
+  border-radius: var(--r);
+  background: var(--panel);
+}
+.group{ padding: 15px 16px; }
+.group + .group{ border-top: 1px solid var(--rule); }
+
+.label{
+  margin: 0 0 9px;
+  font-family: var(--cond);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: .13em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 8px;
+}
+.label .sym{ font-family: var(--mono); text-transform: none; letter-spacing: 0; font-size: 12px; }
+
+dl.nums{
+  margin: 0;
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 3px 10px;
+  font-family: var(--mono);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+dl.nums dt{ color: var(--ink-3); white-space: nowrap; display: flex; align-items: center; gap: 7px; }
+dl.nums dd{ margin: 0; text-align: right; }
+dl.nums dt .sw{ width: 11px; height: 11px; border-radius: 2px; flex: none; }
+dl.nums .soma dt, dl.nums .soma dd{ border-top: 1px solid var(--rule); padding-top: 4px; margin-top: 2px; color: var(--ink); }
+
+.ctrl{ display: grid; grid-template-columns: 1fr 86px; gap: 9px; align-items: center; }
+input[type="range"]{ width: 100%; accent-color: var(--marca); }
+input[type="text"]{
+  font-family: var(--mono);
+  font-size: 13px;
+  color: var(--ink);
+  background: var(--paper);
+  border: 1px solid var(--rule);
+  border-radius: var(--r);
+  padding: 6px 8px;
+  width: 100%;
+  text-align: right;
+}
+
+.nota{
+  margin: 9px 0 0;
+  font-size: 12.5px;
+  line-height: 1.45;
+  color: var(--ink-2);
+}
+.nota strong{ color: var(--ink); }
+.nota code{ font-family: var(--mono); font-size: 11.5px; }
+
+/* --------------------------------- rodapé -------------------------------- */
+
+footer{
+  border-top: 1px solid var(--rule);
+  padding-top: 14px;
+  display: flex;
+  gap: 22px;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  font-size: 12.5px;
+  color: var(--ink-3);
+  line-height: 1.5;
+}
+footer p{ margin: 0; max-width: 60ch; }
+footer code{ font-family: var(--mono); font-size: 12px; color: var(--ink-2); }
+
+@media (max-width: 1180px){
+  .plates{ grid-template-columns: 1fr; }
+}
+@media (max-width: 940px){
+  .stage{ grid-template-columns: minmax(0, 1fr); }
+  .rail{ display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); }
+  .group + .group{ border-top: 0; border-left: 1px solid var(--rule); }
+  canvas.painel{ height: 340px; }
+  canvas.baixo{ height: 280px; }
+}
+@media (max-width: 560px){
+  .app{ padding: 16px 14px 28px; }
+  .rail{ grid-template-columns: 1fr; }
+  .group + .group{ border-left: 0; border-top: 1px solid var(--rule); }
+  canvas.painel{ height: 290px; }
+  canvas.baixo{ height: 250px; }
+}
+
+@media (prefers-reduced-motion: reduce){
+  *{ transition: none !important; }
+}
+</style>
+
+<div class="app">
+
+  <header class="topbar">
+    <div>
+      <p class="eyebrow">Bases 5 · Ciência de Dados · Seção 7.6</p>
+      <h1>Flexibilidade e erro</h1>
+    </div>
+    <div class="topo-dir">
+      <div class="modos" role="tablist" aria-label="A f verdadeira">
+        <button role="tab" data-f="ondulada" aria-selected="true">ondulada</button>
+        <button role="tab" data-f="quase-linear" aria-selected="false">quase linear</button>
+        <button role="tab" data-f="muito-nao-linear" aria-selected="false">muito não linear</button>
+      </div>
+      <div class="relogio">
+        <span class="n" id="relogio">—</span>
+        <span class="u">graus de liberdade</span>
+      </div>
+    </div>
+  </header>
+
+  <main class="stage">
+
+    <section class="plot">
+      <div class="plates">
+        <div class="plate">
+          <canvas class="painel" id="cv-dado"></canvas>
+          <span class="tag">o dado e o ajuste</span>
+          <div class="carregando" id="carregando">calculando os 60 ajustes…</div>
+        </div>
+        <div class="plate">
+          <canvas class="painel" id="cv-mse"></canvas>
+          <span class="tag">MSE de treino e de teste</span>
+        </div>
+      </div>
+
+      <div class="transport">
+        <button class="ctl" id="btn-rigido">o mais rígido</button>
+        <button class="ctl primary" id="btn-play">varrer</button>
+        <button class="ctl" id="btn-minimo">ir ao mínimo</button>
+        <label class="flex-linha">flexibilidade
+          <input type="range" id="flex" min="0" max="59" value="0" aria-label="Flexibilidade do ajuste">
+        </label>
+      </div>
+
+      <div class="plates uma">
+        <div class="plate">
+          <canvas class="painel baixo" id="cv-decomp"></canvas>
+          <span class="tag">a decomposição do MSE de teste</span>
+        </div>
+      </div>
+
+      <pre class="code" id="code"></pre>
+    </section>
+
+    <aside class="rail">
+
+      <div class="group">
+        <h2 class="label">Onde o ajuste está <span class="sym" id="lam-sym">λ</span></h2>
+        <dl class="nums">
+          <dt>graus de liberdade</dt><dd id="n-df">—</dd>
+          <dt>λ</dt><dd id="n-lam">—</dd>
+          <dt>MSE de treino</dt><dd id="n-treino">—</dd>
+          <dt>MSE de teste</dt><dd id="n-teste">—</dd>
+        </dl>
+        <p class="nota">O MSE de teste aqui é o <strong>esperado</strong>, em forma fechada — não a média sobre um conjunto sorteado. Por isso ele não oscila, e por isso não pode furar o piso por sorte da amostra.</p>
+      </div>
+
+      <div class="group">
+        <h2 class="label">A decomposição</h2>
+        <dl class="nums">
+          <dt><span class="sw" style="background:var(--varc)"></span>variância</dt><dd id="n-var">—</dd>
+          <dt><span class="sw" style="background:var(--vies)"></span>viés²</dt><dd id="n-vies">—</dd>
+          <dt><span class="sw" style="background:var(--ruido)"></span>Var(ε)</dt><dd id="n-ruido">—</dd>
+          <div class="soma" style="display:contents"><dt>soma</dt><dd id="n-soma">—</dd></div>
+        </dl>
+        <p class="nota">A soma é o MSE de teste, exatamente — não é aproximação. Mova a flexibilidade e veja <strong>viés² cair enquanto variância sobe</strong>; o mínimo da curva em U é onde essa troca para de compensar.</p>
+      </div>
+
+      <div class="group">
+        <h2 class="label">Ruído <span class="sym">σ</span></h2>
+        <div class="ctrl">
+          <input type="range" id="sig" min="25" max="300" value="150" aria-label="Desvio padrão do ruído">
+          <input type="text" id="sig-num" inputmode="decimal" aria-label="Desvio padrão do ruído, valor exato">
+        </div>
+        <p class="nota">σ é escolhido por quem simula, então <code>Var(ε) = σ²</code> é conhecido — e é a linha tracejada que a curva de teste não cruza. Mexa aqui e veja o piso subir junto com a curva inteira: <strong>a parte do erro que nenhum ajuste alcança</strong>. E repare para onde o mínimo anda: <strong>quanto mais ruído, menos flexibilidade compensa</strong>, porque cada grau de liberdade a mais passa a comprar mais variância pelo mesmo viés.</p>
+      </div>
+
+      <div class="group">
+        <h2 class="label">Onde olhar</h2>
+        <p class="nota" id="dica"></p>
+      </div>
+
+    </aside>
+  </main>
+
+  <footer>
+    <p><strong>Troque a f lá em cima e o mínimo muda de lugar.</strong> Com o σ padrão, ele fica perto de <strong>4</strong> graus de liberdade na <em>quase linear</em>, de <strong>8</strong> na <em>ondulada</em> e de <strong>13</strong> na <em>muito não linear</em> — o painel do meio mostra os três, e o botão <em>ir ao mínimo</em> vai direto a cada um. A curva em U não tem um ponto certo universal: ela tem o ponto certo <em>para aquela f</em>, que ninguém conhece fora de uma simulação.</p>
+    <p><strong>Fidelidade.</strong> O suavizador é um spline cúbico penalizado pelo algoritmo de Reinsch, e a decomposição sai em forma fechada de <code>S</code>, a matriz do suavizador: viés é <code>Sf − f</code> e variância é <code>σ²·diag(SSᵀ)</code>. Não há Monte Carlo, então a página é determinística e a pilha soma a curva de teste por construção. Os números foram conferidos contra uma implementação em <code>numpy</code>. Esta página simula o próprio dado: ela anima as figuras 2.9 a 2.12 de <em>An Introduction to Statistical Learning</em>, não reproduz a figura da seção 7.6.</p>
+  </footer>
+</div>
+
+<script>
+"use strict";
+
+/* ==================================================================== *
+ * O modelo — spline cúbico suavizador e a decomposição viés-variância
+ *
+ * Minimiza Σ(yᵢ − gᵢ)² + λ ∫ g''(t)² dt. Na forma de Reinsch, com
+ * Δ (m×n) e W (m×m, tridiagonal) construídas a partir dos espaçamentos,
+ * a matriz do suavizador é
+ *
+ *     S = (I + λ ΔᵀW⁻¹Δ)⁻¹ = I − λ Δᵀ (W + λΔΔᵀ)⁻¹ Δ          (Woodbury)
+ *
+ * A segunda forma é a que se calcula: (W + λΔΔᵀ) é simétrica definida
+ * positiva e pequena, e evita inverter uma matriz n×n cheia.
+ *
+ * Com S em mãos e a f verdadeira conhecida — o dado é simulado —, viés e
+ * variância saem em FORMA FECHADA, sem reamostrar nada:
+ *
+ *     viés(xᵢ)      = (S·f)ᵢ − f(xᵢ)
+ *     variância(xᵢ) = σ² · (S·Sᵀ)ᵢᵢ
+ *     MSE de teste esperado = média(viés²) + média(variância) + σ²
+ *
+ * Três consequências, e são elas que justificam a página: ela é
+ * determinística; a pilha do terceiro painel soma a curva de teste por
+ * construção, não por acaso; e a curva de teste fica acima do piso
+ * PROVADAMENTE, em vez de por sorte da amostra.
+ *
+ * S não depende de f, de σ nem de y — só de x e de λ. Por isso o laço
+ * caro roda UMA VEZ, no carregamento, e tudo depois é O(n).
+ * ==================================================================== */
+
+const N = 100;                 // observações
+const X0 = 0, X1 = 10;         // domínio
+const NLAM = 60;               // pontos da varredura
+
+/* Gerador determinístico. O Mersenne Twister do Python não existe no
+ * navegador; esta página não precisa dele, porque simula o próprio dado. */
+function mulberry32(semente){
+  let a = semente >>> 0;
+  return function(){
+    a = (a + 0x6D2B79F5) >>> 0;
+    let t = a;
+    t = Math.imul(t ^ (t >>> 15), t | 1) >>> 0;
+    t = (t ^ (t + Math.imul(t ^ (t >>> 7), t | 61))) >>> 0;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+function normais(prox, n){
+  const saida = new Float64Array(n);
+  let i = 0;
+  while (i < n){
+    const u1 = Math.max(prox(), 1e-12), u2 = prox();
+    const r = Math.sqrt(-2 * Math.log(u1));
+    saida[i++] = r * Math.cos(2 * Math.PI * u2);
+    if (i < n) saida[i++] = r * Math.sin(2 * Math.PI * u2);
+  }
+  return saida;
+}
+
+/* x quase igualmente espaçado, com um tremor pequeno para a nuvem não
+ * parecer uma régua. Ordenado por construção: o tremor é menor que meio
+ * passo. */
+function gradeX(){
+  const p = mulberry32(7), passo = (X1 - X0) / N, x = new Float64Array(N);
+  for (let i = 0; i < N; i++) x[i] = X0 + (i + 0.5) * passo + (p() - 0.5) * passo * 0.9;
+  return x;
+}
+
+const FS = {
+  "ondulada":         { rotulo: "ondulada",         f: x => 4 + 0.3 * x + 3 * Math.sin(x) },
+  "quase-linear":     { rotulo: "quase linear",     f: x => 4 + 0.9 * x + 0.4 * Math.sin(x) },
+  "muito-nao-linear": { rotulo: "muito não linear", f: x => 4 + 0.1 * x + 5 * Math.sin(1.6 * x) },
+};
+const CHAVES = Object.keys(FS);
+
+const DICAS = {
+  "ondulada": "Com σ = 1,5 o mínimo fica perto de <strong>8 graus de liberdade</strong>. À esquerda dele a curva laranja é rígida demais e o viés² domina; à direita ela persegue cada ponto e a variância domina. O MSE de treino, enquanto isso, cai o tempo todo — e é por isso que ele não serve para escolher nada.",
+  "quase-linear": "Aqui a f verdadeira quase é uma reta, e o mínimo vem <strong>bem mais cedo</strong>. Repare como a curva em U é rasa perto do fundo, comparada com as outras duas: quando a relação é simples, flexibilidade a mais custa pouco por um bom tempo — mas também não compra nada.",
+  "muito-nao-linear": "A f oscila forte, e agora o mínimo exige <strong>muito mais flexibilidade</strong>. No extremo rígido o viés² é enorme: nenhuma quantidade de dado conserta uma reta tentando acompanhar isto. É o preço da forma errada, escolhida antes de ver o primeiro ponto.",
+};
+
+/* --------------------------- álgebra do spline -------------------------- */
+
+function construir(x){
+  const n = x.length, m = n - 2;
+  const h = new Float64Array(n - 1);
+  for (let i = 0; i < n - 1; i++) h[i] = x[i + 1] - x[i];
+
+  // Δ (m×n), três entradas por linha: colunas a, a+1, a+2.
+  const d0 = new Float64Array(m), d1 = new Float64Array(m), d2 = new Float64Array(m);
+  // W (m×m), tridiagonal simétrica.
+  const w0 = new Float64Array(m), w1 = new Float64Array(m);
+  for (let a = 0; a < m; a++){
+    d0[a] = 1 / h[a];
+    d1[a] = -1 / h[a] - 1 / h[a + 1];
+    d2[a] = 1 / h[a + 1];
+    w0[a] = (h[a] + h[a + 1]) / 3;
+    if (a < m - 1) w1[a] = h[a + 1] / 6;
+  }
+
+  // Δᵀ por coluna: para cada i, as linhas a com Δ[a][i] ≠ 0, e o valor.
+  const cols = [];
+  for (let i = 0; i < n; i++){
+    const lista = [];
+    if (i - 2 >= 0 && i - 2 < m) lista.push([i - 2, d2[i - 2]]);
+    if (i - 1 >= 0 && i - 1 < m) lista.push([i - 1, d1[i - 1]]);
+    if (i >= 0 && i < m)         lista.push([i,     d0[i]]);
+    cols.push(lista);
+  }
+
+  // ΔΔᵀ (m×m), pentadiagonal.
+  const dd = new Float64Array(m * m);
+  for (let a = 0; a < m; a++){
+    for (let b = a; b < Math.min(m, a + 3); b++){
+      let s = 0;
+      // colunas comuns: a..a+2 ∩ b..b+2
+      const da = [d0[a], d1[a], d2[a]], db = [d0[b], d1[b], d2[b]];
+      for (let k = 0; k < 3; k++){
+        const col = a + k, kb = col - b;
+        if (kb >= 0 && kb < 3) s += da[k] * db[kb];
+      }
+      dd[a * m + b] = s; dd[b * m + a] = s;
+    }
+  }
+
+  return { n, m, w0, w1, dd, cols };
+}
+
+/* Cholesky de B (m×m, SPD) e a inversa completa. */
+function inversaSPD(B, m){
+  const L = new Float64Array(m * m);
+  for (let j = 0; j < m; j++){
+    let s = B[j * m + j];
+    for (let k = 0; k < j; k++) s -= L[j * m + k] * L[j * m + k];
+    const ljj = Math.sqrt(Math.max(s, 1e-300));
+    L[j * m + j] = ljj;
+    for (let i = j + 1; i < m; i++){
+      let t = B[i * m + j];
+      for (let k = 0; k < j; k++) t -= L[i * m + k] * L[j * m + k];
+      L[i * m + j] = t / ljj;
+    }
+  }
+  // Binv = L⁻ᵀ L⁻¹, coluna a coluna (simétrica: só metade, espelhada).
+  const inv = new Float64Array(m * m), y = new Float64Array(m);
+  for (let c = 0; c < m; c++){
+    for (let i = 0; i < m; i++){
+      let s = (i === c) ? 1 : 0;
+      for (let k = 0; k < i; k++) s -= L[i * m + k] * y[k];
+      y[i] = s / L[i * m + i];
+    }
+    for (let i = m - 1; i >= 0; i--){
+      let s = y[i];
+      for (let k = i + 1; k < m; k++) s -= L[k * m + i] * inv[k * m + c];
+      inv[i * m + c] = s / L[i * m + i];
+    }
+  }
+  return inv;
+}
+
+/* A varredura inteira. Roda uma vez; devolve, por λ: df, diag(SSᵀ), S·z e
+ * S·f para cada uma das três f. */
+function varrer(x, z){
+  const { n, m, w0, w1, dd, cols } = construir(x);
+  const lambdas = new Float64Array(NLAM);
+  for (let k = 0; k < NLAM; k++){
+    const e = 4 + (-3.2 - 4) * (k / (NLAM - 1));
+    lambdas[k] = Math.pow(10, e);
+  }
+
+  const fvals = {};
+  for (const chave of CHAVES){
+    const v = new Float64Array(n);
+    for (let i = 0; i < n; i++) v[i] = FS[chave].f(x[i]);
+    fvals[chave] = v;
+  }
+
+  const df = new Float64Array(NLAM);
+  const diagSSt = [], Sz = [], Sf = {};
+  for (const chave of CHAVES) Sf[chave] = [];
+
+  const B = new Float64Array(m * m), linha = new Float64Array(n);
+
+  for (let k = 0; k < NLAM; k++){
+    const lam = lambdas[k];
+    /* Dois passes, e a ordem importa: o primeiro escreve B inteira a partir
+     * de ΔΔᵀ, o segundo soma W por cima. Num pass só, a linha `a` seria
+     * reescrita DEPOIS de a iteração `a-1` já ter posto w1 na subdiagonal
+     * dela — e a tridiagonal de W entraria pela metade, deixando B
+     * assimétrica sem erro nenhum na tela. */
+    for (let i = 0; i < m * m; i++) B[i] = lam * dd[i];
+    for (let a = 0; a < m; a++){
+      B[a * m + a] += w0[a];
+      if (a < m - 1){ B[a * m + a + 1] += w1[a]; B[(a + 1) * m + a] += w1[a]; }
+    }
+    const inv = inversaSPD(B, m);
+
+    const dss = new Float64Array(n), sz = new Float64Array(n);
+    const sf = {};
+    for (const chave of CHAVES) sf[chave] = new Float64Array(n);
+    let tr = 0;
+
+    for (let i = 0; i < n; i++){
+      const Li = cols[i];
+      for (let j = 0; j < n; j++){
+        const Lj = cols[j];
+        let acc = 0;
+        for (let p = 0; p < Li.length; p++){
+          const a = Li[p][0], va = Li[p][1];
+          for (let q = 0; q < Lj.length; q++) acc += va * Lj[q][1] * inv[a * m + Lj[q][0]];
+        }
+        linha[j] = (i === j ? 1 : 0) - lam * acc;
+      }
+      tr += linha[i];
+      let ss = 0, azz = 0;
+      const parciais = {};
+      for (const chave of CHAVES) parciais[chave] = 0;
+      for (let j = 0; j < n; j++){
+        const v = linha[j];
+        ss += v * v;
+        azz += v * z[j];
+        for (const chave of CHAVES) parciais[chave] += v * fvals[chave][j];
+      }
+      dss[i] = ss; sz[i] = azz;
+      for (const chave of CHAVES) sf[chave][i] = parciais[chave];
+    }
+
+    df[k] = tr;
+    diagSSt.push(dss);
+    Sz.push(sz);
+    for (const chave of CHAVES) Sf[chave].push(sf[chave]);
+  }
+
+  return { lambdas, df, diagSSt, Sz, Sf, fvals };
+}
+
+/* ==================================================================== *
+ * Estado
+ * ==================================================================== */
+
+const x = gradeX();
+const z = normais(mulberry32(20260912), N);
+const S = { chave: "ondulada", k: 0, sigma: 1.5, tocando: false, pronto: false };
+let M = null;   // o resultado da varredura
+
+/* Tudo o que a tela mostra, derivado do estado em O(n). */
+function curvas(){
+  const s2 = S.sigma * S.sigma;
+  const f = M.fvals[S.chave];
+  const y = new Float64Array(N);
+  for (let i = 0; i < N; i++) y[i] = f[i] + S.sigma * z[i];
+
+  const vies2 = new Float64Array(NLAM), varia = new Float64Array(NLAM);
+  const teste = new Float64Array(NLAM), treino = new Float64Array(NLAM);
+  for (let k = 0; k < NLAM; k++){
+    const sf = M.Sf[S.chave][k], sz = M.Sz[k], dss = M.diagSSt[k];
+    let b = 0, v = 0, t = 0;
+    for (let i = 0; i < N; i++){
+      const d = sf[i] - f[i];
+      b += d * d;
+      v += dss[i];
+      const res = y[i] - (sf[i] + S.sigma * sz[i]);
+      t += res * res;
+    }
+    vies2[k] = b / N;
+    varia[k] = s2 * v / N;
+    teste[k] = vies2[k] + varia[k] + s2;
+    treino[k] = t / N;
+  }
+  return { y, f, vies2, varia, teste, treino, piso: s2 };
+}
+
+function ajusteAtual(){
+  const sf = M.Sf[S.chave][S.k], sz = M.Sz[S.k];
+  const g = new Float64Array(N);
+  for (let i = 0; i < N; i++) g[i] = sf[i] + S.sigma * sz[i];
+  return g;
+}
+
+/* ==================================================================== *
+ * Desenho — utilidades
+ * ==================================================================== */
+
+function css(n){ return getComputedStyle(document.documentElement).getPropertyValue(n).trim(); }
+
+function ajustar(c){
+  const r = c.getBoundingClientRect();
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  const w = Math.max(1, Math.round(r.width)), h = Math.max(1, Math.round(r.height));
+  if (c.width !== Math.round(w * dpr) || c.height !== Math.round(h * dpr)){
+    c.width = Math.round(w * dpr);
+    c.height = Math.round(h * dpr);
+  }
+  const g = c.getContext("2d");
+  g.setTransform(dpr, 0, 0, dpr, 0, 0);
+  return [g, w, h];
+}
+
+function rotulo(g, txt, x, y, cor, opc){
+  const o = opc || {};
+  g.save();
+  g.font = o.font || "500 11px " + css("--cond");
+  g.textAlign = o.align || "left";
+  g.textBaseline = o.baseline || "alphabetic";
+  g.lineWidth = 3.5;
+  g.lineJoin = "round";
+  g.strokeStyle = o.halo || css("--panel");
+  g.strokeText(txt, x, y);
+  g.fillStyle = cor;
+  g.fillText(txt, x, y);
+  g.restore();
+}
+
+function fmt(v, casas){
+  if (!Number.isFinite(v)) return "—";
+  return v.toFixed(casas === undefined ? 2 : casas);
+}
+
+function eixos(g, M_, W, H, xt, yt, Xp, Yp, rotX, rotY){
+  const C = { grid: css("--grid"), ink3: css("--ink-3") };
+  g.strokeStyle = C.grid; g.lineWidth = 1;
+  g.beginPath();
+  for (const v of xt){ const px = Math.round(Xp(v)) + .5; g.moveTo(px, M_.c); g.lineTo(px, H - M_.b); }
+  for (const v of yt){ const py = Math.round(Yp(v)) + .5; g.moveTo(M_.e, py); g.lineTo(W - M_.d, py); }
+  g.stroke();
+
+  g.font = "400 10.5px " + css("--mono");
+  g.fillStyle = C.ink3;
+  g.textAlign = "center"; g.textBaseline = "top";
+  for (const v of xt) g.fillText(String(v), Xp(v), H - M_.b + 7);
+  g.textAlign = "right"; g.textBaseline = "middle";
+  for (const v of yt) g.fillText(String(v), M_.e - 8, Yp(v));
+
+  g.font = "600 10.5px " + css("--cond");
+  g.textAlign = "center"; g.textBaseline = "bottom";
+  g.fillText(rotX, M_.e + (W - M_.e - M_.d) / 2, H - 4);
+  g.save();
+  g.translate(11, M_.c + (H - M_.c - M_.b) / 2);
+  g.rotate(-Math.PI / 2);
+  g.textBaseline = "top";
+  g.fillText(rotY, 0, 0);
+  g.restore();
+}
+
+function marcas(lo, hi, alvo){
+  const bruto = (hi - lo) / alvo;
+  const mag = Math.pow(10, Math.floor(Math.log10(bruto)));
+  const passo = [1, 2, 2.5, 5, 10].find(p => p * mag >= bruto) * mag;
+  const saida = [];
+  for (let v = Math.ceil(lo / passo) * passo; v <= hi + 1e-9; v += passo){
+    saida.push(Math.round(v * 1e6) / 1e6);
+  }
+  return saida;
+}
+
+/* Índice cujo df fica mais perto de uma fração do EIXO.
+ *
+ * A varredura é densa no lado rígido — df[8] ainda é 2,5 de um eixo que vai
+ * a 40 —, então fração do ARRAY não é fração do eixo, e um rótulo posto por
+ * índice encosta no eixo y. Rótulo se posiciona por valor. */
+function idxPorDf(fracao){
+  const alvo = M.df[0] + fracao * (M.df[NLAM - 1] - M.df[0]);
+  let melhor = 0;
+  for (let k = 1; k < NLAM; k++) if (Math.abs(M.df[k] - alvo) < Math.abs(M.df[melhor] - alvo)) melhor = k;
+  return melhor;
+}
+
+/* ==================================================================== *
+ * Painel 1 — o dado e o ajuste
+ * ==================================================================== */
+
+function desenharDado(C){
+  const [g, W, H] = ajustar(document.getElementById("cv-dado"));
+  const Mg = { e: 48, d: 16, c: 30, b: 40 };
+  g.fillStyle = css("--panel"); g.fillRect(0, 0, W, H);
+
+  let lo = Infinity, hi = -Infinity;
+  for (let i = 0; i < N; i++){ lo = Math.min(lo, C.y[i], C.f[i]); hi = Math.max(hi, C.y[i], C.f[i]); }
+  const folga = (hi - lo) * 0.08;
+  lo -= folga; hi += folga;
+
+  const Xp = v => Mg.e + (v - X0) / (X1 - X0) * (W - Mg.e - Mg.d);
+  const Yp = v => Mg.c + (1 - (v - lo) / (hi - lo)) * (H - Mg.c - Mg.b);
+  eixos(g, Mg, W, H, marcas(X0, X1, 5), marcas(lo, hi, 5), Xp, Yp, "x", "y");
+
+  g.fillStyle = css("--pontos");
+  for (let i = 0; i < N; i++){
+    g.beginPath(); g.arc(Xp(x[i]), Yp(C.y[i]), 2.6, 0, 2 * Math.PI); g.fill();
+  }
+
+  const traco = (v, cor, larg) => {
+    g.strokeStyle = cor; g.lineWidth = larg; g.lineJoin = "round";
+    g.beginPath();
+    for (let i = 0; i < N; i++){ const px = Xp(x[i]), py = Yp(v[i]); i ? g.lineTo(px, py) : g.moveTo(px, py); }
+    g.stroke();
+  };
+  traco(C.f, css("--f"), 2);
+  const g_ = ajusteAtual();
+  traco(g_, css("--ajuste"), 2.5);
+
+  rotulo(g, "f verdadeira", Xp(x[2]) + 4, Yp(C.f[2]) - 9, css("--f"));
+  const iRot = Math.round(N * 0.62);
+  rotulo(g, "o ajuste", Xp(x[iRot]) + 4, Yp(g_[iRot]) + 16, css("--ajuste"));
+}
+
+/* ==================================================================== *
+ * Painel 2 — MSE de treino e de teste contra os graus de liberdade
+ * ==================================================================== */
+
+function desenharMSE(C){
+  const [g, W, H] = ajustar(document.getElementById("cv-mse"));
+  const Mg = { e: 48, d: 16, c: 30, b: 40 };
+  g.fillStyle = css("--panel"); g.fillRect(0, 0, W, H);
+
+  const dfLo = M.df[0], dfHi = M.df[NLAM - 1];
+  let hi = 0;
+  for (let k = 0; k < NLAM; k++) hi = Math.max(hi, C.teste[k], C.treino[k]);
+  hi *= 1.08;
+
+  const Xp = v => Mg.e + (v - dfLo) / (dfHi - dfLo) * (W - Mg.e - Mg.d);
+  const Yp = v => Mg.c + (1 - v / hi) * (H - Mg.c - Mg.b);
+  eixos(g, Mg, W, H, marcas(dfLo, dfHi, 5), marcas(0, hi, 5), Xp, Yp,
+        "graus de liberdade  (mais flexível →)", "MSE");
+
+  // o piso irredutível
+  g.save();
+  g.strokeStyle = css("--ruido"); g.lineWidth = 1.5; g.setLineDash([5, 4]);
+  g.beginPath(); g.moveTo(Mg.e, Yp(C.piso)); g.lineTo(W - Mg.d, Yp(C.piso)); g.stroke();
+  g.restore();
+  rotulo(g, "Var(ε) = " + fmt(C.piso), W - Mg.d - 6, Yp(C.piso) - 6, css("--ruido"), { align: "right" });
+
+  const traco = (v, cor, larg, tracejado) => {
+    g.save();
+    g.strokeStyle = cor; g.lineWidth = larg; g.lineJoin = "round";
+    if (tracejado) g.setLineDash(tracejado);
+    g.beginPath();
+    for (let k = 0; k < NLAM; k++){ const px = Xp(M.df[k]), py = Yp(v[k]); k ? g.lineTo(px, py) : g.moveTo(px, py); }
+    g.stroke();
+    g.restore();
+  };
+  traco(C.treino, css("--ink-3"), 2, [6, 4]);
+  traco(C.teste, css("--marca"), 2.5);
+
+  marcador(g, Mg, W, H, Xp(M.df[S.k]));
+  g.fillStyle = css("--marca");
+  g.beginPath(); g.arc(Xp(M.df[S.k]), Yp(C.teste[S.k]), 4, 0, 2 * Math.PI); g.fill();
+
+  const kr = idxPorDf(0.62);
+  rotulo(g, "teste", Xp(M.df[kr]) + 6, Yp(C.teste[kr]) - 8, css("--marca"));
+  rotulo(g, "treino", Xp(M.df[kr]) + 6, Yp(C.treino[kr]) + 14, css("--ink-3"));
+}
+
+function marcador(g, Mg, W, H, px){
+  g.save();
+  g.strokeStyle = css("--ink-2"); g.lineWidth = 1.5;
+  g.beginPath(); g.moveTo(Math.round(px) + .5, Mg.c); g.lineTo(Math.round(px) + .5, H - Mg.b); g.stroke();
+  g.restore();
+}
+
+/* ==================================================================== *
+ * Painel 3 — a decomposição, empilhada
+ *
+ * Ordem da pilha, de baixo para cima: Var(ε), viés², variância. Entre as
+ * faixas vai uma folga de 2px na cor do painel, e cada faixa leva o
+ * próprio rótulo dentro — é a codificação secundária que uma pilha de
+ * três cores exige para não depender só da cor.
+ * ==================================================================== */
+
+function desenharDecomp(C){
+  const [g, W, H] = ajustar(document.getElementById("cv-decomp"));
+  const Mg = { e: 48, d: 16, c: 26, b: 40 };
+  g.fillStyle = css("--panel"); g.fillRect(0, 0, W, H);
+
+  const dfLo = M.df[0], dfHi = M.df[NLAM - 1];
+  let hi = 0;
+  for (let k = 0; k < NLAM; k++) hi = Math.max(hi, C.teste[k]);
+  hi *= 1.08;
+
+  const Xp = v => Mg.e + (v - dfLo) / (dfHi - dfLo) * (W - Mg.e - Mg.d);
+  const Yp = v => Mg.c + (1 - v / hi) * (H - Mg.c - Mg.b);
+  eixos(g, Mg, W, H, marcas(dfLo, dfHi, 5), marcas(0, hi, 5), Xp, Yp,
+        "graus de liberdade  (mais flexível →)", "MSE de teste");
+
+  const faixa = (base, topo, cor) => {
+    g.fillStyle = cor;
+    g.beginPath();
+    for (let k = 0; k < NLAM; k++){ const px = Xp(M.df[k]), py = Yp(topo(k)); k ? g.lineTo(px, py) : g.moveTo(px, py); }
+    for (let k = NLAM - 1; k >= 0; k--) g.lineTo(Xp(M.df[k]), Yp(base(k)));
+    g.closePath(); g.fill();
+  };
+  const b0 = () => 0;
+  const b1 = () => C.piso;
+  const b2 = k => C.piso + C.vies2[k];
+  const b3 = k => C.piso + C.vies2[k] + C.varia[k];
+
+  faixa(b0, b1, css("--ruido"));
+  faixa(b1, b2, css("--vies"));
+  faixa(b2, b3, css("--varc"));
+
+  // as folgas de 2px entre faixas, na cor do painel
+  const separa = (nivel) => {
+    g.save();
+    g.strokeStyle = css("--panel"); g.lineWidth = 2;
+    g.beginPath();
+    for (let k = 0; k < NLAM; k++){ const px = Xp(M.df[k]), py = Yp(nivel(k)); k ? g.lineTo(px, py) : g.moveTo(px, py); }
+    g.stroke(); g.restore();
+  };
+  separa(b1); separa(b2);
+
+  // o topo da pilha É a curva de teste — desenhada por cima para dizer isso
+  g.strokeStyle = css("--marca"); g.lineWidth = 2; g.lineJoin = "round";
+  g.beginPath();
+  for (let k = 0; k < NLAM; k++){ const px = Xp(M.df[k]), py = Yp(C.teste[k]); k ? g.lineTo(px, py) : g.moveTo(px, py); }
+  g.stroke();
+
+  // rótulos diretos dentro de cada faixa
+  const meio = idxPorDf(0.5), fim = idxPorDf(0.82), ini = idxPorDf(0.18);
+  const halo = css("--panel");
+  rotulo(g, "Var(ε)", Xp(M.df[meio]), Yp(C.piso / 2) + 4, css("--paper"), { align: "center", halo: css("--ruido") });
+  if (C.vies2[ini] > hi * 0.06)
+    rotulo(g, "viés²", Xp(M.df[ini]), Yp(C.piso + C.vies2[ini] / 2) + 4, css("--paper"), { align: "center", halo: css("--vies") });
+  else
+    rotulo(g, "viés²", Xp(M.df[ini]), Yp(b2(ini)) - 8, css("--vies"), { align: "center", halo: halo });
+  if (C.varia[fim] > hi * 0.06)
+    rotulo(g, "variância", Xp(M.df[fim]), Yp(b2(fim) + C.varia[fim] / 2) + 4, css("--paper"), { align: "center", halo: css("--varc") });
+  else
+    rotulo(g, "variância", Xp(M.df[fim]), Yp(b3(fim)) - 8, css("--varc"), { align: "center", halo: halo });
+
+  marcador(g, Mg, W, H, Xp(M.df[S.k]));
+}
+
+/* ==================================================================== *
+ * O trilho, a linha de código e o relógio
+ * ==================================================================== */
+
+function texto(C){
+  const df = M.df[S.k];
+  document.getElementById("relogio").textContent = fmt(df, 1);
+  document.getElementById("n-df").textContent = fmt(df, 2);
+  document.getElementById("n-lam").textContent = M.lambdas[S.k].toExponential(2);
+  document.getElementById("n-treino").textContent = fmt(C.treino[S.k], 3);
+  document.getElementById("n-teste").textContent = fmt(C.teste[S.k], 3);
+  document.getElementById("n-var").textContent = fmt(C.varia[S.k], 3);
+  document.getElementById("n-vies").textContent = fmt(C.vies2[S.k], 3);
+  document.getElementById("n-ruido").textContent = fmt(C.piso, 3);
+  document.getElementById("n-soma").textContent = fmt(C.vies2[S.k] + C.varia[S.k] + C.piso, 3);
+  document.getElementById("dica").innerHTML = DICAS[S.chave];
+
+  document.getElementById("code").innerHTML =
+    '<span class="cm"># MSE de teste esperado, com ' + fmt(df, 2) + ' graus de liberdade</span>\n' +
+    fmt(C.teste[S.k], 4) + '  =  ' +
+    '<span class="cv">' + fmt(C.vies2[S.k], 4) + '</span>  +  ' +
+    '<span class="cr">' + fmt(C.varia[S.k], 4) + '</span>  +  ' +
+    '<span class="cn">' + fmt(C.piso, 4) + '</span>\n' +
+    '<span class="cm">          viés²      variância    Var(ε)</span>';
+}
+
+function pintar(){
+  if (!S.pronto) return;
+  const C = curvas();
+  desenharDado(C);
+  desenharMSE(C);
+  desenharDecomp(C);
+  texto(C);
+}
+
+/* ==================================================================== *
+ * Controles
+ * ==================================================================== */
+
+const elFlex = document.getElementById("flex");
+const elSig = document.getElementById("sig");
+const elSigNum = document.getElementById("sig-num");
+const elPlay = document.getElementById("btn-play");
+
+elFlex.addEventListener("input", () => { S.k = +elFlex.value; parar(); pintar(); });
+
+function aplicaSigma(v){
+  S.sigma = Math.min(3, Math.max(0.25, v));
+  elSig.value = String(Math.round(S.sigma * 100));
+  elSigNum.value = S.sigma.toFixed(2);
+  pintar();
+}
+elSig.addEventListener("input", () => aplicaSigma(+elSig.value / 100));
+elSigNum.addEventListener("change", () => {
+  const v = parseFloat(elSigNum.value.replace(",", "."));
+  aplicaSigma(Number.isFinite(v) ? v : S.sigma);
+});
+
+for (const b of document.querySelectorAll(".modos button")){
+  b.addEventListener("click", () => {
+    for (const o of document.querySelectorAll(".modos button")) o.setAttribute("aria-selected", String(o === b));
+    S.chave = b.dataset.f;
+    pintar();
+  });
+}
+
+document.getElementById("btn-rigido").addEventListener("click", () => {
+  parar(); S.k = 0; elFlex.value = "0"; pintar();
+});
+
+document.getElementById("btn-minimo").addEventListener("click", () => {
+  parar();
+  const C = curvas();
+  let melhor = 0;
+  for (let k = 1; k < NLAM; k++) if (C.teste[k] < C.teste[melhor]) melhor = k;
+  S.k = melhor; elFlex.value = String(melhor); pintar();
+});
+
+let quadro = null;
+function parar(){
+  if (quadro !== null){ cancelAnimationFrame(quadro); quadro = null; }
+  S.tocando = false;
+  elPlay.textContent = "varrer";
+}
+elPlay.addEventListener("click", () => {
+  if (S.tocando){ parar(); return; }
+  S.tocando = true;
+  elPlay.textContent = "parar";
+  if (S.k >= NLAM - 1) S.k = 0;
+  let ultimo = performance.now(), acumulado = 0;
+  const passo = (agora) => {
+    acumulado += agora - ultimo;
+    ultimo = agora;
+    while (acumulado > 55 && S.k < NLAM - 1){ S.k++; acumulado -= 55; }
+    elFlex.value = String(S.k);
+    pintar();
+    if (S.k >= NLAM - 1){ parar(); return; }
+    quadro = requestAnimationFrame(passo);
+  };
+  quadro = requestAnimationFrame(passo);
+});
+
+window.addEventListener("resize", pintar);
+if (window.matchMedia) window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", pintar);
+
+/* ==================================================================== *
+ * Partida — a varredura é o único trecho caro, e roda uma vez só.
+ * ==================================================================== */
+
+requestAnimationFrame(() => setTimeout(() => {
+  M = varrer(x, z);
+  S.pronto = true;
+  document.getElementById("carregando").hidden = true;
+  elFlex.max = String(NLAM - 1);
+  aplicaSigma(1.5);
+}, 30));
+</script>
