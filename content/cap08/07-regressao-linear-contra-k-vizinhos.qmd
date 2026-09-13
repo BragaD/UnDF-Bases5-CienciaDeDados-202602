@@ -4,7 +4,285 @@
 Esta seção corresponde à seção 3.5 de @james2023.
 :::
 
-::: {.callout-warning}
-## Em construção
-O conteúdo desta seção ainda será escrito.
-:::
+O capítulo inteiro apostou na mesma forma: uma combinação linear de coeficientes, seja a reta simples da seção 8.1, o plano múltiplo da 8.3, ou a curva de grau 5 da 8.5, que continua sendo linear nos coeficientes mesmo com `potencia²` dentro dela. A seção 7.3 já mostrou que essa não é a única aposta possível — o k-NN não assume forma nenhuma para `f`, e deixa a vizinhança de cada ponto decidir o valor previsto ali —, e a seção 7.6 mediu o preço dessa liberdade em MSE de teste, contra uma `f` simulada e conhecida. Esta seção junta as duas coisas: a mesma régua da 7.6, aplicada à pergunta que a 7.3 deixou em aberto — quando a forma que a reta assume compensa, e quando ela custa caro?
+
+```{python}
+#| label: setup
+#| include: false
+import matplotlib.pyplot as plt
+import numpy as np
+from sklearn.linear_model import LinearRegression
+from sklearn.metrics import mean_squared_error
+from sklearn.neighbors import KNeighborsRegressor
+
+plt.style.use("estilo-figuras.mplstyle")
+```
+
+## Quando a forma verdadeira é a da reta
+
+Responder a pergunta com `Auto` ou `Credit` não dá: a `f` que gerou `milhas_por_galao` ou `saldo` é desconhecida, e sem ela não há como saber se um ajuste chegou perto da relação verdadeira ou só decorou o ruído da amostra — a mesma dificuldade que a seção 7.6 já contornou simulando o próprio dado. Esta seção simula de novo, com a semente `np.random.default_rng(8)` deste capítulo, começando pelo cenário mais favorável à reta que existe: uma verdade exatamente linear.
+
+```{python}
+#| label: simulacao-linear
+def f_verdadeiro(x, curvatura, freq=0.8):
+    return 2.0 + 1.5 * x + curvatura * np.sin(freq * x)
+
+rng = np.random.default_rng(8)
+n_treino = 50
+ruido_padrao = 0.5
+
+x_treino = rng.uniform(-3, 3, size=n_treino)
+ruido_treino = rng.normal(0, ruido_padrao, size=n_treino)
+y_treino_linear = f_verdadeiro(x_treino, 0.0) + ruido_treino
+
+n_treino, ruido_padrao
+```
+
+Cinquenta pontos de treino, `x` uniforme entre -3 e 3, com ruído normal de desvio padrão 0,5 somado a uma reta verdadeira, `f(x) = 2,0 + 1,5x`. A função `f_verdadeiro` carrega um segundo termo, `curvatura * sin(0,8x)`, que fica zerado por enquanto — a próxima seção liga esse termo aos poucos, sem mudar mais nada.
+
+```{python}
+#| label: ajustes-linear
+reta = LinearRegression().fit(x_treino.reshape(-1, 1), y_treino_linear)
+knn1 = KNeighborsRegressor(n_neighbors=1).fit(x_treino.reshape(-1, 1), y_treino_linear)
+knn9 = KNeighborsRegressor(n_neighbors=9).fit(x_treino.reshape(-1, 1), y_treino_linear)
+
+mse_treino_reta = mean_squared_error(y_treino_linear, reta.predict(x_treino.reshape(-1, 1)))
+mse_treino_knn1 = mean_squared_error(y_treino_linear, knn1.predict(x_treino.reshape(-1, 1)))
+mse_treino_knn9 = mean_squared_error(y_treino_linear, knn9.predict(x_treino.reshape(-1, 1)))
+
+coef_reta = float(reta.coef_[0])
+intercepto_reta = float(reta.intercept_)
+
+(
+    round(mse_treino_reta, 2),
+    round(mse_treino_knn1, 2),
+    round(mse_treino_knn9, 2),
+    round(coef_reta, 2),
+    round(intercepto_reta, 2),
+)
+```
+
+Sobre o próprio treino, a reta erra 0,26 de MSE; o k-NN com k=1 erra 0,00 — cada ponto é seu próprio vizinho mais próximo, então a previsão para ele é a resposta que ele mesmo tinha —; k=9 erra 0,31, mais que a reta. O coeficiente que a reta encontrou, 1,50, praticamente repete o 1,5 verdadeiro; o intercepto, 2,08, fica perto do 2,0 verdadeiro, com a folga vindo só do ruído desses cinquenta pontos.
+
+```{python}
+#| label: teste-grande-linear
+n_teste_grande = 20_000
+x_teste_grande = rng.uniform(-3, 3, size=n_teste_grande)
+ruido_teste_grande = rng.normal(0, ruido_padrao, size=n_teste_grande)
+y_teste_grande_linear = f_verdadeiro(x_teste_grande, 0.0) + ruido_teste_grande
+
+n_teste_grande
+```
+
+Vinte mil pontos novos, nunca usados no ajuste, só para medir o que vem a seguir com a precisão que cinquenta pontos não entregam — a mesma razão que levou a seção 7.6 a gerar cinco mil, e a 7.7 a gerar vinte mil.
+
+```{python}
+#| label: mse-vs-k-linear
+ks = [1, 3, 5, 7, 9, 13, 19, 27, 39]
+mse_teste_reta_linear = mean_squared_error(
+    y_teste_grande_linear, reta.predict(x_teste_grande.reshape(-1, 1))
+)
+mses_teste_knn_linear = np.array([
+    mean_squared_error(
+        y_teste_grande_linear,
+        KNeighborsRegressor(n_neighbors=k)
+        .fit(x_treino.reshape(-1, 1), y_treino_linear)
+        .predict(x_teste_grande.reshape(-1, 1)),
+    )
+    for k in ks
+])
+
+melhor_k_linear = int(ks[int(np.argmin(mses_teste_knn_linear))])
+melhor_mse_knn_linear = float(mses_teste_knn_linear.min())
+reta_vence_sempre_quando_linear = bool(mse_teste_reta_linear < mses_teste_knn_linear.min())
+
+(
+    round(float(mse_teste_reta_linear), 2),
+    melhor_k_linear,
+    round(melhor_mse_knn_linear, 2),
+    round(float(mses_teste_knn_linear[0]), 2),
+    reta_vence_sempre_quando_linear,
+)
+```
+
+```{python}
+#| label: fig-ajuste-linear
+#| fig-cap: "Esquerda: cinquenta pontos de treino, a reta verdadeira (que aqui coincide com f, pois curvatura=0), a reta ajustada (tracejada) e os ajustes de k-NN com k=1 e k=9 — o mesmo método, só a espessura da linha muda com k. Direita: MSE de teste (vinte mil pontos) contra 1/k, em escala log; a reta ajustada é a linha tracejada horizontal, porque ela não depende de k. Em nenhum dos nove valores de k o k-NN desce abaixo dela."
+grade = np.linspace(x_teste_grande.min(), x_teste_grande.max(), 400)
+
+fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(11, 4.4))
+
+ax1.scatter(x_treino, y_treino_linear, color="C0", s=18, alpha=0.6, label="treino")
+ax1.plot(grade, f_verdadeiro(grade, 0.0), color="C2", linewidth=2.4, label="f verdadeiro")
+ax1.plot(
+    grade, reta.predict(grade.reshape(-1, 1)),
+    color="C1", linewidth=2, linestyle="--", label="reta",
+)
+ax1.plot(grade, knn9.predict(grade.reshape(-1, 1)), color="C3", linewidth=2.4, label="k-NN, k=9")
+ax1.plot(grade, knn1.predict(grade.reshape(-1, 1)), color="C3", linewidth=0.9, label="k-NN, k=1")
+ax1.set_xlabel("x")
+ax1.set_ylabel("y")
+ax1.legend(fontsize=7, loc="upper left")
+
+inverso_k = 1 / np.array(ks)
+ax2.plot(inverso_k, mses_teste_knn_linear, color="C3", linewidth=2, marker="o", markersize=4, label="k-NN")
+ax2.axhline(mse_teste_reta_linear, color="C1", linewidth=2, linestyle="--", label="reta")
+ax2.set_xscale("log")
+ax2.set_xlabel("1/k (escala log)")
+ax2.set_ylabel("MSE de teste")
+ax2.legend(fontsize=8)
+
+plt.tight_layout()
+plt.show()
+```
+
+No teste grande, a reta erra 0,25 de MSE; o menor erro do k-NN, entre os nove valores de k varridos, sai em k=7 (`melhor_k_linear`) e chega a 0,35 — acima do 0,25 da reta. `reta_vence_sempre_quando_linear` confirma `True`: nenhum dos nove valores de k derruba a reta quando a verdade é dela mesma. O contraste mais direto é com k=1: 0,00 de erro no treino, 0,47 no teste — o mesmo ajuste que decorou a amostra de cinquenta pontos é o que mais erra em dado novo, a mesma lição de overfitting que a seção 7.3 já tinha nomeado.
+
+## Quando a curvatura cresce
+
+A verdade linear é o caso mais favorável à reta que existe — nenhuma forma bate a forma certa. Dado real raramente entrega isso. A mesma `f_verdadeiro` usada acima carrega o termo `curvatura * sin(0,8x)`, deixado em zero até aqui; ligando-o aos poucos, sem tocar nos cinquenta pontos de treino nem no ruído que os acompanha, a única coisa que muda entre uma rodada e a próxima é o quanto a verdade se afasta de uma reta.
+
+```{python}
+#| label: curvatura-sweep
+curvaturas = np.array([0.0, 0.2, 0.4, 0.6, 0.8, 1.0, 1.3, 1.6, 2.0, 2.5, 3.0])
+mses_reta_curvatura = []
+mses_knn_curvatura = []
+for c in curvaturas:
+    y_treino_c = f_verdadeiro(x_treino, c) + ruido_treino
+    reta_c = LinearRegression().fit(x_treino.reshape(-1, 1), y_treino_c)
+    ruido_teste_c = rng.normal(0, ruido_padrao, size=n_teste_grande)
+    y_teste_c = f_verdadeiro(x_teste_grande, c) + ruido_teste_c
+
+    mse_reta_c = mean_squared_error(y_teste_c, reta_c.predict(x_teste_grande.reshape(-1, 1)))
+    mses_knn_c = [
+        mean_squared_error(
+            y_teste_c,
+            KNeighborsRegressor(n_neighbors=k)
+            .fit(x_treino.reshape(-1, 1), y_treino_c)
+            .predict(x_teste_grande.reshape(-1, 1)),
+        )
+        for k in ks
+    ]
+    mses_reta_curvatura.append(mse_reta_c)
+    mses_knn_curvatura.append(min(mses_knn_c))
+
+mses_reta_curvatura = np.array(mses_reta_curvatura)
+mses_knn_curvatura = np.array(mses_knn_curvatura)
+knn_vence = mses_knn_curvatura < mses_reta_curvatura
+
+indice_transicao = int(np.argmax(knn_vence))
+curvatura_antes = float(curvaturas[indice_transicao - 1])
+curvatura_depois = float(curvaturas[indice_transicao])
+transicao_e_unica = bool(np.all(knn_vence[indice_transicao:]))
+
+(
+    round(float(mses_reta_curvatura[0]), 2),
+    round(float(mses_reta_curvatura[-1]), 2),
+    round(float(mses_knn_curvatura[0]), 2),
+    round(float(mses_knn_curvatura[-1]), 2),
+    curvatura_antes,
+    round(float(mses_reta_curvatura[indice_transicao - 1]), 2),
+    round(float(mses_knn_curvatura[indice_transicao - 1]), 2),
+    curvatura_depois,
+    round(float(mses_reta_curvatura[indice_transicao]), 2),
+    round(float(mses_knn_curvatura[indice_transicao]), 2),
+    transicao_e_unica,
+)
+```
+
+```{python}
+#| label: fig-curvatura
+#| fig-cap: "MSE de teste da reta e do melhor k-NN de cada nível (o menor entre os nove k da seção anterior), contra a curvatura da verdade simulada. A reta piora sem parar; o k-NN quase não se mexe. A faixa sombreada marca onde a curva da reta cruza a do k-NN, entre as curvaturas testadas."
+fig, ax = plt.subplots()
+ax.axvspan(curvatura_antes, curvatura_depois, color="C2", alpha=0.15)
+ax.plot(curvaturas, mses_reta_curvatura, color="C1", linewidth=2, marker="o", markersize=4, label="reta")
+ax.plot(curvaturas, mses_knn_curvatura, color="C3", linewidth=2, marker="o", markersize=4, label="k-NN (melhor k)")
+ax.set_xlabel("curvatura")
+ax.set_ylabel("MSE de teste")
+ax.legend()
+plt.tight_layout()
+plt.show()
+```
+
+Nos onze níveis varridos, a reta piora sem parar — de 0,26 em curvatura 0,0 a 0,84 em curvatura 3,0 —, enquanto o melhor k-NN de cada nível mal se mexe: 0,35 no começo, 0,36 no fim. A curva da reta cruza a do k-NN entre curvatura 1,0, onde a reta ainda vence (0,31 contra 0,34), e 1,3, onde o k-NN passa à frente (0,35 contra 0,34). `transicao_e_unica` confirma `True`: em nenhum nível mais curvo depois desse o k-NN perde a dianteira de volta — não é um cruzamento de ida e volta que a sorte da amostra desfaz. Com um conjunto de teste de poucas centenas de pontos, essa margem — 0,01 entre as duas curvas bem no cruzamento — teria variância grande o bastante para inventar ou esconder uma travessia; vinte mil pontos bastam para o cruzamento não depender do sorteio.
+
+## A maldição da dimensionalidade
+
+A curvatura mais alta da varredura acima, 2,5 — no trecho onde o k-NN já vencia com folga —, serve de base para a última pergunta: o que acontece quando se soma preditores que não têm relação nenhuma com a resposta?
+
+```{python}
+#| label: curse-dim
+curvatura_alta = 2.5
+y_treino_dim = f_verdadeiro(x_treino, curvatura_alta) + ruido_treino
+
+ps = [1, 2, 3, 4, 6, 10, 15, 20]
+p_max = max(ps)
+ruido_extra_treino = rng.uniform(-3, 3, size=(n_treino, p_max - 1))
+ruido_extra_teste = rng.uniform(-3, 3, size=(n_teste_grande, p_max - 1))
+ruido_teste_dim = rng.normal(0, ruido_padrao, size=n_teste_grande)
+y_teste_dim = f_verdadeiro(x_teste_grande, curvatura_alta) + ruido_teste_dim
+
+mses_reta_p = []
+mses_knn_p = []
+for p in ps:
+    if p == 1:
+        X_treino_p = x_treino.reshape(-1, 1)
+        X_teste_p = x_teste_grande.reshape(-1, 1)
+    else:
+        X_treino_p = np.column_stack([x_treino, ruido_extra_treino[:, : p - 1]])
+        X_teste_p = np.column_stack([x_teste_grande, ruido_extra_teste[:, : p - 1]])
+
+    reta_p = LinearRegression().fit(X_treino_p, y_treino_dim)
+    mse_reta_p = mean_squared_error(y_teste_dim, reta_p.predict(X_teste_p))
+    mses_knn_p_k = [
+        mean_squared_error(
+            y_teste_dim,
+            KNeighborsRegressor(n_neighbors=k).fit(X_treino_p, y_treino_dim).predict(X_teste_p),
+        )
+        for k in ks
+    ]
+    mses_reta_p.append(mse_reta_p)
+    mses_knn_p.append(min(mses_knn_p_k))
+
+mses_reta_p = np.array(mses_reta_p)
+mses_knn_p = np.array(mses_knn_p)
+
+razao_knn = float(mses_knn_p[-1] / mses_knn_p[0])
+razao_reta = float(mses_reta_p[-1] / mses_reta_p[0])
+knn_degrada_muito_mais = bool(razao_knn > razao_reta)
+knn_vence_em_p1 = bool(mses_knn_p[0] < mses_reta_p[0])
+reta_vence_do_p2_em_diante = bool(np.all(mses_reta_p[1:] < mses_knn_p[1:]))
+
+(
+    round(float(mses_reta_p[0]), 2),
+    round(float(mses_knn_p[0]), 2),
+    round(float(mses_reta_p[-1]), 2),
+    round(float(mses_knn_p[-1]), 2),
+    round(razao_reta, 2),
+    round(razao_knn, 2),
+    knn_vence_em_p1,
+    reta_vence_do_p2_em_diante,
+    knn_degrada_muito_mais,
+)
+```
+
+```{python}
+#| label: fig-dimensao
+#| fig-cap: "MSE de teste da reta e do melhor k-NN contra o número de preditores p, com a mesma verdade fortemente não linear em x1 e p-1 preditores extras sem relação nenhuma com a resposta. Eixo y em escala log, porque as duas curvas crescem em ritmos muito diferentes. A faixa sombreada marca a passagem de p=1 para p=2, onde a vantagem do k-NN desaparece."
+fig, ax = plt.subplots()
+ax.axvspan(1, 2, color="C2", alpha=0.15)
+ax.plot(ps, mses_reta_p, color="C1", linewidth=2, marker="o", markersize=4, label="reta")
+ax.plot(ps, mses_knn_p, color="C3", linewidth=2, marker="o", markersize=4, label="k-NN (melhor k)")
+ax.set_yscale("log")
+ax.set_xlabel("número de preditores (p)")
+ax.set_ylabel("MSE de teste (escala log)")
+ax.legend()
+plt.tight_layout()
+plt.show()
+```
+
+Com um preditor só, `knn_vence_em_p1` confirma `True`: o k-NN erra 0,35 contra 0,66 da reta. Basta somar um preditor de ruído para a ordem se inverter, e `reta_vence_do_p2_em_diante` confirma que ela segue à frente em todos os sete valores de p maiores testados. Nos vinte preditores — dezenove deles pura decoração —, a reta chega a 1,07, 1,63 vez o erro que tinha com um preditor só; o k-NN chega a 13,37, 38,64 vezes o que tinha. `knn_degrada_muito_mais` confirma `True`. Nenhum dos dezenove preditores extras carrega informação sobre a resposta, mas a distância que o k-NN usa para achar "vizinho mais próximo" soma a contribuição de toda coordenada, relevante ou não; em vinte dimensões, os cinquenta pontos de treino que bastavam para cobrir bem uma única reta ficam espalhados demais para que algum fique de fato perto de um ponto novo — a vizinhança deixa de significar proximidade. A reta não paga esse preço: um coeficiente perto de zero em cada preditor inútil já resolve o problema, sem comprometer o que interessa.
+
+## Nenhum dos dois vence sozinho
+
+Três medições, três respostas diferentes: a reta venceu quando a verdade era dela mesma; o k-NN passou à frente a partir de certa curvatura, contanto que a dimensão ficasse baixa; e um único preditor extra sem relação com a resposta já bastou para devolver a vantagem à reta. Qual dos dois ajustar a um dado novo é uma pergunta que só se responde conhecendo a forma verdadeira de `f` — e essa é exatamente a informação que falta em qualquer problema real. Escolher sem essa certeza é o que a validação cruzada, no capítulo 10, ensina a fazer.
