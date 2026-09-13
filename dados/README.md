@@ -147,8 +147,9 @@ em milhares de dólares; `limite` e `saldo` estão em dólares.
 | `origin` | `origem` |
 | `name` | `nome` |
 
-Só o cabeçalho muda: `origem` fica com o código numérico do livro (1, 2, 3),
-e `nome`, nome próprio de modelo de carro, fica em inglês. **Os cinco `?` de
+Só o cabeçalho muda: `origem` fica com o código numérico do livro — 1 para
+automóvel americano, 2 para europeu, 3 para japonês —, e `nome`, nome próprio
+de modelo de carro, fica em inglês. **Os cinco `?` de
 `potencia` foram preservados de propósito** — são a armadilha de tipo que uma
 das seções do capítulo usa, e o ISLP trabalha com as 392 linhas restantes.
 

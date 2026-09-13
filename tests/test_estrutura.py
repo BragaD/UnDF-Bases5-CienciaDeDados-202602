@@ -304,12 +304,16 @@ def test_o_conteudo_nao_comenta_a_propria_escrita():
     que foi parar no onboarding do Colab: texto sobre a ferramenta ou sobre o
     processo não é texto sobre o conteúdo.
 
+    Vale para `content/**/*.qmd` e para o `index.qmd` da raiz — a página mais
+    lida do site, e a única do livro que não mora em `content/`; o mesmo
+    alcance que `test_todo_link_interno_para_qmd_resolve` já usa.
+
     Falso positivo se corrige editando `META_COMENTARIO` com o motivo escrito
     — nunca silenciando o teste.
     """
     padroes = [re.compile(p, re.IGNORECASE) for p in META_COMENTARIO]
     ofensores = []
-    for p in sorted(CONTENT.rglob("*.qmd")):
+    for p in sorted(CONTENT.rglob("*.qmd")) + [RAIZ / "index.qmd"]:
         for n, linha in enumerate(p.read_text(encoding="utf-8").split("\n"), start=1):
             for padrao in padroes:
                 m = padrao.search(linha)
@@ -598,9 +602,14 @@ def test_nenhum_qmd_cita_nome_de_coluna_anterior_a_traducao():
 
     Os capítulos 1 a 5 ficam fora: são de outra abordagem e não passaram pela
     tradução "o dado fala português".
+
+    As listas de `atividades/` entram: elas citam coluna de conjunto traduzido
+    tanto quanto um capítulo — a lista computacional 1 percorre o `College` e
+    o `Auto` inteiros —, e ficar de fora deixava o guarda protegendo capítulos
+    que nem usam esses conjuntos enquanto o arquivo que os usa passava livre.
     """
     achados = []
-    for p in qmds_dos_capitulos_novos():
+    for p in qmds_dos_capitulos_novos() + sorted((RAIZ / "atividades").glob("*.qmd")):
         texto = p.read_text(encoding="utf-8")
         for nome in NOMES_ANTIGOS_DE_COLUNA:
             if _cita_como_identificador(nome, texto):
