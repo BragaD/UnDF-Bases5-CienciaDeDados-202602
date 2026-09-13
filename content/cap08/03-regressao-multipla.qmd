@@ -12,6 +12,7 @@ Esta seção corresponde à seção 3.2 de @james2023.
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+from matplotlib.colors import LinearSegmentedColormap
 from sklearn.linear_model import LinearRegression
 from sklearn.metrics import r2_score
 
@@ -80,9 +81,11 @@ round(corr_jornal_radio, 4), round(corr_jornal_tv, 4), jornal_mais_correlacionad
 
 `jornal` correlaciona com `radio` a 0,3541 e com `tv` a só 0,0566 — `jornal_mais_correlacionado_com_radio` confirma que a primeira supera a segunda. Mercados que gastam mais em rádio tendem a gastar mais em jornal também: os dois investimentos sobem e descem juntos, sem que isso implique nada causal entre eles.
 
-É essa correlação que explica a reviravolta da seção anterior. Se é o rádio — não o jornal — que de fato move vendas, então nos mercados onde se gasta mais em rádio as vendas tendem a ser maiores, e a tabela de correlação mostra que esses são os mesmos mercados que gastam mais em jornal. Uma regressão que olha só para `jornal`, sem `radio` por perto, não tem como separar as duas coisas: ela atribui a jornal parte do crédito que é do rádio. Colocar as duas mídias na mesma equação é o que permite distinguir — e é aí que o coeficiente de jornal cai a praticamente zero.
+É essa correlação que explica a reviravolta do coeficiente de jornal, de 0,0547 sozinho para -0,0010 na companhia das outras duas mídias. Se é o rádio — não o jornal — que de fato move vendas, então nos mercados onde se gasta mais em rádio as vendas tendem a ser maiores, e a tabela de correlação mostra que esses são os mesmos mercados que gastam mais em jornal. Uma regressão que olha só para `jornal`, sem `radio` por perto, não tem como separar as duas coisas: ela atribui a jornal parte do crédito que é do rádio. Colocar as duas mídias na mesma equação é o que permite distinguir — e é aí que o coeficiente de jornal cai a praticamente zero.
 
 ## R² e RSE: o quanto o modelo múltiplo melhora
+
+R² não muda de definição com mais preditores; o RSE muda de denominador. Com $p$ preditores, a raiz é de $\text{RSS}/(n - p - 1)$ — um grau gasto pelo intercepto e um por coeficiente —, e o $n-2$ da seção anterior é o caso $p = 1$ dessa mesma forma.
 
 ```{python}
 #| label: rse-r2-tv-sozinho
@@ -144,8 +147,12 @@ malha_tv, malha_radio = np.meshgrid(grade_tv, grade_radio)
 grade = pd.DataFrame({"tv": malha_tv.ravel(), "radio": malha_radio.ravel()})
 superficie = modelo_tv_radio.predict(grade).reshape(malha_tv.shape)
 
+azuis = LinearSegmentedColormap.from_list(
+    "azuis", plt.get_cmap("Blues")(np.linspace(0.60, 0.74, 256))
+)
+
 fig, ax = plt.subplots()
-mapa = ax.contourf(malha_tv, malha_radio, superficie, levels=14, cmap="Blues")
+mapa = ax.contourf(malha_tv, malha_radio, superficie, levels=14, cmap=azuis)
 ax.scatter(propaganda["tv"], propaganda["radio"], color="C1", s=16, edgecolor="white", linewidth=0.5)
 ax.set_xlabel("tv (milhares de dólares)")
 ax.set_ylabel("radio (milhares de dólares)")
@@ -159,7 +166,7 @@ Cada curva de nível reúne as combinações de `tv` e `radio` que o modelo prev
 
 ## O que a superfície plana ainda erra
 
-O modelo com `tv` e `radio` explica 0,8972 da variância de vendas, mas sobra no resíduo um padrão que essa superfície plana não captura.
+O modelo com `tv` e `radio` explica 0,8972 da variância de vendas — o mesmo valor, até a quarta casa, do modelo de três mídias da tabela acima, já que `jornal` quase não muda a previsão —, mas sobra no resíduo um padrão que essa superfície plana não captura.
 
 ```{python}
 #| label: residuo-por-terco

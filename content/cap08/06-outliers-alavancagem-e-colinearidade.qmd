@@ -125,7 +125,7 @@ coef_potencia_depois = float(modelo2_sem_pior.coef_[0])
 round(r2_2, 2), round(r2_2_sem_pior, 2), round(coef_potencia_antes, 2), round(coef_potencia_depois, 2)
 ```
 
-Tirar só esse carro e reajustar muda pouco: o R² sobe de 0,69 para 0,70, e o coeficiente de `potencia` continua em -0,47 nas duas casas decimais. É um outlier fraco — desvia bastante em y, mas não desloca o ajuste porque o seu valor de `potencia` não é incomum: como a próxima seção mede, a alavancagem desse carro fica abaixo da média das 392 observações. Um outlier de alta alavancagem desloca o ajuste; um outlier de baixa alavancagem, como este, não.
+Tirar só esse carro e reajustar muda pouco: o R² sobe de 0,69 para 0,70, e o coeficiente de `potencia` continua em -0,47 nas duas casas decimais. É um outlier fraco — desvia bastante em y, mas não desloca o ajuste porque o seu valor de `potencia` não é incomum: como a medição logo adiante mostra, a alavancagem desse carro fica abaixo da média das 392 observações. Um outlier de alta alavancagem desloca o ajuste; um outlier de baixa alavancagem, como este, não.
 
 ## Alavancagem: quando o exagero está no eixo x
 
@@ -230,6 +230,30 @@ potencia_e_a_maior_do_conjunto = bool(potencia_da_maior_alavancagem == auto["pot
 
 O `datsun 280-zx`, o pior resíduo, tem alavancagem 0,0066 — abaixo da média 0,0077: seu problema é só em y, o valor previsto para a sua `potencia`. Do outro lado, o `pontiac grand prix` tem a maior alavancagem do conjunto, 0,09, e `potencia_e_a_maior_do_conjunto` confirma por quê: sua `potencia`, 230 hp, é a mais alta entre os 392 carros. Mas seu resíduo padronizado é só 0,28, longe do corte de 3 — os dois carros ilustram, cada um do seu lado, o que o chunk anterior já tinha confirmado para o conjunto inteiro.
 
+Tirar o pior resíduo mexeu pouco no ajuste. Resta a mesma pergunta para o outro carro: a maior alavancagem do conjunto desloca o ajuste sozinha?
+
+```{python}
+#| label: efeito-de-remover-a-maior-alavancagem
+mascara_sem_alavancagem = np.ones(n, dtype=bool)
+mascara_sem_alavancagem[idx_maior_alavancagem] = False
+
+modelo2_sem_alavancagem = LinearRegression().fit(
+    X2[mascara_sem_alavancagem], y_milhas[mascara_sem_alavancagem]
+)
+previsto2_sem_alavancagem = modelo2_sem_alavancagem.predict(X2[mascara_sem_alavancagem])
+r2_2_sem_alavancagem = float(r2_score(y_milhas[mascara_sem_alavancagem], previsto2_sem_alavancagem))
+coef_potencia_sem_alavancagem = float(modelo2_sem_alavancagem.coef_[0])
+
+(
+    round(r2_2, 4),
+    round(r2_2_sem_alavancagem, 4),
+    round(coef_potencia_antes, 4),
+    round(coef_potencia_sem_alavancagem, 4),
+)
+```
+
+Reajustando sem o `pontiac grand prix`, o R² vai de 0,6876 a 0,6869 e o coeficiente de `potencia`, de -0,4662 a -0,4641 — uma alavancagem alta dá a uma observação a *chance* de puxar o ajuste, e não a garantia de que ela puxe: para puxar de fato, ela precisaria também cair longe da curva, e este carro não cai.
+
 ## Colinearidade: quando dois preditores quase se confundem
 
 ```{python}
@@ -287,7 +311,7 @@ vif_pontuacao = vif("pontuacao", credit, preditores_vif)
 round(vif_idade, 2), round(vif_limite, 2), round(vif_pontuacao, 2)
 ```
 
-`idade` sai com VIF 1,01 — sem colinearidade —; `limite` e `pontuacao` saem com 160,59 e 160,67, muito acima da referência de 5 a 10 que o ISLP usa para um VIF problemático. A correlação já mostrava os dois andando juntos; o VIF diz o quanto isso infla a variância de cada coeficiente por causa disso.
+`idade` sai com VIF 1,01 — sem colinearidade —; `limite` e `pontuacao` saem com 160,59 e 160,67, muito acima da referência de 5 a 10 que o ISLP usa para um VIF problemático. A correlação já mostrava os dois andando juntos; o VIF põe número nisso, e quanto mais alto ele é, mais larga fica a faixa de pares de coeficientes que quase empatam em RSS.
 
 A seção 8.1 mostrou que RSS, como função dos coeficientes, é um vale com um único fundo. Colinearidade não muda isso — ainda há um único mínimo —, mas muda o formato do vale ao redor dele.
 
@@ -380,4 +404,4 @@ A largura mede a calha diretamente: fixando o outro coeficiente no valor que mel
 
 ## Quatro problemas, um instrumento comum
 
-Não linearidade, outlier, alavancagem e colinearidade não vêm sempre juntos. Neste capítulo, o U do resíduo linear tinha causa clara — faltava `potencia²` — e diminui bastante ao corrigi-la, com o desvio-padrão das médias por faixa caindo de 3,15 para 1,38; o outlier e a maior alavancagem recaíram sobre carros diferentes, nenhum com força para deslocar o ajuste sozinho; e foi só em `Credit`, com dois preditores que andam quase colados, que a colinearidade apareceu, alargando em mais de doze vezes a faixa de coeficientes que quase empatam em RSS. Cada um pede o gráfico certo para se revelar — nenhum aparece só olhando R².
+Não linearidade, outlier, alavancagem e colinearidade não vêm sempre juntos. Neste capítulo, o U do resíduo linear tinha causa clara — faltava `potencia²` — e diminui bastante ao corrigi-la, com o desvio-padrão das médias por faixa caindo de 3,15 para 1,38; o outlier e a maior alavancagem recaíram sobre carros diferentes, e tirar qualquer um dos dois e reajustar mexeu pouco no R² — de 0,69 para 0,70 sem o outlier, de 0,6876 para 0,6869 sem a maior alavancagem —, nenhum com força para deslocar o ajuste sozinho; e foi só em `Credit`, com dois preditores que andam quase colados, que a colinearidade apareceu, alargando em mais de doze vezes a faixa de coeficientes que quase empatam em RSS. Cada um pede o instrumento certo para se revelar — um gráfico, nos três primeiros; um número, o VIF, na colinearidade —, e nenhum aparece só olhando R².
