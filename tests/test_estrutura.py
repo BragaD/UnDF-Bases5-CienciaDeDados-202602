@@ -135,36 +135,36 @@ def test_nenhuma_secao_inventa_numero_de_secao_do_grus():
     assert not ofensores, "número de seção inventado em: " + ", ".join(sorted(ofensores))
 
 
-def test_sete_capitulos():
-    """Sete, e não dezessete.
+def test_oito_capitulos():
+    """Oito, e não dezessete.
 
     Os capítulos 6 a 17 saíram do livro em 2026-09-10, com o abandono da
-    abordagem do Grus, e estão em `arquivo/grus/`. O capítulo 7 entrou nesse
-    mesmo dia, já na fundação ISLP. Este teste falha tanto se um capítulo do
-    Grus voltar por engano quanto se um capítulo novo entrar em `content/`
-    sem passar pelo `LIVRO` de `scripts/gerar-stubs.py`.
+    abordagem do Grus, e estão em `arquivo/grus/`. Os capítulos 7 e 8
+    entraram depois, já na fundação ISLP. Este teste falha tanto se um
+    capítulo do Grus voltar por engano quanto se um capítulo novo entrar em
+    `content/` sem passar pelo `LIVRO` de `scripts/gerar-stubs.py`.
     """
     dirs = sorted(d.name for d in CONTENT.iterdir() if d.is_dir())
-    assert dirs == [f"cap{n:02d}" for n in range(1, 8)]
+    assert dirs == [f"cap{n:02d}" for n in range(1, 9)]
 
 
 def test_cada_capitulo_tem_index():
-    for n in range(1, 8):
+    for n in range(1, 9):
         assert (CONTENT / f"cap{n:02d}" / "index.qmd").is_file(), f"falta cap{n:02d}/index.qmd"
 
 
-def test_livro_completo_34_secoes_41_arquivos():
+def test_livro_completo_41_secoes_49_arquivos():
     """Nenhum outro teste deste arquivo detecta uma seção inteira sumindo.
 
     `test_todo_qmd_esta_registrado_no_quarto_yml` e
     `test_todo_href_do_quarto_yml_existe_no_disco` são checagens de diferença
     simétrica: apagar um `.qmd` E as duas linhas correspondentes do
-    `_quarto.yml` no mesmo commit passa nos dois. `test_sete_capitulos`
+    `_quarto.yml` no mesmo commit passa nos dois. `test_oito_capitulos`
     só conta diretórios; `test_cada_capitulo_tem_index` só confere o
     `index.qmd`. A fonte da verdade sobre o que o livro DEVE conter é o
     `LIVRO` de `scripts/gerar-stubs.py`, então este teste confere, capítulo
     por capítulo, que cada arquivo esperado existe em disco E aparece no
-    `_quarto.yml`, e fecha nos totais (7 capítulos, 34 seções, 41 arquivos).
+    `_quarto.yml`, e fecha nos totais (8 capítulos, 41 seções, 49 arquivos).
     Como fim de linha, também pega um arquivo de seção com nome digitado
     errado (por exemplo com um `_` no início, que `qmds_no_disco()` ignora de
     propósito): o nome exato esperado não existiria em nenhum dos dois lados.
@@ -173,7 +173,7 @@ def test_livro_completo_34_secoes_41_arquivos():
     saíram do livro — ver a spec da ruptura com o Grus.
     """
     livro = carregar_livro()
-    assert len(livro) == 7, f"esperava 7 capítulos no LIVRO, achei {len(livro)}"
+    assert len(livro) == 8, f"esperava 8 capítulos no LIVRO, achei {len(livro)}"
 
     hrefs = hrefs_registrados()
     total_arquivos = 0
@@ -195,8 +195,8 @@ def test_livro_completo_34_secoes_41_arquivos():
             total_arquivos += 1
             total_secoes += 1
 
-    assert total_secoes == 34, f"esperava 34 seções, achei {total_secoes}"
-    assert total_arquivos == 41, f"esperava 41 arquivos, achei {total_arquivos}"
+    assert total_secoes == 41, f"esperava 41 seções, achei {total_secoes}"
+    assert total_arquivos == 49, f"esperava 49 arquivos, achei {total_arquivos}"
 
 
 def test_nenhum_chunk_comeca_com_linha_indentada():
@@ -349,7 +349,15 @@ ESTILO = 'plt.style.use("estilo-figuras.mplstyle")'
 
 # Seções sem figura, e por quê. Cada entrada é uma decisão registrada, não um
 # esquecimento — daí o dicionário em vez de uma lista.
-SECOES_SEM_FIGURA: dict[str, str] = {}
+SECOES_SEM_FIGURA: dict[str, str] = {
+    "cap08/01-regressao-linear-simples.qmd": "stub; a figura entra quando a seção for escrita",
+    "cap08/02-avaliando-o-ajuste.qmd": "stub; a figura entra quando a seção for escrita",
+    "cap08/03-regressao-multipla.qmd": "stub; a figura entra quando a seção for escrita",
+    "cap08/04-preditores-qualitativos.qmd": "stub; a figura entra quando a seção for escrita",
+    "cap08/05-interacao-e-termos-nao-lineares.qmd": "stub; a figura entra quando a seção for escrita",
+    "cap08/06-outliers-alavancagem-e-colinearidade.qmd": "stub; a figura entra quando a seção for escrita",
+    "cap08/07-regressao-linear-contra-k-vizinhos.qmd": "stub; a figura entra quando a seção for escrita",
+}
 
 # Usos de biblioteca proibida liberados: arquivo -> (biblioteca, motivo).
 # `scipy` deixa de ser proibido em pontos específicos, registrados aqui um a
@@ -542,6 +550,25 @@ NOMES_ANTIGOS_DE_COLUNA = [
     "sales",
     "newspaper",
     "TV",
+    "Limit",
+    "Rating",
+    "Cards",
+    "Own",
+    "Student",
+    "Married",
+    "Balance",
+    "Region",
+    "mpg",
+    "cylinders",
+    "displacement",
+    "horsepower",
+    "acceleration",
+    "origin",
+    # "Age", "year", "weight" e "name" (cabeçalhos originais de Credit/Auto)
+    # ficam de fora: são palavras genéricas demais, e o guarda só dispara com
+    # o nome entre crases ou aspas — o custo de falso positivo (prosa comum,
+    # ou "name" como identificador genérico em outro contexto) supera o de
+    # deixá-las fora da lista.
 ]
 
 

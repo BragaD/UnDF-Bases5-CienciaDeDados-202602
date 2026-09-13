@@ -11,6 +11,8 @@ ESPERADOS = [
     "Advertising.csv",
     "Income1.csv",
     "Income2.csv",
+    "Credit.csv",
+    "Auto.csv",
 ]
 
 COLUNAS_ESPERADAS = {
@@ -19,6 +21,14 @@ COLUNAS_ESPERADAS = {
     "Advertising.csv": ["tv", "radio", "jornal", "vendas"],
     "Income1.csv": ["escolaridade", "renda"],
     "Income2.csv": ["escolaridade", "senioridade", "renda"],
+    "Credit.csv": [
+        "renda", "limite", "pontuacao", "cartoes", "idade", "escolaridade",
+        "imovel_proprio", "estudante", "casado", "regiao", "saldo",
+    ],
+    "Auto.csv": [
+        "milhas_por_galao", "cilindros", "cilindrada", "potencia", "peso",
+        "aceleracao", "ano", "origem", "nome",
+    ],
 }
 
 

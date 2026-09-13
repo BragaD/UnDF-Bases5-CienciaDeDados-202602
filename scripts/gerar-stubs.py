@@ -98,6 +98,15 @@ LIVRO = [
         ("06-qualidade-do-ajuste-e-vies-variancia", "Qualidade do Ajuste e o Compromisso Viés-Variância", ("2.2.1", "2.2.2")),
         ("07-classificacao-e-o-classificador-de-bayes", "Classificação e o Classificador de Bayes", "2.2.3"),
     ]),
+    (8, "Regressão Linear", 3, [
+        ("01-regressao-linear-simples", "Regressão Linear Simples", ("3.1", "3.1.1")),
+        ("02-avaliando-o-ajuste", "Avaliando o Ajuste: R² e Erro", "3.1.3"),
+        ("03-regressao-multipla", "Regressão Múltipla", "3.2"),
+        ("04-preditores-qualitativos", "Preditores Qualitativos", "3.3.1"),
+        ("05-interacao-e-termos-nao-lineares", "Interação e Termos Não Lineares", "3.3.2"),
+        ("06-outliers-alavancagem-e-colinearidade", "Outliers, Alavancagem e Colinearidade", "3.3.3"),
+        ("07-regressao-linear-contra-k-vizinhos", "Regressão Linear contra k-Vizinhos", "3.5"),
+    ]),
 ]
 
 
