@@ -16,6 +16,7 @@ abaixo travam as três camadas que **são** verificáveis — o que o Quarto pub
 o que o git versiona, e o que existe no diretório servido.
 """
 import importlib.util
+import json
 import re
 import subprocess
 from pathlib import Path
@@ -170,7 +171,6 @@ def test_nenhuma_celula_de_resposta_vem_preenchida():
     A marca é literal: célula de código de resposta contém só `# sua resposta`,
     célula de texto contém só `*sua resposta aqui*`.
     """
-    import json
     for nb_path in sorted(ATIVIDADES.glob("lista-comp-*.ipynb")):
         nb = json.loads(nb_path.read_text(encoding="utf-8"))
         for i, celula in enumerate(nb["cells"]):
@@ -187,7 +187,6 @@ def test_nenhuma_celula_de_resposta_vem_preenchida():
 
 def test_nenhuma_celula_da_lista_guarda_saida():
     """O mesmo invariante dos notebooks de aula, mais um motivo: saída entrega resposta."""
-    import json
     for nb_path in sorted(ATIVIDADES.glob("lista-comp-*.ipynb")):
         nb = json.loads(nb_path.read_text(encoding="utf-8"))
         for i, celula in enumerate(nb["cells"]):

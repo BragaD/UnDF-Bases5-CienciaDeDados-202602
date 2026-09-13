@@ -73,6 +73,42 @@ def _remove_cabecalho(texto: str) -> str:
     return FRONTMATTER.sub("", texto, count=1)
 
 
+def _linhas_livres_para_corte(linhas: list[str]) -> list[bool]:
+    """Para cada linha, diz se ela está FORA de toda cerca e de todo div aberto.
+
+    Espelha a MESMA leitura que `G.converte` faz de cerca (```` ``` ````) e de
+    div (`::: {...}` / `:::`), para a partição nunca discordar do parser que
+    processa o pedaço depois dela — inclusive a ordem de prioridade: uma vez
+    dentro de um div, a varredura real não repara mais em cerca (é o laço
+    "naive" de `converte` que só conta abertura/fechamento de `:::` até o div
+    balancear, e só a chamada recursiva de `converte_div` sobre o corpo do
+    div volta a reconhecer cerca); só fora de qualquer div é que uma cerca de
+    código pode abrir.
+    """
+    livre = [False] * len(linhas)
+    fence_fecho: str | None = None
+    profundidade_div = 0
+    for i, linha in enumerate(linhas):
+        if profundidade_div > 0:
+            if G.DIV_ABRE.match(linha):
+                profundidade_div += 1
+            elif G.DIV_FECHA.match(linha):
+                profundidade_div -= 1
+            continue
+        if fence_fecho is not None:
+            if linha.startswith(fence_fecho):
+                fence_fecho = None
+            continue
+        if m := G.CERCA.match(linha):
+            fence_fecho = m.group(1)
+            continue
+        if G.DIV_ABRE.match(linha):
+            profundidade_div = 1
+            continue
+        livre[i] = True
+    return livre
+
+
 def _particiona_nas_marcas(corpo: str) -> list[str]:
     """Isola, num pedaço próprio, cada linha que é exatamente a marca de texto.
 
@@ -80,11 +116,23 @@ def _particiona_nas_marcas(corpo: str) -> list[str]:
     div com código dentro; um parágrafo solto nunca ganha célula própria.
     Chamar `G.converte` uma vez por pedaço, em vez de uma vez no corpo
     inteiro, é o que garante que a marca sempre saia isolada.
+
+    Mas só é seguro cortar numa linha que esteja FORA de toda cerca e de todo
+    div aberto: `G.converte`, chamado por pedaço e sem estado entre chamadas,
+    não casa abertura de div/cerca com fechamento através da fronteira do
+    corte — um corte no meio de um `::: {...} ... :::` deixaria o `:::` de
+    fechamento sobrar como texto cru no pedaço seguinte, e um corte no meio
+    de uma cerca quebraria o bloco de código da mesma forma. Por isso a marca
+    só vira ponto de corte quando `_linhas_livres_para_corte` diz que ela está
+    livre; uma marca dentro de cerca ou de div fica onde está, e o pedaço que
+    a contém — cerca ou div inteiros — vai para `G.converte` de uma vez.
     """
+    linhas = corpo.split("\n")
+    livre = _linhas_livres_para_corte(linhas)
     partes: list[str] = []
     atual: list[str] = []
-    for linha in corpo.split("\n"):
-        if linha.strip() == MARCA_TEXTO:
+    for linha, esta_livre in zip(linhas, livre):
+        if esta_livre and linha.strip() == MARCA_TEXTO:
             partes.append("\n".join(atual))
             partes.append(MARCA_TEXTO)
             atual = []
