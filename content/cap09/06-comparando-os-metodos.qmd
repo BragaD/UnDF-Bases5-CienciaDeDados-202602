@@ -4,7 +4,7 @@
 Esta seção corresponde à seção 4.5 de @james2023.
 :::
 
-A seção 9.5 fechou perguntando quem ganha quando. Cinco métodos entraram neste capítulo: a regressão logística da seção 9.2, LDA, QDA e Naive Bayes da 9.4, e o *k*-NN, que as seções 7.3, 7.7 e 8.7 já aplicaram tanto à regressão quanto à classificação. A resposta honesta é "depende", e o resto desta seção mostra de quê: cenários simulados, com a fronteira verdadeira entre as duas classes conhecida de antemão — porque quem simula escolhe a distribuição de cada classe —, uns em que essa fronteira é linear e um em que não é.
+A seção 9.5 fechou perguntando quem ganha quando. Cinco métodos entraram neste capítulo: a regressão logística da seção 9.2, LDA, QDA e Naive Bayes da 9.4, e o *k*-NN, que as seções 7.3, 7.7 e 8.7 já aplicaram tanto à regressão quanto à classificação. Nesta seção o *k*-NN entra duas vezes — com *k*=1 e com *k*=15, tratados como dois classificadores distintos, porque é o que são —, o que dá **seis classificadores** medidos ao todo. A resposta honesta é "depende", e o resto desta seção mostra de quê: cenários simulados, com a fronteira verdadeira entre as duas classes conhecida de antemão — porque quem simula escolhe a distribuição de cada classe —, uns em que essa fronteira é linear e um em que não é.
 
 ```{python}
 #| label: setup
@@ -30,11 +30,11 @@ X_default["estudante_sim"] = (base["estudante"] == "sim").astype(int)
 k_pequeno, k_grande = 1, 15
 ```
 
-## Cinco métodos, três cenários
+## Seis classificadores, três cenários
 
 O *k* de cada *k*-NN é fixo e declarado agora — `k_pequeno = 1` e `k_grande = 15` —, não ajustado ao próprio dado: cada valor de *k* é, na prática, um classificador diferente, e entra na tabela como tal, em vez de um só "*k*-NN" escolhido às pressas.
 
-Como a seção 9.4 mostrou, um sorteio de treino só não compara métodos de forma confiável — a comparação que decide é a média sobre muitos sorteios, contra um conjunto de teste grande e fixo. Aqui entra mais um cuidado: o tamanho desse teste. A margem mais estreita que esta seção afirma — a diferença entre LDA e QDA quando os preditores são independentes, mais adiante — foi medida, à parte, em vários tamanhos de teste; abaixo de alguns milhares de pontos por classe, ela trocava de sinal de sorteio para sorteio. `n_teste_por_classe = 5000` é o tamanho a partir do qual isso parou de acontecer, e é o mesmo teste, fixo, que todos os cenários a seguir usam.
+Como a seção 9.4 mostrou, um sorteio de treino só não compara métodos de forma confiável — a comparação que decide é a média sobre muitos sorteios, contra um conjunto de teste grande e fixo. O teste ser grande e fixo dentro de cada cenário existe para que a comparação não dependa de qual sorteio de teste calhou; a variação que importa é a do sorteio de **treino**, e é isso — não o teste — que a fração de vitórias, adiante, mede. `n_teste_por_classe = 5000` e `n_replicas = 200`, os mesmos 200 sorteios da seção 9.4.
 
 ```{python}
 #| label: simulacao-cenarios
@@ -49,7 +49,7 @@ cov_a_curva = np.array([[1.0, 0.7], [0.7, 1.0]])
 cov_b_curva = np.array([[1.0, -0.7], [-0.7, 1.0]])
 
 n_teste_por_classe = 5000
-n_replicas = 50
+n_replicas = 200
 
 
 def gera_duas_classes(cov_a, cov_b, n, rng):
@@ -99,17 +99,13 @@ tabela_erro_medio = (
 tabela_erro_medio.round(4)
 ```
 
-Três cenários, cada um com dois preditores e duas classes com médias `media_a = (-1, 0)` e `media_b = (1, 0)` — só a primeira coordenada separa as classes, a segunda tem a mesma distribuição nas duas. O que muda de um cenário a outro é só a covariância dentro de cada classe: idêntica e sem correlação no primeiro, idêntica e com correlação 0,8 no segundo, com sinais opostos (0,7 e -0,7, a mesma diferença de covariância que a seção 9.4 usou) no terceiro — e é só essa terceira mudança que torna a fronteira de Bayes curva em vez de reta. Cinquenta sorteios de treino por cenário, cada um refazendo o ajuste dos seis métodos contra o mesmo teste fixo daquele cenário.
+Três cenários, cada um com dois preditores e duas classes com médias `media_a = (-1, 0)` e `media_b = (1, 0)` — só a primeira coordenada separa as classes, a segunda tem a mesma distribuição nas duas. O que muda de um cenário a outro é só a covariância dentro de cada classe: idêntica e sem correlação no primeiro, idêntica e com correlação 0,8 no segundo, com sinais opostos (0,7 e -0,7, a mesma diferença de covariância que a seção 9.4 usa) no terceiro — e é só essa terceira mudança que torna a fronteira de Bayes curva em vez de reta. Duzentos sorteios de treino por cenário, cada um refazendo o ajuste dos seis classificadores contra o mesmo teste fixo daquele cenário.
 
 ```{python}
 #| label: fig-comparacao-cenarios
-#| fig-cap: "Distribuição do erro de teste em 50 sorteios de treino, para os seis métodos, nos três cenários simulados (painéis, cada um com sua própria escala de erro). Em laranja, o método com menor erro médio naquele cenário; em azul, os demais — a cor marca só essa distinção, a identidade de cada método está no rótulo do eixo. LDA vence por pouco no primeiro painel (preditores independentes) e no segundo (preditores correlacionados); QDA vence com folga no terceiro (fronteira curva)."
+#| fig-cap: "Distribuição do erro de teste em 200 sorteios de treino, para os seis classificadores, nos três cenários simulados (painéis, cada um com sua própria escala de erro). Em laranja, o classificador com menor erro médio naquele cenário — calculado do próprio dado, não escrito à mão; em azul, os demais. A cor marca só essa distinção; a identidade de cada classificador está no rótulo do eixo."
 ordem_metodos = ["LDA", "Logística", "QDA", "Naive Bayes", f"k-NN (k={k_pequeno})", f"k-NN (k={k_grande})"]
-vencedor_por_cenario = {
-    "linear, preditores independentes": "LDA",
-    "linear, preditores correlacionados": "LDA",
-    "fronteira curva": "QDA",
-}
+vencedor_por_cenario = {nome_cenario: tabela_erro_medio.loc[nome_cenario].idxmin() for nome_cenario in cenarios}
 titulo_por_cenario = {
     "linear, preditores independentes": "linear, independentes",
     "linear, preditores correlacionados": "linear, correlacionados",
@@ -141,7 +137,7 @@ for ax, nome_cenario in zip(eixos, cenarios.keys()):
     ax.set_xlabel("erro de teste")
 
 legenda_cores = [
-    Line2D([], [], color="#4195D1", linewidth=1.8, label="demais métodos"),
+    Line2D([], [], color="#4195D1", linewidth=1.8, label="demais classificadores"),
     Line2D([], [], color="#D9480F", linewidth=1.8, label="menor erro médio no cenário"),
 ]
 fig.legend(handles=legenda_cores, loc="lower center", ncols=2, bbox_to_anchor=(0.5, -0.06), frameon=False)
@@ -149,7 +145,7 @@ plt.tight_layout()
 plt.show()
 ```
 
-A tabela e a figura contam a mesma história de dois jeitos: a tabela dá a média de cada caixa, a figura dá a caixa inteira — e é a caixa, não só a média, que diz se uma vantagem é grande o bastante para não desaparecer no próximo sorteio. Nos dois painéis lineares as caixas de LDA, logística, QDA e Naive Bayes se sobrepõem bastante; no painel de fronteira curva, a caixa de QDA já não toca a das outras quatro.
+A tabela e a figura contam a mesma história de dois jeitos: a tabela dá a média de cada caixa, a figura dá a caixa inteira — e é a caixa, não só a média, que diz se uma vantagem é grande o bastante para não desaparecer no próximo sorteio. No primeiro painel, as caixas de LDA, logística, QDA e Naive Bayes se sobrepõem bastante. No segundo, essa sobreposição vale só para LDA, QDA e logística — a caixa do Naive Bayes se descola por completo, a mesma lição que o cenário seguinte mede em número. No terceiro painel, a caixa de QDA não toca a de nenhuma das outras cinco.
 
 ## Fronteira linear, preditores independentes
 
@@ -159,11 +155,12 @@ piv_indep = resultados[resultados["cenario"] == "linear, preditores independente
     index="replica", columns="metodo", values="erro"
 )
 
-media_lda_indep = float(piv_indep["LDA"].mean())
-media_log_indep = float(piv_indep["Logística"].mean())
-media_nb_indep = float(piv_indep["Naive Bayes"].mean())
-media_qda_indep = float(piv_indep["QDA"].mean())
-media_knn1_indep = float(piv_indep[f"k-NN (k={k_pequeno})"].mean())
+media_lda_indep = float(tabela_erro_medio.loc["linear, preditores independentes", "LDA"])
+media_log_indep = float(tabela_erro_medio.loc["linear, preditores independentes", "Logística"])
+media_nb_indep = float(tabela_erro_medio.loc["linear, preditores independentes", "Naive Bayes"])
+media_qda_indep = float(tabela_erro_medio.loc["linear, preditores independentes", "QDA"])
+media_knn1_indep = float(tabela_erro_medio.loc["linear, preditores independentes", f"k-NN (k={k_pequeno})"])
+media_knnk_indep = float(tabela_erro_medio.loc["linear, preditores independentes", f"k-NN (k={k_grande})"])
 
 margem_lda_qda_indep = media_qda_indep - media_lda_indep
 fracao_lda_vence_qda_indep = float((piv_indep["LDA"] < piv_indep["QDA"]).mean())
@@ -174,16 +171,16 @@ amplitude_grupo_lider_indep = (
 
 (
     round(media_lda_indep, 4), round(media_log_indep, 4), round(media_nb_indep, 4), round(media_qda_indep, 4),
-    round(media_knn1_indep, 4), round(margem_lda_qda_indep, 4), round(fracao_lda_vence_qda_indep, 2),
-    round(amplitude_grupo_lider_indep, 4),
+    round(media_knnk_indep, 4), round(media_knn1_indep, 4),
+    round(margem_lda_qda_indep, 4), round(fracao_lda_vence_qda_indep, 2), round(amplitude_grupo_lider_indep, 4),
 )
 ```
 
-Vinte pontos de treino por classe, preditores sem correlação dentro de cada classe, a mesma covariância nas duas — exatamente a suposição da LDA. LDA, logística, Naive Bayes e QDA ficam a 0,0046 uma da outra: 17,33%, 17,49%, 17,69% e 17,79% de erro médio, nessa ordem — um grupo apertado, sem ninguém disparando na frente. *k*-NN com *k*=1 é o único que destoa, 23,57% — mais de cinco pontos percentuais acima até do pior do grupo (17,79% da QDA), o preço de uma vizinhança de um só ponto quando o treino tem só vinte por classe.
+Vinte pontos de treino por classe, preditores sem correlação dentro de cada classe, a mesma covariância nas duas — exatamente a suposição da LDA. LDA, logística, Naive Bayes e QDA ficam a 0,0054 uma da outra: 17,43%, 17,59%, 17,58% e 17,97% de erro médio, nessa ordem — um grupo apertado, sem ninguém disparando na frente. *k*-NN com *k*=15 fica pouco acima desse grupo, 18,04%; *k*-NN com *k*=1 é quem de fato destoa, 23,74% — mais de cinco pontos percentuais acima até do pior do grupo de quatro (17,97% da QDA), o preço de uma vizinhança de um só ponto quando o treino tem só vinte por classe.
 
-Dentro desse grupo apertado, uma comparação se sustenta: LDA erra menos que QDA em 88% dos 50 sorteios — uma margem estreita entre as médias (0,0046), pequena o bastante para justificar o cuidado com o tamanho do teste descrito acima, mas consistente na maioria esmagadora dos sorteios mesmo assim. Entre LDA e Naive Bayes, porém, a distância é ainda menor, e esta seção não afirma qual dos dois vence: os dois pertencem ao mesmo grupo apertado, e a próxima seção mostra por quê Naive Bayes consegue chegar tão perto aqui.
+Dentro desse grupo apertado, uma comparação se sustenta: LDA erra menos que QDA em 81% dos 200 sorteios — uma vantagem sistemática, mas modesta, sobre uma margem estreita entre as médias (0,0054). Entre LDA e Naive Bayes, porém, a distância é menor ainda, e esta seção não afirma qual dos dois vence: os dois pertencem ao mesmo grupo apertado, e o cenário seguinte mostra por quê Naive Bayes consegue chegar tão perto aqui.
 
-## A mesma fronteira, preditores correlacionados
+## Fronteira ainda linear, preditores correlacionados
 
 ```{python}
 #| label: margem-linear-correlacionado
@@ -191,27 +188,22 @@ piv_corr = resultados[resultados["cenario"] == "linear, preditores correlacionad
     index="replica", columns="metodo", values="erro"
 )
 
-media_lda_corr = float(piv_corr["LDA"].mean())
-media_qda_corr = float(piv_corr["QDA"].mean())
-media_log_corr = float(piv_corr["Logística"].mean())
-media_nb_corr = float(piv_corr["Naive Bayes"].mean())
+media_lda_corr = float(tabela_erro_medio.loc["linear, preditores correlacionados", "LDA"])
+media_qda_corr = float(tabela_erro_medio.loc["linear, preditores correlacionados", "QDA"])
+media_log_corr = float(tabela_erro_medio.loc["linear, preditores correlacionados", "Logística"])
+media_nb_corr = float(tabela_erro_medio.loc["linear, preditores correlacionados", "Naive Bayes"])
 
 fracao_lda_vence_nb_corr = float((piv_corr["LDA"] < piv_corr["Naive Bayes"]).mean())
 
-diferenca_nb_lda_indep = media_nb_indep - media_lda_indep
-diferenca_nb_lda_corr = media_nb_corr - media_lda_corr
-razao_diferencas = diferenca_nb_lda_corr / diferenca_nb_lda_indep
-
 (
     round(media_lda_corr, 4), round(media_qda_corr, 4), round(media_log_corr, 4), round(media_nb_corr, 4),
-    round(fracao_lda_vence_nb_corr, 2), round(diferenca_nb_lda_indep, 4), round(diferenca_nb_lda_corr, 4),
-    round(razao_diferencas, 1),
+    round(fracao_lda_vence_nb_corr, 2),
 )
 ```
 
-Mesma fronteira linear, mesmas médias, a única mudança é a correlação dentro de cada classe: 0,8 em vez de zero. LDA, QDA e logística caem para 5,10%, 5,34% e 5,84% — a correlação carrega informação sobre a classe que esses três exploram, porque a direção que separa as classes, $\Sigma^{-1}(\mu_b - \mu_a)$, deixa de apontar só para a coordenada que muda de média e passa a misturar a outra também, mesmo ela tendo a mesma distribuição nas duas classes. Naive Bayes não tem como enxergar isso: ele trata as duas coordenadas como independentes por definição, e seu erro médio, 15,48%, mal se move em relação ao cenário anterior.
+A fronteira continua linear — mesmas médias, a única mudança é a correlação dentro de cada classe: 0,8 em vez de zero. LDA, QDA e logística caem para 5,15%, 5,49% e 6,06% — a correlação carrega informação sobre a classe que esses três exploram, porque a direção que separa as classes, $\Sigma^{-1}(\mu_b - \mu_a)$, deixa de apontar só para a coordenada que muda de média e passa a misturar a outra também, mesmo ela tendo a mesma distribuição nas duas classes. Naive Bayes não tem como enxergar isso: ele trata as duas coordenadas como independentes por definição.
 
-O efeito aparece limpo na distância entre Naive Bayes e LDA: no cenário anterior, 0,0035 — quase nada, dentro do grupo apertado que a seção passada descreveu. Aqui, 0,1038 — 29,3 vezes maior. A mesma suposição de independência que quase não custava nada quando era verdadeira passa a custar dez pontos percentuais quando deixa de ser: LDA erra menos que Naive Bayes em 100% dos 50 sorteios.
+No cenário anterior, Naive Bayes errava 17,58% — dentro do grupo apertado descrito ali. Aqui, com a mesma suposição de independência violada, ele erra 15,95%: continua na mesma faixa alta de antes, enquanto LDA, QDA e logística caem para a faixa de 5% a 6%. A suposição de independência quase não separa Naive Bayes do resto quando ela vale; quando não vale, é o resto que se afasta dela. LDA erra menos que Naive Bayes em 100% dos 200 sorteios.
 
 ## Fronteira curva
 
@@ -221,31 +213,37 @@ piv_curva = resultados[resultados["cenario"] == "fronteira curva"].pivot(
     index="replica", columns="metodo", values="erro"
 )
 
-media_qda_curva = float(piv_curva["QDA"].mean())
-media_lda_curva = float(piv_curva["LDA"].mean())
-media_log_curva = float(piv_curva["Logística"].mean())
-media_nb_curva = float(piv_curva["Naive Bayes"].mean())
-media_knnk_curva = float(piv_curva[f"k-NN (k={k_grande})"].mean())
-media_knn1_curva = float(piv_curva[f"k-NN (k={k_pequeno})"].mean())
+media_qda_curva = float(tabela_erro_medio.loc["fronteira curva", "QDA"])
+media_lda_curva = float(tabela_erro_medio.loc["fronteira curva", "LDA"])
+media_log_curva = float(tabela_erro_medio.loc["fronteira curva", "Logística"])
+media_nb_curva = float(tabela_erro_medio.loc["fronteira curva", "Naive Bayes"])
+media_knnk_curva = float(tabela_erro_medio.loc["fronteira curva", f"k-NN (k={k_grande})"])
+media_knn1_curva = float(tabela_erro_medio.loc["fronteira curva", f"k-NN (k={k_pequeno})"])
+
+metodos_lineares_curva = ["LDA", "Logística", "Naive Bayes"]
+melhor_linear_curva = tabela_erro_medio.loc["fronteira curva", metodos_lineares_curva].idxmin()
+media_melhor_linear_curva = float(tabela_erro_medio.loc["fronteira curva", melhor_linear_curva])
 
 fracao_qda_vence_knnk_curva = float((piv_curva["QDA"] < piv_curva[f"k-NN (k={k_grande})"]).mean())
-fracao_knnk_vence_log_curva = float((piv_curva[f"k-NN (k={k_grande})"] < piv_curva["Logística"]).mean())
+fracao_knnk_vence_melhor_linear_curva = float(
+    (piv_curva[f"k-NN (k={k_grande})"] < piv_curva[melhor_linear_curva]).mean()
+)
 margem_qda_proximo_curva = media_knnk_curva - media_qda_curva
-margem_knnk_grupo_linear_curva = min(media_lda_curva, media_log_curva, media_nb_curva) - media_knnk_curva
+margem_knnk_grupo_linear_curva = media_melhor_linear_curva - media_knnk_curva
 
 (
     round(media_qda_curva, 4), round(media_knnk_curva, 4), round(media_log_curva, 4), round(media_lda_curva, 4),
     round(media_nb_curva, 4), round(media_knn1_curva, 4),
-    round(fracao_qda_vence_knnk_curva, 2), round(fracao_knnk_vence_log_curva, 2),
+    round(fracao_qda_vence_knnk_curva, 2), round(fracao_knnk_vence_melhor_linear_curva, 2),
     round(margem_qda_proximo_curva, 4), round(margem_knnk_grupo_linear_curva, 4),
 )
 ```
 
-Este cenário usa 200 pontos de treino por classe, não os 20 dos dois anteriores: com covariâncias diferentes entre as classes, a fronteira de Bayes se curva, e tanto QDA quanto *k*-NN precisam de mais dado para essa curvatura compensar a variância que ela custa — as seções 7.3 e 8.7 já mostraram esse preço para regressão, e ele vale igual para classificação. QDA erra 13,61% em média, o menor de todos; *k*-NN com *k*=15 vem em segundo, 14,54%; logística, LDA e Naive Bayes empatam por perto, entre 15,76% e 15,78%; *k*-NN com *k*=1 volta a ser o pior, 17,40%.
+Este cenário usa 200 pontos de treino por classe, não os 20 dos dois anteriores: com covariâncias diferentes entre as classes, a fronteira de Bayes se curva, e tanto QDA quanto *k*-NN precisam de mais dado para essa curvatura compensar a variância que ela custa — as seções 7.3 e 8.7 já mostraram esse preço para regressão, e ele vale igual para classificação. QDA erra 13,31% em média, o menor de todos; *k*-NN com *k*=15 vem em segundo, 14,60%; logística, LDA e Naive Bayes empatam por perto, praticamente os três em 15,65%; *k*-NN com *k*=1 volta a ser o pior, 17,23%.
 
-As duas comparações que separam os grupos são sólidas: QDA erra menos que *k*-NN (*k*=15) — seu concorrente mais próximo — em 94% dos 50 sorteios, uma margem de 0,0093 entre as médias; e *k*-NN (*k*=15) erra menos que o melhor dos três métodos lineares em 94% dos sorteios também, margem de 0,0122. Onde a fronteira verdadeira se curva, os dois métodos capazes de acompanhar uma curva — um assumindo a forma quadrática certa, o outro sem assumir forma nenhuma, desde que haja dado — ficam à frente dos três que só sabem traçar uma reta.
+As duas comparações que separam os grupos são sólidas: QDA erra menos que *k*-NN (*k*=15) — seu concorrente mais próximo — em 99% dos 200 sorteios, uma margem de 0,0128 entre as médias; e *k*-NN (*k*=15) erra menos que o melhor dos três métodos lineares — praticamente empatados entre si, todos perto de 15,65% — em 94% dos 200 sorteios também, margem de 0,0105. Onde a fronteira verdadeira se curva, os dois métodos capazes de acompanhar uma curva — um assumindo a forma quadrática certa, o outro sem assumir forma nenhuma, desde que haja dado — ficam à frente dos três que só sabem traçar uma reta.
 
-## Os cinco métodos sobre o Default
+## Os seis classificadores sobre o Default
 
 O `Default` fecha o capítulo com dado real, nas mesmas linhas que ajustaram os modelos da seção 9.4 — `saldo`, `renda` e o indicador de `estudante`.
 
@@ -292,12 +290,11 @@ round(erro_knnk_sem_escala, 4), round(erro_knnk_com_escala, 4)
 *k*-NN com *k*=15 mostra o preço da escala: sem `StandardScaler`, 3,18% de erro; com ele, 2,59% — quase seis décimos de ponto percentual só por colocar `saldo` e `renda` na mesma régua antes de medir distância.
 
 ::: {.conceito}
-| Situação | Quem se sai melhor, nos cenários acima | Por quê |
+| Cenário | O que se destacou | Do que depende |
 |---|---|---|
-| fronteira linear, covariâncias iguais | LDA e logística | é a suposição que os dois fazem |
-| preditores independentes dentro da classe | Naive Bayes fica perto de LDA e logística | a suposição que o batiza vale |
-| preditores correlacionados dentro da classe | Naive Bayes perde feio | a suposição que o batiza não vale |
-| fronteira curva, dado suficiente | QDA, e *k*-NN com *k* maior | um assume a curva certa, o outro não assume forma nenhuma |
+| linear, preditores independentes | LDA, logística, QDA e Naive Bayes ficam num grupo apertado, sem vencedor destacado | nenhuma das quatro suposições é violada aqui |
+| linear, preditores correlacionados | LDA, QDA e logística caem juntos; Naive Bayes fica para trás | só o Naive Bayes assume preditores independentes dentro da classe |
+| fronteira curva, dado suficiente | QDA à frente; *k*-NN com *k* maior em segundo | são os dois capazes de acompanhar uma curva |
 :::
 
-Nenhum dos cinco vence em todo cenário, e qual deles ajustar a um problema novo depende de uma fronteira que, fora de uma simulação, ninguém conhece de antemão. Decidir entre eles sem essa certeza — e escolher o próprio *k* do *k*-NN, em vez de fixá-lo como esta seção fixou — é o que a validação cruzada, no capítulo 10, ensina a fazer.
+Nenhum dos seis classificadores vence em todo cenário, e qual deles ajustar a um problema novo depende de uma fronteira que, fora de uma simulação, ninguém conhece de antemão. Decidir entre eles sem essa certeza — e escolher o próprio *k* do *k*-NN, em vez de fixá-lo como esta seção fixou — é o que a validação cruzada, no capítulo 10, ensina a fazer.
