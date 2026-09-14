@@ -295,9 +295,19 @@ O pedido do autor é explícito, e se traduz em três compromissos verificáveis
 
 ## Dados e dependências
 
-**Nenhum byte vem da rede em tempo de render** — a regra sobrevive intacta. Os conjuntos do ISLP são baixados **uma vez** do site do livro por `scripts/baixar-dados.py` e commitados em `dados/`, com a proveniência de cada um em `dados/README.md`.
+**Nenhum byte vem da rede em tempo de render** — a regra sobrevive intacta. Os conjuntos do ISLP são baixados **uma vez** por `scripts/baixar-dados.py` e commitados em `dados/`, com a proveniência de cada um em `dados/README.md`.
 
 Conjuntos previstos: `Advertising`, `Auto`, `Carseats`, `Credit`, `Default`, `Smarket`, `Hitters`, `Wage`, `Heart`, `OJ`, `Caravan`, `USArrests`, `College`, `NCI60`.
+
+### Emenda de 2026-09-14: de onde os conjuntos vêm
+
+O site do livro publica **sete** dos catorze — `Advertising`, `Income1`, `Income2`, `Credit`, `Auto`, `College` e `Heart`. Os outros devolvem 404, e entre eles está o **`Default`**, sobre o qual o capítulo 4 inteiro é contado: as figuras 4.1 a 4.7, as tabelas 4.1 a 4.5 e a matriz de confusão da 4.4.2 são todas dele. Sem o `Default`, o capítulo 9 não pode seguir o livro.
+
+**Os conjuntos que o site não publica vêm do pacote `ISLP` dos próprios autores**, distribuído no PyPI, que os traz como CSV prontos em `ISLP/data/`. A coleta baixa o *wheel* de uma versão fixa, extrai os CSV e os commita — o mesmo gesto único que já valia para os sete do site.
+
+**Isto não torna o `ISLP` uma dependência, e a distinção é o ponto.** O pacote continua **proibido em chunk que executa**: nada o importa, ele não entra no `pyproject.toml`, e a API dele segue fora do material. O que se extrai dele é o **dado**, uma vez, para virar CSV commitado — exatamente o que esta spec já mandava fazer, só que da fonte que de fato os tem.
+
+`dados/README.md` registra as duas origens, e a versão do pacote de onde cada conjunto saiu.
 
 **O `Boston` é substituído.** O ISLP o usa no lab do capítulo 3; ele contém a variável `B`, construída a partir da proporção de moradores negros por bairro, e o `scikit-learn` removeu o conjunto na versão 1.2 por isso. O capítulo 8 usa **California Housing** no lugar, commitado como CSV. Consequência assumida: os números não batem com os do lab do ISLP, e o texto não comenta a substituição — ele simplesmente usa o outro conjunto.
 
