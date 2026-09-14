@@ -38,7 +38,7 @@ p_z = np.exp(grade_z) / (1 + np.exp(grade_z))
 p_extremo_baixo = float(p_z.min())
 p_extremo_alto = float(p_z.max())
 
-round(p_extremo_baixo, 6), round(p_extremo_alto, 6)
+f"{p_extremo_baixo:.6f}", f"{p_extremo_alto:.6f}"
 ```
 
 Em $\beta_0 + \beta_1 X = -10$, a curva vale 0,000045; em $+10$, vale 0,999955 — perto das bordas de [0, 1], mas sem nunca as tocar, por mais que $\beta_0 + \beta_1 X$ se afaste de zero.
@@ -144,28 +144,63 @@ saldo_medio_nao_estudante = float(nao_estudantes["saldo"].mean())
 round(saldo_medio_estudante, 2), round(saldo_medio_nao_estudante, 2)
 ```
 
-A explicação está no saldo: em média, um estudante deve 987,82 dólares no cartão; um não estudante, 771,77 — 216,05 dólares a menos. Como saldo é o preditor que mais empurra a inadimplência para cima, um estudante típico chega à conta múltipla já carregando essa desvantagem — e é justamente isso que o coeficiente isolado de `estudante` não separa: sozinho, ele confunde o efeito de ser estudante com o efeito de, em média, dever mais.
+A explicação está no saldo: em média, um estudante deve 987,82 dólares no cartão; um não estudante, 771,77 — 216,05 dólares a menos.
 
 ```{python}
-#| label: curva-nao-cruza
-grade_saldo = np.linspace(base["saldo"].min(), base["saldo"].max(), 300)
-renda_media = float(base["renda"].mean())
+#| label: efeito-padronizado
+desvios = X_multiplo.std()
+efeito_padronizado = coeficientes_multiplo * desvios
 
-grade_estudante = pd.DataFrame({"saldo": grade_saldo, "renda": renda_media, "estudante_sim": 1})
-grade_nao_estudante = pd.DataFrame({"saldo": grade_saldo, "renda": renda_media, "estudante_sim": 0})
-
-prob_estudante = modelo_multiplo.predict_proba(grade_estudante)[:, 1]
-prob_nao_estudante = modelo_multiplo.predict_proba(grade_nao_estudante)[:, 1]
-
-estudante_sempre_abaixo = bool((prob_estudante < prob_nao_estudante).all())
-round(renda_media, 2), estudante_sempre_abaixo
+round(float(efeito_padronizado["saldo"]), 4), round(float(efeito_padronizado["renda"]), 4), round(float(efeito_padronizado["estudante_sim"]), 4)
 ```
 
-Fixando `renda` na média do conjunto — 33.516,98 dólares — e variando só `saldo`, a probabilidade prevista para um estudante fica abaixo da de um não estudante em todo ponto da grade: `estudante_sempre_abaixo` sai `True`. A mesma reviravolta do parágrafo anterior, agora como curva — a estudante com o mesmo saldo e a mesma renda de um não estudante, o modelo sempre prevê menos risco.
+Coeficientes em dólares, em dólares e num 0/1 não se comparam crus; multiplicar cada um pelo desvio-padrão do próprio preditor põe os três na mesma escala — log-chance por um desvio-padrão de variação. Nessa escala, saldo pesa 2,7748, contra 0,0405 de renda e -0,2948 de estudante: é saldo, não estudante, o preditor que mais empurra a inadimplência para cima, e é essa desvantagem que um estudante típico já carrega ao entrar na conta múltipla — o coeficiente isolado de `estudante` não separa os dois efeitos: sozinho, ele confunde o efeito de ser estudante com o efeito de, em média, dever mais.
+
+```{python}
+#| label: curvas-independentes-por-grupo
+modelo_saldo_estudante = LogisticRegression(C=np.inf, max_iter=10000).fit(
+    estudantes[["saldo"]], (estudantes["inadimplente"] == "sim").astype(int)
+)
+modelo_saldo_nao_estudante = LogisticRegression(C=np.inf, max_iter=10000).fit(
+    nao_estudantes[["saldo"]], (nao_estudantes["inadimplente"] == "sim").astype(int)
+)
+
+grade_saldo = np.linspace(base["saldo"].min(), base["saldo"].max(), 300)
+grade_saldo_df = pd.DataFrame({"saldo": grade_saldo})
+prob_estudante = modelo_saldo_estudante.predict_proba(grade_saldo_df)[:, 1]
+prob_nao_estudante = modelo_saldo_nao_estudante.predict_proba(grade_saldo_df)[:, 1]
+estudante_sempre_abaixo = bool((prob_estudante < prob_nao_estudante).all())
+
+faixa_comum_min = float(max(estudantes["saldo"].min(), nao_estudantes["saldo"].min()))
+faixa_comum_max = float(min(estudantes["saldo"].max(), nao_estudantes["saldo"].max()))
+grade_comum_df = pd.DataFrame({"saldo": np.linspace(faixa_comum_min, faixa_comum_max, 300)})
+prob_estudante_comum = modelo_saldo_estudante.predict_proba(grade_comum_df)[:, 1]
+prob_nao_estudante_comum = modelo_saldo_nao_estudante.predict_proba(grade_comum_df)[:, 1]
+abaixo_na_faixa_comum = bool((prob_estudante_comum < prob_nao_estudante_comum).all())
+
+base_decis = base.copy()
+base_decis["decil_saldo"] = pd.qcut(base_decis["saldo"], 10)
+taxas_por_decil = (
+    base_decis.groupby(["decil_saldo", "estudante"], observed=True)["inadimplente"]
+    .apply(lambda s: (s == "sim").mean())
+    .unstack("estudante")
+)
+estudante_nunca_acima_no_decil = bool((taxas_por_decil["sim"] <= taxas_por_decil["não"]).all())
+
+(
+    estudante_sempre_abaixo,
+    round(faixa_comum_min, 2),
+    round(faixa_comum_max, 2),
+    abaixo_na_faixa_comum,
+    estudante_nunca_acima_no_decil,
+)
+```
+
+Dois modelos logísticos ajustados separadamente — um só com os estudantes, outro só com os não estudantes, cada um usando `saldo` como único preditor — mostram a curva do estudante abaixo da do não estudante em toda a grade: `estudante_sempre_abaixo` sai `True`. O mesmo vale restrito à faixa de saldo que os dois grupos de fato ocupam, de 0,00 a 2.499,02 dólares (`abaixo_na_faixa_comum`). O dado cru confirma isso sem depender de modelo nenhum: dividindo `saldo` em dez decis, a taxa observada de inadimplência do estudante não passa a do não estudante em nenhum dos dez (`estudante_nunca_acima_no_decil`).
 
 ```{python}
 #| label: fig-paradoxo-estudante
-#| fig-cap: "Esquerda: probabilidade de inadimplência prevista pelo modelo múltiplo contra saldo, com renda fixada na média — a curva do estudante (laranja) fica abaixo da do não estudante (azul) em todo o intervalo. As linhas tracejadas marcam a taxa bruta de cada grupo, sem controlar saldo nem renda. Direita: distribuição de saldo por grupo — o estudante se concentra em saldos mais altos."
+#| fig-cap: "Esquerda: taxa de inadimplência contra saldo. As curvas cheias são estimadas por um modelo logístico ajustado separadamente em cada grupo (laranja: estudante; azul: não estudante); as tracejadas marcam a taxa bruta observada de cada grupo, sem olhar para saldo. Direita: distribuição de saldo por grupo — o estudante se concentra em saldos mais altos."
 fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(11, 4.4))
 
 ax1.plot(grade_saldo, prob_nao_estudante, color="C0", linewidth=2.2, label="não")
@@ -181,7 +216,7 @@ ax1.annotate(
     xytext=(-98, 6), textcoords="offset points", fontsize=8, color="C1",
 )
 ax1.set_xlabel("saldo (dólares)")
-ax1.set_ylabel("probabilidade prevista de inadimplência")
+ax1.set_ylabel("taxa de inadimplência")
 ax1.legend(title="estudante", loc="upper left")
 
 for dados, posicao, cor in [(nao_estudantes["saldo"], 1, "C0"), (estudantes["saldo"], 2, "C1")]:
@@ -201,4 +236,17 @@ plt.tight_layout()
 plt.show()
 ```
 
-A curva da esquerda mostra as duas verdades ao mesmo tempo, e elas não se contradizem: em qualquer saldo fixo, o estudante é o cliente mais seguro — a curva laranja não cruza a azul —, mas as linhas tracejadas, que ignoram saldo e mostram só a taxa bruta de cada grupo, invertem essa ordem. As caixas da direita explicam a inversão: o estudante se concentra em saldos mais altos, exatamente a faixa em que as duas curvas da esquerda já estão mais perto do topo.
+A curva da esquerda e os decis contam a mesma história: em qualquer saldo, o estudante não é o cliente mais arriscado — é a curva laranja que fica embaixo, do primeiro ao último ponto da grade. As linhas tracejadas, que ignoram saldo e mostram só a taxa bruta de cada grupo, invertem essa ordem porque o estudante se concentra em saldos mais altos — a diferença de 216,05 dólares na média medida acima — puxando a média geral dele para cima mesmo com cada saldo individual sendo mais seguro.
+
+```{python}
+#| label: probabilidade-media-por-grupo
+prob_multiplo_todas = modelo_multiplo.predict_proba(X_multiplo)[:, 1]
+mascara_estudante = X_multiplo["estudante_sim"] == 1
+
+media_prob_estudante = float(prob_multiplo_todas[mascara_estudante].mean())
+media_prob_nao_estudante = float(prob_multiplo_todas[~mascara_estudante].mean())
+
+round(media_prob_estudante, 6), round(media_prob_nao_estudante, 6)
+```
+
+A média da probabilidade que o modelo múltiplo prevê para cada estudante, sobre o saldo e a renda que ele de fato tem, é 0,043139; a mesma média entre não estudantes é 0,029195 — batem, até a sexta casa decimal, com os 4,31% e 2,92% de taxa bruta do começo desta seção.
