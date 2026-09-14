@@ -107,6 +107,14 @@ LIVRO = [
         ("06-outliers-alavancagem-e-colinearidade", "Outliers, Alavancagem e Colinearidade", "3.3.3"),
         ("07-regressao-linear-contra-k-vizinhos", "Regressão Linear contra k-Vizinhos", "3.5"),
     ]),
+    (9, "Classificação", 4, [
+        ("01-por-que-nao-regressao-linear", "Por que Não Regressão Linear", ("4.1", "4.2")),
+        ("02-regressao-logistica", "Regressão Logística", ("4.3.1", "4.3.2", "4.3.3", "4.3.4")),
+        ("03-logistica-multinomial", "Logística Multinomial", "4.3.5"),
+        ("04-modelos-generativos", "Modelos Generativos: LDA, QDA e Naive Bayes", "4.4"),
+        ("05-avaliando-um-classificador", "Avaliando um Classificador", "4.4.2"),
+        ("06-comparando-os-metodos", "Comparando os Métodos", "4.5"),
+    ]),
 ]
 
 

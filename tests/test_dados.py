@@ -14,6 +14,7 @@ ESPERADOS = [
     "Credit.csv",
     "Auto.csv",
     "College.csv",
+    "Default.csv",
 ]
 
 COLUNAS_ESPERADAS = {
@@ -38,6 +39,7 @@ COLUNAS_ESPERADAS = {
         "razao_aluno_professor", "perc_ex_alunos_doadores", "gasto_por_aluno",
         "taxa_conclusao",
     ],
+    "Default.csv": ["inadimplente", "estudante", "saldo", "renda"],
 }
 
 

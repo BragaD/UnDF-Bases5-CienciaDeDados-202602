@@ -135,36 +135,36 @@ def test_nenhuma_secao_inventa_numero_de_secao_do_grus():
     assert not ofensores, "número de seção inventado em: " + ", ".join(sorted(ofensores))
 
 
-def test_oito_capitulos():
-    """Oito, e não dezessete.
+def test_nove_capitulos():
+    """Nove, e não dezessete.
 
     Os capítulos 6 a 17 saíram do livro em 2026-09-10, com o abandono da
-    abordagem do Grus, e estão em `arquivo/grus/`. Os capítulos 7 e 8
+    abordagem do Grus, e estão em `arquivo/grus/`. Os capítulos 7, 8 e 9
     entraram depois, já na fundação ISLP. Este teste falha tanto se um
     capítulo do Grus voltar por engano quanto se um capítulo novo entrar em
     `content/` sem passar pelo `LIVRO` de `scripts/gerar-stubs.py`.
     """
     dirs = sorted(d.name for d in CONTENT.iterdir() if d.is_dir())
-    assert dirs == [f"cap{n:02d}" for n in range(1, 9)]
+    assert dirs == [f"cap{n:02d}" for n in range(1, 10)]
 
 
 def test_cada_capitulo_tem_index():
-    for n in range(1, 9):
+    for n in range(1, 10):
         assert (CONTENT / f"cap{n:02d}" / "index.qmd").is_file(), f"falta cap{n:02d}/index.qmd"
 
 
-def test_livro_completo_41_secoes_49_arquivos():
+def test_livro_completo_47_secoes_56_arquivos():
     """Nenhum outro teste deste arquivo detecta uma seção inteira sumindo.
 
     `test_todo_qmd_esta_registrado_no_quarto_yml` e
     `test_todo_href_do_quarto_yml_existe_no_disco` são checagens de diferença
     simétrica: apagar um `.qmd` E as duas linhas correspondentes do
-    `_quarto.yml` no mesmo commit passa nos dois. `test_oito_capitulos`
+    `_quarto.yml` no mesmo commit passa nos dois. `test_nove_capitulos`
     só conta diretórios; `test_cada_capitulo_tem_index` só confere o
     `index.qmd`. A fonte da verdade sobre o que o livro DEVE conter é o
     `LIVRO` de `scripts/gerar-stubs.py`, então este teste confere, capítulo
     por capítulo, que cada arquivo esperado existe em disco E aparece no
-    `_quarto.yml`, e fecha nos totais (8 capítulos, 41 seções, 49 arquivos).
+    `_quarto.yml`, e fecha nos totais (9 capítulos, 47 seções, 56 arquivos).
     Como fim de linha, também pega um arquivo de seção com nome digitado
     errado (por exemplo com um `_` no início, que `qmds_no_disco()` ignora de
     propósito): o nome exato esperado não existiria em nenhum dos dois lados.
@@ -173,7 +173,7 @@ def test_livro_completo_41_secoes_49_arquivos():
     saíram do livro — ver a spec da ruptura com o Grus.
     """
     livro = carregar_livro()
-    assert len(livro) == 8, f"esperava 8 capítulos no LIVRO, achei {len(livro)}"
+    assert len(livro) == 9, f"esperava 9 capítulos no LIVRO, achei {len(livro)}"
 
     hrefs = hrefs_registrados()
     total_arquivos = 0
@@ -195,8 +195,8 @@ def test_livro_completo_41_secoes_49_arquivos():
             total_arquivos += 1
             total_secoes += 1
 
-    assert total_secoes == 41, f"esperava 41 seções, achei {total_secoes}"
-    assert total_arquivos == 49, f"esperava 49 arquivos, achei {total_arquivos}"
+    assert total_secoes == 47, f"esperava 47 seções, achei {total_secoes}"
+    assert total_arquivos == 56, f"esperava 56 arquivos, achei {total_arquivos}"
 
 
 def test_nenhum_chunk_comeca_com_linha_indentada():
@@ -353,7 +353,14 @@ ESTILO = 'plt.style.use("estilo-figuras.mplstyle")'
 
 # Seções sem figura, e por quê. Cada entrada é uma decisão registrada, não um
 # esquecimento — daí o dicionário em vez de uma lista.
-SECOES_SEM_FIGURA: dict[str, str] = {}
+SECOES_SEM_FIGURA: dict[str, str] = {
+    "cap09/01-por-que-nao-regressao-linear.qmd": "stub; a figura entra quando a seção for escrita",
+    "cap09/02-regressao-logistica.qmd": "stub; a figura entra quando a seção for escrita",
+    "cap09/03-logistica-multinomial.qmd": "stub; a figura entra quando a seção for escrita",
+    "cap09/04-modelos-generativos.qmd": "stub; a figura entra quando a seção for escrita",
+    "cap09/05-avaliando-um-classificador.qmd": "stub; a figura entra quando a seção for escrita",
+    "cap09/06-comparando-os-metodos.qmd": "stub; a figura entra quando a seção for escrita",
+}
 
 # Usos de biblioteca proibida liberados: arquivo -> (biblioteca, motivo).
 # `scipy` deixa de ser proibido em pontos específicos, registrados aqui um a
@@ -576,6 +583,11 @@ NOMES_ANTIGOS_DE_COLUNA = [
     # nenhuma com o conjunto. "Top10perc", "Room.Board", "S.F.Ratio",
     # "Grad.Rate" e "F.Undergrad" também ficam de fora: não ocorrem em
     # português nem por acidente, então o guarda não teria o que pegar.
+    "balance",
+    "default",
+    # "student" e "income" (cabeçalhos originais de Default) ficam de fora:
+    # "Student" já está na lista desde o Credit, e "Income" desde o Income1 —
+    # não há motivo para duplicar a entrada por causa da caixa do cabeçalho.
 ]
 
 

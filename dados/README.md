@@ -205,6 +205,53 @@ foi removida na tradução; aqui ela é o assunto do item (b) do exercício 3: o
 aluno descobre que a primeira coluna é o nome da universidade e relê o
 arquivo com `index_col=0`. Removê-la apagaria o exercício.
 
+## `Default.csv` — 10.000 clientes de cartão de crédito, saldo, renda e inadimplência
+
+Do capítulo 9 (*Classificação*, ISLP 4). É o conjunto sobre o qual o
+capítulo inteiro é contado: as figuras 4.1 a 4.7, as tabelas 4.1 a 4.5 e a
+matriz de confusão da seção 4.4.2 são todas dele.
+
+**A proveniência é diferente dos demais conjuntos deste diretório.** O [site
+oficial de @james2023](https://www.statlearning.com/s/) publica só sete dos
+catorze conjuntos previstos para este livro, e o `Default` não está entre
+eles — pedi-lo devolve 404. Ele vem do **pacote `ISLP` dos próprios
+autores**, na versão **0.4.1**, distribuído no PyPI, que traz os CSV prontos
+em `ISLP/data/`. A coleta baixa o *wheel* dessa versão uma única vez e extrai
+o arquivo de dentro dele — `scripts/baixar-dados.py` faz isso com
+`extrair_do_pacote`, ao lado da função que baixa do site:
+
+```bash
+.venv/bin/python scripts/baixar-dados.py
+```
+
+**Isto não torna o `ISLP` uma dependência.** O pacote não entra no
+`pyproject.toml` e nada o importa em código que executa; o que se extrai dele
+é só o dado, uma vez, para virar este CSV commitado — exatamente o gesto que
+já valia para os sete conjuntos do site.
+
+Depois da extração, cabeçalho e categorias são traduzidos à mão. É essa
+tabela de-para que mantém a ponte com o livro-texto — o **nome do arquivo**
+não muda, só o conteúdo:
+
+| Original | Traduzida |
+|---|---|
+| `default` | `inadimplente` |
+| `student` | `estudante` |
+| `balance` | `saldo` |
+| `income` | `renda` |
+
+Categorias também traduzidas: em `inadimplente` e em `estudante`, `Yes`/`No`
+viram `sim`/`não`.
+
+**O conjunto é simulado pelos autores** de @james2023, como `Income1` e
+`Income2` — não é dado observado.
+
+**`saldo` e `renda` também existem em `Credit.csv`, com outra escala.** No
+`Default`, `renda` está em **dólares** (de 771,97 a 73.554,23) e `saldo`
+também em **dólares** (de 0 a 2.654,32); no `Credit`, `renda` está em
+**milhares** de dólares. Mesmo nome de coluna, arquivo diferente, unidade
+diferente.
+
 ## O que saiu
 
 Os conjuntos da abordagem de obtenção de dados abandonada — `stocks.csv`,
