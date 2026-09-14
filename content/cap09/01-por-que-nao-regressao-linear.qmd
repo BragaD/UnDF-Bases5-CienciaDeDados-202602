@@ -4,7 +4,172 @@
 Esta seção corresponde às seções 4.1 e 4.2 de @james2023.
 :::
 
-::: {.callout-warning}
-## Em construção
-O conteúdo desta seção ainda será escrito.
-:::
+O capítulo anterior tratou sempre do mesmo tipo de pergunta: dado um conjunto de preditores, que número a resposta deve assumir — vendas em milhares de unidades, consumo em milhas por galão. `Default` muda o tipo da resposta. Dez mil clientes de cartão de crédito, e a pergunta agora é se um cliente fica inadimplente ou não: `inadimplente` não é uma quantidade, é uma categoria, `sim` ou `não`. `saldo`, `renda` e `estudante` (`sim`/`não`) continuam preditores de sempre; o que muda é o alvo, e é essa mudança que o resto do capítulo resolve.
+
+```{python}
+#| label: setup
+#| include: false
+import matplotlib.pyplot as plt
+import numpy as np
+import pandas as pd
+from sklearn.linear_model import LinearRegression, LogisticRegression
+
+plt.style.use("estilo-figuras.mplstyle")
+```
+
+## O `Default`: dez mil clientes, um alvo qualitativo
+
+```{python}
+#| label: leitura-default
+base = pd.read_csv("dados/Default.csv")
+base.shape, base.columns.tolist()
+```
+
+Dez mil linhas, quatro colunas: `inadimplente` é o alvo; `estudante` é uma segunda categórica; `saldo` (quanto o cliente deve no cartão) e `renda` (a renda anual do cliente) são numéricas, as duas em dólares.
+
+```{python}
+#| label: proporcao-inadimplente
+n_sim = int((base["inadimplente"] == "sim").sum())
+n_nao = int((base["inadimplente"] == "não").sum())
+proporcao_sim = n_sim / len(base)
+
+n_sim, n_nao, round(proporcao_sim, 4)
+```
+
+333 dos 10.000 clientes ficam inadimplentes; 9.667, não. A proporção, 0,0333, é baixa: menos de um em trinta. `Default` é um conjunto desequilibrado, e um classificador que sempre responder "não" já acerta a maioria — um ponto que volta na seção 9.5, quando "acerta a maioria" deixa de bastar como medida.
+
+## O saldo separa; a renda, não
+
+```{python}
+#| label: fig-saldo-renda
+#| fig-cap: "`Default`: saldo e renda de 10.000 clientes, com quem ficou inadimplente (`sim`) destacado sobre quem não ficou (`não`). Ao lado, os mesmos dois grupos em caixas — quartil 25%, mediana e quartil 75% — para saldo e para renda."
+nao = base[base["inadimplente"] == "não"]
+sim = base[base["inadimplente"] == "sim"]
+
+def desenha_caixas(ax, dados_nao, dados_sim, rotulo_y):
+    for dados, posicao, cor in [(dados_nao, 1, "C0"), (dados_sim, 2, "C1")]:
+        propriedades = dict(color=cor, linewidth=1.6)
+        ax.boxplot(
+            dados, positions=[posicao], widths=0.5,
+            boxprops=propriedades, whiskerprops=propriedades,
+            capprops=propriedades, medianprops=propriedades,
+            flierprops=dict(markeredgecolor=cor, markersize=3, alpha=0.5),
+        )
+    ax.set_xticks([1, 2])
+    ax.set_xticklabels(["não", "sim"])
+    ax.set_xlabel("inadimplente")
+    ax.set_ylabel(rotulo_y)
+
+fig, (ax1, ax2, ax3) = plt.subplots(1, 3, figsize=(12, 4.4))
+
+ax1.scatter(nao["saldo"], nao["renda"], color="C0", s=10, alpha=0.35, label="não")
+ax1.scatter(sim["saldo"], sim["renda"], color="C1", s=14, alpha=0.85, label="sim", zorder=3)
+ax1.set_xlabel("saldo (dólares)")
+ax1.set_ylabel("renda (dólares)")
+ax1.legend(title="inadimplente", loc="upper right", markerscale=1.6)
+
+desenha_caixas(ax2, nao["saldo"], sim["saldo"], "saldo (dólares)")
+desenha_caixas(ax3, nao["renda"], sim["renda"], "renda (dólares)")
+
+plt.tight_layout()
+plt.show()
+```
+
+A dispersão à esquerda já sugere uma leitura: os pontos laranja (`sim`) se acumulam à direita, em saldos altos; os azuis (`não`), à esquerda. Em renda, as duas cores se misturam ao longo de todo o eixo vertical. As caixas ao lado conferem essa leitura em vez de só ilustrá-la:
+
+```{python}
+#| label: quartis-saldo-renda
+q1_saldo_nao = float(nao["saldo"].quantile(0.25))
+q3_saldo_nao = float(nao["saldo"].quantile(0.75))
+q1_saldo_sim = float(sim["saldo"].quantile(0.25))
+q3_saldo_sim = float(sim["saldo"].quantile(0.75))
+sobrepoe_saldo = not (q3_saldo_nao < q1_saldo_sim or q3_saldo_sim < q1_saldo_nao)
+
+q1_renda_nao = float(nao["renda"].quantile(0.25))
+q3_renda_nao = float(nao["renda"].quantile(0.75))
+q1_renda_sim = float(sim["renda"].quantile(0.25))
+q3_renda_sim = float(sim["renda"].quantile(0.75))
+sobrepoe_renda = not (q3_renda_nao < q1_renda_sim or q3_renda_sim < q1_renda_nao)
+
+(
+    round(q1_saldo_nao, 2), round(q3_saldo_nao, 2), round(q1_saldo_sim, 2), round(q3_saldo_sim, 2), sobrepoe_saldo,
+    round(q1_renda_nao, 2), round(q3_renda_nao, 2), round(q1_renda_sim, 2), round(q3_renda_sim, 2), sobrepoe_renda,
+)
+```
+
+Em `saldo`, o quartil 75% de quem não ficou inadimplente (1.128,25) fica abaixo do quartil 25% de quem ficou (1.511,61): as duas caixas nem se tocam, `sobrepoe_saldo` sai `False`. Em `renda`, o intervalo de quem não ficou inadimplente vai de 21.405,06 a 43.823,76, e o de quem ficou, de 19.027,51 a 43.067,33 — um contido quase inteiramente dentro do outro, `sobrepoe_renda` sai `True`. O saldo separa os dois grupos; a renda, não.
+
+## Por que a reta não serve para probabilidade
+
+Recodificando `inadimplente` como 0 (`não`) e 1 (`sim`), nada impede de ajustar a mesma `LinearRegression` do capítulo anterior sobre esse alvo — o método não sabe, e não pergunta, se `y` é uma venda em milhares de unidades ou uma categoria disfarçada de número. O que ele devolve, porém, deixa de ser uma venda prevista e passa a ser lido como uma probabilidade prevista: a de que aquele cliente fique inadimplente.
+
+```{python}
+#| label: regressao-sobre-saldo
+y = (base["inadimplente"] == "sim").astype(int)
+X = base[["saldo"]]
+
+reta = LinearRegression().fit(X, y)
+previsoes = reta.predict(X)
+
+n_negativas = int((previsoes < 0).sum())
+minimo_previsto = float(previsoes.min())
+
+n_negativas, round(minimo_previsto, 4)
+```
+
+3.123 dos 10.000 clientes recebem da reta uma previsão negativa — quase um em cada três. O mínimo, -0,0752, é a previsão para quem tem o menor saldo do conjunto. Probabilidade negativa não tem leitura possível: nenhum cliente tem chance "menos que zero por cento" de ficar inadimplente, e é esse o problema — não que a reta erre feio de vez em quando, mas que uma fração inteira das suas previsões caia fora do intervalo em que uma probabilidade pode existir.
+
+## A curva que não sai de [0, 1]
+
+```{python}
+#| label: fig-reta-vs-logistica
+#| fig-cap: "Saldo contra a previsão de inadimplência, para os mesmos clientes de `Default`. Esquerda: a reta ajustada acima, que cruza a faixa sombreada — o intervalo [0, 1] — e sai por baixo dela. Direita: uma curva logística ajustada aos mesmos dados; os traços no alto e embaixo marcam, para cada cliente, se ele ficou inadimplente (sim, no topo) ou não (não, embaixo)."
+logistica = LogisticRegression().fit(X, y)
+
+grade_saldo = pd.DataFrame({"saldo": np.linspace(base["saldo"].min(), base["saldo"].max(), 300)})
+reta_grade = reta.predict(grade_saldo)
+prob_logistica_grade = logistica.predict_proba(grade_saldo)[:, 1]
+
+fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(11, 4.4), sharey=True)
+
+for ax in (ax1, ax2):
+    ax.axhspan(0, 1, color="C2", alpha=0.10)
+    ax.plot(nao["saldo"], np.zeros(len(nao)), "|", color="C0", alpha=0.4, markersize=8)
+    ax.plot(sim["saldo"], np.ones(len(sim)), "|", color="C1", alpha=0.6, markersize=8)
+    ax.set_xlabel("saldo (dólares)")
+
+ax1.plot(grade_saldo["saldo"], reta_grade, color="C3", linewidth=2.2)
+ax1.scatter([0.0], [minimo_previsto], color="C3", s=40, zorder=3)
+ax1.annotate(
+    f"mínimo: {minimo_previsto:.3f}",
+    xy=(0.0, minimo_previsto),
+    xytext=(14, -6),
+    textcoords="offset points",
+    fontsize=8,
+)
+ax1.set_ylabel("previsão / probabilidade de inadimplência")
+ax1.set_title("reta")
+
+ax2.plot(grade_saldo["saldo"], prob_logistica_grade, color="C3", linewidth=2.2)
+ax2.set_title("curva logística")
+
+plt.tight_layout()
+plt.show()
+```
+
+A reta (esquerda) atravessa a faixa sombreada e sai por baixo dela para saldos próximos de zero — a mesma previsão negativa medida acima, agora como curva. A curva logística (direita), ajustada aos mesmos clientes, tem outro formato: um S que se aproxima de 0 e de 1 sem nunca alcançá-los.
+
+```{python}
+#| label: extremos-logistica
+minimo_logistica = float(prob_logistica_grade.min())
+maximo_logistica = float(prob_logistica_grade.max())
+n_fora_logistica = int(((prob_logistica_grade < 0) | (prob_logistica_grade > 1)).sum())
+
+round(minimo_logistica, 5), round(maximo_logistica, 4), n_fora_logistica
+```
+
+Sobre a mesma grade de 300 valores de saldo usada na figura, a curva logística vai de 0,00002 a 0,9810 — perto das bordas, mas sem cruzá-las — e `n_fora_logistica` conta zero pontos fora de [0, 1]. Como a curva se ajusta e por que ela tem esse formato é assunto da próxima seção; o que importa aqui é só que ela existe, e que resolve o problema que a reta tem.
+
+## Mais de duas classes, e a ordem que a codificação inventa
+
+O problema muda de figura, mas não desaparece, quando o alvo tem mais de duas categorias. Um paciente chega ao pronto-socorro com sintomas que apontam para um de três diagnósticos — derrame, overdose ou convulsão —, e codificar isso como `Y = 1` para derrame, `2` para overdose e `3` para convulsão impõe duas coisas que a lista de diagnósticos não tinha: uma ordem entre os três, e a afirmação de que a distância entre derrame e overdose é a mesma que entre overdose e convulsão. Trocar a ordem — `1` para convulsão, `2` para derrame, `3` para overdose — é uma codificação igualmente válida, e produz um modelo linear diferente do primeiro; nenhuma das duas é mais correta, porque não existe uma escala numérica por trás do diagnóstico que a codificação possa recuperar. Reta ou curva, uma resposta com mais de duas categorias sem ordem natural pede outro tratamento — o que a seção 9.3 faz.
