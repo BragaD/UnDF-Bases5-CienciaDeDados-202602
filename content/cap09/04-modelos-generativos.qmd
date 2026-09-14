@@ -91,7 +91,7 @@ Isso elimina de vez a parte mais cara de estimar $f_k$: a associação entre os 
 
 ## Uma suposição que acerta, e uma que erra
 
-A suposição da LDA — uma covariância só — acerta quando as classes de fato compartilham a forma da nuvem de pontos, e erra quando não compartilham. Dado simulado, em que a covariância verdadeira de cada classe é escolhida por quem gera o dado, deixa comparar os dois casos lado a lado: duas classes com a mesma covariância num painel, com covariâncias diferentes no outro.
+A suposição da LDA — uma covariância só — acerta quando as classes de fato compartilham a forma da nuvem de pontos, e erra quando não compartilham. Dado simulado, em que a covariância verdadeira de cada classe é escolhida por quem gera o dado, deixa comparar os dois casos lado a lado: duas classes com a mesma covariância num painel, com covariâncias diferentes no outro. Um sorteio de treino só não decide isso de forma confiável — a diferença entre LDA e QDA num único sorteio pequeno é ruído tanto quanto sinal —, então o que decide é repetir o sorteio muitas vezes contra o mesmo conjunto de teste.
 
 ```{python}
 #| label: fronteiras-simulacao
@@ -104,6 +104,7 @@ cov_laranja_diferente = np.array([[1.0, -0.7], [-0.7, 1.0]])
 
 n_treino_por_classe = 30
 n_teste_por_classe = 20000
+n_replicas = 200
 
 
 def gera_duas_classes(cov_azul, cov_laranja, n, rng):
@@ -114,39 +115,78 @@ def gera_duas_classes(cov_azul, cov_laranja, n, rng):
     return X_gerado, y_gerado
 
 
-X_treino_comum, y_treino_comum = gera_duas_classes(cov_comum, cov_comum, n_treino_por_classe, rng)
-X_treino_diferente, y_treino_diferente = gera_duas_classes(
-    cov_comum, cov_laranja_diferente, n_treino_por_classe, rng
-)
+# Um conjunto de teste grande e FIXO por painel, sorteado uma vez e nunca usado
+# para ajustar nada: mede os n_replicas sorteios de treino a seguir contra o
+# mesmo alvo, em vez de cada um contra o seu próprio.
 X_teste_comum, y_teste_comum = gera_duas_classes(cov_comum, cov_comum, n_teste_por_classe, rng)
 X_teste_diferente, y_teste_diferente = gera_duas_classes(
     cov_comum, cov_laranja_diferente, n_teste_por_classe, rng
 )
 
-lda_comum = LinearDiscriminantAnalysis().fit(X_treino_comum, y_treino_comum)
-qda_comum = QuadraticDiscriminantAnalysis().fit(X_treino_comum, y_treino_comum)
-lda_diferente = LinearDiscriminantAnalysis().fit(X_treino_diferente, y_treino_diferente)
-qda_diferente = QuadraticDiscriminantAnalysis().fit(X_treino_diferente, y_treino_diferente)
+erros_lda_comum = np.empty(n_replicas)
+erros_qda_comum = np.empty(n_replicas)
+erros_lda_diferente = np.empty(n_replicas)
+erros_qda_diferente = np.empty(n_replicas)
 
-erro_lda_comum = float(1 - lda_comum.score(X_teste_comum, y_teste_comum))
-erro_qda_comum = float(1 - qda_comum.score(X_teste_comum, y_teste_comum))
-erro_lda_diferente = float(1 - lda_diferente.score(X_teste_diferente, y_teste_diferente))
-erro_qda_diferente = float(1 - qda_diferente.score(X_teste_diferente, y_teste_diferente))
+for i in range(n_replicas):
+    X_treino_comum, y_treino_comum = gera_duas_classes(cov_comum, cov_comum, n_treino_por_classe, rng)
+    X_treino_diferente, y_treino_diferente = gera_duas_classes(
+        cov_comum, cov_laranja_diferente, n_treino_por_classe, rng
+    )
 
-lda_erra_menos_quando_covariancia_comum = erro_lda_comum < erro_qda_comum
-qda_erra_menos_quando_covariancia_diferente = erro_qda_diferente < erro_lda_diferente
+    lda_comum_i = LinearDiscriminantAnalysis().fit(X_treino_comum, y_treino_comum)
+    qda_comum_i = QuadraticDiscriminantAnalysis().fit(X_treino_comum, y_treino_comum)
+    lda_diferente_i = LinearDiscriminantAnalysis().fit(X_treino_diferente, y_treino_diferente)
+    qda_diferente_i = QuadraticDiscriminantAnalysis().fit(X_treino_diferente, y_treino_diferente)
+
+    erros_lda_comum[i] = 1 - lda_comum_i.score(X_teste_comum, y_teste_comum)
+    erros_qda_comum[i] = 1 - qda_comum_i.score(X_teste_comum, y_teste_comum)
+    erros_lda_diferente[i] = 1 - lda_diferente_i.score(X_teste_diferente, y_teste_diferente)
+    erros_qda_diferente[i] = 1 - qda_diferente_i.score(X_teste_diferente, y_teste_diferente)
+
+media_erro_lda_comum = float(erros_lda_comum.mean())
+media_erro_qda_comum = float(erros_qda_comum.mean())
+media_erro_lda_diferente = float(erros_lda_diferente.mean())
+media_erro_qda_diferente = float(erros_qda_diferente.mean())
+
+fracao_lda_vence_comum = float((erros_lda_comum < erros_qda_comum).mean())
+fracao_qda_vence_diferente = float((erros_qda_diferente < erros_lda_diferente).mean())
 
 (
-    round(erro_lda_comum, 4), round(erro_qda_comum, 4), lda_erra_menos_quando_covariancia_comum,
-    round(erro_lda_diferente, 4), round(erro_qda_diferente, 4), qda_erra_menos_quando_covariancia_diferente,
+    round(media_erro_lda_comum, 4), round(media_erro_qda_comum, 4), round(fracao_lda_vence_comum, 2),
+    round(media_erro_lda_diferente, 4), round(media_erro_qda_diferente, 4), round(fracao_qda_vence_diferente, 2),
 )
 ```
 
-Com as duas classes compartilhando a mesma covariância (correlação 0,7 nas duas), a LDA erra 6,18% dos 20.000 pontos de teste de cada classe contra 6,32% da QDA — `lda_erra_menos_quando_covariancia_comum` confirma que a LDA erra menos, ainda que por uma margem pequena: a suposição que ela faz é exatamente a verdadeira aqui, e a QDA só perde tentando estimar, à toa, duas covariâncias que são a mesma. Quando a covariância muda de sinal entre as classes — a laranja passa de correlação 0,7 para -0,7 —, o quadro se inverte: a LDA erra 2,70%, a QDA, 0,90% — `qda_erra_menos_quando_covariancia_diferente` confirma que agora é a QDA quem erra menos, e por uma margem bem maior que no painel anterior. A reta que a LDA sempre desenha não tem como acompanhar essa mudança de forma entre as duas classes; a fronteira quadrática da QDA, sim.
+Repetindo o sorteio de treino 200 vezes — sempre com `n_treino_por_classe=30` — contra o mesmo conjunto de teste fixo de 20.000 pontos por classe em cada painel: no painel de covariância comum, a LDA erra em média 5,56% contra 5,72% da QDA, e a LDA erra menos em 73% dos 200 sorteios — uma vantagem sistemática, mas modesta. No painel de covariâncias diferentes, a LDA erra em média 2,66% contra 1,05% da QDA, e a QDA erra menos em 99% dos 200 sorteios — quase toda corrida. A suposição da LDA, quando vale, compensa pouco; quando não vale, o preço de mantê-la é grande.
+
+Os mesmos dois cenários, mas com LDA e QDA ajustados agora sobre um treino bem maior — 1.000 pontos por classe, contra os 30 usados acima —, deixam a fronteira ajustada perto da verdade em vez de perto do ruído de uma amostra pequena; é essa fronteira, ao lado da fronteira de Bayes — a fronteira ótima, que sai direto das densidades normais verdadeiras que geraram o dado, sem ajustar modelo nenhum —, que a figura a seguir desenha.
 
 ```{python}
 #| label: fig-fronteiras-lda-qda
-#| fig-cap: "Duas classes simuladas — azul e laranja, 30 pontos de treino cada, mesma separação entre médias nos dois painéis — com fronteiras de LDA (linha verde sólida) e QDA (linha roxa tracejada) ajustadas sobre esse treino. Esquerda: as duas classes compartilham a mesma matriz de covariância (correlação 0,7). Direita: a laranja tem correlação -0,7 em vez de 0,7 — as covariâncias diferem entre as classes."
+#| fig-cap: "Duas classes simuladas — azul e laranja, 1.000 pontos de treino cada, mesma separação entre médias nos dois painéis —, com a fronteira de Bayes (linha cinza pontilhada, calculada das densidades normais verdadeiras) e as fronteiras ajustadas de LDA (verde sólida) e QDA (roxa tracejada). Esquerda: as duas classes compartilham a mesma matriz de covariância (correlação 0,7) — a fronteira de Bayes é reta, e a do LDA quase a cobre. Direita: a laranja tem correlação -0,7 em vez de 0,7 — a fronteira de Bayes se curva, e é a do QDA que a acompanha de perto."
+n_treino_figura_por_classe = 1000
+
+X_treino_comum_fig, y_treino_comum_fig = gera_duas_classes(cov_comum, cov_comum, n_treino_figura_por_classe, rng)
+X_treino_diferente_fig, y_treino_diferente_fig = gera_duas_classes(
+    cov_comum, cov_laranja_diferente, n_treino_figura_por_classe, rng
+)
+
+lda_comum_fig = LinearDiscriminantAnalysis().fit(X_treino_comum_fig, y_treino_comum_fig)
+qda_comum_fig = QuadraticDiscriminantAnalysis().fit(X_treino_comum_fig, y_treino_comum_fig)
+lda_diferente_fig = LinearDiscriminantAnalysis().fit(X_treino_diferente_fig, y_treino_diferente_fig)
+qda_diferente_fig = QuadraticDiscriminantAnalysis().fit(X_treino_diferente_fig, y_treino_diferente_fig)
+
+
+def log_densidade_normal(pontos, media, cov):
+    p = media.shape[0]
+    inv_cov = np.linalg.inv(cov)
+    log_det_cov = np.log(np.linalg.det(cov))
+    diff = pontos - media
+    forma_quadratica = np.einsum("ij,jk,ik->i", diff, inv_cov, diff)
+    return -0.5 * p * np.log(2 * np.pi) - 0.5 * log_det_cov - 0.5 * forma_quadratica
+
+
 fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(11, 4.6), sharex=True, sharey=True)
 
 grade_x = np.linspace(-4.5, 4.5, 300)
@@ -155,15 +195,26 @@ malha_x, malha_y = np.meshgrid(grade_x, grade_y)
 pontos_grade = np.column_stack([malha_x.ravel(), malha_y.ravel()])
 
 paineis = [
-    (ax1, X_treino_comum, y_treino_comum, lda_comum, qda_comum, "mesma covariância"),
-    (ax2, X_treino_diferente, y_treino_diferente, lda_diferente, qda_diferente, "covariâncias diferentes"),
+    (ax1, X_treino_comum_fig, y_treino_comum_fig, lda_comum_fig, qda_comum_fig, cov_comum, "mesma covariância"),
+    (
+        ax2, X_treino_diferente_fig, y_treino_diferente_fig, lda_diferente_fig, qda_diferente_fig,
+        cov_laranja_diferente, "covariâncias diferentes",
+    ),
 ]
-for ax, X_treino, y_treino, modelo_lda, modelo_qda, titulo in paineis:
+for ax, X_treino, y_treino, modelo_lda, modelo_qda, cov_laranja_verdadeira, titulo in paineis:
     previsao_lda_grade = modelo_lda.predict(pontos_grade).reshape(malha_x.shape)
     previsao_qda_grade = modelo_qda.predict(pontos_grade).reshape(malha_x.shape)
+    diferenca_log_densidade = (
+        log_densidade_normal(pontos_grade, media_azul, cov_comum)
+        - log_densidade_normal(pontos_grade, media_laranja, cov_laranja_verdadeira)
+    ).reshape(malha_x.shape)
 
-    ax.scatter(X_treino[y_treino == 0, 0], X_treino[y_treino == 0, 1], color="C0", s=18, zorder=3)
-    ax.scatter(X_treino[y_treino == 1, 0], X_treino[y_treino == 1, 1], color="C1", s=18, zorder=3)
+    ax.scatter(X_treino[y_treino == 0, 0], X_treino[y_treino == 0, 1], color="C0", s=6, zorder=3)
+    ax.scatter(X_treino[y_treino == 1, 0], X_treino[y_treino == 1, 1], color="C1", s=6, zorder=3)
+    ax.contour(
+        malha_x, malha_y, diferenca_log_densidade, levels=[0], colors="#6C757D", linewidths=1.8,
+        linestyles="dotted",
+    )
     ax.contour(malha_x, malha_y, previsao_lda_grade, levels=[0.5], colors="C2", linewidths=2.2)
     ax.contour(
         malha_x, malha_y, previsao_qda_grade, levels=[0.5], colors="C3", linewidths=2.2, linestyles="dashed"
@@ -176,18 +227,21 @@ ax1.set_ylabel("x2")
 legenda_fronteiras = [
     Line2D([], [], marker="o", linestyle="None", color="C0", markersize=7, label="classe azul"),
     Line2D([], [], marker="o", linestyle="None", color="C1", markersize=7, label="classe laranja"),
+    Line2D([], [], color="#6C757D", linewidth=1.8, linestyle=":", label="fronteira de Bayes"),
     Line2D([], [], color="C2", linewidth=2.2, label="fronteira LDA"),
     Line2D([], [], color="C3", linewidth=2.2, linestyle="dashed", label="fronteira QDA"),
 ]
-fig.legend(handles=legenda_fronteiras, loc="lower center", ncols=4, bbox_to_anchor=(0.5, -0.05), frameon=False)
+fig.legend(handles=legenda_fronteiras, loc="lower center", ncols=5, bbox_to_anchor=(0.5, -0.05), frameon=False)
 
 plt.tight_layout()
 plt.show()
 ```
 
+A fronteira de Bayes dá ao leitor uma régua para julgar as outras duas. No painel de covariância comum, ela é reta — as duas classes de fato compartilham $\Sigma$ —, e a fronteira do LDA praticamente a cobre; a do QDA se afasta dela, curvando para acompanhar uma diferença de covariância que não existe de verdade. No painel de covariâncias diferentes, a fronteira de Bayes se curva, e é a do QDA que a acompanha de perto; a do LDA, presa a ser reta, erra a curva inteira. É a mesma assimetria que a média sobre 200 sorteios mediu acima, agora visível: o preço de a LDA manter uma suposição errada é maior do que o preço de a QDA estimar uma covariância a mais que não precisava.
+
 ## Os três sobre o Default
 
-Sobre o `Default`, com os mesmos três preditores usados acima — saldo, renda e o indicador de estudante —, `LinearDiscriminantAnalysis`, `QuadraticDiscriminantAnalysis` e `GaussianNB`, as três classes do `scikit-learn` correspondentes aos três métodos, ajustam LDA, QDA e Naive Bayes exatamente como definidos acima; a `GaussianNB` estima cada densidade marginal $f_{kj}$ como uma normal, a mesma opção que a seção anterior descreveu para um preditor quantitativo.
+Sobre o `Default`, com os mesmos três preditores usados acima — saldo, renda e o indicador de estudante —, `LinearDiscriminantAnalysis`, `QuadraticDiscriminantAnalysis` e `GaussianNB`, as três classes do `scikit-learn` correspondentes aos três métodos, ajustam LDA, QDA e Naive Bayes exatamente como definidos acima; a `GaussianNB` estima cada densidade marginal $f_{kj}$ como uma normal — a opção mais simples entre as que @james2023 lista para um preditor quantitativo; as outras são não paramétricas, um histograma ou uma densidade por kernel em vez de uma forma fixa.
 
 ```{python}
 #| label: ajuste-tres-classificadores
@@ -216,8 +270,9 @@ pd.DataFrame(
 qda_erra_menos_que_lda = bool(erro_qda < erro_lda)
 lda_erra_menos_que_nb = bool(erro_lda < erro_nb)
 diferenca_lda_qda = round(abs(erro_lda - erro_qda), 4)
+todos_abaixo_do_trivial = bool(max(erro_lda, erro_qda, erro_nb) < erro_trivial)
 
-qda_erra_menos_que_lda, lda_erra_menos_que_nb, diferenca_lda_qda
+qda_erra_menos_que_lda, lda_erra_menos_que_nb, diferenca_lda_qda, todos_abaixo_do_trivial
 ```
 
-Entre os três, a QDA erra menos (2,70%) — `qda_erra_menos_que_lda` confirma —, mas por uma margem mínima sobre a LDA (2,76%): a diferença entre os dois é de apenas 0,0006, seis décimos de milésimo, perto demais para chamar de vitória. A LDA, por sua vez, erra menos que o Naive Bayes (2,93%), e `lda_erra_menos_que_nb` confirma. Prever "não" para todo mundo, sem olhar para saldo, renda ou estudante nenhum, erra 3,33%: os três classificadores, que de fato usam o dado, ficam só um pouco abaixo disso. Essa proximidade não fecha a questão — o erro total esconde *como* cada um erra, e é isso que a seção 9.5 mede.
+Entre os três, a QDA erra menos (2,70%) — `qda_erra_menos_que_lda` confirma —, mas por uma margem mínima sobre a LDA (2,76%): a diferença entre os dois é de apenas 0,0006, seis décimos de milésimo, perto demais para chamar de vitória. A LDA, por sua vez, erra menos que o Naive Bayes (2,93%), e `lda_erra_menos_que_nb` confirma. Prever "não" para todo mundo, sem olhar para saldo, renda ou estudante nenhum, erra 3,33%: os três classificadores, que de fato usam o dado, ficam abaixo disso — `todos_abaixo_do_trivial` confirma —, mas só um pouco. Essa proximidade não fecha a questão — o erro total esconde *como* cada um erra, e é isso que a seção 9.5 mede.
