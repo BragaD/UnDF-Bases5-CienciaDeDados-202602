@@ -4,7 +4,7 @@
 Esta seção corresponde à seção 4.4.2 de @james2023.
 :::
 
-A seção anterior ajustou três classificadores diferentes ao `Default` e mediu o erro de cada um sobre as próprias linhas do ajuste — os três abaixo do erro trivial, mas próximos demais entre si para decidir qualquer coisa só por essa proximidade. O erro total soma dois jeitos de errar bem diferentes: dizer "não" para quem de fato fica inadimplente, e dizer "sim" para quem não fica. Esta seção separa os dois, com o classificador logístico ajustado na seção 9.2 — `saldo`, `renda` e o indicador de `estudante` — como caso de trabalho. O vocabulário que sai daqui vale para julgar qualquer classificador, não só este.
+A seção anterior ajustou três classificadores diferentes ao `Default` e mediu o erro de cada um sobre as próprias linhas do ajuste — os três abaixo do erro trivial, mas próximos demais entre si para decidir qualquer coisa só por essa proximidade. O erro total soma dois jeitos de errar bem diferentes: dizer "não" para quem de fato fica inadimplente, e dizer "sim" para quem não fica. Esta seção separa os dois, com o classificador logístico ajustado na seção 9.2 — `saldo`, `renda` e o indicador de `estudante` — como caso de trabalho. Como na seção 9.3, tudo o que segue é medido sobre as mesmas linhas que ajustaram o modelo, não em dado novo. O vocabulário que sai daqui vale para julgar qualquer classificador, não só este.
 
 ```{python}
 #| label: setup
@@ -30,10 +30,11 @@ proba = modelo.predict_proba(X)[:, 1]
 
 ```{python}
 #| label: acerto-trivial
+n_total = len(y)
 acerto_trivial = float((y == 0).mean())
 erro_trivial = float(y.mean())
 
-round(acerto_trivial, 4), round(erro_trivial, 4)
+n_total, round(acerto_trivial, 4), round(erro_trivial, 4)
 ```
 
 Um classificador que responde sempre "não", sem olhar `saldo`, `renda` nem `estudante`, acerta 96,67% das 10.000 linhas — porque 96,67% delas de fato não são inadimplentes; ele erra nos 3,33% restantes, e só neles. Esse número não mede o classificador: mede a proporção da classe rara. Qualquer classificador de verdade precisa ser julgado contra ele, não contra 100%, e ele por si só não distingue um classificador que aprendeu algo de um que só repete a classe mais comum.
@@ -74,6 +75,10 @@ $$
 $$
 
 Precisão responde: entre quem o modelo acusou de inadimplente, quantos de fato eram — aqui, 105 entre 105 + 40 = 145, ou 0,7241. Revocação responde: entre quem de fato ficou inadimplente, quantos o modelo achou — 105 entre 105 + 228 = 333, ou 0,3153. O erro total de 2,68% parece ótimo até se perguntar de quem é o erro: no limiar padrão, o modelo acha 105 dos 333 inadimplentes (105 + 228 = 333) e deixa 228 passar sem sinalizar nada.
+
+::: {.conceito}
+Matriz de confusão, precisão e revocação são o vocabulário mínimo para julgar um classificador. A matriz separa os quatro jeitos de acertar e errar — VN, FP, FN, VP. Precisão (VP / (VP + FP)) mede a confiança de um alarme positivo: quando o modelo diz "sim", quão provável é que esteja certo. Revocação (VP / (VP + FN)) mede a cobertura sobre quem de fato é positivo: da classe que interessa achar, quanto o modelo de fato encontra. Nenhuma das duas depende do algoritmo que gerou a previsão — servem do mesmo jeito para regressão logística, LDA, QDA, Naive Bayes ou qualquer outro classificador.
+:::
 
 ## O limiar é escolha, não verdade
 
@@ -123,37 +128,50 @@ grade_limiares = np.linspace(0.0, 0.5, 251)
 erro_total = np.empty_like(grade_limiares)
 taxa_perdidos = np.empty_like(grade_limiares)
 taxa_falso_alarme = np.empty_like(grade_limiares)
+fp_contagem = np.empty(len(grade_limiares), dtype=int)
+fn_contagem = np.empty(len(grade_limiares), dtype=int)
 
 for i, limiar in enumerate(grade_limiares):
     previsto = (proba >= limiar).astype(int)
     fp = int(((y == 0) & (previsto == 1)).sum())
     fn = int(((y == 1) & (previsto == 0)).sum())
+    fp_contagem[i] = fp
+    fn_contagem[i] = fn
     erro_total[i] = (fp + fn) / len(y)
     taxa_perdidos[i] = fn / n_pos
     taxa_falso_alarme[i] = fp / n_neg
 
-perdidos_so_cresce_com_limiar = bool((np.diff(taxa_perdidos) >= 0).all())
-falso_alarme_so_cai_com_limiar = bool((np.diff(taxa_falso_alarme) <= 0).all())
+perdidos_nunca_cai_com_limiar = bool((np.diff(taxa_perdidos) >= 0).all())
+falso_alarme_nunca_sobe_com_limiar = bool((np.diff(taxa_falso_alarme) <= 0).all())
 
-indice_cruzamento = int(np.argmin(np.abs(taxa_perdidos - taxa_falso_alarme)))
-limiar_cruzamento = float(grade_limiares[indice_cruzamento])
+# Onde as duas TAXAS (denominadores 333 e 9.667) mais se aproximam.
+indice_cruzamento_taxas = int(np.argmin(np.abs(taxa_perdidos - taxa_falso_alarme)))
+limiar_cruzamento_taxas = float(grade_limiares[indice_cruzamento_taxas])
+
+# Onde as duas CONTAGENS (mesma unidade: pessoas) mais se aproximam — um
+# ponto diferente do cruzamento das taxas, de propósito.
+indice_cruzamento_contagem = int(np.argmin(np.abs(fp_contagem - fn_contagem)))
+limiar_cruzamento_contagem = float(grade_limiares[indice_cruzamento_contagem])
 
 indice_erro_minimo = int(np.argmin(erro_total))
 limiar_erro_minimo = float(grade_limiares[indice_erro_minimo])
 
 (
-    perdidos_so_cresce_com_limiar,
-    falso_alarme_so_cai_com_limiar,
-    round(limiar_cruzamento, 3),
-    round(float(taxa_perdidos[indice_cruzamento]), 4),
-    round(float(taxa_falso_alarme[indice_cruzamento]), 4),
+    perdidos_nunca_cai_com_limiar,
+    falso_alarme_nunca_sobe_com_limiar,
+    round(limiar_cruzamento_taxas, 3),
+    int(fp_contagem[indice_cruzamento_taxas]),
+    int(fn_contagem[indice_cruzamento_taxas]),
+    round(limiar_cruzamento_contagem, 3),
+    int(fp_contagem[indice_cruzamento_contagem]),
+    int(fn_contagem[indice_cruzamento_contagem]),
     round(limiar_erro_minimo, 3),
     round(float(erro_total[indice_erro_minimo]), 4),
     round(float(erro_total[-1]), 4),
 )
 ```
 
-Nos 251 limiares varridos, a fração de inadimplentes perdidos nunca cai quando o limiar sobe (`perdidos_so_cresce_com_limiar` é `True`), e a fração de alarme falso entre adimplentes nunca sobe quando o limiar sobe (`falso_alarme_so_cai_com_limiar` é `True`): as duas trocam de direção o tempo todo, em sentidos opostos, não só nos três pontos escolhidos acima. As duas curvas se cruzam perto do limiar 0,038, onde ambas valem cerca de 0,12 — abaixo desse ponto, o modelo já erra mais por alarme falso do que ganha em achar inadimplente. E o erro total mínimo da varredura, 0,0261, acontece no limiar 0,428, não exatamente em 0,5 (que dá 0,0268): perto de 0,5 o erro total está quase plano, não estritamente mínimo ali.
+Nos 251 limiares varridos, a fração de inadimplentes perdidos nunca cai quando o limiar sobe (`perdidos_nunca_cai_com_limiar` é `True`), e a fração de alarme falso entre adimplentes nunca sobe quando o limiar sobe (`falso_alarme_nunca_sobe_com_limiar` é `True`): as duas se movem em sentidos opostos o tempo todo, não só nos três pontos escolhidos acima. As duas *taxas* se cruzam perto do limiar 0,038 — mas são taxas com bases diferentes, 333 inadimplentes contra 9.667 adimplentes. Naquele mesmo limiar, em contagem de pessoas, o modelo produz 1.179 falsos alarmes contra apenas 40 inadimplentes perdidos: quase 30 alarmes falsos para cada inadimplente ainda não achado. Taxas iguais não são erros iguais — quem opera o cartão sente contagem, não taxa. As duas *contagens* só se equilibram bem mais adiante, perto do limiar 0,278, com 160 falsos alarmes contra 159 perdidos. E o erro total mínimo da varredura, 0,0261, ocorre por volta do limiar 0,43 (0,428 e 0,430 empatam nessa grade ao arredondar a quatro casas — não é um ponto único, é um platô), não exatamente em 0,5 (que dá 0,0268): perto de 0,5 o erro total já está quase plano.
 
 ```{python}
 #| label: fig-taxas-por-limiar
@@ -162,16 +180,18 @@ fig, ax = plt.subplots()
 ax.plot(grade_limiares, erro_total, color="C2", linewidth=2.2, label="erro total")
 ax.plot(grade_limiares, taxa_perdidos, color="C1", linewidth=2.2, linestyle="--", label="inadimplentes perdidos")
 ax.plot(grade_limiares, taxa_falso_alarme, color="C0", linewidth=2.2, linestyle=":", label="alarme falso entre adimplentes")
-ax.scatter([limiar_cruzamento], [taxa_perdidos[indice_cruzamento]], color="#6C757D", zorder=5, s=28)
+ax.scatter([limiar_cruzamento_taxas], [taxa_perdidos[indice_cruzamento_taxas]], color="#6C757D", zorder=5, s=28)
 ax.annotate(
-    f"limiar ≈ {limiar_cruzamento:.3f}",
-    xy=(limiar_cruzamento, taxa_perdidos[indice_cruzamento]),
-    xytext=(60, -40), textcoords="offset points", fontsize=8,
+    f"limiar ≈ {limiar_cruzamento_taxas:.3f}",
+    xy=(limiar_cruzamento_taxas, taxa_perdidos[indice_cruzamento_taxas]),
+    xytext=(55, 30), textcoords="offset points", fontsize=8,
     arrowprops=dict(arrowstyle="-", color="#6C757D", linewidth=0.8),
 )
+ax.set_xlim(0, 0.5)
+ax.set_ylim(0, 1)
 ax.set_xlabel("limiar de decisão")
 ax.set_ylabel("taxa")
-ax.legend(loc="center right")
+ax.legend(loc="upper right")
 plt.tight_layout()
 plt.show()
 ```
@@ -192,10 +212,11 @@ curva_nunca_abaixo_da_diagonal = bool((tpr >= fpr).all())
 len(fpr), round(float(auc), 4), curva_nunca_abaixo_da_diagonal
 ```
 
-`roc_curve` percorre 440 pares (taxa de falso alarme, revocação), um por limiar distinto observado nas probabilidades ajustadas, e em nenhum deles a revocação fica abaixo da taxa de falso alarme (`curva_nunca_abaixo_da_diagonal` é `True`) — a curva não cruza para baixo da diagonal em ponto nenhum. `roc_auc_score` resume a curva inteira num número: a área sob ela, 0,9496 — perto do máximo de 1,0, e bem acima dos 0,5 que um classificador sem informação nenhuma sobre `saldo`, `renda` ou `estudante` produziria.
+`roc_curve` não devolve um ponto por probabilidade observada: as 10.000 probabilidades ajustadas por `predict_proba` são todas distintas, mas por padrão o método descarta os pontos colineares que não mudam a forma da curva (`drop_intermediate=True`) e antecede um limiar artificial, `inf`, que não é probabilidade nenhuma — daí 440 pares, não 10.000. São os vértices que bastam para desenhar a curva inteira, não uma amostra de limiares. Em nenhum dos 440 a revocação fica abaixo da taxa de falso alarme (`curva_nunca_abaixo_da_diagonal` é `True`) — a curva não cruza para baixo da diagonal em ponto nenhum. `roc_auc_score` resume a curva inteira num número: a área sob ela, 0,9496 — perto do máximo de 1,0, e bem acima dos 0,5 que um classificador sem informação nenhuma sobre `saldo`, `renda` ou `estudante` produziria.
 
 ```{python}
 #| label: fig-roc
+#| fig-cap: "Curva ROC do classificador logístico sobre o Default (azul): taxa de falso alarme (FPR) contra revocação (TPR), para os 440 limiares que definem a curva. A diagonal pontilhada cinza marca o classificador sem informação nenhuma sobre saldo, renda ou estudante — FPR e revocação crescendo juntos, um a um. O ponto laranja marca o limiar padrão, 0,5, já visto na matriz de confusão. A área sob a curva azul, 0,9496, está na legenda."
 fpr_05 = fp_05 / n_neg
 
 fig, ax = plt.subplots()
@@ -203,10 +224,12 @@ ax.plot(fpr, tpr, color="C0", linewidth=2.2, label=f"curva ROC (regressão logí
 ax.plot([0, 1], [0, 1], color="#7A8894", linestyle=":", linewidth=1.4, label="palpite sem informação")
 ax.scatter([fpr_05], [revocacao_05], color="C1", zorder=5, s=40)
 ax.annotate(
-    f"limiar 0,5\n(FPR {fpr_05:.3f}, revocação {revocacao_05:.3f})",
-    xy=(fpr_05, revocacao_05), xytext=(40, -45), textcoords="offset points", fontsize=8,
+    f"limiar 0,5 (FPR {fpr_05:.3f}, revocação {revocacao_05:.3f})",
+    xy=(fpr_05, revocacao_05), xytext=(50, 40), textcoords="offset points", fontsize=8,
     arrowprops=dict(arrowstyle="-", color="C1", linewidth=0.8),
 )
+ax.set_xlim(0, 1)
+ax.set_ylim(0, 1)
 ax.set_xlabel("taxa de falso alarme (FPR)")
 ax.set_ylabel("revocação (TPR)")
 ax.legend(loc="lower right")
@@ -216,4 +239,4 @@ plt.show()
 
 O ponto marcado é o limiar 0,5 já visto na matriz de confusão: FPR de 0,004 (os 40 falsos alarmes sobre 9.627 + 40 = 9.667 adimplentes) e revocação de 0,315 (os 105 acertos sobre 105 + 228 = 333 inadimplentes) — o mesmo par de números da seção anterior, agora lido como um ponto sobre a curva inteira. A diagonal pontilhada marca o que um classificador sem informação produziria: ganhar revocação só à custa de FPR, na mesma proporção, um a um. A curva do modelo logístico nunca cruza para baixo dela, como o `curva_nunca_abaixo_da_diagonal` do chunk acima confirma, e é a distância entre as duas — resumida na área de 0,9496 — que separa um classificador que aprendeu algo de um que está adivinhando.
 
-A matriz de confusão, a precisão, a revocação e a curva ROC não dependem de qual classificador as produziu: servem para LDA, QDA, Naive Bayes e a regressão logística do mesmo jeito, e é esse o vocabulário que a seção 9.6 usa para comparar os quatro lado a lado.
+A matriz de confusão, a precisão, a revocação e a curva ROC não dependem de qual classificador as produziu: servem para LDA, QDA, Naive Bayes e a regressão logística do mesmo jeito. É esse o vocabulário que permite comparar classificadores, e a seção 9.6 fecha o capítulo perguntando quem ganha quando.
