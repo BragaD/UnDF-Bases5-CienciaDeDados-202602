@@ -4,7 +4,201 @@
 Esta seção corresponde às seções 4.3.1, 4.3.2, 4.3.3 e 4.3.4 de @james2023.
 :::
 
-::: {.callout-warning}
-## Em construção
-O conteúdo desta seção ainda será escrito.
+A seção anterior deixou a curva em S pronta, sem dizer de onde ela vem nem como um coeficiente se lê nela. A regressão logística resolve as duas coisas: ajusta essa curva a dado real, e dá um coeficiente por preditor — só que lido de um jeito diferente do que o capítulo 8 ensinou para a reta.
+
+```{python}
+#| label: setup
+#| include: false
+import matplotlib.pyplot as plt
+import numpy as np
+import pandas as pd
+from sklearn.linear_model import LogisticRegression
+
+plt.style.use("estilo-figuras.mplstyle")
+
+base = pd.read_csv("dados/Default.csv")
+y = (base["inadimplente"] == "sim").astype(int)
+```
+
+## A função logística
+
+Para um preditor $X$ e coeficientes $\beta_0$ e $\beta_1$, a regressão logística modela a probabilidade como
+
+$$
+p(X) = \frac{e^{\beta_0 + \beta_1 X}}{1 + e^{\beta_0 + \beta_1 X}}.
+$$
+
+O denominador é sempre o numerador mais 1, e os dois são positivos para qualquer $\beta_0$, $\beta_1$ e $X$ reais — a fração fica presa em (0, 1) pela forma da conta, não pelo ajuste. É essa propriedade, e não o valor de nenhum coeficiente, que resolve o problema da seção anterior.
+
+```{python}
+#| label: extremos-sigmoide
+grade_z = np.linspace(-10, 10, 400)
+p_z = np.exp(grade_z) / (1 + np.exp(grade_z))
+
+p_extremo_baixo = float(p_z.min())
+p_extremo_alto = float(p_z.max())
+
+round(p_extremo_baixo, 6), round(p_extremo_alto, 6)
+```
+
+Em $\beta_0 + \beta_1 X = -10$, a curva vale 0,000045; em $+10$, vale 0,999955 — perto das bordas de [0, 1], mas sem nunca as tocar, por mais que $\beta_0 + \beta_1 X$ se afaste de zero.
+
+```{python}
+#| label: fig-sigmoide
+#| fig-cap: "A função logística, para z = β0 + β1X entre -10 e 10. A curva se aproxima de 0 e de 1 sem nunca alcançá-los, e é essa forma que sustenta todo ajuste desta seção."
+fig, ax = plt.subplots()
+ax.axhspan(0, 1, color="C2", alpha=0.10)
+ax.plot(grade_z, p_z, color="C0", linewidth=2.2)
+ax.set_xlabel("β0 + β1·X")
+ax.set_ylabel("p(X)")
+plt.tight_layout()
+plt.show()
+```
+
+## O ajuste sobre saldo
+
+```{python}
+#| label: ajuste-saldo
+modelo_saldo = LogisticRegression(C=np.inf, max_iter=10000).fit(base[["saldo"]], y)
+
+intercepto_saldo = float(modelo_saldo.intercept_[0])
+coef_saldo = float(modelo_saldo.coef_[0, 0])
+
+round(intercepto_saldo, 4), round(coef_saldo, 4)
+```
+
+`C=np.inf` desliga a penalização que o `LogisticRegression` aplica por padrão, deixando o ajuste livre para maximizar a verossimilhança sem encolher nenhum coeficiente. Sobre `saldo` sozinho, o ajuste dá intercepto -10,6513 e coeficiente 0,0055.
+
+## A leitura do coeficiente: log-chance, não probabilidade
+
+$$
+\log\left(\frac{p(X)}{1-p(X)}\right) = \beta_0 + \beta_1 X.
+$$
+
+::: {.conceito}
+Um aumento de uma unidade em $X$ soma $\beta_1$ à **log-chance** de $Y = 1$, não à probabilidade $p(X)$. Como a relação entre $p(X)$ e $X$ não é uma reta, o efeito de $X$ sobre a probabilidade depende de onde $X$ já está — diferente da regressão linear do capítulo 8, em que $\beta_1$ valia o mesmo incremento em qualquer ponto.
 :::
+
+Sobre `saldo`, cada dólar a mais soma sempre os mesmos 0,0055 à log-chance de inadimplência — mas o efeito sobre a probabilidade não é constante:
+
+```{python}
+#| label: previsoes-saldo
+grade_previsao = pd.DataFrame({"saldo": [1000, 2000]})
+prob_1000, prob_2000 = modelo_saldo.predict_proba(grade_previsao)[:, 1]
+
+round(float(prob_1000) * 100, 2), round(float(prob_2000) * 100, 2)
+```
+
+Para um saldo de mil dólares, a probabilidade prevista de inadimplência é 0,58%; para um saldo de dois mil dólares — o dobro do primeiro —, ela não dobra: sobe para 58,58%. É essa não linearidade que a curva em S carrega, e que a reta da seção anterior não tinha como representar.
+
+## O paradoxo do estudante
+
+```{python}
+#| label: taxa-bruta-por-estudante
+estudantes = base[base["estudante"] == "sim"]
+nao_estudantes = base[base["estudante"] == "não"]
+
+taxa_estudante = float((estudantes["inadimplente"] == "sim").mean())
+taxa_nao_estudante = float((nao_estudantes["inadimplente"] == "sim").mean())
+
+round(taxa_estudante * 100, 2), round(taxa_nao_estudante * 100, 2)
+```
+
+Entre estudantes, 4,31% ficam inadimplentes; entre os demais, 2,92% — olhado sozinho, o estudante é o cliente mais arriscado dos dois.
+
+```{python}
+#| label: coef-estudante-sozinho
+X_estudante = (base["estudante"] == "sim").astype(int).to_frame("estudante_sim")
+modelo_estudante = LogisticRegression(C=np.inf, max_iter=10000).fit(X_estudante, y)
+
+coef_estudante_sozinho = float(modelo_estudante.coef_[0, 0])
+round(coef_estudante_sozinho, 4)
+```
+
+Um modelo logístico que usa só `estudante` como preditor confirma essa leitura: o coeficiente sai positivo, 0,4014 — ser estudante soma à log-chance de inadimplência.
+
+```{python}
+#| label: modelo-multiplo
+X_multiplo = base[["saldo", "renda"]].copy()
+X_multiplo["estudante_sim"] = (base["estudante"] == "sim").astype(int)
+
+modelo_multiplo = LogisticRegression(C=np.inf, max_iter=10000).fit(X_multiplo, y)
+coeficientes_multiplo = pd.Series(modelo_multiplo.coef_[0], index=modelo_multiplo.feature_names_in_)
+intercepto_multiplo = float(modelo_multiplo.intercept_[0])
+
+(
+    round(intercepto_multiplo, 4),
+    round(float(coeficientes_multiplo["saldo"]), 6),
+    f"{coeficientes_multiplo['renda']:.3e}",
+    round(float(coeficientes_multiplo["estudante_sim"]), 4),
+)
+```
+
+Juntar `saldo`, `renda` e `estudante` na mesma equação reverte o sinal: o coeficiente de estudante cai para -0,6468. `renda` quase não muda a conta (3,033e-06), mas `saldo` (0,005737) e `estudante` pesam — e o de `estudante` trocou de sinal por completo. É o mesmo tipo de reviravolta que a seção 8.3 viu no coeficiente de jornal: positivo sozinho, outra coisa depois que os preditores certos entram na mesma equação.
+
+```{python}
+#| label: saldo-medio-por-estudante
+saldo_medio_estudante = float(estudantes["saldo"].mean())
+saldo_medio_nao_estudante = float(nao_estudantes["saldo"].mean())
+
+round(saldo_medio_estudante, 2), round(saldo_medio_nao_estudante, 2)
+```
+
+A explicação está no saldo: em média, um estudante deve 987,82 dólares no cartão; um não estudante, 771,77 — 216,05 dólares a menos. Como saldo é o preditor que mais empurra a inadimplência para cima, um estudante típico chega à conta múltipla já carregando essa desvantagem — e é justamente isso que o coeficiente isolado de `estudante` não separa: sozinho, ele confunde o efeito de ser estudante com o efeito de, em média, dever mais.
+
+```{python}
+#| label: curva-nao-cruza
+grade_saldo = np.linspace(base["saldo"].min(), base["saldo"].max(), 300)
+renda_media = float(base["renda"].mean())
+
+grade_estudante = pd.DataFrame({"saldo": grade_saldo, "renda": renda_media, "estudante_sim": 1})
+grade_nao_estudante = pd.DataFrame({"saldo": grade_saldo, "renda": renda_media, "estudante_sim": 0})
+
+prob_estudante = modelo_multiplo.predict_proba(grade_estudante)[:, 1]
+prob_nao_estudante = modelo_multiplo.predict_proba(grade_nao_estudante)[:, 1]
+
+estudante_sempre_abaixo = bool((prob_estudante < prob_nao_estudante).all())
+round(renda_media, 2), estudante_sempre_abaixo
+```
+
+Fixando `renda` na média do conjunto — 33.516,98 dólares — e variando só `saldo`, a probabilidade prevista para um estudante fica abaixo da de um não estudante em todo ponto da grade: `estudante_sempre_abaixo` sai `True`. A mesma reviravolta do parágrafo anterior, agora como curva — a estudante com o mesmo saldo e a mesma renda de um não estudante, o modelo sempre prevê menos risco.
+
+```{python}
+#| label: fig-paradoxo-estudante
+#| fig-cap: "Esquerda: probabilidade de inadimplência prevista pelo modelo múltiplo contra saldo, com renda fixada na média — a curva do estudante (laranja) fica abaixo da do não estudante (azul) em todo o intervalo. As linhas tracejadas marcam a taxa bruta de cada grupo, sem controlar saldo nem renda. Direita: distribuição de saldo por grupo — o estudante se concentra em saldos mais altos."
+fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(11, 4.4))
+
+ax1.plot(grade_saldo, prob_nao_estudante, color="C0", linewidth=2.2, label="não")
+ax1.plot(grade_saldo, prob_estudante, color="C1", linewidth=2.2, label="sim")
+ax1.axhline(taxa_nao_estudante, color="C0", linestyle="--", linewidth=1.2, alpha=0.7)
+ax1.axhline(taxa_estudante, color="C1", linestyle="--", linewidth=1.2, alpha=0.7)
+ax1.annotate(
+    "taxa bruta: não", xy=(grade_saldo[-1], taxa_nao_estudante),
+    xytext=(-98, -10), textcoords="offset points", fontsize=8, color="C0",
+)
+ax1.annotate(
+    "taxa bruta: sim", xy=(grade_saldo[-1], taxa_estudante),
+    xytext=(-98, 6), textcoords="offset points", fontsize=8, color="C1",
+)
+ax1.set_xlabel("saldo (dólares)")
+ax1.set_ylabel("probabilidade prevista de inadimplência")
+ax1.legend(title="estudante", loc="upper left")
+
+for dados, posicao, cor in [(nao_estudantes["saldo"], 1, "C0"), (estudantes["saldo"], 2, "C1")]:
+    propriedades = dict(color=cor, linewidth=1.6)
+    ax2.boxplot(
+        dados, positions=[posicao], widths=0.5,
+        boxprops=propriedades, whiskerprops=propriedades,
+        capprops=propriedades, medianprops=propriedades,
+        flierprops=dict(markeredgecolor=cor, markersize=3, alpha=0.5),
+    )
+ax2.set_xticks([1, 2])
+ax2.set_xticklabels(["não", "sim"])
+ax2.set_xlabel("estudante")
+ax2.set_ylabel("saldo (dólares)")
+
+plt.tight_layout()
+plt.show()
+```
+
+A curva da esquerda mostra as duas verdades ao mesmo tempo, e elas não se contradizem: em qualquer saldo fixo, o estudante é o cliente mais seguro — a curva laranja não cruza a azul —, mas as linhas tracejadas, que ignoram saldo e mostram só a taxa bruta de cada grupo, invertem essa ordem. As caixas da direita explicam a inversão: o estudante se concentra em saldos mais altos, exatamente a faixa em que as duas curvas da esquerda já estão mais perto do topo.
