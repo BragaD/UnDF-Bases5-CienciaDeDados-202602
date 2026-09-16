@@ -49,7 +49,7 @@ print(X.shape)
 
 `cidade` é o que a seção 6.1 chamaria de categórico nominal: cinco rótulos, sem ordem nenhuma entre eles. Um modelo, porém, só sabe multiplicar e somar número — e a tradução mais óbvia de texto para número, trocar cada cidade por um inteiro (São Paulo = 1, Rio de Janeiro = 2, Campinas = 3, e assim por diante), inventaria exatamente o que `cidade` não tem: uma ordem entre as cinco, e uma distância entre elas — o modelo passaria a "ler" que Campinas está duas vezes mais longe de São Paulo do que o Rio está, uma afirmação sem sentido nenhum sobre nomes de cidade.
 
-`pd.get_dummies` evita essa invenção: em vez de uma coluna com números inventados, cria uma coluna por categoria, cada uma com 0 ou 1.
+`pd.get_dummies` evita essa invenção: em vez de uma coluna com números inventados, cria uma coluna por categoria, cada uma com `True` onde a linha é daquela categoria e `False` onde não é.
 
 ```{python}
 #| label: dummies-cidade
@@ -62,12 +62,22 @@ dummies_cidade.head(3)
 list(dummies_cidade.columns)
 ```
 
+::: {.funcao}
+**`pd.get_dummies(serie)`** — cria uma coluna para cada valor distinto de `serie`, com `True` nas linhas que têm aquele valor e `False` nas demais. Em conta, `True` vale 1 e `False` vale 0.
+
+- `serie`: a coluna categórica, aqui `alugueis["cidade"]`.
+:::
+
 Cinco colunas, uma por cidade, em ordem alfabética. Nenhuma delas carrega mais peso que outra — e cada linha marca exatamente uma cidade como verdadeira:
 
 ```{python}
 #| label: dummies-checagem
 dummies_cidade.sum(axis=1).unique()
 ```
+
+::: {.funcao}
+**`df.sum(axis=1)`** — `axis` escolhe a direção da soma. Com `0`, o padrão, soma cada coluna descendo pelas linhas; com `1`, soma cada linha atravessando as colunas.
+:::
 
 Toda linha soma 1: nenhum imóvel fica sem cidade, e nenhum marca duas ao mesmo tempo. Essas cinco colunas entram em `X` no lugar do texto:
 
@@ -77,7 +87,14 @@ X = pd.concat([X, dummies_cidade], axis=1)
 X.shape
 ```
 
-`X` passa de quatro para nove colunas — as quatro numéricas mais as cinco 0/1 que substituem `cidade`, sem nenhuma ordem que a coluna original não tinha.
+::: {.funcao}
+**`pd.concat(tabelas, axis=1)`** — cola tabelas numa só.
+
+- `tabelas`: uma lista com as tabelas a colar.
+- `axis`: com `1`, lado a lado, casando as linhas pelo rótulo do índice; com `0`, o padrão, uma embaixo da outra.
+:::
+
+`X` passa de quatro para nove colunas — as quatro numéricas mais as cinco de `True`/`False` que substituem `cidade`, sem nenhuma ordem que a coluna original não tinha.
 
 ## Uma coluna que não pode entrar: o vazamento
 
@@ -97,6 +114,10 @@ Em 9.347 das 10.692 linhas, a soma bate com `total` exatamente. Nas outras:
 divergentes = diferenca[diferenca != 0]
 len(divergentes), divergentes.median(), divergentes.quantile(0.75), divergentes.min()
 ```
+
+::: {.funcao}
+**`serie.min()`** — o menor valor da coluna. Não recebe argumento; valores nulos são ignorados.
+:::
 
 1.345 linhas divergem, e por pouco: a mediana da diferença é -1, o percentil 75 é 2, e o pior caso chega a -379 — a tabela não traz o que causou essas 1.345 exceções, só que a maioria bate exatamente e as demais divergem por um valor pequeno perto de zero, não por uma fração do total.
 
@@ -136,6 +157,23 @@ plt.tight_layout()
 plt.show()
 ```
 
+::: {.funcao}
+**`df.corr()`** — numa tabela, e sem argumento, a correlação de Pearson de cada coluna com cada outra. Devolve uma matriz quadrada, com as mesmas colunas nas linhas e nas colunas, e 1 na diagonal.
+
+**`ax.imshow(matriz, cmap, vmin, vmax)`** — pinta cada célula da matriz com uma cor.
+
+- `cmap`: a escala de cores, aqui `"Blues"`.
+- `vmin`, `vmax`: os valores que recebem as duas pontas da escala.
+
+**`ax.set_xticks(posicoes)`** e **`ax.set_xticklabels(rotulos, rotation, ha)`** — onde ficam as marcas do eixo horizontal e o texto de cada uma. `rotation` inclina o texto, em graus; `ha="right"` alinha o texto pela ponta direita, para que o rótulo inclinado termine embaixo da sua marca. `set_yticks` e `set_yticklabels` fazem o mesmo no eixo vertical.
+
+**`ax.grid(False)`** — desliga a grade, que cortaria as células ao meio.
+
+**`df.iloc[i, j]`** — com dois números, a célula na linha `i` e na coluna `j`, contadas por posição.
+
+**`fig.colorbar(im, ax, label)`** — a barra que traduz cor em valor. `im` é o que `imshow` devolveu, `ax` é o painel ao lado do qual ela fica, e `label` é o título dela.
+:::
+
 `banheiros` correlaciona 0,67 com `aluguel`, `vagas` 0,58, `quartos` 0,54 — todas mais altas que os 0,2645 de `total`, e nenhuma delas tem uma fórmula que inclua `aluguel`. Se a regra para achar vazamento fosse "procure a coluna de correlação mais alta com o alvo", `total` passaria despercebida, e `banheiros` chamaria a atenção por um motivo que não tem nada a ver com vazar resposta nenhuma.
 
 O que explica os 0,2645 está na própria matriz: `total` correlaciona 0,96 com `condominio`, não com `aluguel`. `condominio` é a mesma coluna cujo outlier a seção 6.4 nomeou — as duas linhas de condomínio R$ 1.117.000 — e manteve dentro de `alugueis`. Removendo só essas duas linhas:
@@ -156,6 +194,10 @@ sem_0_1_porcento = alugueis[alugueis["condominio"] < limite]
 outros = alugueis[(alugueis["condominio"] >= limite) & ~mascara_outlier]
 len(alugueis) - len(sem_0_1_porcento), len(outros), outros["condominio"].min(), outros["condominio"].max(), round(sem_0_1_porcento["total"].corr(sem_0_1_porcento["aluguel"]), 4)
 ```
+
+::: {.funcao}
+**`mascara1 & mascara2`** — o operador `&` combina duas colunas de `True`/`False` elemento a elemento: dá `True` só onde as duas são `True`. Os parênteses em volta de cada comparação são obrigatórios.
+:::
 
 11 imóveis ao todo — os dois já removidos mais nove outros, com condomínio entre R$ 10.000 e R$ 220.000, bem abaixo do valor duplicado —, e a correlação sobe mais uma vez, para 0,793. Nenhuma fórmula mudou nos dois cortes: excluir mais imóveis de condomínio alto desloca ainda mais a correlação entre `total` e `aluguel`.
 

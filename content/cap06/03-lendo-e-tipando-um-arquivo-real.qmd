@@ -53,6 +53,10 @@ except TypeError as erro:
     print("caracteres na mensagem completa:", len(str(erro)))
 ```
 
+::: {.funcao}
+**`serie.mean()`** — a média aritmética da coluna, ignorando nulos. Numa coluna `object`, levanta `TypeError`.
+:::
+
 `mean()` nem chega a rodar: `object` é o tipo genérico que o `pandas` usa para texto, e texto não tem média. A mensagem completa, se fosse impressa inteira, traria a coluna inteira concatenada num único bloco de 12.722 caracteres — por isso o truncamento acima, e não por economia de espaço.
 
 ## Onde está o problema
@@ -63,6 +67,10 @@ except TypeError as erro:
 #| label: andar-unique
 alugueis["andar"].unique()[:10]
 ```
+
+::: {.funcao}
+**`serie.unique()`** — os valores distintos da coluna, na ordem em que aparecem pela primeira vez, como um array. O `[:10]` fatia esse array e fica com os dez primeiros.
+:::
 
 Entre `'7'`, `'20'`, `'6'` e outros números escritos como texto, aparece um `'-'`. Contando quantas linhas trazem exatamente esse valor:
 
@@ -92,6 +100,16 @@ alugueis_tipado = pd.read_csv("dados/alugueis.csv", na_values=["-"])
 alugueis_tipado["andar"].dtype, alugueis_tipado["andar"].isna().sum(), round(alugueis_tipado["andar"].mean(), 2)
 ```
 
+::: {.funcao}
+**`pd.read_csv(caminho, na_values=marcadores)`** — a mesma leitura de sempre, com um parâmetro a mais.
+
+- `na_values`: uma lista de textos que devem ser lidos como nulo, somados aos marcadores que o `pandas` já reconhece. Aqui, `["-"]`.
+
+**`serie.dtype`** — atributo: o tipo de uma coluna só (`df.dtypes`, no plural, é o de todas).
+
+**`serie.isna()`** — uma coluna de `True`/`False`, com `True` onde o valor é nulo. Seguido de `.sum()`, conta os nulos.
+:::
+
 Com `"-"` na lista de nulos, `andar` vira `float64` — os 2.461 traços viram `NaN`, e a média dos demais 8.231 valores sai 6,58.
 
 Quando não se sabe de antemão qual marcador vai aparecer, `pd.to_numeric` com `errors="coerce"` faz o trabalho na direção contrária: converte o que consegue e transforma **tudo o que não é número** em nulo, seja `"-"`, seja qualquer outro caractere estranho que o arquivo trouxer.
@@ -101,6 +119,13 @@ Quando não se sabe de antemão qual marcador vai aparecer, `pd.to_numeric` com 
 andar_coerced = pd.to_numeric(alugueis["andar"], errors="coerce")
 andar_coerced.dtype, andar_coerced.isna().sum()
 ```
+
+::: {.funcao}
+**`pd.to_numeric(serie, errors)`** — converte uma coluna para número.
+
+- `serie`: a coluna a converter.
+- `errors`: o que fazer com um valor que não é número. `"raise"`, o padrão, levanta erro e interrompe tudo; `"coerce"` troca o valor por `NaN` e segue.
+:::
 
 O resultado bate com o de `na_values` neste arquivo — os mesmos 2.461 nulos —, porque `"-"` é o único valor fora do padrão numérico. Mas `to_numeric` é mais forte e mais perigoso do que parece: ele converte em silêncio qualquer valor que não reconheça, inclusive um erro de digitação que `na_values=["-"]` deixaria passar direto como texto visível, pronto para ser notado. Usar `na_values` é dizer "eu sei o que este marcador significa"; usar `to_numeric(errors="coerce")` é dizer "eu não sei o que vou encontrar, e prefiro perder o que não for número a travar a conversão inteira".
 
@@ -113,6 +138,12 @@ A seção 6.1 declarou `sigla` como `category` pelo que o tipo diz sobre a colun
 antes_cidade = alugueis["cidade"].memory_usage(deep=True)
 antes_cidade
 ```
+
+::: {.funcao}
+**`serie.memory_usage(deep)`** — quantos bytes a coluna ocupa, contando também o índice.
+
+- `deep`: com `True`, mede o texto de cada string. Com `False`, o padrão, conta só as referências às strings — e, numa coluna de texto, subestima o consumo real.
+:::
 
 730.981 bytes para uma coluna de texto. Quantos valores distintos existem por trás desse número:
 
@@ -150,5 +181,9 @@ plt.show()
 #| label: aluguel-mediana-maximo
 alugueis["aluguel"].median(), alugueis["aluguel"].max()
 ```
+
+::: {.funcao}
+**`serie.max()`** — o maior valor da coluna. Não recebe argumento; valores nulos são ignorados.
+:::
 
 A mediana fica em R$ 2.661, e a barra mais alta do histograma mora perto dela — mas a cauda à direita se estica até R$ 45.000, um único imóvel bem separado do resto. Uma coluna corretamente tipada não garante uma distribuição bem comportada: o `aluguel` já é `int64` desde a primeira leitura, e ainda assim traz um outlier — um valor tão distante do resto que se destaca da distribuição — que qualquer estatística resumida esconderia. É esse tipo de problema — não mais o tipo da coluna, mas o formato dos valores dentro dela — que a próxima seção enfrenta.

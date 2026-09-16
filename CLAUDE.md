@@ -416,7 +416,15 @@ Conceito importante (azul).
 ::: {.exemplo}
 Exemplo (verde).
 :::
+
+::: {.funcao}
+**`df.set_index(coluna)`** — o que faz.
+
+- `coluna`: o parâmetro usado no chunk.
+:::
 ```
+
+`.funcao` (âmbar) explica uma função, método ou atributo na **primeira vez que ele aparece no capítulo**: o que faz, o que recebe e os parâmetros que o chunk de fato usa. Fica logo depois do chunk — ou do último chunk de uma sequência, sem partir uma frase que continua depois dele. O capítulo 6 cobre tudo do `pandas` e o `matplotlib` que os capítulos 1 a 5 não usaram; built-ins do Python ficam de fora.
 
 `spoiler.html` protege um `<div>` com hash SHA-256. **Isso é ofuscação, não proteção.** O conteúdo viaja em texto puro no HTML publicado; o hash só alterna qual `<div>` fica visível, e qualquer aluno lê tudo com Ctrl+U. **Nunca** para gabarito, prova ou qualquer coisa que o aluno não deva ver antes da hora. Serve só para "revelar a resposta depois de tentar".
 

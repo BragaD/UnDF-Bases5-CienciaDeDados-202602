@@ -58,6 +58,7 @@ ROTULOS = {
     "callout-important": ("❗", "Importante"),
     "conceito": ("🔷", "Conceito"),
     "exemplo": ("🟩", "Exemplo"),
+    "funcao": ("🔧", "Função"),
 }
 
 CERCA = re.compile(r"^(`{3,})(.*)$")

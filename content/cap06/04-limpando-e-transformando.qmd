@@ -27,6 +27,12 @@ Com `andar` já tipado, `isna().sum()` mostra o que sobrou:
 alugueis.isna().sum()[lambda s: s > 0]
 ```
 
+::: {.funcao}
+**`df.isna().sum()`** — numa tabela, `isna()` marca cada célula, e `.sum()` soma coluna a coluna: o resultado é uma contagem de nulos por coluna.
+
+**`[lambda s: s > 0]`** — os colchetes também aceitam uma função. O `pandas` a chama passando a própria `Series` e usa o `True`/`False` que ela devolve como filtro: aqui, só as colunas com contagem acima de zero.
+:::
+
 Só `andar`, com 2.461 nulos — o mesmo número que a seção anterior contou como traços. Nenhuma outra coluna do arquivo tem valor faltando.
 
 ## Nulo não é uma coisa só
@@ -38,6 +44,14 @@ O reflexo depois de ver uma coluna com nulo é `dropna()`. Antes de aplicá-lo, 
 alugueis.groupby(alugueis["andar"].isna())[["condominio", "area_m2"]].median()
 ```
 
+::: {.funcao}
+**`df.groupby(chave)`** — separa as linhas em grupos pelo valor de `chave`; a função de resumo chamada em seguida é aplicada a cada grupo separadamente.
+
+- `chave`: um nome de coluna ou uma coluna alinhada com a tabela. Aqui, `alugueis["andar"].isna()`, que forma dois grupos: `False` e `True`.
+
+O `[["condominio", "area_m2"]]` escolhe as colunas a resumir, e `.median()` calcula a mediana de cada uma, grupo a grupo.
+:::
+
 Nas linhas com `andar` nulo, a mediana de `condominio` é 0 e a de `area_m2` é 190 m². Nas linhas com `andar` preenchido, a mediana de `condominio` sobe para 750 e a de `area_m2` cai para 80 m². A proporção de imóveis sem condomínio nenhum aprofunda o mesmo padrão:
 
 ```{python}
@@ -47,6 +61,10 @@ zero_nulo = round(100 * (alugueis.loc[mascara, "condominio"] == 0).sum() / masca
 zero_preenchido = round(100 * (alugueis.loc[~mascara, "condominio"] == 0).sum() / (~mascara).sum(), 1)
 zero_nulo, zero_preenchido
 ```
+
+::: {.funcao}
+**`df.loc[mascara, coluna]`** — com dois argumentos, `.loc` seleciona linhas e coluna de uma vez: as linhas em que `mascara` é `True`, e delas só a `coluna` pedida.
+:::
 
 84,4% das linhas com `andar` nulo têm `condominio` igual a zero, contra 3,6% das linhas com `andar` preenchido. Um imóvel sem condomínio e maior que a mediana é o perfil de uma casa, não de um apartamento. O arquivo não traz uma coluna de tipo de imóvel — o que ele traz é esse padrão, repetido em duas variáveis diferentes, e é ele, não uma afirmação de cabeça, que sustenta a leitura de que `andar` nulo aqui não é o dado faltando: é o imóvel não ter andar, porque é uma casa. Vale a ressalva: isso é evidência forte, não prova — ninguém confere linha por linha se cada uma dessas 2.461 é mesmo uma casa. É a mesma leitura que se faz de qualquer dado sem rótulo direto: somar sinais indiretos até que só uma explicação os explique todos ao mesmo tempo.
 
@@ -63,6 +81,16 @@ alugueis.shape, sem_nulos.shape, com_zero.shape
 #| label: pct-perdido-dropna
 round(100 * (alugueis.shape[0] - sem_nulos.shape[0]) / alugueis.shape[0])
 ```
+
+::: {.funcao}
+**`df.dropna()`** — devolve uma nova tabela sem as linhas que tenham nulo em qualquer coluna.
+
+**`df.fillna(valores)`** — devolve uma nova tabela com os nulos substituídos.
+
+- `valores`: um dicionário coluna → valor preenche só as colunas listadas; aqui, `andar` com 0.
+
+Nenhum dos dois altera `alugueis`. Numa coluna só, `serie.fillna(0)` recebe o valor direto, e é essa a forma do chunk seguinte, que atribui o resultado de volta à tabela.
+:::
 
 `dropna()` sai de 10.692 para 8.231 linhas — 23% da tabela, por uma coluna em que o nulo nunca foi ausência. `fillna({"andar": 0})` mantém as 10.692 e escreve, em número, a mesma coisa que o traço já dizia em texto. É essa a versão que fica:
 
@@ -83,6 +111,10 @@ alugueis["andar"].isna().sum()
 alugueis.duplicated().sum()
 ```
 
+::: {.funcao}
+**`df.duplicated()`** — uma coluna de `True`/`False`, com `True` em cada linha idêntica, em todas as colunas, a uma linha que apareceu *antes* dela. A primeira ocorrência de cada grupo fica `False`.
+:::
+
 358 linhas repetem, em todas as 13 colunas, uma linha que já apareceu antes. Contando também as primeiras ocorrências de cada grupo repetido, e como esses grupos se distribuem por tamanho:
 
 ```{python}
@@ -97,12 +129,26 @@ print("de três ou mais:", (tamanhos >= 3).sum(), "grupos,", tamanhos[tamanhos >
 print("maior grupo:", tamanhos.max())
 ```
 
+::: {.funcao}
+**`df.duplicated(keep=False)`** — `keep` escolhe qual ocorrência deixa de ser marcada: `"first"`, o padrão, poupa a primeira; `"last"` poupa a última; `False` não poupa nenhuma e marca todas as cópias.
+
+**`df.columns`** — atributo: os nomes das colunas. `list(...)` os transforma numa lista do Python.
+
+**`df.groupby(colunas, dropna=False).size()`** — agrupar por todas as colunas junta num mesmo grupo as linhas idênticas, e `.size()` conta as linhas de cada grupo.
+
+- `dropna`: com `False`, uma linha com nulo numa das chaves continua formando grupo em vez de ser descartada.
+:::
+
 Dos 246 grupos, 206 são pares. Os outros 40 têm de três a 22 cópias, e são esses 40 grupos, sozinhos, que respondem pelas 192 linhas que sobram das 604. O maior — 22 anúncios idênticos em todas as 13 colunas — leva ao extremo a mesma pergunta que qualquer duplicata levanta: é um imóvel (ou um anúncio) republicado vinte e duas vezes, ou vinte e dois apartamentos realmente iguais? A tabela não traz o que decidiria entre as duas. Um exemplo, de um grupo menor:
 
 ```{python}
 #| label: duplicadas-exemplo
 repetidos.sort_values(["cidade", "area_m2"]).head(3)
 ```
+
+::: {.funcao}
+**`df.sort_values([coluna1, coluna2])`** — com uma lista, ordena pela primeira coluna e usa a segunda para desempatar.
+:::
 
 Três anúncios de Belo Horizonte, 15 m², um quarto, idênticos até o último real de condomínio e seguro-incêndio.
 
@@ -116,6 +162,10 @@ Uma linha repetida pode ser duas coisas bem diferentes: o mesmo imóvel anunciad
 #| label: outliers-describe
 alugueis[["area_m2", "condominio"]].describe()
 ```
+
+::: {.funcao}
+**`df.describe()`** — um resumo de cada coluna numérica: contagem de não nulos (`count`), média (`mean`), desvio padrão (`std`), mínimo (`min`), os quartis `25%`, `50%` — a mediana — e `75%`, e máximo (`max`).
+:::
 
 Em `area_m2`, a mediana é 90 m² contra um máximo de 46.335 m². Em `condominio`, a mediana é R$ 560 contra um máximo de R$ 1.117.000. Como razão entre máximo e mediana:
 
@@ -148,6 +198,12 @@ p99_area = round(alugueis["area_m2"].quantile(0.99))
 p99_area
 ```
 
+::: {.funcao}
+**`serie.quantile(q)`** — o valor abaixo do qual fica a fração `q` dos dados.
+
+- `q`: um número entre 0 e 1; `0.99` é o percentil 99.
+:::
+
 Noventa e nove por cento dos imóveis têm até 650 m².
 
 ```{python}
@@ -166,6 +222,12 @@ axs[1].set_title(f"eixo cortado no percentil 99 ({p99_area} m²)")
 plt.tight_layout()
 plt.show()
 ```
+
+::: {.funcao}
+**`ax.boxplot(valores)`** — o boxplot: a caixa vai do primeiro ao terceiro quartil, a linha dentro dela é a mediana, as hastes se estendem até o último valor que esteja a no máximo 1,5 vez a altura da caixa para fora dela, e o que passa disso é desenhado ponto a ponto.
+
+`plt.subplots(1, 2)` devolve os dois painéis num array, e `axs[0]` e `axs[1]` escolhem cada um pela posição.
+:::
 
 À esquerda, a caixa inteira do boxplot — onde mora metade dos imóveis — vira uma linha reta colada no zero: os imóveis de 46.335, 24.606 e 12.732 m² esticam o eixo inteiro para caber. À direita, com o eixo cortado em 650 m², a caixa aparece, e são esses mesmos imóveis — e outros acima do corte — que ficam fora do que o gráfico mostra.
 
@@ -186,5 +248,9 @@ alugueis["aluguel_por_m2"].describe()
 linha_minima = alugueis.loc[alugueis["aluguel_por_m2"].idxmin()]
 round(linha_minima["aluguel_por_m2"], 2), round(linha_minima["area_m2"])
 ```
+
+::: {.funcao}
+**`serie.idxmin()`** — o rótulo do índice da linha com o menor valor, e não o valor. Passado a `.loc`, recupera a linha inteira.
+:::
 
 R$ 0,13 por metro quadrado — não porque o aluguel seja baixo, mas porque a área é 12.732 m², um dos três imóveis extremos já vistos, grande o bastante para que qualquer aluguel divida em quase nada. É essa coluna que a próxima seção compara entre as cinco cidades.
