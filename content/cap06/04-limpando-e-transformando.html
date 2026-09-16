@@ -818,6 +818,10 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 dtype: int64</code></pre>
 </div>
 </div>
+<div class="funcao">
+<p><strong><code>df.isna().sum()</code></strong> — numa tabela, <code>isna()</code> marca cada célula, e <code>.sum()</code> soma coluna a coluna: o resultado é uma contagem de nulos por coluna.</p>
+<p><strong><code>[lambda s: s &gt; 0]</code></strong> — os colchetes também aceitam uma função. O <code>pandas</code> a chama passando a própria <code>Series</code> e usa o <code>True</code>/<code>False</code> que ela devolve como filtro: aqui, só as colunas com contagem acima de zero.</p>
+</div>
 <p>Só <code>andar</code>, com 2.461 nulos — o mesmo número que a seção anterior contou como traços. Nenhuma outra coluna do arquivo tem valor faltando.</p>
 </section>
 <section id="nulo-não-é-uma-coisa-só" class="level2">
@@ -859,6 +863,13 @@ dtype: int64</code></pre>
 </div>
 </div>
 </div>
+<div class="funcao">
+<p><strong><code>df.groupby(chave)</code></strong> — separa as linhas em grupos pelo valor de <code>chave</code>; a função de resumo chamada em seguida é aplicada a cada grupo separadamente.</p>
+<ul>
+<li><code>chave</code>: um nome de coluna ou uma coluna alinhada com a tabela. Aqui, <code>alugueis["andar"].isna()</code>, que forma dois grupos: <code>False</code> e <code>True</code>.</li>
+</ul>
+<p>O <code>[["condominio", "area_m2"]]</code> escolhe as colunas a resumir, e <code>.median()</code> calcula a mediana de cada uma, grupo a grupo.</p>
+</div>
 <p>Nas linhas com <code>andar</code> nulo, a mediana de <code>condominio</code> é 0 e a de <code>area_m2</code> é 190 m². Nas linhas com <code>andar</code> preenchido, a mediana de <code>condominio</code> sobe para 750 e a de <code>area_m2</code> cai para 80 m². A proporção de imóveis sem condomínio nenhum aprofunda o mesmo padrão:</p>
 <div id="cell-andar-nulo-proporcao-condominio-zero" class="cell" data-execution_count="5">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb6"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb6-1"><a href="#cb6-1" aria-hidden="true" tabindex="-1"></a>mascara <span class="op">=</span> alugueis[<span class="st">"andar"</span>].isna()</span>
@@ -868,6 +879,9 @@ dtype: int64</code></pre>
 <div id="andar-nulo-proporcao-condominio-zero" class="cell-output cell-output-display" data-execution_count="5">
 <pre><code>(np.float64(84.4), np.float64(3.6))</code></pre>
 </div>
+</div>
+<div class="funcao">
+<p><strong><code>df.loc[mascara, coluna]</code></strong> — com dois argumentos, <code>.loc</code> seleciona linhas e coluna de uma vez: as linhas em que <code>mascara</code> é <code>True</code>, e delas só a <code>coluna</code> pedida.</p>
 </div>
 <p>84,4% das linhas com <code>andar</code> nulo têm <code>condominio</code> igual a zero, contra 3,6% das linhas com <code>andar</code> preenchido. Um imóvel sem condomínio e maior que a mediana é o perfil de uma casa, não de um apartamento. O arquivo não traz uma coluna de tipo de imóvel — o que ele traz é esse padrão, repetido em duas variáveis diferentes, e é ele, não uma afirmação de cabeça, que sustenta a leitura de que <code>andar</code> nulo aqui não é o dado faltando: é o imóvel não ter andar, porque é uma casa. Vale a ressalva: isso é evidência forte, não prova — ninguém confere linha por linha se cada uma dessas 2.461 é mesmo uma casa. É a mesma leitura que se faz de qualquer dado sem rótulo direto: somar sinais indiretos até que só uma explicação os explique todos ao mesmo tempo.</p>
 <p>Isso muda a decisão. Descartar essas 2.461 linhas jogaria fora informação que não estava ausente — o imóvel existe, o aluguel existe, só o andar não faz sentido para ele. Preencher com 0 é a escolha coerente com o que o dado significa: 0 é o andar de quem não tem andar, o térreo, que é exatamente o que uma casa é.</p>
@@ -884,6 +898,14 @@ dtype: int64</code></pre>
 <div id="pct-perdido-dropna" class="cell-output cell-output-display" data-execution_count="7">
 <pre><code>23</code></pre>
 </div>
+</div>
+<div class="funcao">
+<p><strong><code>df.dropna()</code></strong> — devolve uma nova tabela sem as linhas que tenham nulo em qualquer coluna.</p>
+<p><strong><code>df.fillna(valores)</code></strong> — devolve uma nova tabela com os nulos substituídos.</p>
+<ul>
+<li><code>valores</code>: um dicionário coluna → valor preenche só as colunas listadas; aqui, <code>andar</code> com 0.</li>
+</ul>
+<p>Nenhum dos dois altera <code>alugueis</code>. Numa coluna só, <code>serie.fillna(0)</code> recebe o valor direto, e é essa a forma do chunk seguinte, que atribui o resultado de volta à tabela.</p>
 </div>
 <p><code>dropna()</code> sai de 10.692 para 8.231 linhas — 23% da tabela, por uma coluna em que o nulo nunca foi ausência. <code>fillna({"andar": 0})</code> mantém as 10.692 e escreve, em número, a mesma coisa que o traço já dizia em texto. É essa a versão que fica:</p>
 <div id="cell-andar-fillna-decisao" class="cell" data-execution_count="8">
@@ -905,6 +927,9 @@ dtype: int64</code></pre>
 <pre><code>np.int64(358)</code></pre>
 </div>
 </div>
+<div class="funcao">
+<p><strong><code>df.duplicated()</code></strong> — uma coluna de <code>True</code>/<code>False</code>, com <code>True</code> em cada linha idêntica, em todas as colunas, a uma linha que apareceu <em>antes</em> dela. A primeira ocorrência de cada grupo fica <code>False</code>.</p>
+</div>
 <p>358 linhas repetem, em todas as 13 colunas, uma linha que já apareceu antes. Contando também as primeiras ocorrências de cada grupo repetido, e como esses grupos se distribuem por tamanho:</p>
 <div id="duplicadas-composicao" class="cell" data-execution_count="10">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb16"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb16-1"><a href="#cb16-1" aria-hidden="true" tabindex="-1"></a>repetidos <span class="op">=</span> alugueis[alugueis.duplicated(keep<span class="op">=</span><span class="va">False</span>)]</span>
@@ -922,6 +947,14 @@ pares: 206
 de três ou mais: 40 grupos, 192 linhas
 maior grupo: 22</code></pre>
 </div>
+</div>
+<div class="funcao">
+<p><strong><code>df.duplicated(keep=False)</code></strong> — <code>keep</code> escolhe qual ocorrência deixa de ser marcada: <code>"first"</code>, o padrão, poupa a primeira; <code>"last"</code> poupa a última; <code>False</code> não poupa nenhuma e marca todas as cópias.</p>
+<p><strong><code>df.columns</code></strong> — atributo: os nomes das colunas. <code>list(...)</code> os transforma numa lista do Python.</p>
+<p><strong><code>df.groupby(colunas, dropna=False).size()</code></strong> — agrupar por todas as colunas junta num mesmo grupo as linhas idênticas, e <code>.size()</code> conta as linhas de cada grupo.</p>
+<ul>
+<li><code>dropna</code>: com <code>False</code>, uma linha com nulo numa das chaves continua formando grupo em vez de ser descartada.</li>
+</ul>
 </div>
 <p>Dos 246 grupos, 206 são pares. Os outros 40 têm de três a 22 cópias, e são esses 40 grupos, sozinhos, que respondem pelas 192 linhas que sobram das 604. O maior — 22 anúncios idênticos em todas as 13 colunas — leva ao extremo a mesma pergunta que qualquer duplicata levanta: é um imóvel (ou um anúncio) republicado vinte e duas vezes, ou vinte e dois apartamentos realmente iguais? A tabela não traz o que decidiria entre as duas. Um exemplo, de um grupo menor:</p>
 <div id="cell-duplicadas-exemplo" class="cell" data-execution_count="11">
@@ -1004,6 +1037,9 @@ maior grupo: 22</code></pre>
 </div>
 </div>
 </div>
+<div class="funcao">
+<p><strong><code>df.sort_values([coluna1, coluna2])</code></strong> — com uma lista, ordena pela primeira coluna e usa a segunda para desempatar.</p>
+</div>
 <p>Três anúncios de Belo Horizonte, 15 m², um quarto, idênticos até o último real de condomínio e seguro-incêndio.</p>
 <div class="exemplo">
 <p>Uma linha repetida pode ser duas coisas bem diferentes: o mesmo imóvel anunciado mais de uma vez — pela imobiliária e pelo dono, ou reenviado depois de expirar —, ou dois apartamentos realmente iguais, no mesmo prédio, com a mesma planta e o mesmo condomínio. A tabela não guarda um identificador de anúncio nem um endereço, e sem isso não há como distinguir as duas situações a partir do que está nela. Remover as duplicatas presumiria a primeira explicação; mantê-las presumiria a segunda. Nenhuma das duas é sustentada pelo dado disponível — e é por isso que esta seção não decide: <code>alugueis</code> segue com as 10.692 linhas, duplicadas incluídas.</p>
@@ -1071,6 +1107,9 @@ maior grupo: 22</code></pre>
 
 </div>
 </div>
+</div>
+<div class="funcao">
+<p><strong><code>df.describe()</code></strong> — um resumo de cada coluna numérica: contagem de não nulos (<code>count</code>), média (<code>mean</code>), desvio padrão (<code>std</code>), mínimo (<code>min</code>), os quartis <code>25%</code>, <code>50%</code> — a mediana — e <code>75%</code>, e máximo (<code>max</code>).</p>
 </div>
 <p>Em <code>area_m2</code>, a mediana é 90 m² contra um máximo de 46.335 m². Em <code>condominio</code>, a mediana é R$ 560 contra um máximo de R$ 1.117.000. Como razão entre máximo e mediana:</p>
 <div id="cell-outliers-razoes" class="cell" data-execution_count="13">
@@ -1161,6 +1200,12 @@ maior grupo: 22</code></pre>
 <pre><code>650</code></pre>
 </div>
 </div>
+<div class="funcao">
+<p><strong><code>serie.quantile(q)</code></strong> — o valor abaixo do qual fica a fração <code>q</code> dos dados.</p>
+<ul>
+<li><code>q</code>: um número entre 0 e 1; <code>0.99</code> é o percentil 99.</li>
+</ul>
+</div>
 <p>Noventa e nove por cento dos imóveis têm até 650 m².</p>
 <div id="cell-fig-outliers-area" class="cell" data-execution_count="17">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb27"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb27-1"><a href="#cb27-1" aria-hidden="true" tabindex="-1"></a>fig, axs <span class="op">=</span> plt.subplots(<span class="dv">1</span>, <span class="dv">2</span>, figsize<span class="op">=</span>(<span class="dv">11</span>, <span class="fl">4.5</span>))</span>
@@ -1187,6 +1232,10 @@ Figura&nbsp;31.1: Área dos imóveis: o boxplot da esquerda comprime tudo perto 
 </figure>
 </div>
 </div>
+</div>
+<div class="funcao">
+<p><strong><code>ax.boxplot(valores)</code></strong> — o boxplot: a caixa vai do primeiro ao terceiro quartil, a linha dentro dela é a mediana, as hastes se estendem até o último valor que esteja a no máximo 1,5 vez a altura da caixa para fora dela, e o que passa disso é desenhado ponto a ponto.</p>
+<p><code>plt.subplots(1, 2)</code> devolve os dois painéis num array, e <code>axs[0]</code> e <code>axs[1]</code> escolhem cada um pela posição.</p>
 </div>
 <p>À esquerda, a caixa inteira do boxplot — onde mora metade dos imóveis — vira uma linha reta colada no zero: os imóveis de 46.335, 24.606 e 12.732 m² esticam o eixo inteiro para caber. À direita, com o eixo cortado em 650 m², a caixa aparece, e são esses mesmos imóveis — e outros acima do corte — que ficam fora do que o gráfico mostra.</p>
 <p>Nenhuma dessas linhas sai da tabela. O imóvel de 46.335 m² e o condomínio de R$ 1.117.000 continuam em <code>alugueis</code> até o fim desta seção e da próxima: são o motivo pelo qual a seção seguinte, ao resumir valores por cidade, prefere a mediana à média — um valor deste tamanho desloca uma média inteira, e a mediana não se importa com ele.</p>
@@ -1215,6 +1264,9 @@ Name: aluguel_por_m2, dtype: float64</code></pre>
 <div id="aluguel-por-m2-minimo" class="cell-output cell-output-display" data-execution_count="19">
 <pre><code>(np.float64(0.13), 12732)</code></pre>
 </div>
+</div>
+<div class="funcao">
+<p><strong><code>serie.idxmin()</code></strong> — o rótulo do índice da linha com o menor valor, e não o valor. Passado a <code>.loc</code>, recupera a linha inteira.</p>
 </div>
 <p>R$ 0,13 por metro quadrado — não porque o aluguel seja baixo, mas porque a área é 12.732 m², um dos três imóveis extremos já vistos, grande o bastante para que qualquer aluguel divida em quase nada. É essa coluna que a próxima seção compara entre as cinco cidades.</p>
 
