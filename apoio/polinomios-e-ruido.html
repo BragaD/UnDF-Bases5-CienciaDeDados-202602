@@ -1,0 +1,883 @@
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Polinômios e Ruído</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans+Condensed:wght@600&family=IBM+Plex+Sans:wght@400;500&display=swap">
+
+<style>
+/* ------------------------------------------------------------------ *
+ * Tokens — os mesmos das outras páginas de apoio/ (gradiente,
+ * lote-minibatch, flexibilidade-e-erro), para as quatro serem
+ * visivelmente irmãs. Fundo e texto do tema `cosmo`; azuis do logo da UnDF.
+ *
+ * A regra de leitura também é a mesma: azul é o que não muda (a f
+ * verdadeira), laranja é o que se mexe (o ajuste, e os ajustes dos outros
+ * sorteios, esmaecidos). Os cinco graus NÃO ganham cinco cores: cada um
+ * tem o próprio painel, e o título do painel é a identidade.
+ * ------------------------------------------------------------------ */
+:root{
+  color-scheme: light;
+
+  --paper:    #FFFFFF;
+  --paper-2:  #EEF4FA;
+  --panel:    #FFFFFF;
+  --ink:      #373A3C;
+  --ink-2:    #5B6B76;
+  --ink-3:    #8A99A5;
+  --rule:     #DCE5EE;
+  --grid:     #EDF2F7;
+
+  --marca:    #2264AF;
+  --pontos:   #27316E;   /* as 15 observações — o navy do logo */
+
+  --f:        #2264AF;
+  --ajuste:   #D9480F;
+  --vies:     #4195D1;
+  --varc:     #D9480F;
+  --ruido:    #2F8F46;
+
+  --sans: "IBM Plex Sans", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --cond: "IBM Plex Sans Condensed", "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+
+  --r: 3px;
+  --rail: 330px;
+}
+
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    color-scheme: dark;
+    --paper:   #12161B;
+    --paper-2: #1A2430;
+    --panel:   #171F27;
+    --ink:     #E6ECF2;
+    --ink-2:   #9BAAB8;
+    --ink-3:   #6E7F8D;
+    --rule:    #2A3743;
+    --grid:    #202B35;
+    --marca:   #6FB0E8;
+    --pontos:  #DCE7F2;
+    --f:       #6FB0E8;
+    --ajuste:  #FF7A45;
+    --vies:    #6FB0E8;
+    --varc:    #FF7A45;
+    --ruido:   #5FC27E;
+  }
+}
+:root[data-theme="dark"]{
+  color-scheme: dark;
+  --paper:   #12161B;
+  --paper-2: #1A2430;
+  --panel:   #171F27;
+  --ink:     #E6ECF2;
+  --ink-2:   #9BAAB8;
+  --ink-3:   #6E7F8D;
+  --rule:    #2A3743;
+  --grid:    #202B35;
+  --marca:   #6FB0E8;
+  --pontos:  #DCE7F2;
+  --f:       #6FB0E8;
+  --ajuste:  #FF7A45;
+  --vies:    #6FB0E8;
+  --varc:    #FF7A45;
+  --ruido:   #5FC27E;
+}
+
+*{ box-sizing: border-box; }
+[hidden]{ display: none !important; }
+
+body{
+  margin: 0;
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--sans);
+  font-size: 15px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+}
+
+:focus-visible{ outline: 2px solid var(--marca); outline-offset: 2px; }
+
+/* --------------------------------- topo --------------------------------- */
+
+.app{
+  max-width: 1360px;
+  margin: 0 auto;
+  padding: 22px 24px 40px;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.topbar{
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 24px;
+  flex-wrap: wrap;
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--rule);
+}
+
+.eyebrow{
+  margin: 0 0 2px;
+  font-family: var(--cond);
+  font-size: 11.5px;
+  font-weight: 600;
+  letter-spacing: .14em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+}
+
+h1{
+  margin: 0;
+  font-family: var(--cond);
+  font-weight: 600;
+  font-size: clamp(26px, 3.4vw, 38px);
+  line-height: 1.04;
+  letter-spacing: -.005em;
+  text-wrap: balance;
+}
+
+.relogio{
+  text-align: right;
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
+}
+.relogio .n{ font-size: 30px; line-height: 1; color: var(--ink); }
+.relogio .u{
+  display: block;
+  font-family: var(--cond);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+  margin-top: 4px;
+}
+
+/* -------------------------------- palco --------------------------------- */
+
+.stage{
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) var(--rail);
+  gap: 20px;
+  align-items: start;
+}
+
+.plot{ display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+
+.plates{ display: grid; gap: 12px; grid-template-columns: repeat(3, minmax(0, 1fr)); }
+
+.plate{
+  position: relative;
+  background: var(--panel);
+  border: 1px solid var(--rule);
+  border-radius: var(--r);
+  overflow: hidden;
+}
+
+canvas.painel{ display: block; width: 100%; height: 270px; }
+
+.tag{
+  position: absolute;
+  top: 9px; left: 12px;
+  font-family: var(--cond);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+  pointer-events: none;
+}
+.sym{ text-transform: none; letter-spacing: 0; }
+.tag b{ color: var(--ink); font-weight: 600; }
+
+/* ----------------------------- transporte ------------------------------- */
+
+.transport{ display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+
+button.ctl{
+  font-family: var(--cond);
+  font-size: 13.5px;
+  font-weight: 600;
+  letter-spacing: .03em;
+  padding: 8px 14px;
+  border: 1px solid var(--rule);
+  border-radius: var(--r);
+  background: var(--panel);
+  color: var(--ink);
+  cursor: pointer;
+}
+button.ctl:hover{ border-color: var(--ink-3); }
+button.ctl.primary{
+  background: var(--marca);
+  border-color: var(--marca);
+  color: var(--paper);
+}
+button.ctl.primary:hover{ filter: brightness(1.08); }
+button.ctl[aria-pressed="true"]{
+  background: var(--paper-2);
+  border-color: var(--ajuste);
+  color: var(--ink);
+}
+
+.sig-linha{
+  flex: 1 1 320px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-family: var(--cond);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: .07em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+  min-width: 240px;
+}
+.sig-linha input[type="range"]{ flex: 1; accent-color: var(--ajuste); }
+.sig-linha output{
+  font-family: var(--mono);
+  font-size: 13px;
+  letter-spacing: 0;
+  color: var(--ink);
+  min-width: 3.2em;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+/* --------------------------- linha de código ---------------------------- */
+
+.code{
+  margin: 0;
+  padding: 13px 15px;
+  background: var(--paper-2);
+  border: 1px solid var(--rule);
+  border-left: 3px solid var(--marca);
+  border-radius: var(--r);
+  font-family: var(--mono);
+  font-size: 12.5px;
+  line-height: 1.7;
+  color: var(--ink);
+  overflow-x: auto;
+  white-space: pre;
+  font-variant-ligatures: none;
+}
+.code .cm{ color: var(--ink-3); }
+
+/* ---------------------------- trilho lateral ---------------------------- */
+
+.rail{
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--rule);
+  border-radius: var(--r);
+  background: var(--panel);
+}
+.group{ padding: 15px 16px; }
+.group + .group{ border-top: 1px solid var(--rule); }
+
+.label{
+  margin: 0 0 9px;
+  font-family: var(--cond);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: .13em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+}
+
+table.nums{
+  width: 100%;
+  border-collapse: collapse;
+  font-family: var(--mono);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+table.nums th{
+  font-family: var(--cond);
+  font-weight: 600;
+  font-size: 10.5px;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+  text-align: right;
+  padding: 0 0 5px 6px;
+  border-bottom: 1px solid var(--rule);
+  vertical-align: bottom;
+}
+table.nums th:first-child, table.nums td:first-child{ text-align: left; padding-left: 0; }
+table.nums td{ text-align: right; padding: 4px 0 0 6px; }
+table.nums tr.min td{ color: var(--marca); font-weight: 500; }
+.sw{ display: inline-block; width: 9px; height: 9px; border-radius: 2px; margin-right: 4px; vertical-align: 0; }
+
+.nota{
+  margin: 9px 0 0;
+  font-size: 12.5px;
+  line-height: 1.45;
+  color: var(--ink-2);
+}
+.nota strong{ color: var(--ink); }
+.nota code{ font-family: var(--mono); font-size: 11.5px; }
+
+/* --------------------------------- rodapé -------------------------------- */
+
+footer{
+  border-top: 1px solid var(--rule);
+  padding-top: 14px;
+  display: flex;
+  gap: 22px;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  font-size: 12.5px;
+  color: var(--ink-3);
+  line-height: 1.5;
+}
+footer p{ margin: 0; max-width: 60ch; }
+footer code{ font-family: var(--mono); font-size: 12px; color: var(--ink-2); }
+
+@media (max-width: 1180px){
+  .plates{ grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 940px){
+  .stage{ grid-template-columns: minmax(0, 1fr); }
+  .rail{ display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); }
+  .group + .group{ border-top: 0; border-left: 1px solid var(--rule); }
+}
+</style>
+
+<div class="app">
+
+  <header class="topbar">
+    <div>
+      <p class="eyebrow">Bases 5 · Ciência de Dados · Seção 7.6</p>
+      <h1>Polinômios e ruído</h1>
+    </div>
+    <div class="relogio">
+      <span class="n" id="relogio">—</span>
+      <span class="u">desvio padrão do ruído, <span class="sym">σ</span></span>
+    </div>
+  </header>
+
+  <main class="stage">
+
+    <section class="plot">
+
+      <div class="transport">
+        <label class="sig-linha">ruído <span class="sym">σ</span>
+          <input type="range" id="sig" min="0" max="200" value="50" aria-label="Desvio padrão do ruído">
+          <output id="sig-num" for="sig">—</output>
+        </label>
+        <button class="ctl" id="btn-sorteio">novo sorteio</button>
+        <button class="ctl" id="btn-f" aria-pressed="false">f verdadeira</button>
+        <button class="ctl" id="btn-fantasmas" aria-pressed="false">mostrar 30 sorteios</button>
+        <button class="ctl primary" id="btn-play">aumentar o ruído</button>
+      </div>
+
+      <div class="plates" id="plates"></div>
+
+      <pre class="code" id="code"></pre>
+    </section>
+
+    <aside class="rail">
+
+      <div class="group">
+        <h2 class="label">Erro por grau</h2>
+        <table class="nums">
+          <thead>
+            <tr><th>grau</th><th>treino</th><th><span class="sw" style="background:var(--vies)"></span>viés²</th><th><span class="sw" style="background:var(--varc)"></span>variância</th><th>teste</th></tr>
+          </thead>
+          <tbody id="tabela"></tbody>
+        </table>
+        <p class="nota"><strong>Treino</strong> é o MSE nos 15 pontos do sorteio da tela. <strong>Teste</strong> é o MSE <strong>esperado</strong> num ponto novo, em forma fechada: viés² + variância + Var(ε), com <code>Var(ε) = σ² = <span id="piso">—</span></code>. Não depende do sorteio, então não oscila. Em azul, o grau de menor erro de teste.</p>
+      </div>
+
+      <div class="group">
+        <h2 class="label">Onde olhar</h2>
+        <p class="nota">Ligue <em>f verdadeira</em> e leve σ a 0: os ajustes de grau 3, 6 e 14 passam por cima dela, a curva azul pontilhada: a f é um polinômio de grau 3, e os três conseguem reproduzi-la. A reta e a parábola não conseguem, com ruído nenhum. <strong>Esse erro é o viés</strong>, e ele não muda com σ.</p>
+        <p class="nota">Agora aumente σ. A reta quase não se mexe. O grau 14 tem 15 coeficientes para 15 pontos, então passa exatamente por todos, com MSE de treino zero, e se contorce entre eles, sobretudo nas pontas. <strong>Esse movimento é a variância</strong>: ela cresce com σ², e cresce muito mais depressa quanto mais flexível for o ajuste.</p>
+        <p class="nota">Ligue <em>mostrar 30 sorteios</em> para ver o leque de ajustes que outros 30 conjuntos de treino dariam. A largura do leque é a variância, e a distância entre o centro do leque e a f verdadeira é o viés.</p>
+      </div>
+
+    </aside>
+  </main>
+
+  <footer>
+    <p><strong>O dado.</strong> <code>f(x) = 0,2x³ + 0,4x² − 1,8x − 1</code>, com 15 valores de x igualmente espaçados entre −3 e 3 e <code>y = f(x) + σ·z</code>, em que z são 15 sorteios de uma normal padrão. O slider muda σ e mantém z; por isso as curvas se deformam continuamente em vez de saltar. <em>Novo sorteio</em> troca z.</p>
+    <p><strong>Fidelidade.</strong> Cada ajuste é mínimos quadrados, o mesmo que <code>LinearRegression</code> sobre <code>PolynomialFeatures(grau)</code>, resolvido por QR. Viés e variância saem em forma fechada da matriz que leva y ao ajuste: viés é <code>Lf − f</code> e variância é <code>σ²·diag(LLᵀ)</code>, com a média tomada sobre 301 pontos igualmente espaçados em [−3, 3]. Os números foram conferidos contra uma implementação em <code>numpy</code>. O eixo vertical dos cinco painéis é fixo; o que sai dele foi cortado, não omitido.</p>
+  </footer>
+</div>
+
+<script>
+"use strict";
+
+/* ==================================================================== *
+ * O modelo — mínimos quadrados polinomiais e a decomposição
+ *
+ * Para cada grau d, com X (15 × (d+1)) a matriz de Vandermonde dos x de
+ * treino e G (301 × (d+1)) a da grade de avaliação, o ajuste na grade é
+ *
+ *     ĝ = L·y,     L = G · R⁻¹ · Qᵀ,     X = Q·R
+ *
+ * L é uma matriz fixa (301 × 15): não depende de y, de σ nem de f. Por
+ * isso ela é calculada UMA VEZ, e tudo o que o slider move é O(301·15).
+ * Com L em mãos e a f conhecida,
+ *
+ *     viés(x₀)      = (L·f)(x₀) − f(x₀)          — f nos 15 x de treino
+ *     variância(x₀) = σ² · Σⱼ L(x₀, j)²
+ *     MSE de teste esperado = média(viés²) + média(variância) + σ²
+ *
+ * A base é x/3, e não x: em [−1, 1] a Vandermonde de grau 14 tem número de
+ * condição ~1·10⁶, e a QR (Gram-Schmidt modificado, com reortogonalização)
+ * resolve sem perder dígito que apareça na tela.
+ * ==================================================================== */
+
+const N = 15;
+const X0 = -3, X1 = 3;
+const NG = 301;
+const GRAUS = [1, 2, 3, 6, 14];
+const NFANT = 30;
+const YLO = -7, YHI = 7;
+const SIG_MAX = 2;
+
+const f = x => 0.2 * x * x * x + 0.4 * x * x - 1.8 * x - 1;
+
+const xs = Float64Array.from({ length: N }, (_, i) => X0 + i * (X1 - X0) / (N - 1));
+const xg = Float64Array.from({ length: NG }, (_, i) => X0 + i * (X1 - X0) / (NG - 1));
+const fx = xs.map(f);
+const fg = xg.map(f);
+
+/* Gerador determinístico — o mesmo das outras páginas de apoio/. */
+function mulberry32(semente){
+  let a = semente >>> 0;
+  return function(){
+    a = (a + 0x6D2B79F5) >>> 0;
+    let t = a;
+    t = Math.imul(t ^ (t >>> 15), t | 1) >>> 0;
+    t = (t ^ (t + Math.imul(t ^ (t >>> 7), t | 61))) >>> 0;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+function normais(semente, n){
+  const prox = mulberry32(semente), saida = new Float64Array(n);
+  let i = 0;
+  while (i < n){
+    const u1 = Math.max(prox(), 1e-12), u2 = prox();
+    const r = Math.sqrt(-2 * Math.log(u1));
+    saida[i++] = r * Math.cos(2 * Math.PI * u2);
+    if (i < n) saida[i++] = r * Math.sin(2 * Math.PI * u2);
+  }
+  return saida;
+}
+
+/* L (NG × N) para um grau. */
+function suavizador(d){
+  const p = d + 1;
+  // colunas de X: Q começa como X e é ortonormalizada no lugar
+  const Q = [];
+  for (let k = 0; k < p; k++) Q.push(Float64Array.from(xs, v => Math.pow(v / 3, k)));
+  const R = Array.from({ length: p }, () => new Float64Array(p));
+  for (let k = 0; k < p; k++){
+    for (let passe = 0; passe < 2; passe++){          // reortogonalização
+      for (let j = 0; j < k; j++){
+        let s = 0;
+        for (let i = 0; i < N; i++) s += Q[j][i] * Q[k][i];
+        R[j][k] += s;
+        for (let i = 0; i < N; i++) Q[k][i] -= s * Q[j][i];
+      }
+    }
+    let nrm = 0;
+    for (let i = 0; i < N; i++) nrm += Q[k][i] * Q[k][i];
+    nrm = Math.sqrt(nrm);
+    R[k][k] = nrm;
+    for (let i = 0; i < N; i++) Q[k][i] /= nrm;
+  }
+  // L = G · R⁻¹ · Qᵀ, linha a linha: resolve Rᵀ·w = g(x₀) e soma w·Qᵀ
+  const L = new Float64Array(NG * N);
+  const w = new Float64Array(p);
+  for (let r = 0; r < NG; r++){
+    for (let k = 0; k < p; k++){
+      let s = Math.pow(xg[r] / 3, k);
+      for (let j = 0; j < k; j++) s -= R[j][k] * w[j];
+      w[k] = s / R[k][k];
+    }
+    for (let i = 0; i < N; i++){
+      let s = 0;
+      for (let k = 0; k < p; k++) s += w[k] * Q[k][i];
+      L[r * N + i] = s;
+    }
+  }
+  // o mesmo, nos 15 x de treino, para o MSE de treino
+  const H = new Float64Array(N * N);
+  for (let r = 0; r < N; r++){
+    for (let k = 0; k < p; k++){
+      let s = Math.pow(xs[r] / 3, k);
+      for (let j = 0; j < k; j++) s -= R[j][k] * w[j];
+      w[k] = s / R[k][k];
+    }
+    for (let i = 0; i < N; i++){
+      let s = 0;
+      for (let k = 0; k < p; k++) s += w[k] * Q[k][i];
+      H[r * N + i] = s;
+    }
+  }
+  // o que não depende de σ nem de y: viés² médio e variância/σ² média
+  let b2 = 0, v1 = 0;
+  const Lf = new Float64Array(NG);
+  for (let r = 0; r < NG; r++){
+    let s = 0, q = 0;
+    for (let i = 0; i < N; i++){ const l = L[r * N + i]; s += l * fx[i]; q += l * l; }
+    Lf[r] = s;
+    b2 += (s - fg[r]) * (s - fg[r]);
+    v1 += q;
+  }
+  return { d, L, H, Lf, vies2: b2 / NG, var1: v1 / NG };
+}
+
+const MOD = GRAUS.map(suavizador);
+
+function aplica(M, y, saida){
+  for (let r = 0; r < NG; r++){
+    let s = 0;
+    for (let i = 0; i < N; i++) s += M.L[r * N + i] * y[i];
+    saida[r] = s;
+  }
+  return saida;
+}
+function mseTreino(M, y){
+  let t = 0;
+  for (let r = 0; r < N; r++){
+    let s = 0;
+    for (let i = 0; i < N; i++) s += M.H[r * N + i] * y[i];
+    t += (y[r] - s) * (y[r] - s);
+  }
+  return t / N;
+}
+
+/* ==================================================================== *
+ * Estado
+ * ==================================================================== */
+
+const S = { sigma: 0.5, semente: 20260923, fantasmas: false, verF: false, tocando: false };
+let z = normais(S.semente, N);
+const zf = Array.from({ length: NFANT }, (_, k) => normais(1000 + k, N));
+
+function yDe(zz){
+  const y = new Float64Array(N);
+  for (let i = 0; i < N; i++) y[i] = fx[i] + S.sigma * zz[i];
+  return y;
+}
+
+/* ==================================================================== *
+ * Desenho — utilidades (as mesmas das páginas irmãs)
+ * ==================================================================== */
+
+function css(n){ return getComputedStyle(document.documentElement).getPropertyValue(n).trim(); }
+
+function ajustar(c){
+  const r = c.getBoundingClientRect();
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  const w = Math.max(1, Math.round(r.width)), h = Math.max(1, Math.round(r.height));
+  if (c.width !== Math.round(w * dpr) || c.height !== Math.round(h * dpr)){
+    c.width = Math.round(w * dpr);
+    c.height = Math.round(h * dpr);
+  }
+  const g = c.getContext("2d");
+  g.setTransform(dpr, 0, 0, dpr, 0, 0);
+  return [g, w, h];
+}
+
+function rotulo(g, txt, x, y, cor, opc){
+  const o = opc || {};
+  g.save();
+  g.font = o.font || "500 11px " + css("--cond");
+  g.textAlign = o.align || "left";
+  g.textBaseline = o.baseline || "alphabetic";
+  g.lineWidth = 3.5;
+  g.lineJoin = "round";
+  g.strokeStyle = css("--panel");
+  g.strokeText(txt, x, y);
+  g.fillStyle = cor;
+  g.fillText(txt, x, y);
+  g.restore();
+}
+
+function fmt(v, casas){
+  if (!Number.isFinite(v)) return "—";
+  return v.toFixed(casas === undefined ? 2 : casas).replace(".", ",");
+}
+
+function eixos(g, Mg, W, H, xt, yt, Xp, Yp, rotX, rotY, fmtY){
+  g.strokeStyle = css("--grid"); g.lineWidth = 1;
+  g.beginPath();
+  for (const v of xt){ const px = Math.round(Xp(v)) + .5; g.moveTo(px, Mg.c); g.lineTo(px, H - Mg.b); }
+  for (const v of yt){ const py = Math.round(Yp(v)) + .5; g.moveTo(Mg.e, py); g.lineTo(W - Mg.d, py); }
+  g.stroke();
+
+  g.font = "400 10.5px " + css("--mono");
+  g.fillStyle = css("--ink-3");
+  g.textAlign = "center"; g.textBaseline = "top";
+  for (const v of xt) g.fillText(String(v), Xp(v), H - Mg.b + 6);
+  g.textAlign = "right"; g.textBaseline = "middle";
+  for (const v of yt) g.fillText(fmtY ? fmtY(v) : String(v), Mg.e - 7, Yp(v));
+
+  if (rotX){
+    g.font = "600 10.5px " + css("--cond");
+    g.textAlign = "center"; g.textBaseline = "bottom";
+    g.fillText(rotX, Mg.e + (W - Mg.e - Mg.d) / 2, H - 3);
+  }
+  if (rotY){
+    g.save();
+    g.font = "600 10.5px " + css("--cond");
+    g.translate(10, Mg.c + (H - Mg.c - Mg.b) / 2);
+    g.rotate(-Math.PI / 2);
+    g.textAlign = "center"; g.textBaseline = "top";
+    g.fillText(rotY, 0, 0);
+    g.restore();
+  }
+}
+
+function curva(g, xv, yv, Xp, Yp){
+  g.beginPath();
+  for (let i = 0; i < xv.length; i++){
+    const px = Xp(xv[i]), py = Yp(yv[i]);
+    i ? g.lineTo(px, py) : g.moveTo(px, py);
+  }
+  g.stroke();
+}
+
+/* ==================================================================== *
+ * Os painéis — cinco ajustes e um de erro por grau
+ * ==================================================================== */
+
+const plates = document.getElementById("plates");
+const telas = [];
+for (const d of GRAUS){
+  const nome = d === 1 ? "reta" : d === 2 ? "parábola" : "grau " + d;
+  const el = document.createElement("div");
+  el.className = "plate";
+  el.innerHTML = '<canvas class="painel"></canvas><span class="tag"><b>' + nome + '</b>' +
+                 (d > 2 ? '' : ' · grau ' + d) + '</span>';
+  plates.appendChild(el);
+  telas.push(el.querySelector("canvas"));
+}
+{
+  const el = document.createElement("div");
+  el.className = "plate";
+  el.innerHTML = '<canvas class="painel" id="cv-erro"></canvas><span class="tag">MSE por grau · escala log</span>';
+  plates.appendChild(el);
+}
+
+const buf = new Float64Array(NG);
+
+function desenharAjuste(c, M, y){
+  const [g, W, H] = ajustar(c);
+  const Mg = { e: 30, d: 10, c: 28, b: 24 };
+  g.fillStyle = css("--panel"); g.fillRect(0, 0, W, H);
+
+  const Xp = v => Mg.e + (v - X0) / (X1 - X0) * (W - Mg.e - Mg.d);
+  const Yp = v => Mg.c + (1 - (v - YLO) / (YHI - YLO)) * (H - Mg.c - Mg.b);
+  eixos(g, Mg, W, H, [-3, -2, -1, 0, 1, 2, 3], [-6, -3, 0, 3, 6], Xp, Yp);
+
+  g.save();
+  g.beginPath(); g.rect(Mg.e, Mg.c, W - Mg.e - Mg.d, H - Mg.c - Mg.b); g.clip();
+  g.lineJoin = "round";
+
+  if (S.fantasmas){
+    g.strokeStyle = css("--ajuste"); g.globalAlpha = 0.16; g.lineWidth = 1.2;
+    for (const zz of zf) curva(g, xg, aplica(M, yDe(zz), buf), Xp, Yp);
+    g.globalAlpha = 1;
+  }
+
+  // a f verdadeira é referência, não protagonista: pontilhada e translúcida,
+  // para o ajuste laranja passar por cima dela sem escondê-la
+  if (S.verF){
+    g.save();
+    g.strokeStyle = css("--f"); g.lineWidth = 2; g.globalAlpha = 0.7;
+    g.setLineDash([2, 4]); g.lineCap = "round";
+    curva(g, xg, fg, Xp, Yp);
+    g.restore();
+  }
+
+  g.strokeStyle = css("--ajuste"); g.lineWidth = 2.5;
+  curva(g, xg, aplica(M, y, buf), Xp, Yp);
+
+  // os pontos, com anel na cor do painel para se separarem das curvas
+  for (let i = 0; i < N; i++){
+    g.beginPath(); g.arc(Xp(xs[i]), Yp(y[i]), 4, 0, 2 * Math.PI);
+    g.fillStyle = css("--panel"); g.fill();
+    g.beginPath(); g.arc(Xp(xs[i]), Yp(y[i]), 3, 0, 2 * Math.PI);
+    g.fillStyle = css("--pontos"); g.fill();
+  }
+  g.restore();
+
+  if (M.d === 1){
+    if (S.verF) rotulo(g, "f verdadeira", Xp(-2.9), Yp(f(-2.9)) - 8, css("--f"));
+    rotulo(g, "o ajuste", Xp(1.2), Yp(M.Lf[Math.round((1.2 - X0) / (X1 - X0) * (NG - 1))]) + 16, css("--ajuste"));
+  }
+}
+
+const LOG_LO = -3, LOG_HI = 4;     // 0,001 a 10.000 — o grau 14 passa de 10³ no teste
+/* Abaixo de 10^LOG_LO o ponto vai para o chão do eixo com marcador VAZADO:
+ * o treino do grau 14 é zero (interpola os 15 pontos), e zero não tem log. */
+
+function desenharErro(C){
+  const [g, W, H] = ajustar(document.getElementById("cv-erro"));
+  const Mg = { e: 40, d: 14, c: 40, b: 36 };
+  g.fillStyle = css("--panel"); g.fillRect(0, 0, W, H);
+
+  const Xp = k => Mg.e + (k + 0.5) / GRAUS.length * (W - Mg.e - Mg.d);
+  const lg = v => Math.log10(Math.min(Math.max(v, Math.pow(10, LOG_LO)), Math.pow(10, LOG_HI)));
+  const Yp = v => Mg.c + (1 - (lg(v) - LOG_LO) / (LOG_HI - LOG_LO)) * (H - Mg.c - Mg.b);
+
+  // grade e rótulos à mão: x categórico (os graus), y em potências de 10
+  g.strokeStyle = css("--grid"); g.lineWidth = 1;
+  g.beginPath();
+  for (let e = LOG_LO; e <= LOG_HI; e++){ const py = Math.round(Yp(Math.pow(10, e))) + .5; g.moveTo(Mg.e, py); g.lineTo(W - Mg.d, py); }
+  g.stroke();
+  g.font = "400 10.5px " + css("--mono"); g.fillStyle = css("--ink-3");
+  g.textAlign = "right"; g.textBaseline = "middle";
+  for (let e = LOG_LO; e <= LOG_HI; e++) g.fillText(fmt(Math.pow(10, e), Math.max(0, -e)), Mg.e - 6, Yp(Math.pow(10, e)));
+  g.textAlign = "center"; g.textBaseline = "top";
+  GRAUS.forEach((d, k) => g.fillText(String(d), Xp(k), H - Mg.b + 6));
+  g.font = "600 10.5px " + css("--cond");
+  g.textBaseline = "bottom";
+  g.fillText("grau", Mg.e + (W - Mg.e - Mg.d) / 2, H - 3);
+
+  // o piso
+  if (C.piso > 0){
+    g.save();
+    g.strokeStyle = css("--ruido"); g.lineWidth = 1.5; g.setLineDash([5, 4]);
+    g.beginPath(); g.moveTo(Mg.e, Yp(C.piso)); g.lineTo(W - Mg.d, Yp(C.piso)); g.stroke();
+    g.restore();
+  }
+
+  const serie = (vals, cor, tracejado) => {
+    g.save();
+    g.strokeStyle = cor; g.lineWidth = 2; g.lineJoin = "round";
+    if (tracejado) g.setLineDash(tracejado);
+    g.beginPath();
+    vals.forEach((v, k) => { const px = Xp(k), py = Yp(v); k ? g.lineTo(px, py) : g.moveTo(px, py); });
+    g.stroke();
+    g.setLineDash([]);
+    vals.forEach((v, k) => {
+      g.beginPath(); g.arc(Xp(k), Yp(v), 5, 0, 2 * Math.PI); g.fillStyle = css("--panel"); g.fill();
+      g.beginPath(); g.arc(Xp(k), Yp(v), 4, 0, 2 * Math.PI);
+      if (v < Math.pow(10, LOG_LO)){ g.strokeStyle = cor; g.lineWidth = 1.5; g.stroke(); }
+      else { g.fillStyle = cor; g.fill(); }
+    });
+    g.restore();
+  };
+  serie(C.treino, css("--ink-3"), [5, 4]);
+  serie(C.teste, css("--marca"));
+
+  const ult = GRAUS.length - 1;
+  rotulo(g, "teste", Xp(ult) - 8, Yp(C.teste[ult]) - 10, css("--marca"), { align: "right" });
+  rotulo(g, C.treino[ult] < Math.pow(10, LOG_LO) ? "treino ≈ 0" : "treino", Xp(ult) - 10, Yp(C.treino[ult]) + 4, css("--ink-3"), { align: "right" });
+  if (C.piso > 0) rotulo(g, "Var(ε)", Mg.e + 4, Yp(C.piso) - 6, css("--ruido"));
+}
+
+/* ==================================================================== *
+ * Números, tabela e a linha de código
+ * ==================================================================== */
+
+function numeros(y){
+  const s2 = S.sigma * S.sigma;
+  const treino = [], vies2 = [], varia = [], teste = [];
+  for (const M of MOD){
+    treino.push(mseTreino(M, y));
+    vies2.push(M.vies2);
+    varia.push(s2 * M.var1);
+    teste.push(M.vies2 + s2 * M.var1 + s2);
+  }
+  return { treino, vies2, varia, teste, piso: s2 };
+}
+
+function texto(C){
+  document.getElementById("relogio").textContent = fmt(S.sigma, 2);
+  document.getElementById("sig-num").textContent = fmt(S.sigma, 2);
+  document.getElementById("piso").textContent = fmt(C.piso, 3);
+
+  let kmin = 0;
+  for (let k = 1; k < GRAUS.length; k++) if (C.teste[k] < C.teste[kmin] - 1e-12) kmin = k;
+  document.getElementById("tabela").innerHTML = GRAUS.map((d, k) =>
+    '<tr' + (k === kmin ? ' class="min"' : '') + '><td>' + d + '</td><td>' + fmt(C.treino[k], 3) +
+    '</td><td>' + fmt(C.vies2[k], 3) + '</td><td>' + fmt(C.varia[k], 3) +
+    '</td><td>' + fmt(C.teste[k], 3) + '</td></tr>').join("");
+
+  document.getElementById("code").innerHTML =
+    '<span class="cm"># y = f(x) + σ·z, com σ = ' + fmt(S.sigma, 2) + '</span>\n' +
+    'modelo = make_pipeline(PolynomialFeatures(grau), LinearRegression())\n' +
+    'modelo.fit(x.reshape(-1, 1), y)   <span class="cm"># um por painel: grau em ' + GRAUS.join(", ") + '</span>';
+}
+
+function pintar(){
+  const y = yDe(z);
+  MOD.forEach((M, k) => desenharAjuste(telas[k], M, y));
+  const C = numeros(y);
+  desenharErro(C);
+  texto(C);
+}
+
+/* ==================================================================== *
+ * Controles
+ * ==================================================================== */
+
+const elSig = document.getElementById("sig");
+const elPlay = document.getElementById("btn-play");
+const elFant = document.getElementById("btn-fantasmas");
+
+function aplicaSigma(v){
+  S.sigma = Math.min(SIG_MAX, Math.max(0, v));
+  elSig.value = String(Math.round(S.sigma * 100));
+  pintar();
+}
+elSig.addEventListener("input", () => { parar(); aplicaSigma(+elSig.value / 100); });
+
+document.getElementById("btn-sorteio").addEventListener("click", () => {
+  S.semente++;
+  z = normais(S.semente, N);
+  pintar();
+});
+
+const elF = document.getElementById("btn-f");
+elF.addEventListener("click", () => {
+  S.verF = !S.verF;
+  elF.setAttribute("aria-pressed", String(S.verF));
+  pintar();
+});
+
+elFant.addEventListener("click", () => {
+  S.fantasmas = !S.fantasmas;
+  elFant.setAttribute("aria-pressed", String(S.fantasmas));
+  pintar();
+});
+
+let quadro = null;
+function parar(){
+  if (quadro !== null){ cancelAnimationFrame(quadro); quadro = null; }
+  S.tocando = false;
+  elPlay.textContent = "aumentar o ruído";
+}
+elPlay.addEventListener("click", () => {
+  if (S.tocando){ parar(); return; }
+  S.tocando = true;
+  elPlay.textContent = "parar";
+  if (S.sigma >= SIG_MAX - 1e-9) S.sigma = 0;
+  let ultimo = performance.now();
+  const passo = (agora) => {
+    const dt = Math.min(agora - ultimo, 100);
+    ultimo = agora;
+    aplicaSigma(S.sigma + dt / 1000 * 0.25);     // 0,25 de σ por segundo
+    if (S.sigma >= SIG_MAX - 1e-9){ parar(); return; }
+    quadro = requestAnimationFrame(passo);
+  };
+  quadro = requestAnimationFrame(passo);
+});
+
+window.addEventListener("resize", pintar);
+if (window.matchMedia) window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", pintar);
+
+aplicaSigma(0.5);
+</script>
