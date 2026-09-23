@@ -1,6 +1,6 @@
 # Lendo e Tipando um Arquivo Real
 
-A seção anterior fechou avisando que `estados` não tinha um valor faltante sequer, e prometeu trocar esse arquivo limpo por um que chega direto de uma fonte real. É o que este arquivo faz: um conjunto de anúncios de aluguel de imóveis em cinco cidades brasileiras, lido sem nenhuma limpeza prévia — exatamente como ele chegaria de um raspador ou de uma exportação de planilha.
+Um arquivo real raramente chega limpo. O desta seção é um conjunto de anúncios de aluguel de imóveis em cinco cidades brasileiras, lido sem nenhuma limpeza prévia — exatamente como ele chegaria de um raspador ou de uma exportação de planilha.
 
 ```{python}
 #| label: setup
@@ -38,11 +38,11 @@ Antes de qualquer conta, `dtypes` — o mesmo primeiro passo da seção 6.1:
 alugueis.dtypes
 ```
 
-Doze colunas vieram como o esperado: nove numéricas (de `area_m2` a `vagas` e de `condominio` a `total`, todas contagens ou valores em reais) e três como `object` porque são texto de verdade — `cidade` é um nome de cidade, `aceita_animal` e `mobiliado` são "sim" ou "não". `andar` é a única que destoa: representa um número — o andar do imóvel —, e mesmo assim veio como `object`, junto dos textos.
+Doze colunas vieram como o esperado: nove numéricas (de `area_m2` a `vagas` e de `condominio` a `total`, todas contagens, áreas ou valores em reais) e três como `object` porque são texto de verdade — `cidade` é um nome de cidade, `aceita_animal` e `mobiliado` são "sim" ou "não". `andar` é a única que destoa: representa um número — o andar do imóvel —, e mesmo assim veio como `object`, junto dos textos.
 
 ## O estrago, antes da causa
 
-Um número de andar deveria admitir média. Tentar calcular uma mostra o problema na prática, não em teoria:
+Um número de andar deveria admitir média. O que acontece ao pedir a média de uma coluna numérica que o `pandas` guardou como `object`?
 
 ```{python}
 #| label: media-andar-erro
@@ -76,7 +76,7 @@ Entre `'7'`, `'20'`, `'6'` e outros números escritos como texto, aparece um `'-
 
 ```{python}
 #| label: andar-tracos
-tracos = (alugueis["andar"] == "-").sum()
+tracos = int((alugueis["andar"] == "-").sum())
 tracos, round(100 * tracos / len(alugueis))
 ```
 
@@ -97,7 +97,7 @@ Quando se sabe qual é o marcador, `na_values` ensina o `read_csv` a reconhecê-
 ```{python}
 #| label: na-values-andar
 alugueis_tipado = pd.read_csv("dados/alugueis.csv", na_values=["-"])
-alugueis_tipado["andar"].dtype, alugueis_tipado["andar"].isna().sum(), round(alugueis_tipado["andar"].mean(), 2)
+alugueis_tipado["andar"].dtype, int(alugueis_tipado["andar"].isna().sum()), round(float(alugueis_tipado["andar"].mean()), 2)
 ```
 
 ::: {.funcao}
@@ -117,7 +117,7 @@ Quando não se sabe de antemão qual marcador vai aparecer, `pd.to_numeric` com 
 ```{python}
 #| label: to-numeric-andar
 andar_coerced = pd.to_numeric(alugueis["andar"], errors="coerce")
-andar_coerced.dtype, andar_coerced.isna().sum()
+andar_coerced.dtype, int(andar_coerced.isna().sum())
 ```
 
 ::: {.funcao}
@@ -135,7 +135,7 @@ A seção 6.1 declarou `sigla` como `category` pelo que o tipo diz sobre a colun
 
 ```{python}
 #| label: cidade-memoria-antes
-antes_cidade = alugueis["cidade"].memory_usage(deep=True)
+antes_cidade = int(alugueis["cidade"].memory_usage(deep=True))
 antes_cidade
 ```
 
@@ -156,7 +156,7 @@ Só cinco cidades, repetidas pelas 10.692 linhas. Convertendo e medindo de novo:
 
 ```{python}
 #| label: cidade-memoria-depois
-depois_cidade = alugueis["cidade"].astype("category").memory_usage(deep=True)
+depois_cidade = int(alugueis["cidade"].astype("category").memory_usage(deep=True))
 antes_cidade, depois_cidade, round(depois_cidade / antes_cidade * 100)
 ```
 
@@ -168,22 +168,29 @@ Resolvido o problema de `andar`, vale olhar o que a distribuição do próprio a
 
 ```{python}
 #| label: fig-distribuicao-aluguel
-#| fig-cap: "Distribuição do aluguel: a maioria dos imóveis se concentra abaixo de 10 mil reais, mas a cauda longa chega a 45 mil"
+#| fig-cap: "Distribuição do aluguel, com o eixo vertical em escala log para que as barras de um imóvel só apareçam: o grosso dos anúncios fica nos primeiros milhares de reais, e a cauda se estica até 45 mil"
+#| fig-alt: "Histograma do aluguel em reais, de zero a 45 mil, com o eixo de contagem de imóveis em escala logarítmica. As barras mais altas ficam à esquerda, abaixo de 5 mil reais, e vão baixando para a direita; à direita de 20 mil restam barras isoladas de um ou dois imóveis, a última em 45 mil."
 fig, ax = plt.subplots()
-ax.hist(alugueis["aluguel"], bins=60)
+ax.hist(alugueis["aluguel"], bins=60, edgecolor="white", linewidth=0.3)
+ax.set_yscale("log")
+ax.set_xlim(left=0)
 ax.set_xlabel("aluguel (R$)")
-ax.set_ylabel("imóveis")
+ax.set_ylabel("imóveis (escala log)")
 plt.tight_layout()
 plt.show()
 ```
 
 ```{python}
 #| label: aluguel-mediana-maximo
-alugueis["aluguel"].median(), alugueis["aluguel"].max()
+print("mediana:", alugueis["aluguel"].median())
+print("três maiores:", alugueis["aluguel"].nlargest(3).tolist())
+print("% abaixo de 10 mil:", round(100 * (alugueis["aluguel"] < 10_000).mean(), 1))
 ```
 
 ::: {.funcao}
-**`serie.max()`** — o maior valor da coluna. Não recebe argumento; valores nulos são ignorados.
+**`serie.nlargest(n)`** — os `n` maiores valores da coluna, do maior para o menor. É o `nlargest` da seção 6.1, agora numa `Series`, sem nome de coluna.
+
+**`serie.mean()`** sobre uma coluna de `True`/`False` — cada `True` vale 1 e cada `False` vale 0, então a média é a fração de `True`.
 :::
 
-A mediana fica em R$ 2.661, e a barra mais alta do histograma mora perto dela — mas a cauda à direita se estica até R$ 45.000, um único imóvel bem separado do resto. Uma coluna corretamente tipada não garante uma distribuição bem comportada: o `aluguel` já é `int64` desde a primeira leitura, e ainda assim traz um outlier — um valor tão distante do resto que se destaca da distribuição — que qualquer estatística resumida esconderia. É esse tipo de problema — não mais o tipo da coluna, mas o formato dos valores dentro dela — que a próxima seção enfrenta.
+A mediana fica em R$ 2.661, e 91,9% dos imóveis custam menos de R$ 10.000. Os três maiores aluguéis são 45.000, 30.000 e 25.000: o topo é um imóvel só, R$ 15.000 acima do segundo. Uma coluna corretamente tipada não garante uma distribuição bem comportada: o `aluguel` já é `int64` desde a primeira leitura, e ainda assim traz um *outlier* — um valor tão distante do resto que se destaca da distribuição — que a mediana, sozinha, não deixa ver. É esse tipo de problema — não mais o tipo da coluna, mas o formato dos valores dentro dela — que a próxima seção enfrenta.
