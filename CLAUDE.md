@@ -304,6 +304,8 @@ O link é do site para o notebook e **não** o contrário: `LINHA_COLAB`, no ger
 
 **São arquivos estáticos, não conteúdo do site.** Um HTML só, sem build, sem dependência de rede, que abre com dois cliques e roda offline. Não têm `.qmd`, não entram no `book.chapters` e não aparecem no sidebar — o que os leva ao site é uma linha em `project.resources`, no `_quarto.yml`, que o Quarto copia para `_book/apoio/`. Sem essa linha, a página existe no repositório e **não** existe no site publicado.
 
+**Celular não é requisito.** As páginas de `apoio/` são projetadas na aula e abertas no computador; basta que funcionem em tela de desktop e de projetor, nos temas claro e escuro. Não gaste rodada de verificação nem de revisão com largura de celular nelas — a exigência de 390 px do `slide-auditor` e do `/visual-audit` vale para as seções do livro, não para `apoio/`.
+
 As duas dividem tokens, tipografia e componentes de propósito — são irmãs, e uma terceira página deve copiar o mesmo bloco `:root` em vez de inventar outro.
 
 Quatro decisões que não são óbvias e custam tempo a redescobrir:

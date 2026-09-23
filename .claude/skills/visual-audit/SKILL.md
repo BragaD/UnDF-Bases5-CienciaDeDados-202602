@@ -12,7 +12,7 @@ disallowed-tools: ["Edit"]
 
 1. Resolva a seção para `content/capNN/MM-*.qmd` e `_book/content/capNN/MM-*.html`.
 2. Se o `.qmd` for mais novo que o HTML: `make render` (serializado; espera a vez sozinho — CLAUDE.md). Docker parado → avise e audite só o fonte, dizendo isso no relatório.
-3. **`--capturas`** (opcional): capture a página em desktop (1280 px), celular (390 px) e tema escuro com `scripts/captura-pagina.py`, na imagem oficial do Playwright (nada disso entra no `uv.lock`). Saída em `quality_reports/capturas/` (gitignorado); depois leia os PNGs com a ferramenta Read.
+3. **`--capturas`** (opcional): capture a página em desktop (1280 px), celular (390 px) e tema escuro com `scripts/captura-pagina.py`, na imagem oficial do Playwright (nada disso entra no `uv.lock`). Saída em `quality_reports/capturas/` (gitignorado); depois leia os PNGs com a ferramenta Read. Página de `apoio/`: pule a captura de celular — ela só precisa funcionar em desktop/projetor (CLAUDE.md).
 
    ```bash
    docker run --rm -v "$PWD/_book:/site:ro" -v "$PWD/scripts:/scripts:ro" \

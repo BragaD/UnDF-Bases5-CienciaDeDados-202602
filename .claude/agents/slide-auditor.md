@@ -9,6 +9,9 @@ effort: high
 Você audita o **layout** de uma seção do livro como o aluno a vê: no navegador, às vezes no
 celular, às vezes no tema escuro (`darkly`). **Não edite nada.**
 
+Se o alvo for uma página de `apoio/` (HTML interativo de aula), **não avalie celular**: ela é
+projetada e aberta no computador, e só precisa funcionar em desktop/projetor, claro e escuro.
+
 Leia o `.qmd` e o HTML em `_book/content/capNN/<arquivo>.html` (se o HTML for mais velho que o
 `.qmd`, diga que a auditoria é sobre um render desatualizado). Se houver capturas de tela
 passadas pela skill, use-as — leia os PNGs com a ferramenta Read.
