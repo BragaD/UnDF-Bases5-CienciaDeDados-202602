@@ -4,7 +4,7 @@
 Esta seção corresponde à seção 2.2.3 de @james2023.
 :::
 
-A seção anterior mediu o ajuste em distância: o quanto $\hat f(x)$ erra de um $y$ numérico. Quando $Y$ é uma classe — doente ou não, spam ou não —, distância deixa de fazer sentido, e a régua muda: o que conta é se a previsão acertou o rótulo ou errou.
+Quando $Y$ é uma classe (doente ou não, spam ou não), a distância entre a previsão e o valor observado deixa de fazer sentido. A régua muda: o que conta é se a previsão acertou o rótulo ou errou.
 
 ```{python}
 #| label: setup
@@ -19,25 +19,25 @@ plt.style.use("estilo-figuras.mplstyle")
 
 ## A taxa de erro
 
-O análogo do MSE, para uma resposta qualitativa, é a **taxa de erro**: a fração das previsões que erram o rótulo.
+Para uma resposta qualitativa, o análogo do MSE é a **taxa de erro**, a fração das previsões que erram o rótulo:
 
 $$
-\text{Taxa de erro} = \frac{1}{n}\sum_{i=1}^n \mathbb{1}(y_i \neq \hat y_i)
+\text{Taxa de erro} = \frac{1}{n}\sum_{i=1}^n I(y_i \neq \hat y_i)
 $$
 
-$\mathbb{1}(y_i \neq \hat y_i)$ vale 1 quando o classificador erra a observação $i$ e 0 quando acerta; a média sobre as $n$ observações é a proporção de erros. A mesma ressalva da seção anterior continua valendo, ponto por ponto: a taxa de erro que interessa é a de **teste**, medida sobre dado que não ajustou o classificador — a de **treino** só diz o quanto o classificador decorou o que já tinha visto, e cai mesmo quando essa memorização não ensinou nada sobre dado novo.
+$\hat y_i$ é a classe prevista para a observação $i$, e $I(y_i \neq \hat y_i)$ é uma **variável indicadora**: vale 1 quando o classificador erra a observação $i$ e 0 quando acerta. A média sobre as $n$ observações é a proporção de erros. Vale a mesma regra do MSE: a taxa de erro que interessa é a **de teste**, medida em observações que não foram usadas para ajustar o classificador. A de **treino** diz o quanto ele decorou o que já tinha visto.
 
 ## O classificador de Bayes
 
-Existe uma regra que minimiza a taxa de erro esperada, e ela é simples de enunciar: para cada ponto $x_0$, atribuir a classe mais provável dado $X = x_0$.
+Se fosse possível saber, para cada ponto, a probabilidade de cada classe, qual regra de previsão erraria menos? A resposta é simples de enunciar: em cada ponto $x_0$, prever a classe mais provável dado $X = x_0$.
 
 $$
-\hat C(x_0) = \operatorname*{argmax}_{j} \; P(Y = j \mid X = x_0)
+\hat C(x_0) = \operatorname*{argmax}_{j} \; \Pr(Y = j \mid X = x_0)
 $$
 
-Nenhuma outra regra faz melhor — atribuir qualquer classe que não seja a mais provável só pode aumentar a chance de errar aquele ponto. É por isso que essa regra tem nome próprio, **classificador de Bayes**, e sua taxa de erro tem nome próprio também: **taxa de erro de Bayes**, o piso que nenhum classificador fura, o análogo exato do $\mathrm{Var}(\epsilon)$ da seção anterior.
+$\Pr(Y = j \mid X = x_0)$ é a probabilidade condicional de a classe ser $j$ para quem tem $X = x_0$. Prever qualquer outra classe em $x_0$ só aumenta a chance de errar ali, e por isso nenhuma regra faz melhor. Essa regra se chama **classificador de Bayes**, e a taxa de erro dela, **taxa de erro de Bayes**: a menor taxa de erro de teste esperada que um classificador pode ter, análogo ao $\mathrm{Var}(\varepsilon)$ da regressão.
 
-Só que descrever o classificador de Bayes é mais fácil do que construí-lo: ele exige conhecer $P(Y = j \mid X = x_0)$ de verdade, para todo $x_0$ — a distribuição condicional exata de $Y$ dado $X$. Com dado real, ninguém tem essa distribuição; o que existe são $n$ observações, e a distribuição que as gerou permanece desconhecida. É por isso que o classificador de Bayes, fora de um material como este, é inatingível: um padrão contra o qual comparar, nunca um classificador que alguém constrói. Aqui é diferente pelo mesmo motivo da seção anterior — o dado vai ser simulado, e quem simula escolhe $P(Y \mid X)$.
+Descrever o classificador de Bayes é mais fácil que construí-lo. Ele exige conhecer $\Pr(Y = j \mid X = x_0)$ para todo $x_0$, e com dados reais ninguém tem essa distribuição: o que existe são $n$ observações. Por isso o classificador de Bayes é inatingível na prática, um padrão contra o qual comparar os outros. Com dados simulados, porém, é quem simula que escolhe $\Pr(Y \mid X)$, e aí o piso pode ser calculado.
 
 ```{python}
 #| label: dados-classificacao
@@ -58,15 +58,23 @@ X_teste, y_teste = gerar(rng, 20_000)
 X_treino.shape, X_teste.shape
 ```
 
-Dois preditores, $X_1$ e $X_2$, uniformes em $[0, 10]$; a probabilidade condicional de $Y=1$ é uma logística sobre uma combinação deles — tendência linear em $x_2$ mais uma oscilação de seno em $x_1$, a mesma forma de combinar reta e seno que gerou $f$ na seção anterior:
+::: {.funcao}
+**`np.exp(arr)`** e **`np.sin(arr)`**: a exponencial e o seno de cada elemento.
+
+**`mascara.astype(int)`**: converte `True`/`False` em 1/0.
+
+**`np.column_stack([a, b])`**: junta dois arrays de uma dimensão como as colunas de uma tabela.
+:::
+
+Dois preditores, $X_1$ e $X_2$, uniformes em $[0, 10]$. A probabilidade de $Y = 1$ é uma logística sobre uma combinação deles, uma tendência linear em $x_2$ mais uma oscilação de seno em $x_1$:
 
 $$
-P(Y = 1 \mid X = x) = \frac{1}{1 + e^{-(3\sin(x_1) - x_2 + 5)}}
+\Pr(Y = 1 \mid X = x) = \frac{1}{1 + e^{-(3\sin(x_1) - x_2 + 5)}}
 $$
 
-O rótulo $Y$ sai de um sorteio com essa probabilidade — `rng.uniform(size=n) < p` é exatamente um Bernoulli$(p)$. Trezentos pontos para treino, na mesma ordem de grandeza da seção anterior; vinte mil para teste, maior do que os cinco mil de lá, e a razão para o tamanho vem mais adiante, quando o teto de Bayes precisar ser medido com precisão contra o k-NN.
+O rótulo sai de um sorteio com essa probabilidade: `rng.uniform(size=n) < p` vale `True` com probabilidade $p$, e isso é um sorteio de Bernoulli$(p)$. São 300 pontos de treino e 20.000 de teste; o motivo de tantos pontos de teste aparece quando o *k*-NN for comparado com o piso.
 
-A fronteira de Bayes — onde $P(Y=1\mid X=x)=1/2$, e as duas classes empatam — fica onde o argumento da logística zera: $x_2 = 3\sin(x_1) + 5$, uma curva, não uma reta. Fora dessa curva, uma classe é sempre mais provável que a outra, mas nunca com certeza: em quase todo ponto do domínio, $P(Y=1\mid X=x)$ fica entre 0 e 1, nunca exatamente em 0 ou 1 — há sempre uma chance da classe menos provável aparecer, e é essa sobreposição que faz a taxa de erro de Bayes ser maior que zero.
+A **fronteira de Bayes** é onde $\Pr(Y = 1 \mid X = x) = 1/2$ e as duas classes empatam. Ela fica onde o expoente da logística zera, $x_2 = 3\sin(x_1) + 5$, uma curva. Fora dela, uma classe é sempre mais provável que a outra, mas nunca com certeza: em todo ponto do quadrado, a probabilidade fica estritamente entre 0 e 1. Há sempre alguma chance de a classe menos provável aparecer, e é essa sobreposição que faz a taxa de erro de Bayes ser maior que zero.
 
 ```{python}
 #| label: piso-bayes
@@ -81,13 +89,25 @@ erro_bayes_teste = float(np.mean(pred_bayes_teste != y_teste))
 round(piso_bayes, 4), round(erro_bayes_teste, 4)
 ```
 
-A taxa de erro de Bayes não precisa de nenhum sorteio para ser calculada: em cada ponto $x$, o classificador de Bayes ainda erra com probabilidade $\min\big(P(Y{=}1\mid X{=}x),\, 1 - P(Y{=}1\mid X{=}x)\big)$ — a chance da classe que ele não escolheu. A média dessa quantidade sobre o domínio inteiro, calculada numa grade fina, dá **13,26%**: o piso exato, porque $P(Y\mid X)$ é conhecida ponto a ponto. Aplicar a mesma regra de Bayes aos 20.000 pontos de teste — prever a classe mais provável em cada um, e comparar com o $y$ que de fato saiu do sorteio — dá **13,32%**, quase o mesmo número: a diferença é só o ruído de um sorteio finito em volta do valor exato.
+::: {.funcao}
+**`np.minimum(a, b)`**: o menor dos dois valores, elemento a elemento.
 
-## k-vizinhos mais próximos
+**`np.mean(previsto != observado)`**: a comparação dá um array de `True`/`False`, e a média dele é a fração de `True`, isto é, a taxa de erro.
+:::
 
-O classificador de Bayes conhece $P(Y \mid X)$; o k-NN não conhece nada disso, e estima. Para um ponto $x_0$, ele olha os $k$ pontos de treino mais próximos e vota: a classe que aparece mais entre os vizinhos é a prevista. Essa votação é uma estimativa da própria quantidade que o classificador de Bayes usaria — a fração de vizinhos da classe 1 aproxima $P(Y{=}1\mid X{=}x_0)$ —, só que calculada localmente, com $k$ pontos, em vez de conhecida de antemão.
+A taxa de erro de Bayes pode ser calculada sem sorteio nenhum. Em cada ponto $x$, o classificador de Bayes erra com a chance da classe que ele não escolheu:
 
-$k$ decide o quanto essa estimativa é local. Com $k$ pequeno, a vizinhança é minúscula, às vezes um só ponto, e a fronteira persegue cada observação de treino individualmente — variância alta, porque trocar a amostra de treino move a fronteira inteira. Com $k$ grande, a vizinhança cresce até deixar de ser vizinhança: pontos distantes do $x_0$ que está sendo classificado entram na votação, dilutem qualquer estrutura local, e a fronteira endurece até quase virar uma reta — viés alto, o mesmo preço que a reta pagava na seção anterior.
+$$
+\min\big(\Pr(Y{=}1\mid X{=}x),\; 1 - \Pr(Y{=}1\mid X{=}x)\big)
+$$
+
+Como $X$ é uniforme no quadrado $[0, 10]^2$, a taxa de erro de Bayes é a média dessa quantidade sobre o quadrado, e numa grade fina ela dá **13,26%**. Aplicar a regra de Bayes aos 20.000 pontos de teste, prevendo a classe mais provável em cada um e comparando com o $y$ que saiu do sorteio, dá **13,32%**: quase o mesmo número, com a diferença que se espera de um sorteio finito.
+
+## *k* vizinhos mais próximos
+
+E quando $\Pr(Y \mid X)$ é desconhecida, como com dados reais? O classificador de Bayes conhece essa probabilidade; o *k*-NN não conhece, e estima. Para um ponto $x_0$, ele olha os $k$ pontos de treino mais próximos e prevê a classe que aparece mais entre eles. A fração de vizinhos da classe 1 é uma estimativa de $\Pr(Y{=}1\mid X{=}x_0)$, feita localmente, com $k$ pontos.
+
+$k$ decide o quanto essa estimativa é local. Com $k$ pequeno, a vizinhança tem poucos pontos, às vezes um só, e a fronteira segue cada observação de treino: variância alta, porque trocar a amostra de treino move a fronteira inteira. Com $k$ grande, pontos distantes de $x_0$ entram na votação, diluem a estrutura local, e a fronteira endurece: viés alto. No limite, com $k$ perto do número de pontos de treino, todo ponto tem praticamente os mesmos vizinhos, e o classificador prevê a mesma classe, a mais comum no treino, em todo lugar.
 
 ```{python}
 #| label: knn-varios-k
@@ -97,8 +117,14 @@ erros_teste = []
 for k in ks:
     modelo = KNeighborsClassifier(n_neighbors=k)
     modelo.fit(X_treino, y_treino)
-    erros_treino.append(float(np.mean(modelo.predict(X_treino) != y_treino)))
-    erros_teste.append(float(np.mean(modelo.predict(X_teste) != y_teste)))
+    previsto_treino = modelo.predict(X_treino)
+    previsto_teste = modelo.predict(X_teste)
+    erros_treino.append(
+        float(np.mean(previsto_treino != y_treino))
+    )
+    erros_teste.append(
+        float(np.mean(previsto_teste != y_teste))
+    )
 
 erros_treino = np.array(erros_treino)
 erros_teste = np.array(erros_teste)
@@ -108,14 +134,56 @@ teste_minimo = float(erros_teste[indice_minimo])
 nunca_abaixo_do_piso = bool(np.all(erros_teste >= piso_bayes))
 margem_pp = round((teste_minimo - piso_bayes) * 100, 2)
 
-k_minimo, round(teste_minimo, 4), round(float(erros_treino[0]), 4), nunca_abaixo_do_piso, margem_pp
+len(ks), ks[0], ks[-1], k_minimo, round(teste_minimo, 4), round(float(erros_treino[0]), 4), nunca_abaixo_do_piso, margem_pp
 ```
 
-Setenta e cinco valores de $k$ varridos, de 1 a 297, de quatro em quatro. Em $k=1$, o erro de treino é **0%** — cada ponto de treino é o próprio vizinho mais próximo de si mesmo, então a votação sempre acerta o rótulo que já tinha. O erro de teste em $k=1$ não acompanha: a fronteira que decorou cada ponto de treino erra a vizinhança de um ponto novo com muito mais frequência. O menor erro de teste do varrimento inteiro sai em $k=9$: **15,08%**. Em nenhum dos 75 valores de $k$ a taxa de erro de teste desce abaixo dos 13,26% calculados acima — nem no ponto que mais se aproxima, $k=9$, que fica **1,82** ponto percentual acima (`margem_pp`). Com um conjunto de teste de poucas centenas de pontos, essa distância teria variância grande o bastante para a taxa de teste cruzar o piso por sorte da amostra, o mesmo risco que levou a seção anterior a medir o MSE contra cinco mil pontos em vez dos noventa que já tinha; vinte mil pontos de teste bastam para essa comparação não depender do sorteio.
+::: {.funcao}
+**`KNeighborsClassifier(n_neighbors)`**: cria um *k*-NN para resposta qualitativa, que prevê a classe mais comum entre os `n_neighbors` vizinhos mais próximos. Ajusta-se com `.fit(X, y)` e prevê com `.predict(X)`, como os modelos de regressão.
+:::
 
-## A fronteira que cada k desenha
+A varredura cobre 75 valores de $k$, de 1 a 297, de quatro em quatro. Com $k = 1$, o erro de treino é **0%**: cada ponto de treino é o seu próprio vizinho mais próximo, e a votação sempre devolve o rótulo que ele já tinha. O menor erro de teste sai em $k = 9$: **15,08%**. Em nenhum dos 75 valores a taxa de erro de teste desce abaixo dos 13,26% do piso de Bayes; mesmo o melhor, $k = 9$, fica **1,82** ponto percentual acima (`margem_pp`). Com poucas centenas de pontos de teste, uma distância desse tamanho poderia sumir por sorte da amostra; com 20.000, a comparação não depende do sorteio.
 
-Três valores de $k$, bem separados, mostram o que a tabela de erros já contou em número: $k=1$, o mínimo do varrimento ($k=9$), e $k=199$, perto do outro extremo.
+Uma ressalva sobre esse $k = 9$: ele foi escolhido olhando o próprio conjunto de teste, e por isso os 15,08% saem um pouco otimistas. Aqui isso serve para desenhar a curva inteira; na prática, o $k$ é escolhido sem tocar no teste, com a validação cruzada do capítulo 10.
+
+A figura a seguir põe no eixo horizontal $1/k$, que cresce com a flexibilidade: $k$ pequeno fica à direita.
+
+```{python}
+#| label: fig-erro-contra-k
+#| fig-cap: "Taxa de erro de treino e de teste do k-NN contra 1/k (escala log), da vizinhança maior (esquerda) à menor (direita). O treino chega a 0% em k=1; o teste desenha um U, com o mínimo em k=9, e nunca desce abaixo da taxa de erro de Bayes (tracejada)."
+#| fig-alt: "Gráfico de linhas com duas curvas contra 1/k em escala logarítmica. A de treino desce até zero à direita; a de teste desce, atinge um mínimo por volta de 15% e volta a subir, sempre acima de uma linha tracejada horizontal em 13%."
+inverso_k = 1 / np.array(ks)
+
+fig, ax = plt.subplots()
+ax.plot(inverso_k, erros_treino, linewidth=2, label="erro de treino")
+ax.plot(inverso_k, erros_teste, linewidth=2, label="erro de teste")
+ax.axhline(piso_bayes, color="0.45", linestyle="--", linewidth=1.5, label="taxa de erro de Bayes")
+ax.set_xscale("log")
+ax.set_xlim(inverso_k.min() * 0.8, 1.25)
+ax.set_ylim(0, None)
+ax.yaxis.set_major_formatter(lambda valor, _: f"{valor:.0%}")
+ax.set_xlabel("1/k (escala log; mais flexível →)")
+ax.set_ylabel("taxa de erro")
+ax.legend()
+plt.tight_layout()
+plt.show()
+```
+
+A figura tem uma surpresa: em boa parte da faixa de $k$, o erro de treino fica **acima** do de teste, ao contrário do que se espera de um erro medido nos próprios pontos do ajuste.
+
+```{python}
+#| label: treino-acima-do-teste
+treino_acima = int(np.sum(erros_treino > erros_teste))
+bayes_no_treino = np.mean(
+    (p_verdadeiro(X_treino[:, 0], X_treino[:, 1]) > 0.5).astype(int) != y_treino
+)
+treino_acima, round(float(bayes_no_treino), 4)
+```
+
+O erro de treino passa do de teste em 58 dos 75 valores de $k$. O erro de treino é medido em só 300 pontos, e uma taxa medida em 300 pontos oscila alguns pontos percentuais de uma amostra para outra; a de teste, medida em 20.000, quase não oscila. E como os 75 valores de $k$ usam os mesmos 300 pontos, as taxas de treino oscilam em boa parte juntas, sobretudo para valores de $k$ próximos. Nesta amostra, a oscilação foi para cima: até a regra de Bayes, que é a de menor erro esperado, erra 16,33% dos pontos de treino, contra os 13,26% que erra no quadrado inteiro. O que a figura ensina é o formato das curvas (treino caindo até zero com $k$ pequeno, teste em U), e não a posição de uma em relação à outra.
+
+## A fronteira que cada $k$ desenha
+
+Três valores de $k$ bem separados mostram o que a varredura contou em número: $k = 1$, o mínimo ($k = 9$) e $k = 199$, mais perto do outro extremo. Além dos erros, o chunk mede o quanto cada fronteira discorda da de Bayes: a fração de uma grade sobre o quadrado em que o *k*-NN e o classificador de Bayes preveem classes diferentes.
 
 ```{python}
 #| label: tres-k
@@ -124,27 +192,39 @@ k_tres = [1, k_minimo, k_grande]
 modelos_tres = [
     KNeighborsClassifier(n_neighbors=k).fit(X_treino, y_treino) for k in k_tres
 ]
+
+grade_fig = np.linspace(0, 10, 200)
+Xg, Yg = np.meshgrid(grade_fig, grade_fig)
+pontos_grade = np.column_stack([Xg.ravel(), Yg.ravel()])
+bayes_grade = (p_verdadeiro(pontos_grade[:, 0], pontos_grade[:, 1]) > 0.5).astype(int)
+
 tabela_k = pd.DataFrame(
     {
         "treino": [float(np.mean(m.predict(X_treino) != y_treino)) for m in modelos_tres],
         "teste": [float(np.mean(m.predict(X_teste) != y_teste)) for m in modelos_tres],
+        "discorda de Bayes": [
+            float(np.mean(m.predict(pontos_grade) != bayes_grade)) for m in modelos_tres
+        ],
     },
     index=[f"k={k_tres[0]}", f"k={k_tres[1]} (menor erro de teste)", f"k={k_tres[2]}"],
 )
 tabela_k.round(4)
 ```
 
-$k=1$ decora o treino (0% de erro) e erra 20,92% do teste; $k=199$ erra 26,67% do treino e 23,03% do teste, rígido demais para acompanhar a curva de $3\sin(x_1) + 5$; $k=9$ fica entre os dois em treino (14,33%) e vence os dois no teste (15,08%) — nem tão preso ao ruído de cada ponto quanto $k=1$, nem tão achatado quanto $k=199$.
+```{python}
+#| label: tres-k-menor-discordancia
+tabela_k["teste"].idxmin(), tabela_k["discorda de Bayes"].idxmin()
+```
+
+$k = 1$ decora o treino (0% de erro) e erra 20,92% do teste. $k = 199$ erra 26,67% do treino e 23,03% do teste, rígido demais para acompanhar a curva $x_2 = 3\sin(x_1) + 5$. $k = 9$ fica entre os dois no treino (14,33%) e tem o menor erro de teste dos três (15,08%, a primeira saída do `idxmin`). A última coluna conta a mesma história pela fronteira: $k = 9$ discorda da regra de Bayes em 7,77% da grade, contra 15,70% de $k = 1$ e 19,45% de $k = 199$, e é o que menos discorda dos três (a segunda saída do `idxmin`).
 
 ```{python}
 #| label: fig-fronteiras
-#| fig-cap: "Fronteiras de decisão do k-NN para k=1, k=9 e k=199 (verde), sobre os mesmos 300 pontos de treino coloridos pela classe verdadeira, com a fronteira de Bayes (roxo tracejado) por cima. k=1 dobra atrás de cada ponto; k=199 quase não acompanha a curvatura da fronteira verdadeira; k=9 é o que chega mais perto dela."
-grade_fig = np.linspace(0, 10, 200)
-Xg, Yg = np.meshgrid(grade_fig, grade_fig)
-pontos_grade = np.column_stack([Xg.ravel(), Yg.ravel()])
+#| fig-cap: "Fronteiras de decisão do k-NN para k=1, k=9 e k=199 (verde), sobre os mesmos 300 pontos de treino coloridos pela classe verdadeira, com a fronteira de Bayes (roxo tracejado) por cima. k=1 se dobra atrás de cada ponto; k=199 quase não acompanha a curvatura da fronteira verdadeira; k=9 é o que discorda menos dela."
+#| fig-alt: "Três painéis lado a lado com os mesmos pontos azuis e laranja. Em cada um, uma linha verde separa as classes: no primeiro ela é muito recortada, no segundo acompanha de perto a curva tracejada roxa em forma de onda, e no terceiro é quase lisa e se afasta da onda."
 proba_bayes = p_verdadeiro(Xg, Yg)
 
-fig, eixos = plt.subplots(1, 3, figsize=(12, 4.3), sharex=True, sharey=True)
+fig, eixos = plt.subplots(1, 3, figsize=(12, 4.6), sharex=True, sharey=True)
 for ax, k, modelo in zip(eixos, k_tres, modelos_tres):
     proba_knn = modelo.predict_proba(pontos_grade)[:, 1].reshape(Xg.shape)
     ax.scatter(
@@ -162,9 +242,20 @@ for ax, k, modelo in zip(eixos, k_tres, modelos_tres):
 eixos[0].set_ylabel("x2")
 eixos[0].plot([], [], color="#2F8F46", linewidth=2, label="fronteira k-NN")
 eixos[0].plot([], [], color="#9775FA", linestyle="--", linewidth=1.5, label="fronteira de Bayes")
-eixos[0].legend(fontsize=7, loc="lower left")
-plt.tight_layout()
+alcas, rotulos = eixos[0].get_legend_handles_labels()
+fig.legend(alcas, rotulos, loc="lower center", ncols=4, frameon=False)
+plt.tight_layout(rect=(0, 0.08, 1, 1))
 plt.show()
 ```
 
-É a mesma curva em U da seção anterior, só que medida em taxa de erro em vez de MSE: $k$ pequeno decora o treino e erra o teste por variância, $k$ grande simplifica demais e erra por viés, e o meio-termo — aqui $k=9$ — não elimina nenhuma das duas parcelas, só encontra a combinação que soma menos, sem nunca descer abaixo do piso que o classificador de Bayes marca. O compromisso é o mesmo; muda só a métrica que o mede.
+::: {.funcao}
+**`modelo.predict_proba(X)`**: em vez da classe, a probabilidade estimada de cada classe para cada linha de `X`, uma coluna por classe, na ordem de `modelo.classes_`. Aqui as classes são 0 e 1, e `[:, 1]` separa a probabilidade da classe 1.
+
+**`X_treino[y_treino == 0, 0]`**: `y_treino == 0` é uma máscara de `True`/`False`, uma por linha; antes da vírgula ela escolhe as linhas da classe 0, e o `0` depois da vírgula escolhe a primeira coluna.
+
+**`ax.contour(x, y, z, levels)`**: desenha as curvas onde `z` vale cada número de `levels`. Com `levels=[0.5]`, a curva onde a probabilidade da classe 1 é meio: a fronteira de decisão.
+
+**`fig.legend(alcas, rotulos, loc, ncols)`**: uma legenda só para a figura inteira, fora dos painéis.
+:::
+
+É o mesmo compromisso da regressão, medido em taxa de erro em vez de MSE. $k$ pequeno decora o treino e erra o teste por variância. $k$ grande simplifica demais e erra por viés. O meio-termo, aqui $k = 9$, erra menos no teste sem descer abaixo do piso de Bayes. Na classificação, a taxa de erro não se decompõe exatamente numa soma de viés ao quadrado e variância, como o MSE, mas o formato do compromisso, com a curva de teste em U, é o mesmo.

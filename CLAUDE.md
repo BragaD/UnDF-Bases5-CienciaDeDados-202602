@@ -17,7 +17,7 @@ O que existe hoje:
 
 ### Antes de escrever um capítulo
 
-**Leia `content/cap06/` inteiro primeiro.** Foi o primeiro capítulo escrito sob a spec do ISLP, e fixa a forma: abertura de seção sem "nesta seção veremos", o chunk de setup aplicando `estilo-figuras.mplstyle`, a posição dos callouts `::: {.conceito}` e `::: {.exemplo}`. Um capítulo novo que copiar essa forma economiza rodadas de revisão; um que reinventar a forma provavelmente repete um erro que o cap. 6 já pagou.
+**Leia `content/cap06/` inteiro primeiro.** Foi o primeiro capítulo escrito sob a spec do ISLP, e fixa a forma: abertura de seção sem "nesta seção veremos", o chunk de setup aplicando `estilo-figuras.mplstyle`, a posição dos callouts `::: {.conceito}` e `::: {.exemplo}`. Um capítulo novo que copiar essa forma economiza rodadas de revisão; um que reinventar a forma provavelmente repete um erro que o cap. 6 já pagou. **Exceção:** as aberturas do cap. 6 que começam por "A seção anterior fechou…" são ponte forçada — o vício que a regra editorial, abaixo, proíbe. Copie a forma, não essas frases.
 
 **Todo número afirmado na prosa sai da saída de um chunk.** Duas exceções, e só duas:
 
@@ -101,7 +101,23 @@ Nenhum `.qmd` de `content/` diz que houve mudança de abordagem, que um capítul
 
 É a mesma disciplina que já tirou do livro a explicação de Shift+Enter, que foi parar no onboarding do Colab: **texto sobre a ferramenta ou sobre o processo não é texto sobre o conteúdo.**
 
-`test_o_conteudo_nao_comenta_a_propria_escrita`, em `tests/test_estrutura.py`, guarda isso com uma lista curta de padrões ancorados no material como sujeito. Falso positivo se corrige editando `META_COMENTARIO` **com o motivo escrito**, nunca silenciando o teste. Os padrões são estreitos de propósito: o capítulo 5 diz "abordagem anterior" e "passou a ser" falando de gradiente descendente, e um padrão frouxo os pegaria.
+### Nem meta-texto sobre o livro-fonte, nem pontes forçadas
+
+Segundo pedido do autor, que estende o primeiro: **o foco é o conteúdo e a didática.** O texto não compara o material com o ISLP, não diz o que o material tem ou deixa de ter, não explica por que algo entrou de tal forma, nem descreve como o livro de referência está organizado. A única menção ao livro-fonte na prosa é o callout de correspondência; o resto é ciência de dados.
+
+O que **não** fazer (frases reais, já publicadas):
+
+- *"É essa pergunta que abre o ISLP, com o exemplo que também abre esta seção: `Advertising`"* — fala da organização do livro-fonte, não da pergunta.
+- *"A função exata que os autores usaram para simular esses pontos não está disponível fora do pacote `ISLP` do R, que este material não instala."* — explica uma limitação do material e o que ele instala.
+
+O mesmo vale para **pontes forçadas** — a abertura que resume o fim da seção anterior antes de chegar ao assunto:
+
+- *"O capítulo anterior fechou com `X` e `y` prontos, os dois ainda como `DataFrame` e `Series` — rótulos de coluna, …"*
+- *"A seção anterior fechou perguntando o que significa estimar uma função a partir de dado, …"*
+
+A seção abre pelo **assunto**: a pergunta, o dado, o fenômeno. Remissão a outra seção é legítima quando carrega conteúdo que o leitor precisa ali ("a taxa de erro de teste, definida na seção 7.7"), não como costura narrativa entre páginas. Na dúvida, apague a frase: se o parágrafo continua de pé, ela era ponte.
+
+`test_o_conteudo_nao_comenta_a_propria_escrita`, em `tests/test_estrutura.py`, guarda a parte sobre a escrita com uma lista curta de padrões ancorados no material como sujeito. Falso positivo se corrige editando `META_COMENTARIO` **com o motivo escrito**, nunca silenciando o teste. Os padrões são estreitos de propósito: o capítulo 5 diz "abordagem anterior" e "passou a ser" falando de gradiente descendente, e um padrão frouxo os pegaria. Meta-texto sobre o ISLP e pontes forçadas **não** têm teste — são cobrados pelos revisores (`proofreader`, `pedagogy-reviewer`, `humanize-auditor`; INV-13 em `.claude/rules/content-invariants.md`).
 
 ## Visão geral
 

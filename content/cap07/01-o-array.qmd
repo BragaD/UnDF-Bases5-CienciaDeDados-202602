@@ -4,7 +4,7 @@
 Esta seção corresponde à seção 2.3 de @james2023.
 :::
 
-O capítulo anterior fechou com `X` e `y` prontos, os dois ainda como `DataFrame` e `Series` — rótulos de coluna, índice, tudo o que o `pandas` guarda sobre a tabela. A partir daqui o objeto que aparece o tempo todo é outro: todo estimador do `scikit-learn` devolve um `ndarray` — um coeficiente ajustado, uma previsão, uma probabilidade —, e ninguém apresentou esse objeto ainda. Este é o array do `numpy`: o que ele guarda, como se fatia, como se filtra, e o que significa somar "ao longo de um eixo".
+Os estimadores do `scikit-learn` devolvem seus resultados em arrays do `numpy`: os coeficientes ajustados, as previsões e as probabilidades chegam como `ndarray`. O array se parece com uma lista Python, mas guarda um tipo só, fatia sem copiar e faz conta sobre todos os elementos de uma vez, sem laço.
 
 ```{python}
 #| label: setup
@@ -18,7 +18,7 @@ plt.style.use("estilo-figuras.mplstyle")
 
 ## O array, e o tipo único que ele impõe
 
-Um `np.array` nasce de uma lista, mas não herda a flexibilidade dela: uma lista Python guarda qualquer mistura de tipos, um array guarda só um.
+Um `np.array` nasce de uma lista, mas não herda a flexibilidade dela: uma lista Python guarda qualquer mistura de tipos, e um array guarda só um.
 
 ```{python}
 #| label: array-de-lista
@@ -26,7 +26,13 @@ quartos = np.array([2, 3, 1, 4, 2])
 quartos, quartos.dtype
 ```
 
-`quartos` guarda os mesmos cinco números da lista, mas ganha um atributo que a lista não tem: `dtype`, o tipo único de todo elemento do array — aqui, `int64`. Basta um elemento vir com casa decimal para promover o array inteiro:
+::: {.funcao}
+**`np.array(lista)`**: cria um array a partir de uma lista (ou de uma lista de listas, para duas dimensões).
+
+**`arr.dtype`**: o tipo único de todos os elementos do array.
+:::
+
+`quartos` guarda os mesmos cinco números da lista, e ganha um atributo que a lista não tem: `dtype`, aqui `int64`. Basta um elemento vir com uma casa decimal para promover o array inteiro:
 
 ```{python}
 #| label: tipo-unico
@@ -34,7 +40,7 @@ misto = np.array([1, 2, 3.0])
 misto.dtype
 ```
 
-`misto.dtype` devolve `float64`, não uma mistura de `int64` e `float64` elemento a elemento — os dois primeiros números também viraram ponto flutuante, mesmo tendo entrado como inteiros. Uma lista de listas vira um array de duas dimensões, e `shape` guarda o formato:
+O resultado é `float64` para o array todo, não uma mistura de `int64` e `float64` elemento a elemento. Os dois primeiros números também viraram ponto flutuante, mesmo tendo entrado como inteiros. Uma lista de listas vira um array de duas dimensões, e `shape` guarda o formato:
 
 ```{python}
 #| label: array-2d
@@ -42,11 +48,15 @@ matriz = np.array([[1, 2], [3, 4], [5, 6]])
 matriz.shape, matriz.dtype
 ```
 
-`(3, 2)` diz três linhas e duas colunas; `dtype`, de novo, é um só para o array inteiro.
+::: {.funcao}
+**`arr.shape`**: o formato do array, uma tupla com o tamanho de cada dimensão. `(3, 2)` são três linhas e duas colunas; `(5,)` é uma dimensão só, com cinco elementos.
+:::
+
+Três linhas e duas colunas, e de novo um `dtype` só para o array inteiro.
 
 ## Fatiar sem copiar: a vista
 
-Fatiar um array usa a mesma notação `[início:fim]` de uma lista Python, mas o resultado se comporta diferente.
+Fatiar um array usa a mesma notação `[início:fim]` de uma lista Python, mas o resultado se comporta de outro jeito.
 
 ```{python}
 #| label: fatia-e-vista
@@ -56,7 +66,7 @@ fatia[0] = 999
 original
 ```
 
-Alterar `fatia[0]` também mudou `original`. A fatia não é uma cópia dos números: é outra janela sobre o mesmo bloco de memória. É a armadilha número um de quem chega de listas, onde `lista[1:3]` sempre devolve uma lista nova, sem ligação nenhuma com a original. Quando o array de origem precisa continuar intocado, a fatia pede `.copy()`:
+O que aconteceu com `original` quando só `fatia` foi alterada? Mudou também. A fatia é outra janela sobre o mesmo bloco de memória, e não uma cópia dos números. Quem chega das listas cai nessa armadilha primeiro, porque lá `lista[1:3]` sempre devolve uma lista nova, sem ligação nenhuma com a original. Quando o array de origem precisa continuar intocado, a fatia pede `.copy()`:
 
 ```{python}
 #| label: fatia-copia
@@ -66,15 +76,19 @@ copia[0] = 999
 original2
 ```
 
-Desta vez `original2` sai como entrou — `.copy()` força um bloco de memória novo, separado do original.
+::: {.funcao}
+**`arr.copy()`**: devolve um array novo, num bloco de memória separado, com os mesmos valores.
+:::
+
+Desta vez `original2` sai como entrou.
 
 ::: {.conceito}
-Fatia (`x[1:3]`) devolve uma **vista**: o mesmo bloco de memória, só enxergado por outra janela. Indexação por **máscara booleana** ou por **lista de posições** (`x[[0, 2]]`) sempre devolve uma **cópia**. `.copy()` força uma cópia em qualquer um dos dois casos, quando o array original precisa ficar fora de alcance.
+Fatia (`x[1:3]`) devolve uma **vista**: o mesmo bloco de memória, enxergado por outra janela. Indexação por **máscara booleana** ou por **lista de posições** (`x[[0, 2]]`) sempre devolve uma **cópia**. `.copy()` força uma cópia em qualquer caso, quando o array original precisa ficar fora de alcance.
 :::
 
 ## A máscara booleana no lugar do laço
 
-Uma comparação entre um array e um número não compara o array inteiro de uma vez: compara elemento a elemento, e devolve um array de `True`/`False` do mesmo tamanho.
+Uma comparação entre um array e um número acontece elemento a elemento, e devolve um array de `True`/`False` do mesmo tamanho.
 
 ```{python}
 #| label: mascara-condicao
@@ -83,18 +97,18 @@ mascara = valores > 0
 mascara
 ```
 
-Usar esse array de booleanos para indexar o array original — `valores[mascara]` — filtra os elementos onde a máscara vale `True`:
+Indexar o array original com esse array de booleanos, `valores[mascara]`, filtra os elementos onde a máscara vale `True`:
 
 ```{python}
 #| label: mascara-filtragem
 valores[mascara]
 ```
 
-É o mesmo resultado que um laço `for` com um `if` dentro produziria, elemento a elemento, só que sem escrever o laço: a máscara descreve a condição uma vez, e o `numpy` aplica sobre o array inteiro.
+Um laço `for` com um `if` dentro produziria o mesmo resultado, elemento a elemento. A máscara descreve a condição uma vez, e o `numpy` a aplica sobre o array inteiro.
 
 ## A forma de uma redução: `axis`
 
-Somar os elementos de uma matriz aceita um argumento que muda o que "somar" quer dizer: `axis=0` percorre as linhas, coluna por coluna; `axis=1` percorre as colunas, linha por linha. Sobre uma matriz com aluguel e área de quatro imóveis:
+Somar os elementos de uma matriz aceita um argumento que muda o que "somar" quer dizer. `axis=0` percorre as linhas, coluna por coluna; `axis=1` percorre as colunas, linha por linha. Sobre uma matriz com aluguel e área de quatro imóveis:
 
 ```{python}
 #| label: precos-matriz
@@ -115,7 +129,13 @@ soma_colunas = precos.sum(axis=0)
 soma_colunas.shape, soma_colunas
 ```
 
-A forma sai `(2,)` — um total por **coluna**: 5050,0 de aluguel somado, 260,0 de área somada, os quatro imóveis colapsados em uma soma cada. Somando ao longo de `axis=1`:
+::: {.funcao}
+**`arr.sum(axis)`** e **`arr.mean(axis)`**: somam ou tiram a média dos elementos. Sem `axis`, reduzem o array inteiro a um número.
+
+- `axis`: o eixo que desaparece na redução. Com `0`, sobra um resultado por coluna; com `1`, um por linha.
+:::
+
+Um total por **coluna**, e por isso a forma `(2,)`: 5.050,0 de aluguel somado e 260,0 de área somada, os quatro imóveis colapsados numa soma cada. Somando ao longo de `axis=1`:
 
 ```{python}
 #| label: soma-axis1
@@ -123,9 +143,9 @@ soma_linhas = precos.sum(axis=1)
 soma_linhas.shape, soma_linhas
 ```
 
-A forma agora sai `(4,)` — o oposto: um total por **linha**, aluguel mais área de cada imóvel, os dois números de cada linha colapsados em um só. É a confusão mais comum de quem começa com `axis`: o número que ele nomeia é o eixo que **desaparece** na redução, não o eixo que sobra.
+Agora são quatro números, um por **linha**: aluguel mais área de cada imóvel, uma soma que aqui só mostra a forma do resultado, porque reais e metros quadrados não se somam. A confusão mais comum de quem começa com `axis` mora aqui. O número que ele nomeia é o eixo que **desaparece** na redução, e não o eixo que sobra.
 
-`mean` segue a mesma regra de forma que `sum` — só troca soma por média:
+`mean` segue a mesma regra, trocando soma por média:
 
 ```{python}
 #| label: media-axis0
@@ -133,7 +153,7 @@ media_colunas = precos.mean(axis=0)
 media_colunas.shape, media_colunas
 ```
 
-Forma `(2,)`, de novo uma média por **coluna**: 1262,5 de aluguel médio, 65,0 de área média.
+1.262,5 de aluguel médio e 65,0 de área média, uma média por coluna.
 
 ```{python}
 #| label: media-axis1
@@ -141,11 +161,11 @@ media_linhas = precos.mean(axis=1)
 media_linhas.shape, media_linhas
 ```
 
-Forma `(4,)`, uma média por **linha** — um número por imóvel. É a redução que mais volta nos capítulos seguintes: média de coluna para padronizar uma variável, média de linha para resumir uma observação.
+E aqui, um número por imóvel, com a mesma ressalva de unidade. A média por coluna é a que mais volta nos capítulos seguintes: é com ela que se padroniza uma variável.
 
 ## Sorteando com semente: o `rng`
 
-Todo sorteio deste material usa um gerador com semente fixa e explícita, passado adiante em vez de guardado num estado global. Sem semente, cada renderização da página sortearia números diferentes — e as figuras que dependem deles mudariam a cada vez, sem que o texto ao redor mudasse junto.
+Um sorteio reprodutível precisa de um gerador com semente fixa e explícita. Sem semente, cada renderização da página sortearia números diferentes, e as figuras que dependem deles mudariam a cada vez sem que o texto ao redor mudasse junto.
 
 ```{python}
 #| label: rng-reproducivel
@@ -154,7 +174,13 @@ rng_b = np.random.default_rng(7)
 np.array_equal(rng_a.normal(size=3), rng_b.normal(size=3))
 ```
 
-Duas instâncias criadas com a mesma semente sorteiam exatamente a mesma sequência — é essa garantia que faz `rng = np.random.default_rng(7)` valer como semente fixa do capítulo inteiro, a partir daqui:
+::: {.funcao}
+**`np.random.default_rng(semente)`**: cria um gerador de números aleatórios. Dois geradores com a mesma semente sorteiam a mesma sequência.
+
+**`np.array_equal(a, b)`**: `True` se os dois arrays têm o mesmo formato e os mesmos valores.
+:::
+
+Duas instâncias criadas com a mesma semente sorteiam exatamente a mesma sequência. É essa garantia que faz `rng = np.random.default_rng(7)` valer como semente fixa do capítulo inteiro:
 
 ```{python}
 #| label: rng-normal
@@ -170,11 +196,18 @@ amostra
 rng.choice(["sim", "não"], size=5)
 ```
 
-A figura a seguir usa as duas coisas desta seção ao mesmo tempo: duas coordenadas sorteadas com `rng.normal`, e uma máscara booleana que decide a cor de cada ponto.
+::: {.funcao}
+**`rng.normal(loc, scale, size)`**: sorteia `size` valores de uma normal com média `loc` e desvio padrão `scale` (por padrão, 0 e 1).
+
+**`rng.choice(valores, size)`**: sorteia `size` elementos de `valores`, com reposição.
+:::
+
+A figura a seguir junta as duas coisas desta seção: coordenadas sorteadas com `rng.normal`, e uma máscara booleana que decide a cor de cada ponto.
 
 ```{python}
 #| label: fig-nuvens-mascara
 #| fig-cap: "Duzentos pontos sorteados com `rng.normal`, coloridos por uma máscara booleana sobre a distância à origem"
+#| fig-alt: "Nuvem de duzentos pontos em torno da origem, em duas cores: os pontos do centro numa cor e os mais afastados, formando um anel irregular, na outra."
 x = rng.normal(size=200)
 y = rng.normal(size=200)
 distancia = np.sqrt(x**2 + y**2)
@@ -186,20 +219,29 @@ ax.scatter(x[mascara_fig], y[mascara_fig], label="além de 1,5 da origem")
 ax.set_xlabel("x")
 ax.set_ylabel("y")
 ax.legend()
+ax.set_aspect("equal")
 plt.tight_layout()
 plt.show()
 ```
 
+::: {.funcao}
+**`np.sqrt(arr)`**: a raiz quadrada de cada elemento. Operadores como `**` e `+` também agem elemento a elemento.
+
+**`~mascara`**: inverte uma máscara, trocando `True` por `False` e vice-versa.
+
+**`ax.set_aspect("equal")`**: a mesma escala nos dois eixos, para que um círculo apareça como círculo.
+:::
+
 ```{python}
 #| label: contagem-mascara
-mascara_fig.sum(), (~mascara_fig).sum()
+int(mascara_fig.sum()), int((~mascara_fig).sum())
 ```
 
-55 dos 200 pontos ficam a mais de 1,5 da origem; os outros 145 ficam mais perto — a mesma máscara que filtrou `valores` mais acima, agora decidindo a cor de um gráfico em vez de filtrar uma lista de números.
+Somar uma máscara conta quantos `True` ela tem, porque, numa soma, `True` vale 1. 55 dos 200 pontos ficam a mais de 1,5 da origem, e os outros 145 ficam mais perto. É a mesma máscara que filtrou `valores` mais acima, agora escolhendo a cor de um gráfico.
 
 ## Do `DataFrame` para o array
 
-O capítulo anterior separou `alugueis` em `X`, os preditores, e `y`, o alvo — os dois como objetos do `pandas`. Aqui `X` volta reduzido às quatro colunas numéricas que já vinham prontas — sem os cinco `dummies` de cidade que a seção 6.6 acrescenta depois —, só para a linha caber numa página:
+Uma tabela de `pandas` guarda, além dos números, o nome de cada coluna e o índice de cada linha. Em `alugueis`, quatro colunas numéricas descrevem cada imóvel (os preditores, `X`) e o aluguel é o que se quer prever (a resposta, `y`):
 
 ```{python}
 #| label: leitura-x-y
@@ -218,11 +260,15 @@ y_array = y.to_numpy()
 type(X_array), X_array.shape, X_array.dtype, type(y_array), y_array.shape, y_array.dtype
 ```
 
-Mesmas formas, `(10692, 4)` e `(10692,)`, mas o `DataFrame` virou `ndarray` e a `Series` virou `ndarray` também — e junto com o tipo foram embora os nomes de coluna e o índice. A primeira linha de `X_array`,
+::: {.funcao}
+**`df.to_numpy()`** e **`serie.to_numpy()`**: devolvem os valores de uma tabela ou de uma coluna como `ndarray`, sem nomes de coluna nem índice.
+:::
+
+As formas continuam `(10692, 4)` e `(10692,)`, mas o `DataFrame` e a `Series` viraram `ndarray`, e com o tipo foram embora os nomes de coluna e o índice. A primeira linha de `X_array`,
 
 ```{python}
 #| label: primeira-linha
 X_array[0]
 ```
 
-chega como quatro números soltos — 70, 2, 1, 1 — sem dizer mais qual era área, qual era quarto, qual era banheiro, qual era vaga; só a ordem em que as colunas foram escolhidas continua carregando esse significado. É o mesmo tipo de objeto, sem nome nenhum de coluna, que sai do outro lado de um estimador do `scikit-learn`: um coeficiente ajustado, uma previsão, uma probabilidade. A próxima seção volta à pergunta que abre o capítulo: o que significa estimar uma função a partir de dado, e o que muda entre prever e explicar.
+chega como quatro números soltos (70, 2, 1, 1), sem dizer qual número é a área, quais são os quartos, os banheiros e as vagas. Só a ordem em que as colunas foram escolhidas guarda esse significado. É nesse formato, sem nome de coluna, que um estimador do `scikit-learn` faz as contas e devolve os resultados.

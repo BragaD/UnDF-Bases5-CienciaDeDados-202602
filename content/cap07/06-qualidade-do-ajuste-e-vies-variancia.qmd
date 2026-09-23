@@ -4,7 +4,7 @@
 Esta seção corresponde às seções 2.2.1 e 2.2.2 de @james2023.
 :::
 
-A seção anterior prometeu medir a qualidade de um ajuste de regressão a sério, com o erro quadrático médio. Falta dizer uma coisa antes de medir qualquer coisa: **onde** esse erro é medido decide se o número significa alguma coisa.
+Dois ajustes diferentes aos mesmos dados: qual é melhor? A resposta natural é medir quanto cada um erra e ficar com o que erra menos. Mas **onde** esse erro é medido decide se o número quer dizer alguma coisa.
 
 ```{python}
 #| label: setup
@@ -22,23 +22,21 @@ plt.style.use("estilo-figuras.mplstyle")
 
 ## O erro quadrático médio, e a pergunta que interessa
 
-Dado um ajuste $\hat f$ sobre $n$ pares observados, o erro quadrático médio resume o quanto ele erra:
+Na regressão, a medida mais usada é o **erro quadrático médio** (MSE, do inglês *mean squared error*). Dado um ajuste $\hat f$ e $n$ observações $(x_i, y_i)$, ele é a média dos quadrados das diferenças entre o observado e o previsto:
 
 $$
 \text{MSE} = \frac{1}{n}\sum_{i=1}^{n} \left(y_i - \hat f(x_i)\right)^2
 $$
 
-A seção 7.2 decompôs o erro esperado de qualquer previsão em uma parte redutível — a distância entre $\hat f$ e a $f$ verdadeira, que um ajuste melhor encolhe — e uma parte irredutível, $\mathrm{Var}(\epsilon)$, que nenhum ajuste toca. O MSE tenta medir essa primeira parte, só que de um jeito que engana se medido no lugar errado: se $x_i$ e $y_i$ são os mesmos pontos que ajustaram $\hat f$, nada impede que $\hat f$ passe exatamente por cada um deles, sem ter aprendido nada sobre a relação entre $X$ e $Y$ — só decorado as respostas que já tinha. A seção 7.3 já deu nome a esse sintoma: *overfitting*, o ajuste que persegue o ruído de uma amostra específica em vez da relação que a gerou. Um MSE de treino baixo não distingue essas duas coisas: um ajuste que aprendeu a relação e um ajuste que decorou a amostra podem chegar ao mesmo número ali.
+Se $x_i$ e $y_i$ são os mesmos pontos usados para construir $\hat f$, esse é o **MSE de treino**, e ele engana. Nada impede que $\hat f$ passe exatamente por cada ponto de treino sem ter aprendido nada sobre a relação entre $X$ e $Y$, só decorando as respostas que já tinha. É o *overfitting*, o ajuste que segue o ruído de uma amostra em vez da relação que a gerou. Um MSE de treino baixo não distingue um ajuste que aprendeu a relação de um que decorou a amostra.
 
-A pergunta que interessa nunca é "quão perto $\hat f$ chega dos pontos que o ajustaram", e sim "quão perto $\hat f$ chega de um ponto que ele nunca viu". Responder essa segunda pergunta exige guardar parte do dado de fora do ajuste, só para medir contra ela depois.
+A pergunta que interessa é outra: quão perto $\hat f$ chega de um ponto que ele **nunca viu**? O **MSE de teste**, medido em observações que ficaram de fora do ajuste, responde a ela. Ele estima o erro esperado inteiro da seção 7.2, a parte redutível mais a irredutível, $\mathrm{Var}(\varepsilon)$. Como a parte irredutível é a mesma para qualquer método, comparar o MSE de teste de dois ajustes é comparar o quanto cada um deixa de erro redutível.
 
 ## Separando treino e teste: `train_test_split`
 
-`train_test_split`, do `scikit-learn`, faz exatamente essa separação: reserva uma fração do dado como **teste** — nunca usada para ajustar nada, só para medir depois — e deixa o resto como **treino**. A partir daqui, todo ajuste deste material passa por essa divisão antes de qualquer MSE ser calculado.
+Para ter um conjunto de teste, basta separá-lo antes de ajustar qualquer coisa: uma fração dos dados fica reservada como **teste**, sem nunca entrar em ajuste nenhum, e o resto vira **treino**. É essa separação que permite julgar um ajuste pelo erro em dados novos.
 
-## Uma f exata, porque desta vez o dado é simulado
-
-Ainda falta uma peça para tornar a comparação honesta: mesmo com treino e teste separados, o MSE de teste mede a distância até $Y$, não até $f$ — e $Y$ carrega o ruído $\epsilon$ que nenhum ajuste alcança. Para ver o quanto da flexibilidade de um ajuste é real, e não só o ajuste perseguindo esse ruído, seria preciso conhecer a própria $f$ que gerou o dado — o que a seção 7.2 já observou ser impossível com `Advertising` ou mesmo com `Income1`, onde só uma estimativa suave de $f$ estava disponível. Um dado **simulado**, gerado por uma função escolhida por quem escreve, resolve isso: a $f$ verdadeira deixa de ser estimada e passa a ser conhecida, número por número.
+Para ver o que a flexibilidade de um ajuste tem de real, e o que é só o ajuste seguindo o ruído, ainda falta uma peça: conhecer a própria $f$. Com dados reais isso é impossível. Com dados **simulados**, gerados por uma função escolhida por quem simula, a $f$ verdadeira é conhecida número por número.
 
 ```{python}
 #| label: simulacao
@@ -59,15 +57,24 @@ x_treino, x_teste, y_treino, y_teste = train_test_split(
 x_treino.shape, x_teste.shape
 ```
 
-Trezentos pontos, gerados por uma função conhecida — soma de uma tendência linear com uma oscilação de seno — mais um ruído normal com desvio padrão `ruido_padrao = 1.5`, também escolhido, portanto também conhecido. `train_test_split` divide os trezentos em 210 de treino e 90 de teste, na proporção `test_size=0.3` pedida. `random_state=7` fixa qual ponto cai em cada lado — é a mesma semente `7` do capítulo inteiro, só que passada do jeito que esta função em particular pede: um inteiro, não o `rng = np.random.default_rng(7)` usado para gerar `x` e `ruido` duas linhas acima. As duas sementes fixam sorteios diferentes, e as duas precisam estar fixas para o capítulo reproduzir sempre a mesma figura.
+::: {.funcao}
+**`rng.uniform(inicio, fim, size)`**: sorteia `size` valores uniformes entre `inicio` e `fim` (entre 0 e 1, sem os dois primeiros argumentos). O `rng` e o `rng.normal` são os mesmos da seção 7.5.
 
-`ruido_padrao` não é um detalhe descartável: é o desvio padrão de $\epsilon$, e $\text{Var}(\epsilon) = \text{ruido\_padrao}^2$ é exatamente o piso irredutível que a seção 7.2 descreveu sem poder desenhar. Aqui dá para desenhar, porque foi quem escreveu este material que escolheu o número.
+**`np.sort(arr)`**: devolve os valores de `arr` em ordem crescente.
 
-Os 90 pontos de teste bastam para o que vem a seguir: comparar três ajustes específicos entre si. Não bastam para a varredura que vem mais adiante nesta seção, que precisa medir com precisão se uma curva cruza ou não o piso — e o texto volta a esse ponto quando chegar lá.
+**`train_test_split(x, y, test_size, random_state)`**: sorteia quais observações vão para o teste e devolve, nesta ordem, os preditores de treino, os de teste, as respostas de treino e as de teste.
+
+- `test_size=0.3`: 30% das observações vão para o teste.
+- `random_state=7`: a semente do sorteio, para que a divisão saia sempre a mesma.
+:::
+
+Trezentos pontos gerados por uma função conhecida, uma tendência linear somada a uma oscilação de seno, mais um ruído normal com desvio padrão `ruido_padrao = 1.5`. A divisão deixa 210 pontos de treino e 90 de teste. As duas sementes, a do `rng` e a do `random_state`, fixam sorteios diferentes, e as duas precisam estar fixas para a figura sair sempre igual.
+
+`ruido_padrao` é o desvio padrão de $\varepsilon$, e portanto $\mathrm{Var}(\varepsilon) = 1{,}5^2 = 2{,}25$: o piso irredutível da seção 7.2, que aqui se conhece porque foi escolhido na simulação.
 
 ## Três ajustes, três flexibilidades
 
-Com $f$ verdadeira conhecida, dá para comparar ajustes de rigidez bem diferente contra ela, não só contra o dado. O mais rígido dos três é uma reta — `LinearRegression`, a mesma ferramenta que a seção 7.3 usou em `Income2`. Os outros dois são *smoothing splines*: uma curva suave, ajustada minimizando a soma dos resíduos ao quadrado mais uma penalidade sobre a curvatura da própria curva, controlada por um parâmetro $\lambda$. Quanto maior $\lambda$, mais a curvatura pesa contra o ajuste e mais a curva se aproxima de uma reta; quanto menor $\lambda$, menos a curvatura pesa, e mais livre a curva fica para dobrar atrás de cada ponto.
+Com a $f$ verdadeira conhecida, dá para comparar ajustes de rigidez bem diferente contra ela, e não só contra os dados. O mais rígido é uma reta, com `LinearRegression`. Os outros dois são *smoothing splines*: curvas suaves ajustadas minimizando a soma dos quadrados dos resíduos mais uma penalidade sobre a curvatura, com o peso da penalidade dado por um parâmetro $\lambda$. Quanto maior $\lambda$, mais a curvatura é punida e mais a curva se aproxima de uma reta; quanto menor $\lambda$, mais livre a curva fica para se dobrar atrás de cada ponto.
 
 ```{python}
 #| label: tres-ajustes
@@ -99,32 +106,59 @@ resultado = pd.DataFrame(
 resultado.round(2)
 ```
 
+::: {.funcao}
+**`np.argsort(arr)`**: as posições que põem `arr` em ordem crescente. `x_treino[ordem]` reordena o array por essas posições; a mesma `ordem` aplicada a `y_treino` mantém cada $y$ junto do seu $x$.
+
+**`arr.reshape(-1, 1)`**: transforma um array de uma dimensão numa tabela de uma coluna só. O `LinearRegression` pede os preditores nesse formato, uma coluna por preditor; o `-1` quer dizer "quantas linhas forem necessárias".
+
+**`make_smoothing_spline(x, y, lam)`**: ajusta um *smoothing spline* aos pontos, que precisam vir com `x` em ordem crescente. `lam` é o $\lambda$ da penalidade. Devolve uma função: `spline_moderado(x_teste)` dá a previsão em cada ponto de `x_teste`.
+:::
+
+```{python}
+#| label: tres-ajustes-comparacao
+resultado["teste"].idxmin(), resultado["treino"].is_monotonic_decreasing
+```
+
+::: {.funcao}
+**`serie.is_monotonic_decreasing`**: `True` se cada valor é menor ou igual ao anterior.
+:::
+
 ```{python}
 #| label: fig-tres-ajustes
-#| fig-cap: "Trezentos pontos simulados a partir de uma f conhecida (linha azul), divididos em treino (círculos) e teste (triângulos), com três ajustes de flexibilidade crescente: a reta mal acompanha a curva; o spline muito flexível dobra atrás de cada ponto de treino, inclusive os que são só ruído."
+#| fig-cap: "Trezentos pontos simulados a partir de uma f conhecida (azul), divididos em treino (círculos cinza) e teste (triângulos cinza), com três ajustes de flexibilidade crescente. A reta mal acompanha a curva; o spline muito flexível se dobra atrás de cada ponto de treino, copiando também o ruído de cada um."
+#| fig-alt: "Pontos em forma de onda crescente, com a curva verdadeira, uma reta que corta a onda, uma curva suave que a acompanha e uma curva muito recortada que segue cada ponto."
 grade = np.linspace(x.min(), x.max(), 400)
 
 fig, ax = plt.subplots()
-ax.scatter(x_treino, y_treino, s=14, alpha=0.5, label="treino")
-ax.scatter(x_teste, y_teste, s=20, alpha=0.6, marker="^", label="teste")
-ax.plot(grade, f_verdadeiro(grade), linewidth=2.5, label="f verdadeiro")
-ax.plot(grade, reta.predict(grade.reshape(-1, 1)), linewidth=2, label="reta")
-ax.plot(grade, spline_moderado(grade), linewidth=2, label="spline moderado")
-ax.plot(grade, spline_flexivel(grade), linewidth=2, label="spline muito flexível")
+ax.scatter(x_treino, y_treino, s=14, alpha=0.5, color="#7A8894", label="treino")
+ax.scatter(
+    x_teste, y_teste, s=20, alpha=0.6, color="#7A8894", marker="^", label="teste"
+)
+ax.plot(grade, f_verdadeiro(grade), color="C0", linewidth=2.5, label="f verdadeira")
+previsao_reta = reta.predict(grade.reshape(-1, 1))
+ax.plot(grade, previsao_reta, color="C1", linewidth=2, label="reta")
+ax.plot(
+    grade, spline_moderado(grade), color="C2", linewidth=2, label="spline moderado"
+)
+ax.plot(
+    grade, spline_flexivel(grade), color="C3", linewidth=2,
+    label="spline muito flexível",
+)
 ax.set_xlabel("x")
 ax.set_ylabel("y")
-ax.legend(fontsize=8, ncols=2)
+ax.set_xlim(0, 10)
+ax.legend(ncols=2)
 plt.tight_layout()
 plt.show()
 ```
 
-A reta erra 5,83 de MSE no treino e 5,28 no teste: rígida demais para acompanhar a oscilação do seno, ela erra parecido nos dois lados, porque a forma que assumiu — reta — está errada em qualquer amostra, treino ou teste. O spline muito flexível é o oposto: 1,05 no treino, quase decorando cada ponto, contra 2,77 no teste — o ajuste que mais se aproxima do dado observado é o que mais piora quando confrontado com dado novo. O spline moderado fica entre os dois e vence os dois no teste: 1,66 no treino, 2,31 no teste — nem tão rígido quanto a reta, nem tão perseguidor do ruído quanto o spline muito flexível.
+A reta erra 5,83 de MSE no treino e 5,28 no teste. Rígida demais para acompanhar a oscilação do seno, ela erra parecido nos dois conjuntos, porque a forma que assumiu está errada em qualquer amostra. O spline muito flexível faz o oposto: 1,05 no treino, quase decorando cada ponto, contra 2,77 no teste. O spline moderado tem o menor MSE de teste dos três (`idxmin` aponta para ele), com 1,66 no treino e 2,31 no teste.
 
-Repare que o MSE de **treino** só cai conforme a flexibilidade cresce — 5,83, depois 1,66, depois 1,05, estritamente decrescente —, enquanto o de **teste** cai e depois sobe: 5,28, depois 2,31, depois 2,77. É exatamente esse formato, treino sempre caindo e teste em U, que a próxima figura mede com uma varredura bem mais fina do que só três pontos.
+A comparação da segunda saída mostra o formato: o MSE de treino só cai conforme a flexibilidade cresce (`is_monotonic_decreasing` é `True`: 5,83, 1,66, 1,05), enquanto o de teste cai e depois sobe (5,28, 2,31, 2,77). Treino sempre caindo, teste em U: a varredura a seguir mostra esse formato com muito mais que três pontos.
 
 ## A curva em U, e o piso que ela não fura
 
-Três ajustes já bastam para sugerir o formato em U do MSE de teste; uma varredura em $\lambda$, do mais rígido ao mais flexível, mostra a curva inteira. Só que o MSE de teste, medido sobre poucos pontos, é ele mesmo uma variável aleatória — com os 90 pontos já separados, ele pode cair abaixo do piso irredutível por sorte da amostra, sem que o piso tenha sido furado de verdade. O próprio @james2023 evita esse problema medindo a curva de teste sobre um conjunto de teste bem maior; a mesma simulação que dá acesso a $f$ permite gerar um.
+Uma varredura em $\lambda$, do mais rígido ao mais flexível, desenha a curva inteira. Só que o MSE de teste, medido sobre poucos pontos, também varia com o sorteio: com só 90 pontos, ele pode cair abaixo do piso irredutível por sorte da amostra, sem que o piso tenha sido furado de verdade. Como a simulação dá acesso a $f$, dá para gerar um conjunto de teste muito maior, da mesma $f$ e com o mesmo ruído.
 
 ```{python}
 #| label: teste-grande
@@ -135,7 +169,7 @@ y_teste_grande = f_verdadeiro(x_teste_grande) + ruido_teste_grande
 x_teste_grande.shape
 ```
 
-Cinco mil pontos novos, da mesma $f$ e do mesmo `ruido_padrao` — nunca usados para ajustar nada, só para medir a varredura a seguir com a precisão que 90 pontos não entregam.
+Cinco mil pontos novos, que não entram em ajuste nenhum e servem só para medir a varredura.
 
 ```{python}
 #| label: curva-u
@@ -169,15 +203,26 @@ teste_nunca_fura_piso = bool(np.all(mse_teste >= piso))
 piso, round(float(lambda_minimo), 2), round(float(mse_teste_minimo), 2), treino_sempre_cai, teste_nunca_fura_piso
 ```
 
+::: {.funcao}
+**`np.logspace(a, b, n)`**: `n` números igualmente espaçados em escala logarítmica, de $10^a$ a $10^b$. Aqui, 60 valores de $\lambda$ de 1.000 a 0,00001.
+
+**`np.argmin(arr)`**: a posição do menor valor de `arr`.
+
+**`np.diff(arr)`**: a diferença entre cada elemento e o anterior. `np.all(np.diff(mse_treino) <= 0)` pergunta se nenhuma diferença é positiva, isto é, se o MSE de treino nunca sobe.
+
+**`np.all(mascara)`**: `True` se todos os elementos da máscara são `True`.
+:::
+
 ```{python}
 #| label: fig-curva-u
-#| fig-cap: "MSE de treino e de teste (este sobre os 5.000 pontos do conjunto de teste grande) contra a flexibilidade do spline (λ decrescente, escala log). O treino cai sem parar; o teste cai, toca um mínimo perto de λ=0,30 e volta a subir. A linha tracejada é Var(ε) — o piso irredutível que este material conhece porque gerou o próprio ruído — e a curva de teste nunca desce abaixo dela."
+#| fig-cap: "MSE de treino e de teste (este sobre os 5.000 pontos do conjunto de teste grande) contra a flexibilidade do spline (λ decrescente, escala log). O treino cai sem parar; o teste cai, toca um mínimo perto de λ=0,30 e volta a subir. A linha tracejada é Var(ε), o piso irredutível, conhecido porque o ruído foi gerado na simulação; a curva de teste nunca desce abaixo dela."
+#| fig-alt: "Duas curvas contra lambda decrescente em escala log: a de treino desce sem parar, a de teste desce, atinge um mínimo e volta a subir, sempre acima de uma linha tracejada horizontal."
 fig, ax = plt.subplots()
 ax.plot(lambdas, mse_treino, linewidth=2, label="MSE treino")
 ax.plot(lambdas, mse_teste, linewidth=2, label="MSE teste")
-ax.axhline(piso, linestyle="--", linewidth=1.5, label="piso irredutível (Var(ε))")
+ax.axhline(piso, color="0.45", linestyle="--", linewidth=1.5, label="piso irredutível (Var(ε))")
 ax.set_xscale("log")
-ax.invert_xaxis()
+ax.set_xlim(lambdas.max(), lambdas.min())
 ax.set_xlabel("λ do spline (escala log; menor λ = mais flexível →)")
 ax.set_ylabel("MSE")
 ax.legend()
@@ -185,18 +230,24 @@ plt.tight_layout()
 plt.show()
 ```
 
-Ao longo dos 60 valores de $\lambda$ varridos, o MSE de treino cai sem interrupção — confirmado pelo chunk acima, `treino_sempre_cai` é `True`. O de teste não: desce de um extremo rígido, toca o mínimo, 2,41, perto de $\lambda=0,30$ — na mesma vizinhança do spline moderado ($\lambda=0,5$), escolhido às cegas mais acima, sem estar exatamente no mesmo ponto — e volta a subir do outro lado, onde a flexibilidade passa a perseguir ruído. Em nenhum dos 60 pontos, medidos contra os cinco mil pontos do conjunto de teste grande, o MSE de teste desce abaixo de `piso = 2.25`, a variância do ruído que este material mesmo gerou — `teste_nunca_fura_piso` é `True`. É o piso que a seção 7.2 descreveu sem poder mostrar: nenhuma flexibilidade, por maior que seja, empurra o erro esperado abaixo da parte do problema que o próprio ajuste não controla.
+::: {.funcao}
+**`ax.axhline(y, color, linestyle)`**: uma linha horizontal na altura `y`, de uma ponta à outra do gráfico; `color="0.45"` é um cinza.
+
+**`ax.set_xscale("log")`**: põe o eixo horizontal em escala logarítmica. Com o `set_xlim` indo do maior $\lambda$ ao menor, a flexibilidade cresce da esquerda para a direita.
+:::
+
+Ao longo dos 60 valores de $\lambda$, o MSE de treino nunca sobe (`treino_sempre_cai` é `True`). O de teste desce a partir do extremo rígido, toca o mínimo de 2,41 perto de $\lambda = 0{,}30$ e volta a subir do outro lado, onde a flexibilidade passa a seguir o ruído. O mínimo fica perto do spline moderado ($\lambda = 0{,}5$), escolhido às cegas na comparação anterior, sem coincidir com ele. Em nenhum dos 60 pontos o MSE de teste desce abaixo de `piso = 2.25` (`teste_nunca_fura_piso` é `True`). É o piso da seção 7.2, agora desenhado: nenhuma flexibilidade põe o erro esperado abaixo da parte do problema que o ajuste não controla.
 
 ## A decomposição viés-variância
 
-A curva em U tem uma explicação, e ela vem de decompor o MSE esperado de teste, num ponto novo $x_0$, em três parcelas:
+Por que a curva de teste tem forma de U? Imagine repetir o experimento muitas vezes: sortear um conjunto de treino novo, ajustar $\hat f$ nele e prever num ponto novo $x_0$, cuja resposta é $y_0 = f(x_0) + \varepsilon$. A cada repetição, $\hat f(x_0)$ sai um pouco diferente. A média do erro quadrático sobre todas essas repetições (sobre os conjuntos de treino possíveis e sobre o ruído de $y_0$) se decompõe em três parcelas:
 
 $$
-E\left[\left(y_0 - \hat f(x_0)\right)^2\right] = \mathrm{Var}\left(\hat f(x_0)\right) + \left[\mathrm{Bias}\left(\hat f(x_0)\right)\right]^2 + \mathrm{Var}(\epsilon)
+\mathrm{E}\left[\left(y_0 - \hat f(x_0)\right)^2\right] = \mathrm{Var}\left(\hat f(x_0)\right) + \left[\mathrm{Bias}\left(\hat f(x_0)\right)\right]^2 + \mathrm{Var}(\varepsilon)
 $$
 
-**Viés** é o erro que vem da forma escolhida ser rígida demais para a relação verdadeira — o preço que a reta paga por ser reta, mesmo com todo o dado de treino do mundo à disposição. **Variância** é o quanto $\hat f$ mudaria se reajustada sobre outra amostra de treino, sorteada da mesma população — o preço que o spline muito flexível paga por seguir de perto os pontos específicos que calhou de ver: um pouco de ruído a mais ou a menos nesses pontos, e a curva inteira se reacomoda atrás deles. **Var(ε)** é o piso que a figura acima desenhou, e nenhuma das duas parcelas anteriores toca.
+O **viés** (*bias*) é o erro que vem de a forma escolhida ser rígida demais para a relação verdadeira: o preço que a reta paga por ser reta, mesmo com todos os dados de treino do mundo. A **variância** é o quanto $\hat f(x_0)$ muda de um conjunto de treino para outro: o preço que o spline muito flexível paga por seguir de perto os pontos que calhou de receber. Um pouco de ruído a mais ou a menos nesses pontos, e a curva inteira se reacomoda. $\mathrm{Var}(\varepsilon)$ é o piso, que nenhuma das duas outras parcelas toca.
 
-Os três ajustes desta seção ocupam três lugares nesse espaço. A reta tem viés alto — nenhuma reta acompanha a curvatura do seno — e variância baixa: trocar a amostra de treino move pouco o coeficiente de uma reta. O spline muito flexível inverte os dois: viés baixo, porque ele consegue seguir qualquer curvatura, e variância alta, porque essa mesma liberdade o deixa refém do ruído específico da amostra que recebeu. O spline moderado não zera nenhuma das duas parcelas — nenhum ajuste zera —, mas encontra a combinação das duas que soma menos, e é essa soma, viés ao quadrado mais variância, mais o piso que nenhum dos dois toca, que a curva em U traça ao percorrer a flexibilidade.
+Os três ajustes ocupam lugares diferentes nessa conta. A reta tem viés alto, porque nenhuma reta acompanha a curvatura do seno, e variância baixa, porque trocar a amostra de treino move pouco uma reta. O spline muito flexível inverte os dois: viés baixo, porque consegue seguir qualquer curvatura, e variância alta, porque essa liberdade o deixa refém do ruído da amostra. O spline moderado não zera nenhuma das duas parcelas, mas entre os três é o que tem o menor MSE de teste, que é a estimativa dessa soma.
 
-A mesma pergunta, do lado da classificação, ainda precisa de resposta: lá o erro não se mede em distância, e sim contando acerto e erro, e existe um piso análogo a este — o classificador de Bayes. É para lá que a próxima seção vai.
+A decomposição vale num ponto $x_0$. O MSE de teste esperado é a média dela sobre todos os pontos do conjunto de teste. A curva desenhada acima é uma única realização disso: um conjunto de treino, um ajuste por $\lambda$. Ela acompanha a soma viés² + variância + $\mathrm{Var}(\varepsilon)$ sem ser exatamente essa soma, que é uma média sobre muitos conjuntos de treino. Mas o formato é o mesmo. Conforme a flexibilidade cresce, o viés cai e a variância sobe. No começo o viés cai mais depressa, e o erro de teste desce. Depois a variância passa a dominar, e ele sobe.

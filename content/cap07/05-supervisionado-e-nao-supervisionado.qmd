@@ -4,7 +4,7 @@
 Esta seção corresponde às seções 2.1.4 e 2.1.5 de @james2023.
 :::
 
-Toda seção deste capítulo até aqui partiu do mesmo formato de dado, sem nomeá-lo: um `X` que se mede e um `Y` que se quer prever ou explicar — `vendas` em `Advertising`, `renda` em `Income1` e em `Income2`. Essa suposição tem nome, e é ela que separa o aprendizado estatístico em duas famílias.
+`Advertising`, `Income1` e `Income2` têm o mesmo formato: preditores que se medem e uma resposta que se quer prever ou explicar (`vendas` num caso, `renda` nos outros dois). Nem todo problema traz essa resposta, e é a presença ou a ausência dela que separa o aprendizado estatístico em duas famílias.
 
 ```{python}
 #| label: setup
@@ -17,13 +17,13 @@ plt.style.use("estilo-figuras.mplstyle")
 
 ## Uma resposta para cada observação, ou nenhuma
 
-No aprendizado **supervisionado**, cada observação chega como um par (`X_i`, `Y_i`): um vetor de preditores e uma resposta associada a ele, que torna possível checar o quanto uma estimativa `f̂` acerta. É esse par que sustentou a seção 7.2 inteira — estimar `f`, decompor o erro em redutível e irredutível, perguntar se o que interessa é prever `Y` ou entender como `X` o explica. Sem `Y`, nenhuma dessas perguntas tem como ser respondida: não sobra nada para comparar contra a previsão.
+No aprendizado **supervisionado**, cada observação chega como um par $(x_i, y_i)$, com $i = 1, \dots, n$: os valores dos preditores e a resposta associada a eles. É a resposta que permite conferir o quanto uma estimativa $\hat f$ acerta, e é ela que sustenta as perguntas da seção 7.2: estimar $f$, separar o erro em redutível e irredutível, decidir entre prever e explicar. Sem $y_i$, não sobra nada contra o que comparar a previsão.
 
-No aprendizado **não supervisionado**, cada observação chega só como `X_i` — os preditores, sem resposta nenhuma emparelhada. Não é descuido de quem coletou o dado: para muitos problemas reais simplesmente não existe um `Y` a registrar, nenhum rótulo verdadeiro contra o qual comparar. E a ausência de `Y` muda a natureza da pergunta, não só a resposta disponível: deixa de ser "o que prevê `Y`" e passa a ser "que estrutura existe neste `X`" — quantos grupos naturais o dado tem, quais variáveis se movem juntas, qual observação foge do padrão das demais.
+No aprendizado **não supervisionado**, cada observação chega só como $x_i$, sem resposta nenhuma. Em muitos problemas reais não existe um $Y$ a registrar: uma loja conhece o que cada cliente comprou, mas não existe um rótulo "verdadeiro" dizendo a que tipo de cliente cada um pertence. A pergunta muda de natureza. Em vez de "o que prevê $Y$", passa a ser "que estrutura existe nestes dados": quantos grupos naturais eles formam, quais variáveis se movem juntas, qual observação foge do padrão das demais.
 
 ## A mesma nuvem, duas perguntas
 
-A diferença fica mais clara olhando o mesmo dado das duas formas. A nuvem a seguir é simulada — três grupos de pontos em duas dimensões, cada um sorteado ao redor de um centro diferente:
+Olhar os mesmos dados das duas formas deixa a diferença clara. A nuvem a seguir é simulada: três grupos de pontos em duas dimensões, cada um sorteado ao redor de um centro diferente.
 
 ```{python}
 #| label: nuvem-simulada
@@ -37,16 +37,35 @@ rotulo = np.repeat(np.arange(len(centros)), n_por_grupo)
 X.shape, rotulo.shape
 ```
 
+::: {.funcao}
+**`np.array(lista)`**: cria um array a partir de uma lista; uma lista de listas vira uma tabela, uma lista interna por linha. Aqui, `centros` tem uma linha por grupo.
+
+**`np.random.default_rng(semente)`**: cria um gerador de números aleatórios com semente fixa, para que o sorteio saia igual a cada execução.
+
+**`rng.normal(loc, scale, size)`**: sorteia valores de uma normal com média `loc` e desvio padrão `scale`. Aqui, `loc` é o centro do grupo e `size=(40, 2)` pede 40 pontos com duas coordenadas cada.
+
+**`np.concatenate(lista)`**: empilha os arrays da lista, um embaixo do outro.
+
+**`np.arange(n)`** e **`np.repeat(valores, vezes)`**: `np.arange(3)` é `[0, 1, 2]`, e `np.repeat` repete cada valor `vezes` vezes seguidas, aqui 40 zeros, 40 uns e 40 dois, um rótulo para cada ponto.
+:::
+
+`X` é um array de 120 linhas e 2 colunas, uma linha por ponto, e `rotulo` guarda, para cada ponto, o grupo que o gerou.
+
 ```{python}
 #| label: contagem-grupos
 np.unique(rotulo, return_counts=True)
 ```
 
-Cento e vinte pontos ao todo, quarenta de cada um dos três grupos que geraram a nuvem. É a mesma nuvem que aparece nos dois painéis a seguir — só muda o que se sabe sobre ela:
+::: {.funcao}
+**`np.unique(arr, return_counts=True)`**: os valores distintos de `arr`, em ordem, e quantas vezes cada um aparece.
+:::
+
+Três grupos, 40 pontos em cada, 120 ao todo. Os dois painéis a seguir mostram a mesma nuvem; muda só o que se sabe sobre ela.
 
 ```{python}
 #| label: fig-supervisionado-nao-supervisionado
-#| fig-cap: "A mesma nuvem simulada, olhada de duas formas. Esquerda: cada ponto colorido pelo grupo que o gerou — o problema é supervisionado, porque existe um rótulo contra o qual checar qualquer resposta. Direita: os mesmos 120 pontos, sem cor nenhuma — o problema é não supervisionado, e a pergunta passa a ser quantos grupos existem aqui."
+#| fig-cap: "A mesma nuvem simulada, olhada de duas formas. Esquerda: cada ponto colorido pelo grupo que o gerou; com o rótulo conhecido, o problema é supervisionado. Direita: os mesmos 120 pontos, sem cor; sem rótulo, o problema é não supervisionado, e a pergunta passa a ser quantos grupos existem ali."
+#| fig-alt: "Dois gráficos de dispersão com a mesma nuvem de 120 pontos em três aglomerados. À esquerda, cada aglomerado tem uma cor; à direita, todos os pontos são cinza."
 fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(11, 4.5))
 
 for grupo in range(len(centros)):
@@ -67,12 +86,18 @@ plt.tight_layout()
 plt.show()
 ```
 
-À esquerda, a cor de cada ponto vem do grupo que o sorteou — é isso que torna o problema supervisionado: existe uma resposta contra a qual qualquer partição proposta pode ser conferida, certa ou errada. À direita, a mesma nuvem, sem nenhuma cor: o que resta é a pergunta que dá título ao painel. Um método de agrupamento poderia propor uma partição parecida com a da esquerda — e, olhando a nuvem, três grupos parecem mesmo a resposta razoável —, mas não há como confirmar isso contra um rótulo verdadeiro, porque nenhum rótulo verdadeiro existe do lado direito. O que existe é a estrutura que os pontos sugerem por si.
+::: {.funcao}
+**`X[rotulo == grupo]`**: `rotulo == grupo` compara cada rótulo com o grupo e devolve um array de `True`/`False`, a **máscara**; indexar `X` com ela seleciona só as linhas onde a máscara vale `True`.
 
-## Regressão contra classificação: a natureza de Y
+**`X[:, 0]`** e **`X[:, 1]`**: a primeira e a segunda coluna de `X`, em todas as linhas. O `:` antes da vírgula quer dizer "todas as linhas".
+:::
 
-Dentro do lado supervisionado ainda existe uma segunda distinção — não sobre ter ou não ter `Y`, mas sobre que tipo de valor `Y` assume. Quando `Y` é **quantitativo** — um número que mede algo, como `vendas` em `Advertising` ou `renda` em `Income1` e `Income2` —, o problema é de **regressão**: sem nomear, cada seção deste capítulo até aqui foi um problema de regressão. Quando `Y` é **qualitativo** — uma categoria, como "inadimplente" ou "não inadimplente", "spam" ou "não spam" —, o problema é de **classificação**: não existe meio caminho entre duas categorias, e o erro passa a se medir contando acerto e erro, não medindo distância.
+À esquerda, a cor de cada ponto vem do grupo que o sorteou. Com esse rótulo em mãos, a pergunta natural é de classificação: dado um ponto novo, com suas coordenadas $x_1$ e $x_2$, a que grupo ele pertence? Há uma resposta certa contra a qual conferir cada previsão. À direita, sem cor nenhuma, sobra a pergunta que dá título à legenda. Um método de agrupamento poderia propor uma partição parecida com a da esquerda, e, olhando a nuvem, três grupos parecem mesmo razoáveis. Mas não há rótulo contra o qual confirmar essa resposta: o que existe é só a estrutura que os pontos sugerem.
 
-Essa segunda distinção, porém, é menos nítida do que o parágrafo anterior sugere: alguns métodos não escolhem um lado. O k-NN que a seção 7.3 ajustou a `Income2` mediu a distância até os vizinhos mais próximos de cada ponto e devolveu a média das respostas deles — um número, porque ali `Y` era quantitativo. O mesmo mecanismo, aplicado a um `Y` qualitativo, devolve a categoria mais comum entre os vizinhos, em vez da média: nada no método muda, só o que se faz com a vizinhança encontrada. k-NN serve aos dois lados dessa distinção, e não é o único método capaz disso — a fronteira entre regressão e classificação separa problemas, não separa métodos.
+## Regressão contra classificação: a natureza de $Y$
 
-As duas próximas seções seguem essa costura: a seção 7.6 mede a qualidade de um ajuste de regressão, com o erro quadrático médio; a seção 7.7 faz o mesmo do lado da classificação, com a taxa de erro e um piso que nenhum classificador consegue furar. Mais adiante neste material, a costura muda de novo, para o aprendizado não supervisionado — onde a nuvem cinzenta desta seção ganha um bloco inteiro dedicado a responder, com método, à pergunta que aqui ficou em aberto.
+O que muda quando $Y$ deixa de ser um número? Dentro do lado supervisionado há uma segunda distinção, que é sobre o tipo de valor que $Y$ assume. Quando $Y$ é **quantitativo**, um número que mede algo (como `vendas` ou `renda`), o problema é de **regressão**, e todos os exemplos do capítulo até aqui foram de regressão. Quando $Y$ é **qualitativo**, uma categoria (como "inadimplente" ou "em dia", "spam" ou "não spam"), o problema é de **classificação**. Não há meio caminho entre duas categorias, e o erro passa a ser contado, acerto ou erro, em vez de medido como distância.
+
+A fronteira separa problemas, mas nem sempre separa métodos. O *k*-NN que a seção 7.3 ajustou a `Income2` encontrou os vizinhos mais próximos de cada ponto e devolveu a média das rendas deles, um número, porque ali $Y$ era quantitativo. Aplicado a um $Y$ qualitativo, o mesmo mecanismo devolve a categoria mais comum entre os vizinhos. A busca pelos vizinhos não muda; muda só o que se faz com eles.
+
+As duas seções seguintes medem a qualidade de um ajuste em cada lado: a 7.6 na regressão, com o erro quadrático médio, e a 7.7 na classificação, com a taxa de erro. O lado não supervisionado ganha, mais adiante, um capítulo próprio para responder com método à pergunta que o painel da direita deixou em aberto.
