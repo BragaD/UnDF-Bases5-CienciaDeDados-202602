@@ -1,6 +1,6 @@
 # Dados Retangulares
 
-A seção anterior tratou `estados` como quatro colunas soltas, cada uma com o seu tipo — mas nenhuma coluna existe sozinha: são as linhas que as amarram, cada uma descrevendo a mesma unidade federativa em `estado`, `populacao`, `taxa_homicidios` e `sigla`. É essa junção — colunas compartilhando linhas — que faz de `estados` uma tabela, e não uma pilha de quatro listas independentes.
+Nenhuma coluna de `estados` existe sozinha: são as linhas que as amarram, cada uma descrevendo a mesma unidade federativa em `estado`, `populacao`, `taxa_homicidios` e `sigla`. É essa junção — colunas compartilhando linhas — que faz de `estados` uma tabela, e não uma pilha de quatro listas independentes.
 
 ```{python}
 #| label: setup
@@ -50,7 +50,7 @@ estados.info()
 **`df.info()`** — imprime um resumo da tabela: o índice, e para cada coluna o nome, quantos valores não nulos ela tem e o tipo; no fim, uma estimativa da memória ocupada. Não recebe argumento aqui, e imprime em vez de devolver.
 :::
 
-As quatro colunas têm 27 valores não nulos cada — nenhum furo nesta tabela —, e o total ocupa 996,0+ bytes; o sinal de mais avisa que essa é uma estimativa rasa, que conta menos que o real para as colunas de texto, como a seção anterior já tinha medido de outro jeito.
+As quatro colunas têm 27 valores não nulos cada — nenhum furo nesta tabela —, e o total ocupa 996,0+ bytes; o sinal de mais avisa que essa é uma estimativa rasa, que conta menos que o real para as colunas de texto.
 
 ::: {.conceito}
 Linhas são registros, colunas são variáveis. É essa convenção — não uma lei da natureza — que faz `(27, 4)` significar "27 estados, 4 variáveis" em vez de "27 variáveis, 4 estados". Trocar os eixos preservaria os números e destruiria o significado.
@@ -130,7 +130,8 @@ Olhando coluna a coluna, `estados` não deixa ver se população e violência ca
 
 ```{python}
 #| label: fig-populacao-taxa
-#| fig-cap: "População (escala log) contra taxa de homicídios: a correlação é fraca e negativa — tamanho, por si só, não decide violência"
+#| fig-cap: "População (escala log) contra taxa de homicídios: nenhuma diagonal clara — tamanho, por si só, não decide violência"
+#| fig-alt: "Gráfico de dispersão com uma bolinha por unidade federativa: população no eixo horizontal, em escala logarítmica, e taxa de homicídios no vertical. Os pontos se espalham sem tendência clara; estão rotulados RR e AP, à esquerda, com taxas altas, PE, com a taxa mais alta, e MG e SP, à direita, com taxas baixas."
 fig, ax = plt.subplots()
 ax.scatter(estados["populacao"], estados["taxa_homicidios"])
 ax.set_xscale("log")
@@ -172,7 +173,15 @@ estados.nlargest(2, "populacao")[["sigla", "populacao", "taxa_homicidios"]]
 **`df.nsmallest(n, coluna)`** — o espelho de `nlargest`: as `n` linhas com os menores valores de `coluna`, da menor para a maior.
 :::
 
-Roraima e Amapá têm populações de 716.793 e 802.837 — diferença de menos de 100 mil habitantes —, e taxas de 23,58 e 32,01: quase vizinhos num eixo, distantes no outro. No outro extremo, São Paulo (45.973.194 habitantes) e Minas Gerais (21.322.691), as duas maiores populações da tabela, têm taxas de 6,16 e 12,63 — ambas entre as mais baixas. E a maior taxa de todas não é de um estado pequeno nem do maior:
+Roraima e Amapá têm populações de 716.793 e 802.837 — diferença de menos de 100 mil habitantes —, e taxas de 23,58 e 32,01: quase vizinhos num eixo, distantes no outro. No outro extremo, São Paulo (45.973.194 habitantes) e Minas Gerais (21.322.691), as duas maiores populações da tabela, têm taxas de 6,16 e 12,63. Ordenando as 27 taxas da menor para a maior:
+
+```{python}
+#| label: taxa-posicao-sp-mg
+posicao_taxa = estados.sort_values("taxa_homicidios")["sigla"].tolist()
+posicao_taxa.index("SP") + 1, posicao_taxa.index("MG") + 1
+```
+
+São Paulo tem a menor taxa das 27, e Minas Gerais a quarta menor. E a maior taxa de todas não é de um estado pequeno nem do maior:
 
 ```{python}
 #| label: taxa-extremo
@@ -183,7 +192,11 @@ Pernambuco tem a maior taxa da tabela, 36,78 — e não é um estado pequeno:
 
 ```{python}
 #| label: pe-rank-populacao
-print("mediana de populacao:", estados["populacao"].median())
+mediana = estados["populacao"].median()
+populacao_pe = estados.loc[estados["sigla"] == "PE", "populacao"].iloc[0]
+print("população de PE:", populacao_pe)
+print("mediana de populacao:", mediana)
+print("razão:", round(populacao_pe / mediana, 1))
 print(
     "posição de PE por população (1 = maior):",
     estados.sort_values("populacao", ascending=False)["sigla"].tolist().index("PE") + 1,
@@ -198,13 +211,15 @@ print(
 **`df.sort_values(coluna, ascending=False)`** — `ascending=False` inverte a ordenação: do maior valor para o menor.
 
 **`serie.tolist()`** — converte a coluna numa lista do Python. É o que permite chamar `.index("PE")`, método de lista que devolve a posição, a partir de 0, do primeiro elemento igual a `"PE"`.
+
+**`.iloc[0]`** numa `Series` — o primeiro valor dela, pela posição. O filtro `estados.loc[estados["sigla"] == "PE", "populacao"]` devolve uma coluna de um valor só, e `.iloc[0]` tira o número de dentro dela.
 :::
 
-Pernambuco é o sétimo mais populoso das 27 unidades, com população acima do dobro da mediana. A correlação entre as duas colunas dá um primeiro número para o que o olho já viu:
+Pernambuco é o sétimo mais populoso das 27 unidades, com 9.539.029 habitantes contra uma mediana de 4.145.040 — 2,3 vezes a mediana. A correlação entre as duas colunas dá um primeiro número para o que o olho já viu:
 
 ```{python}
 #| label: correlacao-populacao-taxa
-round(estados["populacao"].corr(estados["taxa_homicidios"]), 2)
+round(float(estados["populacao"].corr(estados["taxa_homicidios"])), 2)
 ```
 
 ::: {.funcao}
@@ -213,15 +228,15 @@ round(estados["populacao"].corr(estados["taxa_homicidios"]), 2)
 - `outra`: a segunda coluna, aqui `estados["taxa_homicidios"]`.
 :::
 
--0,41 é uma correlação fraca. Tirando os dois estados que a puxam no topo da população:
+-0,41 é uma correlação negativa moderada. Ela é calculada sobre a população na escala original, não na escala log da figura — e, na escala original, São Paulo e Minas Gerais ficam muito à direita de todos os outros estados. Tirando os dois:
 
 ```{python}
 #| label: correlacao-sem-sp-mg
 sem_sp_mg = estados[~estados["sigla"].isin(["SP", "MG"])]
-round(sem_sp_mg["populacao"].corr(sem_sp_mg["taxa_homicidios"]), 2)
+round(float(sem_sp_mg["populacao"].corr(sem_sp_mg["taxa_homicidios"])), 2)
 ```
 
-ela cai de -0,41 para -0,02 — praticamente zero. São Paulo e Minas Gerais sozinhos respondem pela tendência inteira; tirados os dois, população e taxa não guardam relação nenhuma entre si no resto da distribuição. Separar os estados por região é um próximo passo possível para procurar o que de fato explica a variação — população isolada não é essa resposta.
+ela cai de -0,41 para -0,02 — praticamente zero. São Paulo e Minas Gerais sozinhos respondem pela tendência inteira; tirados os dois, população e taxa não guardam relação linear nenhuma entre si no resto da distribuição. Separar os estados por região é um próximo passo possível para procurar o que de fato explica a variação — população isolada não é essa resposta.
 
 ::: {.funcao}
 **`~mascara`** — o operador `~` inverte uma coluna de `True`/`False` elemento a elemento. `estados[~estados["sigla"].isin([...])]` fica com as linhas cuja sigla *não* está na lista.
