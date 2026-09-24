@@ -4,7 +4,7 @@
 Esta seção corresponde às seções 3.1 e 3.1.1 de @james2023.
 :::
 
-`Advertising` traz o quanto duzentos mercados investiram em três mídias de propaganda — televisão, rádio e jornal — e quantas unidades do produto cada um vendeu. A pergunta mais simples que esse dado permite fazer é também a primeira: o investimento em TV, sozinho, ajuda a prever vendas? Regressão linear simples responde ajustando uma reta a exatamente dois números por mercado, `tv` e `vendas`, deixando `radio` e `jornal` de fora por enquanto.
+`Advertising` traz o quanto duzentos mercados investiram em três mídias de propaganda (televisão, rádio e jornal) e quantas unidades do produto cada um vendeu. A pergunta mais simples que esse dado permite fazer é também a primeira: o investimento em TV, sozinho, ajuda a prever vendas? A regressão linear simples responde ajustando uma reta a exatamente dois números por mercado, `tv` e `vendas`, e deixa `radio` e `jornal` de fora por enquanto.
 
 ```{python}
 #| label: setup
@@ -25,13 +25,27 @@ propaganda = pd.read_csv("dados/Advertising.csv")
 propaganda.shape, propaganda.columns.tolist()
 ```
 
-Duzentos mercados, quatro colunas — `tv`, `radio`, `jornal` e `vendas`, a primeira em milhares de dólares, a última em milhares de unidades. Regressão linear simples escreve a relação entre as duas que interessam aqui como
+Duzentos mercados e quatro colunas: `tv`, `radio` e `jornal` em milhares de dólares, `vendas` em milhares de unidades. Antes de qualquer modelo, a nuvem de `vendas` contra `tv`:
+
+```{python}
+#| label: fig-dispersao-tv-vendas
+#| fig-cap: "Vendas contra o investimento em TV nos duzentos mercados de Advertising."
+#| fig-alt: "Nuvem de duzentos pontos azuis que sobe da esquerda para a direita, estreita perto de zero e mais aberta à direita."
+fig, ax = plt.subplots()
+ax.scatter(propaganda["tv"], propaganda["vendas"], color="C0", s=18)
+ax.set_xlabel("tv (milhares de dólares)")
+ax.set_ylabel("vendas (milhares de unidades)")
+plt.tight_layout()
+plt.show()
+```
+
+Os pontos sobem juntos, mas não em fila: mercados com o mesmo gasto em TV vendem quantidades bem diferentes. Uma reta resume a tendência e deixa essa dispersão de fora. A regressão linear simples escreve essa reta como
 
 $$
 \text{vendas} \approx \beta_0 + \beta_1 \cdot \text{tv}.
 $$
 
-$\beta_0$ e $\beta_1$ são duas constantes, desconhecidas até se estimar: $\beta_0$ é o **intercepto** — o valor esperado de vendas quando o investimento em TV é zero —, e $\beta_1$ é a **inclinação** — o quanto vendas muda, em média, para cada unidade a mais de tv. O símbolo "≈" marca que a relação é uma aproximação: nada garante que dois mercados com o mesmo investimento em TV vendam exatamente o mesmo, e o quanto cada um foge da reta é o que o resto desta seção mede.
+$\beta_0$ e $\beta_1$ são duas constantes, desconhecidas até se estimar. $\beta_0$ é o **intercepto**, o valor esperado de vendas quando `tv`, o investimento em TV, é zero. $\beta_1$ é a **inclinação**, o quanto `vendas` muda, em média, para cada unidade a mais de `tv`. O símbolo "≈" marca que a relação é uma aproximação: nada garante que dois mercados com o mesmo investimento em TV vendam exatamente o mesmo, e o quanto cada um foge da reta é o que o resto desta seção mede.
 
 ## O resíduo, e a soma que ele eleva ao quadrado
 
@@ -53,40 +67,48 @@ $$
 \text{RSS} = e_1^2 + e_2^2 + \cdots + e_n^2 = \sum_{i=1}^{n} \left(y_i - \hat\beta_0 - \hat\beta_1 x_i\right)^2.
 $$
 
-Elevar ao quadrado, em vez de somar o valor absoluto de cada resíduo, pune um erro grande desproporcionalmente mais do que vários erros pequenos, e deixa RSS como uma soma de parábolas em $\beta_0$ e $\beta_1$ — uma superfície com um único fundo, que se acha por fórmula fechada em vez de busca. Ajustar a reta é escolher, entre todos os pares $(\beta_0, \beta_1)$ possíveis, o único que minimiza essa soma: é a esse critério que se dá o nome de **mínimos quadrados**.
+Elevar ao quadrado, em vez de somar o valor absoluto de cada resíduo, pune um erro grande desproporcionalmente mais do que vários erros pequenos. E deixa RSS como uma soma de parábolas em $\beta_0$ e $\beta_1$: uma superfície com um único fundo, que se acha por fórmula fechada em vez de busca. Ajustar a reta é escolher, entre todos os pares $(\beta_0, \beta_1)$ possíveis, o único que minimiza essa soma: é a esse critério que se dá o nome de **mínimos quadrados**. Qual reta deixa a soma menor, olhando a nuvem acima? A que passa pelo meio dela, com inclinação positiva, é o palpite natural; a conta diz exatamente qual.
 
 ::: {.conceito}
-O **resíduo** $e_i = y_i - \hat y_i$ mede a distância entre um valor observado e o previsto pela reta. A **soma dos quadrados dos resíduos** (RSS) soma $e_i^2$ sobre todas as observações. **Mínimos quadrados** é o critério que escolhe $\hat\beta_0$ e $\hat\beta_1$ minimizando RSS — nenhum outro par de coeficientes produz uma reta com RSS menor.
+O **resíduo** $e_i = y_i - \hat y_i$ mede a distância entre um valor observado e o previsto pela reta. A **soma dos quadrados dos resíduos** (RSS) soma $e_i^2$ sobre todas as observações. **Mínimos quadrados** é o critério que escolhe $\hat\beta_0$ e $\hat\beta_1$ minimizando RSS: nenhum outro par de coeficientes produz uma reta com RSS menor.
 :::
 
 ## A conta à mão: duas médias bastam
 
-Minimizar RSS por cálculo — derivando em relação a $\beta_0$ e a $\beta_1$ e igualando as duas derivadas a zero — leva a uma fórmula fechada que depende só das médias de `tv` e `vendas`, e dos desvios de cada ponto em relação a elas:
+Minimizar RSS por cálculo, derivando em relação a $\beta_0$ e a $\beta_1$ e igualando as duas derivadas a zero, leva a uma fórmula fechada que depende só das médias de `tv` e `vendas`, e dos desvios de cada ponto em relação a elas:
 
 $$
 \hat\beta_1 = \frac{\displaystyle\sum_{i=1}^{n} (x_i - \bar x)(y_i - \bar y)}{\displaystyle\sum_{i=1}^{n} (x_i - \bar x)^2}, \qquad \hat\beta_0 = \bar y - \hat\beta_1 \bar x.
 $$
 
-Não precisa de nenhuma biblioteca de otimização — dá para calcular direto com `numpy`:
+Não é preciso nenhuma biblioteca de otimização. Dá para calcular direto com `pandas`, coluna contra coluna:
 
 ```{python}
 #| label: conta-a-mao
 tv = propaganda["tv"]
 vendas = propaganda["vendas"]
 
-tv_media = tv.mean()
-vendas_media = vendas.mean()
-beta1_mao = ((tv - tv_media) * (vendas - vendas_media)).sum() / ((tv - tv_media) ** 2).sum()
+tv_media = float(tv.mean())
+vendas_media = float(vendas.mean())
+beta1_mao = float(
+    ((tv - tv_media) * (vendas - vendas_media)).sum() / ((tv - tv_media) ** 2).sum()
+)
 beta0_mao = vendas_media - beta1_mao * tv_media
 
-round(tv_media, 2), round(vendas_media, 2), round(beta1_mao, 4), round(beta0_mao, 4), round(beta1_mao * 1000, 1)
+(
+    round(tv_media, 2),
+    round(vendas_media, 2),
+    round(beta1_mao, 4),
+    round(beta0_mao, 4),
+    round(beta1_mao * 1000, 1),
+)
 ```
 
-O investimento médio em TV é 147,04 (mil dólares); a venda média, 14,02 (mil unidades). A partir só dessas duas médias e dos desvios em relação a elas, $\hat\beta_1$ sai 0,0475 e $\hat\beta_0$, 7,0326. Como `tv` e `vendas` vêm as duas em milhares, $\hat\beta_1 \times 1.000$ traduz a inclinação para a escala do dinheiro gasto: 47,5 — cada mil dólares a mais investidos em TV está associado, em média, a 47,5 unidades a mais vendidas.
+O investimento médio em TV é 147,04 (mil dólares); a venda média, 14,02 (mil unidades). A partir só dessas duas médias e dos desvios em relação a elas, $\hat\beta_1$ sai 0,0475 e $\hat\beta_0$, 7,0326. Como `tv` e `vendas` vêm as duas em milhares, $\hat\beta_1 \times 1.000$ traduz a inclinação para unidades vendidas por mil dólares: 47,5. Cada mil dólares a mais investidos em TV está associado, em média, a 47,5 unidades a mais vendidas.
 
 ## A mesma conta, pronta: `LinearRegression`
 
-O `scikit-learn` resolve a mesma minimização sem passar pelas médias explicitamente. `LinearRegression().fit(X, y)` recebe o preditor e a resposta e devolve um objeto já ajustado, com a inclinação em `.coef_` e o intercepto em `.intercept_` — os dois como array e escalar do `numpy`, por isso o `float(...)` ao redor de cada um daqui em diante. `X` entra como o `DataFrame` que já veio do `pandas`, mesmo sendo de uma coluna só, sem nenhum `.to_numpy()`: o estimador aceita e devolve, em `.feature_names_in_`, o nome de coluna que recebeu.
+O `scikit-learn` resolve a mesma minimização por um caminho que vale para qualquer número de preditores, sem a fórmula das duas médias. `LinearRegression().fit(X, y)` recebe o preditor e a resposta e devolve um objeto já ajustado, com a inclinação em `.coef_` e o intercepto em `.intercept_`. Os dois vêm como array e escalar do `numpy`, por isso o `float(...)` ao redor de cada um daqui em diante. `X` entra como o `DataFrame` que já veio do `pandas`, mesmo sendo de uma coluna só, sem nenhum `.to_numpy()`: o estimador aceita e devolve, em `.feature_names_in_`, o nome de coluna que recebeu.
 
 ```{python}
 #| label: ajuste-sklearn
@@ -105,21 +127,34 @@ beta0_sklearn = float(modelo.intercept_)
 )
 ```
 
-`feature_names_in_` guarda só `tv`, o único nome que o `DataFrame` de uma coluna carregava. Os dois pares de coeficiente — o calculado à mão e o que saiu do `.fit()` — são (7,0326; 0,0475) nos dois casos, e `np.allclose` confirma: `True`. É a mesma fórmula fechada por trás das duas contas; a segunda só evita escrever as médias à mão.
+::: {.funcao}
+**`LinearRegression().fit(X, y)`**: cria um modelo linear e estima seus parâmetros por mínimos quadrados, a partir dos preditores `X` (uma tabela, uma coluna por preditor) e da resposta `y`. Devolve o próprio modelo, já ajustado.
+
+**`modelo.coef_`** e **`modelo.intercept_`**: os coeficientes estimados $\hat\beta_1, \dots, \hat\beta_p$, na ordem das colunas de `X`, e o intercepto $\hat\beta_0$.
+
+**`modelo.feature_names_in_`**: os nomes das colunas de `X` no momento do `fit`, na mesma ordem de `coef_`. Só existe quando `X` é um `DataFrame`.
+
+**`np.allclose(a, b)`**: `True` se cada elemento de `a` coincide com o correspondente de `b` até uma tolerância pequena, que absorve o último dígito de arredondamento do ponto flutuante.
+:::
+
+`feature_names_in_` guarda só `tv`, o único nome que o `DataFrame` de uma coluna carregava. O par calculado à mão e o que saiu do `.fit()` são (7,0326; 0,0475) nos dois casos, e `np.allclose` confirma: `True`. As duas contas chegam ao mesmo mínimo de RSS, que é único, por caminhos diferentes. A fórmula das duas médias só existe com um preditor; o `.fit()` resolve o caso geral, e é ele que segue funcionando quando houver três preditores, na seção 8.3.
 
 ## A reta, e o resíduo que ela deixa
 
 ```{python}
 #| label: fig-reta-e-residuos
-#| fig-cap: "Duzentos mercados: vendas contra o investimento em TV, com a reta de mínimos quadrados por cima. Cada segmento liga um mercado observado à previsão da reta para o mesmo investimento — o resíduo daquele mercado, o e_i que RSS eleva ao quadrado."
+#| fig-cap: "Duzentos mercados: vendas contra o investimento em TV, com a reta de mínimos quadrados por cima. Cada segmento verde liga um mercado observado à previsão da reta para o mesmo investimento: é o resíduo daquele mercado, o e_i que RSS eleva ao quadrado."
+#| fig-alt: "Nuvem de duzentos pontos azuis que sobe da esquerda para a direita, cortada por uma reta laranja; de cada ponto sai um segmento vertical verde até a reta, e os segmentos ficam mais longos à direita, onde a nuvem se abre."
 yhat = modelo.predict(X)
 grade_tv = np.linspace(tv.min(), tv.max(), 200)
 reta_grade = modelo.predict(pd.DataFrame({"tv": grade_tv}))
 
 fig, ax = plt.subplots()
-ax.vlines(tv, np.minimum(vendas, yhat), np.maximum(vendas, yhat), color="C1", linewidth=1)
-ax.plot(grade_tv, reta_grade, color="C0", linewidth=2, label="reta ajustada")
-ax.scatter(tv, vendas, color="C2", s=18, zorder=3, label="observado")
+ax.vlines(
+    tv, np.minimum(vendas, yhat), np.maximum(vendas, yhat), color="C2", linewidth=1
+)
+ax.plot(grade_tv, reta_grade, color="C1", linewidth=2, label="reta ajustada")
+ax.scatter(tv, vendas, color="C0", s=18, zorder=3, label="observado")
 ax.set_xlabel("tv (milhares de dólares)")
 ax.set_ylabel("vendas (milhares de unidades)")
 ax.legend()
@@ -127,7 +162,15 @@ plt.tight_layout()
 plt.show()
 ```
 
-A reta captura a tendência — vender mais conforme se investe mais em TV —, mas nenhum mercado senta exatamente sobre ela: sempre sobra um segmento. Somar o quadrado dos duzentos segmentos desta figura dá exatamente o RSS que a reta minimiza:
+::: {.funcao}
+**`modelo.predict(X)`**: aplica o modelo ajustado a cada linha de `X` e devolve as previsões $\hat y$. `X` precisa ter as mesmas colunas, com os mesmos nomes, que o `fit` recebeu; por isso a grade entra como `pd.DataFrame({"tv": grade_tv})`.
+
+**`np.linspace(inicio, fim, n)`**: `n` números igualmente espaçados de `inicio` a `fim`, aqui os valores de `tv` onde a reta é desenhada.
+
+**`np.minimum(a, b)`** e **`np.maximum(a, b)`**: o menor e o maior de cada par de elementos. Cada segmento vertical vai do menor ao maior entre o valor observado e o previsto.
+:::
+
+A reta captura a tendência de vender mais conforme se investe mais em TV, mas nenhum mercado senta exatamente sobre ela: sempre sobra um segmento. Somar o quadrado dos duzentos segmentos desta figura dá exatamente o RSS que a reta minimiza:
 
 ```{python}
 #| label: rss-da-reta-ajustada
@@ -135,15 +178,16 @@ rss_min = float(((vendas - yhat) ** 2).sum())
 round(rss_min, 2)
 ```
 
-2.102,53 — nenhuma outra reta, entre todos os pares $(\beta_0, \beta_1)$ possíveis, soma menos que isso.
+O RSS da reta ajustada é 2.102,53. Nenhuma outra reta, entre todos os pares $(\beta_0, \beta_1)$ possíveis, soma menos que isso.
 
 ## Um vale com um fundo só
 
-RSS, como soma de quadrados de uma função linear de $\beta_0$ e $\beta_1$, é uma superfície convexa nesses dois parâmetros: um paraboloide elíptico, sem platôs nem mínimos locais além de um único ponto. Variando $\beta_0$ e $\beta_1$ numa grade ao redor de $(\hat\beta_0, \hat\beta_1)$ e calculando RSS em cada combinação, essa forma aparece em curvas de nível — cada uma liga os pares que produzem o mesmo RSS.
+RSS, como soma de quadrados de uma função linear de $\beta_0$ e $\beta_1$, é uma superfície convexa nesses dois parâmetros. Desde que `tv` não seja a mesma em todos os mercados, a convexidade é estrita: um paraboloide elíptico, sem platôs e com um único ponto de mínimo. Variando $\beta_0$ e $\beta_1$ numa grade ao redor de $(\hat\beta_0, \hat\beta_1)$ e calculando RSS em cada combinação, essa forma aparece em curvas de nível, cada uma ligando os pares que produzem o mesmo RSS.
 
 ```{python}
 #| label: fig-rss-contorno
-#| fig-cap: "Curvas de nível de RSS sobre (β0, β1), na regressão de vendas sobre tv em Advertising, nos níveis 2.150, 2.200, 2.300, 2.400, 2.500 e 2.600 — quanto mais grossa a curva, menor o RSS que ela marca. O ponto marcado é (β̂0, β̂1); cada curva liga pares com o mesmo RSS, e as seis se fecham ao redor desse único ponto — não há outro vale na janela."
+#| fig-cap: "Curvas de nível de RSS sobre (β0, β1), na regressão de vendas sobre tv em Advertising, nos níveis 2.150, 2.200, 2.300, 2.400, 2.500 e 2.600. Quanto mais grossa a curva, menor o RSS que ela marca. O ponto laranja é (β̂0, β̂1), e as seis curvas se fecham ao redor dele."
+#| fig-alt: "Seis elipses azuis concêntricas, compridas e inclinadas, desenhadas no plano de beta 0 contra beta 1, com um ponto laranja no centro comum."
 grade_beta0 = np.linspace(3.5, 10.5, 300)
 grade_beta1 = np.linspace(0.02, 0.075, 300)
 malha_beta0, malha_beta1 = np.meshgrid(grade_beta0, grade_beta1)
@@ -162,20 +206,19 @@ contornos = ax.contour(
     levels=niveis_rss, colors="C0", linewidths=larguras_das_curvas,
 )
 ax.scatter([beta0_sklearn], [beta1_sklearn], color="C1", s=40, zorder=3)
-ax.annotate(
-    r"$(\hat\beta_0,\ \hat\beta_1)$",
-    xy=(beta0_sklearn, beta1_sklearn),
-    xytext=(10, -14),
-    textcoords="offset points",
-    fontsize=9,
-)
 ax.set_xlabel(r"$\beta_0$")
 ax.set_ylabel(r"$\beta_1$")
 plt.tight_layout()
 plt.show()
 ```
 
-A legenda promete curvas fechadas, então a afirmação se confere contando, não olhando: o próprio objeto que o `contour` devolve guarda, para cada nível, os segmentos de linha que desenhou, e um segmento fecha quando termina no mesmo ponto em que começou.
+::: {.funcao}
+**`np.meshgrid(a, b)`**: combina dois eixos numa grade, devolvendo duas matrizes com a coordenada horizontal e a vertical de cada ponto. Aqui, cada ponto da grade é um par $(\beta_0, \beta_1)$, e `rss_grade` guarda o RSS de cada par.
+
+**`ax.contour(x, y, z, levels, colors, linewidths)`**: desenha as curvas de nível de `z` sobre a grade, uma para cada valor de `levels`, com a espessura de `linewidths`.
+:::
+
+A legenda promete curvas fechadas, e isso se confere contando, não olhando. O objeto que o `contour` devolve guarda, para cada nível, os segmentos de linha que desenhou, e um segmento fecha quando termina no mesmo ponto em que começou.
 
 ```{python}
 #| label: curvas-fechadas
@@ -192,7 +235,11 @@ for segmentos_do_nivel in contornos.allsegs:
 segmentos_totais, segmentos_fechados, segmentos_fechados == segmentos_totais
 ```
 
-Seis níveis, seis segmentos desenhados, e os seis fecham: `segmentos_totais` e `segmentos_fechados` saem iguais, 6 e 6. Nenhuma curva sai cortada pela borda da janela — o que confirma, em vez de supor, que RSS tem um único vale nesta vizinhança de $(\hat\beta_0, \hat\beta_1)$.
+::: {.funcao}
+**`contornos.allsegs`**: a lista, nível por nível, das linhas que `ax.contour` desenhou. Cada linha é um array de pontos $(x, y)$; `segmento[0]` é o primeiro ponto e `segmento[-1]`, o último.
+:::
+
+Seis níveis, seis segmentos desenhados, e os seis fecham: `segmentos_totais` e `segmentos_fechados` saem iguais, 6 e 6. Nenhuma curva sai cortada pela borda da janela. A figura é consistente com o vale único que a convexidade garante; a contagem só confirma que a janela escolhida mostra esse vale inteiro.
 
 ```{python}
 #| label: minimo-real-contra-grade
@@ -200,4 +247,4 @@ minimo_real_menor_que_grade = bool(rss_min < rss_grade.min())
 round(rss_min, 2), round(float(rss_grade.min()), 2), minimo_real_menor_que_grade
 ```
 
-O mínimo verdadeiro, 2.102,53, fica abaixo até do menor valor que a própria grade alcança, 2.102,56 — `minimo_real_menor_que_grade` é `True`. Nenhum dos 300×300 pontos testados coincide exatamente com $(\hat\beta_0, \hat\beta_1)$, só passa perto: é a fórmula fechada, não a grade, que encontra o fundo do vale de verdade. RSS diz qual par de coeficientes é o melhor entre os que este dado observou; não diz se essa reta presta para prever vendas em geral, nem quanto de vendas ela de fato explica.
+O mínimo verdadeiro, 2.102,53, fica abaixo até do menor valor que a própria grade alcança, 2.102,56, e `minimo_real_menor_que_grade` é `True`. Nenhum dos 300×300 pontos testados coincide exatamente com $(\hat\beta_0, \hat\beta_1)$, só passa perto. É a fórmula fechada, não a grade, que encontra o fundo do vale de verdade. RSS diz qual par de coeficientes é o melhor entre os que este dado observou; não diz se essa reta presta para prever vendas em geral, nem quanto de vendas ela de fato explica.

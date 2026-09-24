@@ -4,7 +4,7 @@
 Esta seção corresponde à seção 3.2 de @james2023.
 :::
 
-`Advertising` traz três mídias, e a seção 8.1 usou só uma. A pergunta mais direta é repetir a mesma reta duas vezes mais — uma para `radio`, outra para `jornal` — e ler os três coeficientes lado a lado. Esta seção começa por essa pergunta, e termina desfazendo a resposta que ela parece dar.
+`Advertising` traz três mídias, e a seção 8.1 usou só uma. O caminho mais direto seria ajustar uma reta para cada mídia, como a 8.1 fez com `tv`, e ler cada coeficiente isolado. Feito para `jornal`, esse caminho dá uma resposta que não sobrevive a um modelo com as três mídias juntas.
 
 ```{python}
 #| label: setup
@@ -33,13 +33,19 @@ beta1_jornal_sozinho = float(modelo_jornal.coef_[0])
 round(beta1_jornal_sozinho, 4), round(beta1_jornal_sozinho * 1000, 1)
 ```
 
-Ajustada sozinha contra `jornal`, a reta de mínimos quadrados dá um coeficiente de 0,0547: cada mil dólares a mais gastos em jornal está associado, em média, a 54,7 unidades a mais vendidas. É um coeficiente positivo, do mesmo tipo que a seção 8.1 encontrou para `tv` — nada nesta regressão isolada distingue jornal das outras duas mídias.
+Ajustada sozinha contra `jornal`, a reta de mínimos quadrados dá um coeficiente de 0,0547: cada mil dólares a mais gastos em jornal está associado, em média, a 54,7 unidades a mais vendidas. É um coeficiente positivo, do mesmo tipo que a seção 8.1 encontrou para `tv`, e nada nesta regressão isolada distingue `jornal` das outras duas mídias.
 
-Só que ajustar `jornal` sozinho ignora `tv` e `radio` por completo. Se as três mídias variam juntas de mercado para mercado, o coeficiente de uma pode estar levando crédito por vendas que outra produziu — e a única forma de saber é colocar as três na mesma equação.
+Só que ajustar `jornal` sozinho ignora `tv` e `radio` por completo. Se as três mídias variam juntas de mercado para mercado, o coeficiente de uma pode estar levando crédito por vendas que outra produziu. A única forma de saber é colocar as três na mesma equação.
 
 ## As três mídias na mesma equação
 
-O modelo múltiplo estende a mesma ideia de mínimos quadrados a mais de um preditor: em vez de uma reta, um hiperplano que minimiza a soma dos quadrados dos resíduos sobre `tv`, `radio` e `jornal` ao mesmo tempo.
+O modelo múltiplo estende a mesma ideia de mínimos quadrados a mais de um preditor. Em vez de uma reta, ajusta um hiperplano que minimiza a soma dos quadrados dos resíduos sobre `tv`, `radio` e `jornal` ao mesmo tempo:
+
+$$
+\text{vendas} \approx \beta_0 + \beta_1 \cdot \text{tv} + \beta_2 \cdot \text{radio} + \beta_3 \cdot \text{jornal}.
+$$
+
+Antes de olhar a saída, vale apostar: o coeficiente de `jornal`, 0,0547 quando ajustado sozinho, fica parecido quando `tv` e `radio` entram na mesma equação?
 
 ```{python}
 #| label: modelo-multiplo
@@ -52,17 +58,32 @@ coeficientes_mil_dolares = (coeficientes * 1000).round(1)
 coeficientes.round(4), coeficientes_mil_dolares
 ```
 
-`feature_names_in_` guarda os três nomes de coluna que o `DataFrame` carregava, na mesma ordem dos coeficientes — por isso dá para juntar os dois numa única `Series` em vez de decorar qual número é qual. `tv` sai com 0,0458 (45,8 por mil dólares) e `radio` com 0,1885 (188,5 por mil dólares), os dois positivos. `jornal` sai com -0,0010 (-1,0 por mil dólares): praticamente zero, e de sinal oposto ao 0,0547 que a regressão sozinha tinha encontrado para ele.
-
-::: {.conceito}
-Num modelo múltiplo, cada coeficiente $\hat\beta_j$ se lê como o efeito médio sobre a resposta de aumentar o preditor $X_j$ em uma unidade, **mantendo todos os outros preditores fixos**. É essa cláusula — mantendo os demais fixos — que separa a leitura de um coeficiente múltiplo da de uma regressão simples, e é ela que muda o que se pode dizer sobre `jornal`.
+::: {.funcao}
+**`pd.Series(valores, index=rotulos)`**: uma coluna de valores com um rótulo por posição. Aqui, os rótulos são os nomes de `feature_names_in_`, e cada coeficiente passa a ser lido pelo nome do seu preditor.
 :::
 
-Lido dessa forma: gastar mais mil dólares em `tv`, mantendo `radio` e `jornal` fixos, está associado a 45,8 unidades a mais de venda; mais mil dólares em `radio`, mantendo `tv` e `jornal` fixos, a 188,5 unidades a mais. Mais mil dólares em `jornal`, mantendo `tv` e `radio` fixos, está associado a uma variação de -1,0 unidade — perto o bastante de zero para não sobrar efeito de jornal depois que as outras duas mídias já estão na conta.
+`feature_names_in_` guarda os três nomes de coluna que o `DataFrame` carregava, na mesma ordem dos coeficientes, e por isso dá para juntar os dois numa única `Series` em vez de decorar qual número é qual. `tv` sai com 0,0458 (45,8 unidades por mil dólares) e `radio` com 0,1885 (188,5 por mil dólares), os dois positivos. `jornal` sai com -0,0010 (-1,0 por mil dólares): praticamente zero, e de sinal oposto ao 0,0547 que a regressão sozinha tinha encontrado para ele.
+
+::: {.conceito}
+Num modelo múltiplo, cada coeficiente $\hat\beta_j$ se lê como o efeito médio sobre a resposta de aumentar o preditor $X_j$ em uma unidade, **mantendo todos os outros preditores fixos**. É essa cláusula que separa a leitura de um coeficiente múltiplo da de uma regressão simples, e é ela que muda o que se pode dizer sobre `jornal`.
+:::
+
+Lido dessa forma: gastar mais mil dólares em `tv`, mantendo `radio` e `jornal` fixos, está associado a 45,8 unidades a mais de venda; mais mil dólares em `radio`, mantendo `tv` e `jornal` fixos, a 188,5 unidades a mais. Mais mil dólares em `jornal`, mantendo `tv` e `radio` fixos, está associado a uma variação de -1,0 unidade. Isso é pouco? Um coeficiente sozinho não diz, porque depende da unidade do preditor. O que diz é o quanto a previsão muda quando `jornal` percorre toda a faixa observada, comparado com o quanto as vendas variam:
+
+```{python}
+#| label: efeito-de-jornal-na-faixa
+amplitude_jornal = float(propaganda["jornal"].max() - propaganda["jornal"].min())
+efeito_jornal_na_faixa = float(coeficientes["jornal"]) * amplitude_jornal
+desvio_vendas = float(y.std())
+
+round(amplitude_jornal, 1), round(efeito_jornal_na_faixa, 3), round(desvio_vendas, 2)
+```
+
+Indo do mercado que menos gasta em jornal ao que mais gasta, uma faixa de 113,7 mil dólares, a previsão muda -0,118 mil unidades, isto é, 118 unidades a menos. `vendas` varia de um mercado para outro com desvio padrão de 5,22 mil unidades. Depois que `tv` e `radio` estão na conta, sobra a `jornal` um efeito praticamente nulo.
 
 ## Por que jornal some: quem anda com quem
 
-A explicação não está em mais uma regressão — está em como as três mídias se relacionam entre si, antes de qualquer venda entrar na conta.
+A explicação não exige mais uma regressão. Basta ver como as três mídias se relacionam entre si, antes de qualquer venda entrar na conta.
 
 ```{python}
 #| label: correlacoes
@@ -70,22 +91,30 @@ correlacoes = propaganda[["tv", "radio", "jornal", "vendas"]].corr()
 correlacoes.round(4)
 ```
 
+::: {.funcao}
+**`df.corr()`**: a correlação de Pearson de cada coluna com cada outra, numa tabela quadrada. `correlacoes.loc["jornal", "radio"]` lê uma célula pelo nome da linha e da coluna.
+:::
+
 ```{python}
 #| label: jornal-correlaciona-mais-com-radio
 corr_jornal_radio = float(correlacoes.loc["jornal", "radio"])
 corr_jornal_tv = float(correlacoes.loc["jornal", "tv"])
 jornal_mais_correlacionado_com_radio = bool(corr_jornal_radio > corr_jornal_tv)
 
-round(corr_jornal_radio, 4), round(corr_jornal_tv, 4), jornal_mais_correlacionado_com_radio
+(
+    round(corr_jornal_radio, 4),
+    round(corr_jornal_tv, 4),
+    jornal_mais_correlacionado_com_radio,
+)
 ```
 
-`jornal` correlaciona com `radio` a 0,3541 e com `tv` a só 0,0566 — `jornal_mais_correlacionado_com_radio` confirma que a primeira supera a segunda. Mercados que gastam mais em rádio tendem a gastar mais em jornal também: os dois investimentos sobem e descem juntos, sem que isso implique nada causal entre eles.
+`jornal` correlaciona com `radio` a 0,3541 e com `tv` a só 0,0566, e `jornal_mais_correlacionado_com_radio` confirma que a primeira supera a segunda. Mercados que gastam mais em rádio tendem a gastar mais em jornal também: os dois investimentos sobem e descem juntos, sem que isso implique nada causal entre eles.
 
-É essa correlação que explica a reviravolta do coeficiente de jornal, de 0,0547 sozinho para -0,0010 na companhia das outras duas mídias. Se é o rádio — não o jornal — que de fato move vendas, então nos mercados onde se gasta mais em rádio as vendas tendem a ser maiores, e a tabela de correlação mostra que esses são os mesmos mercados que gastam mais em jornal. Uma regressão que olha só para `jornal`, sem `radio` por perto, não tem como separar as duas coisas: ela atribui a jornal parte do crédito que é do rádio. Colocar as duas mídias na mesma equação é o que permite distinguir — e é aí que o coeficiente de jornal cai a praticamente zero.
+É essa correlação que explica a reviravolta do coeficiente de jornal, de 0,0547 sozinho para -0,0010 na companhia das outras duas mídias. Suponha que é o rádio, e não o jornal, que de fato move vendas. Então nos mercados onde se gasta mais em rádio as vendas tendem a ser maiores, e a tabela de correlação mostra que esses são os mesmos mercados que gastam mais em jornal. Uma regressão que olha só para `jornal`, sem `radio` por perto, não tem como separar as duas coisas e atribui a jornal parte do crédito que é do rádio. Colocar as duas mídias na mesma equação é o que permite distinguir, e é aí que o coeficiente de jornal cai a praticamente zero.
 
 ## R² e RSE: o quanto o modelo múltiplo melhora
 
-R² não muda de definição com mais preditores; o RSE muda de denominador. Com $p$ preditores, a raiz é de $\text{RSS}/(n - p - 1)$ — um grau gasto pelo intercepto e um por coeficiente —, e o $n-2$ da seção anterior é o caso $p = 1$ dessa mesma forma.
+R² não muda de definição com mais preditores; o RSE muda de denominador. Com $p$ preditores, a raiz é de $\text{RSS}/(n - p - 1)$, com um grau gasto pelo intercepto e um por coeficiente. O $n-2$ da seção 8.2 é o caso $p = 1$ dessa mesma forma.
 
 ```{python}
 #| label: rse-r2-tv-sozinho
@@ -122,11 +151,13 @@ comparacao = pd.DataFrame(
 comparacao
 ```
 
-O modelo de `tv` sozinho explica 0,6119 da variância de vendas, com erro típico de 3,2587 mil unidades. Somar `radio` e `jornal` sobe o R² para 0,8972 e derruba o RSE para 1,6855: as três mídias juntas explicam mais da variância de vendas do que `tv` sozinho, e erram menos a cada previsão. A régua não muda — R² e RSE continuam sendo as mesmas duas medidas da seção anterior —, só o modelo que elas avaliam.
+O modelo de `tv` sozinho explica 0,6119 da variância de vendas, com erro típico de 3,2587 mil unidades. Somar `radio` e `jornal` sobe o R² para 0,8972 e derruba o RSE para 1,6855. Sobre os duzentos mercados usados no ajuste, as três mídias juntas erram menos, em média, do que `tv` sozinho.
+
+Quanto desse ganho é mérito das duas mídias novas? O R² sozinho não responde: ele nunca cai quando se acrescenta um preditor, nem mesmo com uma coluna de ruído no lugar de `radio`. O que pesa aqui é o tamanho do salto, de 0,6119 para 0,8972, e o RSE, que desconta um grau por coeficiente, cair de 3,2587 para 1,6855, quase à metade.
 
 ## A superfície ajustada com tv e radio
 
-Como jornal quase não muda a previsão, a superfície que os coeficientes de `tv` e `radio` desenham já carrega quase toda a informação do modelo múltiplo — e, com só dois preditores, dá para desenhar essa superfície inteira.
+Como jornal quase não muda a previsão, a superfície que os coeficientes de `tv` e `radio` desenham já carrega quase toda a informação do modelo múltiplo. E, com só dois preditores, dá para desenhar essa superfície inteira.
 
 ```{python}
 #| label: modelo-tv-radio
@@ -135,56 +166,91 @@ modelo_tv_radio = LinearRegression().fit(X_tv_radio, y)
 yhat_tv_radio = modelo_tv_radio.predict(X_tv_radio)
 
 r2_tv_radio = float(r2_score(y, yhat_tv_radio))
-round(r2_tv_radio, 4)
+coef_tv = float(modelo_tv_radio.coef_[0])
+coef_radio = float(modelo_tv_radio.coef_[1])
+round(r2_tv_radio, 4), round(coef_tv, 4), round(coef_radio, 4)
 ```
 
 ```{python}
 #| label: fig-superficie-tv-radio
 #| fig-cap: "Vendas previstas para toda combinação de investimento em tv e radio, pelo modelo ajustado com as duas mídias. Os pontos são os duzentos mercados observados."
+#| fig-alt: "Mapa de cor em faixas laranja paralelas e inclinadas, separadas por linhas brancas, mais claras no canto inferior esquerdo e mais escuras no superior direito, com duzentos pontos azuis espalhados por todo o plano de tv contra radio."
 grade_tv = np.linspace(propaganda["tv"].min(), propaganda["tv"].max(), 60)
 grade_radio = np.linspace(propaganda["radio"].min(), propaganda["radio"].max(), 60)
 malha_tv, malha_radio = np.meshgrid(grade_tv, grade_radio)
 grade = pd.DataFrame({"tv": malha_tv.ravel(), "radio": malha_radio.ravel()})
 superficie = modelo_tv_radio.predict(grade).reshape(malha_tv.shape)
 
-azuis = LinearSegmentedColormap.from_list(
-    "azuis", plt.get_cmap("Blues")(np.linspace(0.60, 0.74, 256))
+laranjas = LinearSegmentedColormap.from_list(
+    "laranjas", plt.get_cmap("Oranges")(np.linspace(0.15, 0.70, 256))
 )
 
 fig, ax = plt.subplots()
-mapa = ax.contourf(malha_tv, malha_radio, superficie, levels=14, cmap=azuis)
-ax.scatter(propaganda["tv"], propaganda["radio"], color="C1", s=16, edgecolor="white", linewidth=0.5)
+mapa = ax.contourf(malha_tv, malha_radio, superficie, levels=10, cmap=laranjas)
+ax.contour(
+    malha_tv,
+    malha_radio,
+    superficie,
+    levels=mapa.levels,
+    colors="white",
+    linewidths=0.6,
+)
+ax.scatter(
+    propaganda["tv"],
+    propaganda["radio"],
+    color="C0",
+    s=16,
+    edgecolor="white",
+    linewidth=0.5,
+)
 ax.set_xlabel("tv (milhares de dólares)")
 ax.set_ylabel("radio (milhares de dólares)")
 barra = fig.colorbar(mapa, ax=ax, shrink=0.9, pad=0.02)
-barra.set_label("vendas prevista (mil unidades)")
+barra.set_label("vendas previstas (mil unidades)")
 plt.tight_layout()
 plt.show()
 ```
 
-Cada curva de nível reúne as combinações de `tv` e `radio` que o modelo prevê com a mesma venda; a superfície cresce para a direita e para cima, do mesmo jeito que os dois coeficientes positivos calculados acima já anunciavam.
+::: {.funcao}
+**`LinearSegmentedColormap.from_list(nome, cores)`**: monta uma escala de cores contínua a partir de uma lista de cores. Aqui, as cores são uma fatia da escala `"Oranges"`, `plt.get_cmap("Oranges")(np.linspace(0.15, 0.70, 256))`, que evita os extremos quase brancos e quase pretos da escala.
+
+**`ax.contourf(x, y, z, levels, cmap)`**: pinta o plano por faixas de valor de `z`, como num mapa de relevo; `levels` é o número de faixas e `cmap`, a escala de cores. Por cima, o `ax.contour` da seção 8.1, com os mesmos `levels`, traça em branco a fronteira entre cada par de faixas vizinhas.
+:::
+
+Cada faixa reúne as combinações de `tv` e `radio` que o modelo prevê com a mesma venda. As fronteiras entre faixas, em branco, são retas paralelas, porque o modelo é um plano. A superfície cresce para a direita e para cima, como anunciam os dois coeficientes positivos deste ajuste, 0,0458 para `tv` e 0,1880 para `radio`.
 
 ## O que a superfície plana ainda erra
 
-O modelo com `tv` e `radio` explica 0,8972 da variância de vendas — o mesmo valor, até a quarta casa, do modelo de três mídias da tabela acima, já que `jornal` quase não muda a previsão —, mas sobra no resíduo um padrão que essa superfície plana não captura.
+O modelo com `tv` e `radio` explica 0,8972 da variância de vendas, o mesmo valor, até a quarta casa, do modelo de três mídias da tabela acima. `jornal` quase não muda a previsão. Mas sobra no resíduo um padrão que essa superfície plana não captura.
 
 ```{python}
 #| label: residuo-por-terco
-df_resid = pd.DataFrame({
-    "previsto": yhat_tv_radio,
-    "residuo": y.to_numpy() - yhat_tv_radio,
-})
+df_resid = pd.DataFrame(
+    {
+        "previsto": yhat_tv_radio,
+        "residuo": y.to_numpy() - yhat_tv_radio,
+    }
+)
 df_resid["terco"] = pd.qcut(df_resid["previsto"], 3, labels=["baixo", "medio", "alto"])
 
-medias_por_terco = df_resid.groupby("terco", observed=True)[["previsto", "residuo"]].mean()
+medias_por_terco = df_resid.groupby("terco", observed=True)[
+    ["previsto", "residuo"]
+].mean()
 medias_por_terco.round(4)
 ```
 
-Dividindo os duzentos mercados em três grupos pelo valor previsto — o terço com a previsão mais baixa, o do meio, o mais alto —, o resíduo médio não fica perto de zero nos três grupos: 0,4307 no terço mais baixo, -0,8077 no do meio, e de volta a 0,3650 no mais alto. O sinal do erro típico muda com a faixa de previsão, em vez de se espalhar ao acaso ao redor de zero — um padrão que uma superfície plana, por definição, não reproduz.
+::: {.funcao}
+**`pd.qcut(serie, q, labels)`**: corta os valores de `serie` em `q` faixas com o mesmo número de observações cada, pelos quantis, e dá a cada faixa um rótulo de `labels`. É o primo de `pd.cut`, que corta nas bordas que recebe.
+
+**`df.groupby(coluna, observed=True)[colunas].mean()`**: separa as linhas pelos valores de `coluna` e tira a média de cada uma das `colunas` dentro de cada grupo. `observed=True` mantém só os grupos que de fato aparecem, o comportamento que `pandas` recomenda para colunas categóricas.
+:::
+
+Os duzentos mercados foram divididos em três grupos pelo valor previsto: o terço com a previsão mais baixa, o do meio e o mais alto. O resíduo médio não fica perto de zero nos três grupos: 0,4307 no terço mais baixo, -0,8077 no do meio, e de volta a 0,3650 no mais alto. O sinal do erro muda com a faixa de previsão, em vez de se espalhar ao acaso ao redor de zero.
 
 ```{python}
 #| label: fig-residuo-tv-radio
-#| fig-cap: "Resíduo contra o valor previsto, no modelo de tv e radio. A linha tracejada marca resíduo zero; os três marcadores maiores são a média de cada terço de previsão — abaixo de zero no meio, acima nas duas pontas."
+#| fig-cap: "Resíduo contra o valor previsto, no modelo de tv e radio. A linha tracejada marca resíduo zero; os três marcadores laranja são a média de cada terço de previsão, abaixo de zero no meio e acima nas duas pontas."
+#| fig-alt: "Nuvem de pontos azuis de resíduo contra vendas previstas, em volta de uma linha tracejada verde no zero, com uma linha laranja de três pontos que desce no meio e sobe nas duas pontas."
 fig, ax = plt.subplots()
 ax.axhline(0, color="C2", linewidth=1, linestyle="--")
 ax.scatter(df_resid["previsto"], df_resid["residuo"], color="C0", s=14, alpha=0.6)
@@ -196,10 +262,10 @@ ax.plot(
     marker="o",
     markersize=7,
 )
-ax.set_xlabel("vendas prevista (mil unidades)")
-ax.set_ylabel("resíduo (vendas observada − prevista)")
+ax.set_xlabel("vendas previstas (mil unidades)")
+ax.set_ylabel("resíduo (observada − prevista)")
 plt.tight_layout()
 plt.show()
 ```
 
-Essa curvatura — negativa no meio da faixa de previsão, positiva nas duas pontas — é o sinal de que `tv` e `radio` não agem de forma independente sobre vendas. A seção 8.5 retoma este mesmo modelo para mostrar o que muda ao deixar as duas mídias interagirem.
+Uma curvatura assim, negativa no meio da faixa de previsão e positiva nas duas pontas, diz que o plano erra de forma sistemática, mas não diz, sozinha, por quê. Ela é compatível com duas causas: o efeito de uma mídia depende do nível da outra, ou alguma mídia age sobre vendas em curva, e não em linha reta. A seção 8.5 testa a primeira hipótese com este mesmo modelo.

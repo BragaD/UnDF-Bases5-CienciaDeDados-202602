@@ -4,7 +4,7 @@
 Esta seção corresponde à seção 3.1.3 de @james2023.
 :::
 
-Ajustar uma reta por mínimos quadrados sempre dá um $\hat\beta_0$ e um $\hat\beta_1$ — a seção anterior encontrou o par que minimiza RSS para `vendas ~ tv` e não sobrou nenhum outro candidato menor. A pergunta muda agora: o quanto essa reta *serve*. Duas medidas respondem isso, cada uma de um jeito, e as duas partem do mesmo RSS.
+Mínimos quadrados sempre devolve um $\hat\beta_0$ e um $\hat\beta_1$, mesmo quando a reta descreve mal o dado. Para `vendas ~ tv`, quanto essa reta *serve*? Quanto um mercado costuma ficar longe dela, e quanto da variação de vendas entre os mercados ela dá conta de explicar? Duas medidas respondem, cada uma a uma dessas perguntas, e as duas partem do mesmo RSS.
 
 ```{python}
 #| label: setup
@@ -26,7 +26,7 @@ yhat = modelo.predict(X)
 
 ## O erro típico de previsão: RSE
 
-O erro-padrão residual (RSE) resume o RSS como um único número, na mesma unidade da resposta. É a raiz do RSS dividido não por $n$, e sim por $n-2$ — a reta já consumiu dois parâmetros, $\hat\beta_0$ e $\hat\beta_1$, antes de sobrar erro para medir:
+O erro-padrão residual (RSE) resume o RSS como um único número, na mesma unidade da resposta. É a raiz do RSS dividido por $n-2$ em vez de $n$, porque a reta já consumiu dois parâmetros, $\hat\beta_0$ e $\hat\beta_1$, antes de sobrar erro para medir:
 
 $$
 \text{RSE} = \sqrt{\frac{\text{RSS}}{n-2}}
@@ -59,13 +59,70 @@ percentual_erro = rse_mao / vendas_media * 100
 )
 ```
 
-Duzentos mercados, `n_menos_2 = 198` depois de descontar os dois parâmetros que a reta gastou para se ajustar: RSS, 2.102,53, dividido por 198 e com a raiz, dá 3,2587. `mean_squared_error` calcula o mesmo RSS já dividido por $n$ — não por $n-2$ —, então recuperar o RSE a partir dele exige desfazer essa divisão antes de tirar a raiz; feito isso, os dois caminhos batem: 3,2587 nos dois casos, `True`.
+::: {.funcao}
+**`mean_squared_error(y, yhat)`**: a média de $(y_i - \hat y_i)^2$, isto é, o RSS dividido por $n$.
+:::
 
-Vendas está em milhares de unidades, então 3,2587 quer dizer que a venda observada de um mercado típico se afasta da reta em cerca de 3.259 unidades — para cima ou para baixo, em média. Contra a venda média de 14,0225 mil unidades, esses 3,2587 mil unidades representam 23,24% dela: é esse o tamanho do erro típico de previsão, relativo à própria escala do que se está prevendo.
+Duzentos mercados, `n_menos_2 = 198` depois de descontar os dois parâmetros que a reta gastou para se ajustar: RSS, 2.102,53, dividido por 198 e com a raiz, dá 3,2587. `mean_squared_error` divide o mesmo RSS por $n$, e não por $n-2$. Para recuperar o RSE a partir dele, é preciso desfazer essa divisão antes de tirar a raiz. Feito isso, os dois caminhos batem: 3,2587 nos dois casos, `True`.
+
+`vendas` está em milhares de unidades, então o afastamento típico entre a venda de um mercado e a reta é da ordem de 3.259 unidades, para cima ou para baixo. "Típico" aqui tem sentido preciso: o RSE é a raiz de uma média de quadrados, e estima o desvio padrão do erro $\varepsilon$ em torno da reta. Contra a venda média de 14,0225 mil unidades, esses 3,2587 mil unidades representam 23,24% dela. É esse o tamanho do erro típico de previsão, relativo à própria escala do que se está prevendo.
+
+Esse único número vale para a reta inteira, e só descreve bem cada mercado se a dispersão em torno da reta for parecida em toda a faixa de `tv`. A nuvem da seção 8.1 sugeria que não é: estreita perto de zero, aberta à direita. O mesmo "tamanho típico", a raiz da média dos resíduos ao quadrado, medido dentro de faixas de `tv`:
+
+```{python}
+#| label: residuo-tipico-por-faixa-de-tv
+residuo = y - yhat
+faixa_tv = pd.cut(X["tv"], [0, 50, 100, 150, 200, 300])
+residuo_tipico = pd.DataFrame({
+    "mercados": residuo.groupby(faixa_tv, observed=True).size(),
+    "resíduo típico": (residuo**2).groupby(faixa_tv, observed=True).mean() ** 0.5,
+}).round(2)
+residuo_tipico
+```
+
+```{python}
+#| label: rse-entre-as-faixas
+menor_tipico = float(residuo_tipico["resíduo típico"].min())
+maior_tipico = float(residuo_tipico["resíduo típico"].max())
+rse_fica_entre_as_faixas = bool(menor_tipico < rse_mao < maior_tipico)
+
+menor_tipico, maior_tipico, rse_fica_entre_as_faixas
+```
+
+```{python}
+#| label: fig-residuo-contra-tv
+#| fig-cap: "Resíduo de cada mercado contra o investimento em TV, no ajuste de vendas sobre tv. A faixa laranja vai de menos a mais o resíduo típico de cada faixa de tv; a linha tracejada verde marca ± RSE, o mesmo valor para todos os mercados."
+#| fig-alt: "Pontos azuis de resíduo contra tv, espalhados em volta do zero, pouco dispersos à esquerda e muito dispersos à direita. Uma faixa laranja em degraus acompanha esse alargamento; duas linhas tracejadas verdes horizontais ficam na mesma altura de ponta a ponta."
+bordas = [0, 50, 100, 150, 200, 300]
+fig, ax = plt.subplots()
+ax.axhline(0, color="#6C757D", linewidth=0.8)
+for sinal in (1, -1):
+    ax.axhline(sinal * rse_mao, color="C2", linewidth=1.2, linestyle="--")
+ax.scatter(X["tv"], residuo, color="C0", s=14, alpha=0.6)
+for esquerda, direita, tipico in zip(
+    bordas[:-1], bordas[1:], residuo_tipico["resíduo típico"]
+):
+    ax.fill_between(
+        [esquerda, direita], -tipico, tipico, color="C1", alpha=0.18, linewidth=0
+    )
+ax.set_xlim(0, 300)
+ax.set_xlabel("tv (milhares de dólares)")
+ax.set_ylabel("resíduo (mil unidades)")
+plt.tight_layout()
+plt.show()
+```
+
+::: {.funcao}
+**`pd.cut(serie, bordas)`**: põe cada valor da série na faixa entre duas bordas consecutivas. Aqui, os mercados ficam agrupados por faixa de investimento em TV.
+
+**`ax.fill_between(x, y1, y2)`**: pinta a região entre as curvas `y1` e `y2` ao longo de `x`, aqui um retângulo por faixa de `tv`.
+:::
+
+O resíduo típico vai de 1,78 mil unidades nos mercados que gastam até 50 mil dólares em TV a 4,39 nos que gastam mais de 200, e `rse_fica_entre_as_faixas` confirma que o RSE de 3,2587 fica entre esses extremos. O RSE é um resumo da reta inteira: para os mercados que gastam pouco em TV ele exagera o erro, e para os que gastam muito ele o subestima. Lê-lo como "o desvio padrão de $\varepsilon$" supõe uma dispersão constante que este dado não tem.
 
 ## R²: a proporção de variância explicada
 
-RSE vem na unidade de `vendas`, e 3,2587 só diz alguma coisa a quem sabe a escala de vendas — não dá para comparar direto com o RSE de um modelo cuja resposta é medida em outra unidade. R² resolve isso descartando a unidade: é a fração do TSS — a variância total da resposta, antes de qualquer reta — que a regressão explica.
+RSE vem na unidade de `vendas`, e 3,2587 só diz alguma coisa a quem sabe a escala de vendas. Se vendas fosse medida em unidades em vez de milhares, o mesmo ajuste teria RSE mil vezes maior. Existe uma medida que não dependa da escala? R² descarta a unidade: é a fração do TSS (a variação total da resposta em torno da própria média, antes de qualquer reta) que a regressão explica.
 
 $$
 \text{TSS} = \sum_{i=1}^n (y_i - \bar y)^2, \qquad R^2 = 1 - \frac{\text{RSS}}{\text{TSS}}
@@ -91,13 +148,23 @@ r2_via_score = float(modelo.score(X, y))
 )
 ```
 
-TSS, a variância total de vendas antes de qualquer reta, sai 5.417,15; descontado o RSS de 2.102,53, sobram 3.314,62 de variância que a reta explica. A conta à mão, `r2_score` e `.score()` — os três caminhos para o mesmo número — concordam em 0,6119: `True`. Uma reta que usa só o investimento em TV explica 61,19% da variância de vendas, sem que esse número carregue unidade nenhuma — é isso que o torna comparável entre modelos onde o RSE não é.
+::: {.funcao}
+**`r2_score(y, yhat)`**: o R², $1 - \text{RSS}/\text{TSS}$, calculado a partir das respostas observadas e das previstas.
 
-::: {.conceito}
-O **erro-padrão residual** (RSE) é a raiz de $\text{RSS}/(n-2)$: o tamanho típico do resíduo, na unidade da resposta. O **R²** é $1 - \text{RSS}/\text{TSS}$: a fração da variância da resposta que o modelo explica, sempre entre 0 e 1 e sem unidade — o que o torna comparável de um modelo para outro, mesmo quando o RSE não é.
+**`modelo.score(X, y)`**: nos estimadores de regressão do `scikit-learn`, o mesmo R², com o `predict` feito por dentro.
+
+**`np.isclose(a, b)`**: a versão de `np.allclose` para dois números, `True` se coincidem até uma tolerância pequena.
 :::
 
-R² alto não garante que o modelo seja bom, nem R² baixo que ele seja ruim: os dois dependem de quanto do problema é o $\mathrm{Var}(\epsilon)$ que o capítulo anterior chamou de piso irredutível — nenhuma reta, nem a melhor possível, explica a parte da variância que é ruído puro.
+TSS, a variação total de vendas antes de qualquer reta, sai 5.417,15. Descontado o RSS de 2.102,53, sobram 3.314,62 que a reta explica. A conta à mão, `r2_score` e `.score()` concordam em 0,6119: `True`. Uma reta que usa só o investimento em TV explica 61,19% da variância de vendas, e esse número não carrega unidade nenhuma: continuaria 0,6119 com vendas medida em unidades, em milhares ou em milhões.
+
+::: {.conceito}
+O **erro-padrão residual** (RSE) é a raiz de $\text{RSS}/(n-2)$: o tamanho típico do resíduo, na unidade da resposta. O **R²** é $1 - \text{RSS}/\text{TSS}$: a fração da variância da resposta que o modelo explica nos dados usados no ajuste. Nesses dados, e com intercepto, fica entre 0 e 1, não tem unidade e não muda se a resposta trocar de escala.
+
+Os dois são medidas de **treino**. Acrescentar um preditor a um modelo nunca faz o R² de treino cair, mesmo que o preditor seja ruído puro: no pior caso, mínimos quadrados lhe dá coeficiente zero e o RSS fica onde estava. Comparar o R² de um modelo com o de outro que o contém, portanto, sempre favorece o maior. A comparação honesta é o erro em dado novo, o MSE de teste da seção 7.6.
+:::
+
+R² alto não garante que o modelo seja bom, nem R² baixo que ele seja ruim. Os dois dependem de quanto do problema é o $\mathrm{Var}(\varepsilon)$, o piso irredutível da seção 7.6: nenhuma reta, nem a melhor possível, explica a parte da variância que é ruído puro.
 
 ## O que a reta previu contra o que cada mercado vendeu
 
@@ -108,11 +175,12 @@ explicada_maior_que_rss = bool(explicada > rss)
 soma_confere, explicada_maior_que_rss
 ```
 
-RSS mais a parte explicada soma de volta o TSS — `soma_confere` é `True` — e a parte explicada é maior que a não explicada, `explicada_maior_que_rss` também `True`, o mesmo fato que R² > 0,5 já dizia.
+RSS mais a parte explicada soma de volta o TSS (`soma_confere` é `True`), e a parte explicada é maior que a não explicada (`explicada_maior_que_rss` também é `True`). É o mesmo fato que R² > 0,5 já dizia.
 
 ```{python}
 #| label: fig-previsto-observado-e-decomposicao
 #| fig-cap: "À esquerda, previsto contra observado para os duzentos mercados de Advertising, com a diagonal de previsão perfeita: a distância vertical de cada ponto até ela é o resíduo daquele mercado. À direita, o TSS decomposto em RSS (não explicada) e a parte que a reta explica, com R² anotado como a fração de cima."
+#| fig-alt: "Dois painéis. À esquerda, pontos azuis de vendas previstas contra observadas espalhados em volta de uma diagonal laranja, com a nuvem achatada: as previsões variam menos que as vendas. À direita, uma barra única empilhada, cinza embaixo e laranja em cima, maior que a cinza, com o rótulo R² = 0,612."
 fig, (ax_diag, ax_barra) = plt.subplots(1, 2, figsize=(9, 4.2))
 
 limite = (min(y.min(), yhat.min()) - 1, max(y.max(), yhat.max()) + 1)
@@ -125,15 +193,15 @@ ax_diag.set_xlabel("vendas observadas (mil unidades)")
 ax_diag.set_ylabel("vendas previstas (mil unidades)")
 ax_diag.legend()
 
-ax_barra.bar(0, rss, color="C1", label="RSS (não explicada)")
-ax_barra.bar(0, explicada, bottom=rss, color="C0", label="explicada (TSS − RSS)")
+ax_barra.bar(0, rss, color="#9AA5B1", label="RSS (não explicada)")
+ax_barra.bar(0, explicada, bottom=rss, color="C1", label="explicada (TSS − RSS)")
 ax_barra.annotate(
-    f"R² = {r2_mao:.3f}",
+    f"R² = {r2_mao:.3f}".replace(".", ","),
     xy=(0, rss + explicada / 2),
     xytext=(0.55, rss + explicada / 2),
     va="center",
     fontsize=9,
-    arrowprops={"arrowstyle": "-", "linewidth": 0.8},
+    arrowprops={"arrowstyle": "-", "linewidth": 0.8, "color": "#6C757D"},
 )
 ax_barra.set_xlim(-0.6, 1.6)
 ax_barra.set_xticks([0])
@@ -145,4 +213,8 @@ plt.tight_layout()
 plt.show()
 ```
 
-À esquerda, cada ponto é um mercado: quanto mais perto da diagonal, menor o resíduo que a seção anterior somou ao quadrado para formar o RSS. À direita, a mesma barra que soma TSS — verificado acima — dividida nas duas parcelas que R² compara: o pedaço laranja é o RSS que a reta deixou sem explicar, o azul é a fatia que R² = 0,612 mede como proporção do todo.
+::: {.funcao}
+**`ax.bar(x, altura, bottom)`**: desenha uma barra de altura `altura` na posição `x`, começando em `bottom` em vez de zero. Duas chamadas, a segunda com `bottom` igual à altura da primeira, empilham as duas parcelas numa barra só.
+:::
+
+À esquerda, cada ponto é um mercado: quanto mais perto da diagonal, menor o resíduo que entra ao quadrado no RSS. À direita, a barra do TSS aparece dividida nas duas parcelas que R² compara. O pedaço cinza é o RSS que a reta deixou sem explicar; o laranja é a fatia que a reta de mínimos quadrados explica, e que R² = 0,612 mede como proporção do todo.

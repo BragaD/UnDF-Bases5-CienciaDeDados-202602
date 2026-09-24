@@ -105,7 +105,7 @@ LIVRO = [
         ("04-preditores-qualitativos", "Preditores Qualitativos", "3.3.1"),
         ("05-interacao-e-termos-nao-lineares", "Interação e Termos Não Lineares", "3.3.2"),
         ("06-outliers-alavancagem-e-colinearidade", "Outliers, Alavancagem e Colinearidade", "3.3.3"),
-        ("07-regressao-linear-contra-k-vizinhos", "Regressão Linear contra k-Vizinhos", "3.5"),
+        ("07-regressao-linear-contra-k-vizinhos", "Regressão Linear contra k-NN", "3.5"),
     ]),
     (9, "Classificação", 4, [
         ("01-por-que-nao-regressao-linear", "Por que Não Regressão Linear", ("4.1", "4.2")),
