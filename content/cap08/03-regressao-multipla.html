@@ -750,7 +750,7 @@ window.Quarto = {
 </li>
           <li class="sidebar-item">
   <div class="sidebar-item-container"> 
-  <a href="../../content/cap08/07-regressao-linear-contra-k-vizinhos.html" class="sidebar-item-text sidebar-link"><span class="chapter-title">Regressão Linear contra k-Vizinhos</span></a>
+  <a href="../../content/cap08/07-regressao-linear-contra-k-vizinhos.html" class="sidebar-item-text sidebar-link"><span class="chapter-title">Regressão Linear contra k-NN</span></a>
   </div>
 </li>
       </ul>
@@ -862,7 +862,7 @@ Nota
 <p>Esta seção corresponde à seção 3.2 de <span class="citation" data-cites="james2023">James et al. (<a href="#ref-james2023" role="doc-biblioref">2023</a>)</span>.</p>
 </div>
 </div>
-<p><code>Advertising</code> traz três mídias, e a seção 8.1 usou só uma. A pergunta mais direta é repetir a mesma reta duas vezes mais — uma para <code>radio</code>, outra para <code>jornal</code> — e ler os três coeficientes lado a lado. Esta seção começa por essa pergunta, e termina desfazendo a resposta que ela parece dar.</p>
+<p><code>Advertising</code> traz três mídias, e a seção 8.1 usou só uma. O caminho mais direto seria ajustar uma reta para cada mídia, como a 8.1 fez com <code>tv</code>, e ler cada coeficiente isolado. Feito para <code>jornal</code>, esse caminho dá uma resposta que não sobrevive a um modelo com as três mídias juntas.</p>
 <section id="jornal-sozinho-parece-importar" class="level2">
 <h2 class="anchored" data-anchor-id="jornal-sozinho-parece-importar">Jornal, sozinho, parece importar</h2>
 <div id="cell-jornal-sozinho" class="cell" data-execution_count="2">
@@ -875,12 +875,16 @@ Nota
 <pre><code>(0.0547, 54.7)</code></pre>
 </div>
 </div>
-<p>Ajustada sozinha contra <code>jornal</code>, a reta de mínimos quadrados dá um coeficiente de 0,0547: cada mil dólares a mais gastos em jornal está associado, em média, a 54,7 unidades a mais vendidas. É um coeficiente positivo, do mesmo tipo que a seção 8.1 encontrou para <code>tv</code> — nada nesta regressão isolada distingue jornal das outras duas mídias.</p>
-<p>Só que ajustar <code>jornal</code> sozinho ignora <code>tv</code> e <code>radio</code> por completo. Se as três mídias variam juntas de mercado para mercado, o coeficiente de uma pode estar levando crédito por vendas que outra produziu — e a única forma de saber é colocar as três na mesma equação.</p>
+<p>Ajustada sozinha contra <code>jornal</code>, a reta de mínimos quadrados dá um coeficiente de 0,0547: cada mil dólares a mais gastos em jornal está associado, em média, a 54,7 unidades a mais vendidas. É um coeficiente positivo, do mesmo tipo que a seção 8.1 encontrou para <code>tv</code>, e nada nesta regressão isolada distingue <code>jornal</code> das outras duas mídias.</p>
+<p>Só que ajustar <code>jornal</code> sozinho ignora <code>tv</code> e <code>radio</code> por completo. Se as três mídias variam juntas de mercado para mercado, o coeficiente de uma pode estar levando crédito por vendas que outra produziu. A única forma de saber é colocar as três na mesma equação.</p>
 </section>
 <section id="as-três-mídias-na-mesma-equação" class="level2">
 <h2 class="anchored" data-anchor-id="as-três-mídias-na-mesma-equação">As três mídias na mesma equação</h2>
-<p>O modelo múltiplo estende a mesma ideia de mínimos quadrados a mais de um preditor: em vez de uma reta, um hiperplano que minimiza a soma dos quadrados dos resíduos sobre <code>tv</code>, <code>radio</code> e <code>jornal</code> ao mesmo tempo.</p>
+<p>O modelo múltiplo estende a mesma ideia de mínimos quadrados a mais de um preditor. Em vez de uma reta, ajusta um hiperplano que minimiza a soma dos quadrados dos resíduos sobre <code>tv</code>, <code>radio</code> e <code>jornal</code> ao mesmo tempo:</p>
+<p><span class="math display">\[
+\text{vendas} \approx \beta_0 + \beta_1 \cdot \text{tv} + \beta_2 \cdot \text{radio} + \beta_3 \cdot \text{jornal}.
+\]</span></p>
+<p>Antes de olhar a saída, vale apostar: o coeficiente de <code>jornal</code>, 0,0547 quando ajustado sozinho, fica parecido quando <code>tv</code> e <code>radio</code> entram na mesma equação?</p>
 <div id="cell-modelo-multiplo" class="cell" data-execution_count="3">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb3"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a>X_multiplo <span class="op">=</span> propaganda[[<span class="st">"tv"</span>, <span class="st">"radio"</span>, <span class="st">"jornal"</span>]]</span>
 <span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a>modelo_multiplo <span class="op">=</span> LinearRegression().fit(X_multiplo, y)</span>
@@ -900,19 +904,33 @@ Nota
  dtype: float64)</code></pre>
 </div>
 </div>
-<p><code>feature_names_in_</code> guarda os três nomes de coluna que o <code>DataFrame</code> carregava, na mesma ordem dos coeficientes — por isso dá para juntar os dois numa única <code>Series</code> em vez de decorar qual número é qual. <code>tv</code> sai com 0,0458 (45,8 por mil dólares) e <code>radio</code> com 0,1885 (188,5 por mil dólares), os dois positivos. <code>jornal</code> sai com -0,0010 (-1,0 por mil dólares): praticamente zero, e de sinal oposto ao 0,0547 que a regressão sozinha tinha encontrado para ele.</p>
-<div class="conceito">
-<p>Num modelo múltiplo, cada coeficiente <span class="math inline">\(\hat\beta_j\)</span> se lê como o efeito médio sobre a resposta de aumentar o preditor <span class="math inline">\(X_j\)</span> em uma unidade, <strong>mantendo todos os outros preditores fixos</strong>. É essa cláusula — mantendo os demais fixos — que separa a leitura de um coeficiente múltiplo da de uma regressão simples, e é ela que muda o que se pode dizer sobre <code>jornal</code>.</p>
+<div class="funcao">
+<p><strong><code>pd.Series(valores, index=rotulos)</code></strong>: uma coluna de valores com um rótulo por posição. Aqui, os rótulos são os nomes de <code>feature_names_in_</code>, e cada coeficiente passa a ser lido pelo nome do seu preditor.</p>
 </div>
-<p>Lido dessa forma: gastar mais mil dólares em <code>tv</code>, mantendo <code>radio</code> e <code>jornal</code> fixos, está associado a 45,8 unidades a mais de venda; mais mil dólares em <code>radio</code>, mantendo <code>tv</code> e <code>jornal</code> fixos, a 188,5 unidades a mais. Mais mil dólares em <code>jornal</code>, mantendo <code>tv</code> e <code>radio</code> fixos, está associado a uma variação de -1,0 unidade — perto o bastante de zero para não sobrar efeito de jornal depois que as outras duas mídias já estão na conta.</p>
+<p><code>feature_names_in_</code> guarda os três nomes de coluna que o <code>DataFrame</code> carregava, na mesma ordem dos coeficientes, e por isso dá para juntar os dois numa única <code>Series</code> em vez de decorar qual número é qual. <code>tv</code> sai com 0,0458 (45,8 unidades por mil dólares) e <code>radio</code> com 0,1885 (188,5 por mil dólares), os dois positivos. <code>jornal</code> sai com -0,0010 (-1,0 por mil dólares): praticamente zero, e de sinal oposto ao 0,0547 que a regressão sozinha tinha encontrado para ele.</p>
+<div class="conceito">
+<p>Num modelo múltiplo, cada coeficiente <span class="math inline">\(\hat\beta_j\)</span> se lê como o efeito médio sobre a resposta de aumentar o preditor <span class="math inline">\(X_j\)</span> em uma unidade, <strong>mantendo todos os outros preditores fixos</strong>. É essa cláusula que separa a leitura de um coeficiente múltiplo da de uma regressão simples, e é ela que muda o que se pode dizer sobre <code>jornal</code>.</p>
+</div>
+<p>Lido dessa forma: gastar mais mil dólares em <code>tv</code>, mantendo <code>radio</code> e <code>jornal</code> fixos, está associado a 45,8 unidades a mais de venda; mais mil dólares em <code>radio</code>, mantendo <code>tv</code> e <code>jornal</code> fixos, a 188,5 unidades a mais. Mais mil dólares em <code>jornal</code>, mantendo <code>tv</code> e <code>radio</code> fixos, está associado a uma variação de -1,0 unidade. Isso é pouco? Um coeficiente sozinho não diz, porque depende da unidade do preditor. O que diz é o quanto a previsão muda quando <code>jornal</code> percorre toda a faixa observada, comparado com o quanto as vendas variam:</p>
+<div id="cell-efeito-de-jornal-na-faixa" class="cell" data-execution_count="4">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb5"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a>amplitude_jornal <span class="op">=</span> <span class="bu">float</span>(propaganda[<span class="st">"jornal"</span>].<span class="bu">max</span>() <span class="op">-</span> propaganda[<span class="st">"jornal"</span>].<span class="bu">min</span>())</span>
+<span id="cb5-2"><a href="#cb5-2" aria-hidden="true" tabindex="-1"></a>efeito_jornal_na_faixa <span class="op">=</span> <span class="bu">float</span>(coeficientes[<span class="st">"jornal"</span>]) <span class="op">*</span> amplitude_jornal</span>
+<span id="cb5-3"><a href="#cb5-3" aria-hidden="true" tabindex="-1"></a>desvio_vendas <span class="op">=</span> <span class="bu">float</span>(y.std())</span>
+<span id="cb5-4"><a href="#cb5-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb5-5"><a href="#cb5-5" aria-hidden="true" tabindex="-1"></a><span class="bu">round</span>(amplitude_jornal, <span class="dv">1</span>), <span class="bu">round</span>(efeito_jornal_na_faixa, <span class="dv">3</span>), <span class="bu">round</span>(desvio_vendas, <span class="dv">2</span>)</span></code></pre></div><button title="Copiar para a área de transferência" class="code-copy-button"><i class="bi"></i></button></div>
+<div id="efeito-de-jornal-na-faixa" class="cell-output cell-output-display" data-execution_count="4">
+<pre><code>(113.7, -0.118, 5.22)</code></pre>
+</div>
+</div>
+<p>Indo do mercado que menos gasta em jornal ao que mais gasta, uma faixa de 113,7 mil dólares, a previsão muda -0,118 mil unidades, isto é, 118 unidades a menos. <code>vendas</code> varia de um mercado para outro com desvio padrão de 5,22 mil unidades. Depois que <code>tv</code> e <code>radio</code> estão na conta, sobra a <code>jornal</code> um efeito praticamente nulo.</p>
 </section>
 <section id="por-que-jornal-some-quem-anda-com-quem" class="level2">
 <h2 class="anchored" data-anchor-id="por-que-jornal-some-quem-anda-com-quem">Por que jornal some: quem anda com quem</h2>
-<p>A explicação não está em mais uma regressão — está em como as três mídias se relacionam entre si, antes de qualquer venda entrar na conta.</p>
-<div id="cell-correlacoes" class="cell" data-execution_count="4">
-<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb5"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a>correlacoes <span class="op">=</span> propaganda[[<span class="st">"tv"</span>, <span class="st">"radio"</span>, <span class="st">"jornal"</span>, <span class="st">"vendas"</span>]].corr()</span>
-<span id="cb5-2"><a href="#cb5-2" aria-hidden="true" tabindex="-1"></a>correlacoes.<span class="bu">round</span>(<span class="dv">4</span>)</span></code></pre></div><button title="Copiar para a área de transferência" class="code-copy-button"><i class="bi"></i></button></div>
-<div id="correlacoes" class="cell-output cell-output-display" data-execution_count="4">
+<p>A explicação não exige mais uma regressão. Basta ver como as três mídias se relacionam entre si, antes de qualquer venda entrar na conta.</p>
+<div id="cell-correlacoes" class="cell" data-execution_count="5">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb7"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb7-1"><a href="#cb7-1" aria-hidden="true" tabindex="-1"></a>correlacoes <span class="op">=</span> propaganda[[<span class="st">"tv"</span>, <span class="st">"radio"</span>, <span class="st">"jornal"</span>, <span class="st">"vendas"</span>]].corr()</span>
+<span id="cb7-2"><a href="#cb7-2" aria-hidden="true" tabindex="-1"></a>correlacoes.<span class="bu">round</span>(<span class="dv">4</span>)</span></code></pre></div><button title="Copiar para a área de transferência" class="code-copy-button"><i class="bi"></i></button></div>
+<div id="correlacoes" class="cell-output cell-output-display" data-execution_count="5">
 <div>
 
 
@@ -961,57 +979,64 @@ Nota
 </div>
 </div>
 </div>
-<div id="cell-jornal-correlaciona-mais-com-radio" class="cell" data-execution_count="5">
-<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb6"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb6-1"><a href="#cb6-1" aria-hidden="true" tabindex="-1"></a>corr_jornal_radio <span class="op">=</span> <span class="bu">float</span>(correlacoes.loc[<span class="st">"jornal"</span>, <span class="st">"radio"</span>])</span>
-<span id="cb6-2"><a href="#cb6-2" aria-hidden="true" tabindex="-1"></a>corr_jornal_tv <span class="op">=</span> <span class="bu">float</span>(correlacoes.loc[<span class="st">"jornal"</span>, <span class="st">"tv"</span>])</span>
-<span id="cb6-3"><a href="#cb6-3" aria-hidden="true" tabindex="-1"></a>jornal_mais_correlacionado_com_radio <span class="op">=</span> <span class="bu">bool</span>(corr_jornal_radio <span class="op">&gt;</span> corr_jornal_tv)</span>
-<span id="cb6-4"><a href="#cb6-4" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb6-5"><a href="#cb6-5" aria-hidden="true" tabindex="-1"></a><span class="bu">round</span>(corr_jornal_radio, <span class="dv">4</span>), <span class="bu">round</span>(corr_jornal_tv, <span class="dv">4</span>), jornal_mais_correlacionado_com_radio</span></code></pre></div><button title="Copiar para a área de transferência" class="code-copy-button"><i class="bi"></i></button></div>
-<div id="jornal-correlaciona-mais-com-radio" class="cell-output cell-output-display" data-execution_count="5">
+<div class="funcao">
+<p><strong><code>df.corr()</code></strong>: a correlação de Pearson de cada coluna com cada outra, numa tabela quadrada. <code>correlacoes.loc["jornal", "radio"]</code> lê uma célula pelo nome da linha e da coluna.</p>
+</div>
+<div id="cell-jornal-correlaciona-mais-com-radio" class="cell" data-execution_count="6">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb8"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb8-1"><a href="#cb8-1" aria-hidden="true" tabindex="-1"></a>corr_jornal_radio <span class="op">=</span> <span class="bu">float</span>(correlacoes.loc[<span class="st">"jornal"</span>, <span class="st">"radio"</span>])</span>
+<span id="cb8-2"><a href="#cb8-2" aria-hidden="true" tabindex="-1"></a>corr_jornal_tv <span class="op">=</span> <span class="bu">float</span>(correlacoes.loc[<span class="st">"jornal"</span>, <span class="st">"tv"</span>])</span>
+<span id="cb8-3"><a href="#cb8-3" aria-hidden="true" tabindex="-1"></a>jornal_mais_correlacionado_com_radio <span class="op">=</span> <span class="bu">bool</span>(corr_jornal_radio <span class="op">&gt;</span> corr_jornal_tv)</span>
+<span id="cb8-4"><a href="#cb8-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb8-5"><a href="#cb8-5" aria-hidden="true" tabindex="-1"></a>(</span>
+<span id="cb8-6"><a href="#cb8-6" aria-hidden="true" tabindex="-1"></a>    <span class="bu">round</span>(corr_jornal_radio, <span class="dv">4</span>),</span>
+<span id="cb8-7"><a href="#cb8-7" aria-hidden="true" tabindex="-1"></a>    <span class="bu">round</span>(corr_jornal_tv, <span class="dv">4</span>),</span>
+<span id="cb8-8"><a href="#cb8-8" aria-hidden="true" tabindex="-1"></a>    jornal_mais_correlacionado_com_radio,</span>
+<span id="cb8-9"><a href="#cb8-9" aria-hidden="true" tabindex="-1"></a>)</span></code></pre></div><button title="Copiar para a área de transferência" class="code-copy-button"><i class="bi"></i></button></div>
+<div id="jornal-correlaciona-mais-com-radio" class="cell-output cell-output-display" data-execution_count="6">
 <pre><code>(0.3541, 0.0566, True)</code></pre>
 </div>
 </div>
-<p><code>jornal</code> correlaciona com <code>radio</code> a 0,3541 e com <code>tv</code> a só 0,0566 — <code>jornal_mais_correlacionado_com_radio</code> confirma que a primeira supera a segunda. Mercados que gastam mais em rádio tendem a gastar mais em jornal também: os dois investimentos sobem e descem juntos, sem que isso implique nada causal entre eles.</p>
-<p>É essa correlação que explica a reviravolta do coeficiente de jornal, de 0,0547 sozinho para -0,0010 na companhia das outras duas mídias. Se é o rádio — não o jornal — que de fato move vendas, então nos mercados onde se gasta mais em rádio as vendas tendem a ser maiores, e a tabela de correlação mostra que esses são os mesmos mercados que gastam mais em jornal. Uma regressão que olha só para <code>jornal</code>, sem <code>radio</code> por perto, não tem como separar as duas coisas: ela atribui a jornal parte do crédito que é do rádio. Colocar as duas mídias na mesma equação é o que permite distinguir — e é aí que o coeficiente de jornal cai a praticamente zero.</p>
+<p><code>jornal</code> correlaciona com <code>radio</code> a 0,3541 e com <code>tv</code> a só 0,0566, e <code>jornal_mais_correlacionado_com_radio</code> confirma que a primeira supera a segunda. Mercados que gastam mais em rádio tendem a gastar mais em jornal também: os dois investimentos sobem e descem juntos, sem que isso implique nada causal entre eles.</p>
+<p>É essa correlação que explica a reviravolta do coeficiente de jornal, de 0,0547 sozinho para -0,0010 na companhia das outras duas mídias. Suponha que é o rádio, e não o jornal, que de fato move vendas. Então nos mercados onde se gasta mais em rádio as vendas tendem a ser maiores, e a tabela de correlação mostra que esses são os mesmos mercados que gastam mais em jornal. Uma regressão que olha só para <code>jornal</code>, sem <code>radio</code> por perto, não tem como separar as duas coisas e atribui a jornal parte do crédito que é do rádio. Colocar as duas mídias na mesma equação é o que permite distinguir, e é aí que o coeficiente de jornal cai a praticamente zero.</p>
 </section>
 <section id="r²-e-rse-o-quanto-o-modelo-múltiplo-melhora" class="level2">
 <h2 class="anchored" data-anchor-id="r²-e-rse-o-quanto-o-modelo-múltiplo-melhora">R² e RSE: o quanto o modelo múltiplo melhora</h2>
-<p>R² não muda de definição com mais preditores; o RSE muda de denominador. Com <span class="math inline">\(p\)</span> preditores, a raiz é de <span class="math inline">\(\text{RSS}/(n - p - 1)\)</span> — um grau gasto pelo intercepto e um por coeficiente —, e o <span class="math inline">\(n-2\)</span> da seção anterior é o caso <span class="math inline">\(p = 1\)</span> dessa mesma forma.</p>
-<div id="cell-rse-r2-tv-sozinho" class="cell" data-execution_count="6">
-<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb8"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb8-1"><a href="#cb8-1" aria-hidden="true" tabindex="-1"></a>X_tv <span class="op">=</span> propaganda[[<span class="st">"tv"</span>]]</span>
-<span id="cb8-2"><a href="#cb8-2" aria-hidden="true" tabindex="-1"></a>modelo_tv <span class="op">=</span> LinearRegression().fit(X_tv, y)</span>
-<span id="cb8-3"><a href="#cb8-3" aria-hidden="true" tabindex="-1"></a>yhat_tv <span class="op">=</span> modelo_tv.predict(X_tv)</span>
-<span id="cb8-4"><a href="#cb8-4" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb8-5"><a href="#cb8-5" aria-hidden="true" tabindex="-1"></a>n <span class="op">=</span> <span class="bu">len</span>(y)</span>
-<span id="cb8-6"><a href="#cb8-6" aria-hidden="true" tabindex="-1"></a>rss_tv <span class="op">=</span> <span class="bu">float</span>(((y <span class="op">-</span> yhat_tv) <span class="op">**</span> <span class="dv">2</span>).<span class="bu">sum</span>())</span>
-<span id="cb8-7"><a href="#cb8-7" aria-hidden="true" tabindex="-1"></a>rse_tv <span class="op">=</span> <span class="bu">float</span>(np.sqrt(rss_tv <span class="op">/</span> (n <span class="op">-</span> <span class="dv">2</span>)))</span>
-<span id="cb8-8"><a href="#cb8-8" aria-hidden="true" tabindex="-1"></a>r2_tv <span class="op">=</span> <span class="bu">float</span>(r2_score(y, yhat_tv))</span>
-<span id="cb8-9"><a href="#cb8-9" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb8-10"><a href="#cb8-10" aria-hidden="true" tabindex="-1"></a><span class="bu">round</span>(rse_tv, <span class="dv">4</span>), <span class="bu">round</span>(r2_tv, <span class="dv">4</span>)</span></code></pre></div><button title="Copiar para a área de transferência" class="code-copy-button"><i class="bi"></i></button></div>
-<div id="rse-r2-tv-sozinho" class="cell-output cell-output-display" data-execution_count="6">
+<p>R² não muda de definição com mais preditores; o RSE muda de denominador. Com <span class="math inline">\(p\)</span> preditores, a raiz é de <span class="math inline">\(\text{RSS}/(n - p - 1)\)</span>, com um grau gasto pelo intercepto e um por coeficiente. O <span class="math inline">\(n-2\)</span> da seção 8.2 é o caso <span class="math inline">\(p = 1\)</span> dessa mesma forma.</p>
+<div id="cell-rse-r2-tv-sozinho" class="cell" data-execution_count="7">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb10"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb10-1"><a href="#cb10-1" aria-hidden="true" tabindex="-1"></a>X_tv <span class="op">=</span> propaganda[[<span class="st">"tv"</span>]]</span>
+<span id="cb10-2"><a href="#cb10-2" aria-hidden="true" tabindex="-1"></a>modelo_tv <span class="op">=</span> LinearRegression().fit(X_tv, y)</span>
+<span id="cb10-3"><a href="#cb10-3" aria-hidden="true" tabindex="-1"></a>yhat_tv <span class="op">=</span> modelo_tv.predict(X_tv)</span>
+<span id="cb10-4"><a href="#cb10-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb10-5"><a href="#cb10-5" aria-hidden="true" tabindex="-1"></a>n <span class="op">=</span> <span class="bu">len</span>(y)</span>
+<span id="cb10-6"><a href="#cb10-6" aria-hidden="true" tabindex="-1"></a>rss_tv <span class="op">=</span> <span class="bu">float</span>(((y <span class="op">-</span> yhat_tv) <span class="op">**</span> <span class="dv">2</span>).<span class="bu">sum</span>())</span>
+<span id="cb10-7"><a href="#cb10-7" aria-hidden="true" tabindex="-1"></a>rse_tv <span class="op">=</span> <span class="bu">float</span>(np.sqrt(rss_tv <span class="op">/</span> (n <span class="op">-</span> <span class="dv">2</span>)))</span>
+<span id="cb10-8"><a href="#cb10-8" aria-hidden="true" tabindex="-1"></a>r2_tv <span class="op">=</span> <span class="bu">float</span>(r2_score(y, yhat_tv))</span>
+<span id="cb10-9"><a href="#cb10-9" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb10-10"><a href="#cb10-10" aria-hidden="true" tabindex="-1"></a><span class="bu">round</span>(rse_tv, <span class="dv">4</span>), <span class="bu">round</span>(r2_tv, <span class="dv">4</span>)</span></code></pre></div><button title="Copiar para a área de transferência" class="code-copy-button"><i class="bi"></i></button></div>
+<div id="rse-r2-tv-sozinho" class="cell-output cell-output-display" data-execution_count="7">
 <pre><code>(3.2587, 0.6119)</code></pre>
 </div>
 </div>
-<div id="cell-rse-r2-multiplo" class="cell" data-execution_count="7">
-<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb10"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb10-1"><a href="#cb10-1" aria-hidden="true" tabindex="-1"></a>yhat_multiplo <span class="op">=</span> modelo_multiplo.predict(X_multiplo)</span>
-<span id="cb10-2"><a href="#cb10-2" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb10-3"><a href="#cb10-3" aria-hidden="true" tabindex="-1"></a>p <span class="op">=</span> X_multiplo.shape[<span class="dv">1</span>]</span>
-<span id="cb10-4"><a href="#cb10-4" aria-hidden="true" tabindex="-1"></a>rss_multiplo <span class="op">=</span> <span class="bu">float</span>(((y <span class="op">-</span> yhat_multiplo) <span class="op">**</span> <span class="dv">2</span>).<span class="bu">sum</span>())</span>
-<span id="cb10-5"><a href="#cb10-5" aria-hidden="true" tabindex="-1"></a>rse_multiplo <span class="op">=</span> <span class="bu">float</span>(np.sqrt(rss_multiplo <span class="op">/</span> (n <span class="op">-</span> p <span class="op">-</span> <span class="dv">1</span>)))</span>
-<span id="cb10-6"><a href="#cb10-6" aria-hidden="true" tabindex="-1"></a>r2_multiplo <span class="op">=</span> <span class="bu">float</span>(r2_score(y, yhat_multiplo))</span>
-<span id="cb10-7"><a href="#cb10-7" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb10-8"><a href="#cb10-8" aria-hidden="true" tabindex="-1"></a><span class="bu">round</span>(rse_multiplo, <span class="dv">4</span>), <span class="bu">round</span>(r2_multiplo, <span class="dv">4</span>)</span></code></pre></div><button title="Copiar para a área de transferência" class="code-copy-button"><i class="bi"></i></button></div>
-<div id="rse-r2-multiplo" class="cell-output cell-output-display" data-execution_count="7">
+<div id="cell-rse-r2-multiplo" class="cell" data-execution_count="8">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb12"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb12-1"><a href="#cb12-1" aria-hidden="true" tabindex="-1"></a>yhat_multiplo <span class="op">=</span> modelo_multiplo.predict(X_multiplo)</span>
+<span id="cb12-2"><a href="#cb12-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb12-3"><a href="#cb12-3" aria-hidden="true" tabindex="-1"></a>p <span class="op">=</span> X_multiplo.shape[<span class="dv">1</span>]</span>
+<span id="cb12-4"><a href="#cb12-4" aria-hidden="true" tabindex="-1"></a>rss_multiplo <span class="op">=</span> <span class="bu">float</span>(((y <span class="op">-</span> yhat_multiplo) <span class="op">**</span> <span class="dv">2</span>).<span class="bu">sum</span>())</span>
+<span id="cb12-5"><a href="#cb12-5" aria-hidden="true" tabindex="-1"></a>rse_multiplo <span class="op">=</span> <span class="bu">float</span>(np.sqrt(rss_multiplo <span class="op">/</span> (n <span class="op">-</span> p <span class="op">-</span> <span class="dv">1</span>)))</span>
+<span id="cb12-6"><a href="#cb12-6" aria-hidden="true" tabindex="-1"></a>r2_multiplo <span class="op">=</span> <span class="bu">float</span>(r2_score(y, yhat_multiplo))</span>
+<span id="cb12-7"><a href="#cb12-7" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb12-8"><a href="#cb12-8" aria-hidden="true" tabindex="-1"></a><span class="bu">round</span>(rse_multiplo, <span class="dv">4</span>), <span class="bu">round</span>(r2_multiplo, <span class="dv">4</span>)</span></code></pre></div><button title="Copiar para a área de transferência" class="code-copy-button"><i class="bi"></i></button></div>
+<div id="rse-r2-multiplo" class="cell-output cell-output-display" data-execution_count="8">
 <pre><code>(1.6855, 0.8972)</code></pre>
 </div>
 </div>
-<div id="cell-tabela-comparacao" class="cell" data-execution_count="8">
-<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb12"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb12-1"><a href="#cb12-1" aria-hidden="true" tabindex="-1"></a>comparacao <span class="op">=</span> pd.DataFrame(</span>
-<span id="cb12-2"><a href="#cb12-2" aria-hidden="true" tabindex="-1"></a>    {<span class="st">"R²"</span>: [r2_tv, r2_multiplo], <span class="st">"RSE"</span>: [rse_tv, rse_multiplo]},</span>
-<span id="cb12-3"><a href="#cb12-3" aria-hidden="true" tabindex="-1"></a>    index<span class="op">=</span>[<span class="st">"tv sozinho"</span>, <span class="st">"tv + radio + jornal"</span>],</span>
-<span id="cb12-4"><a href="#cb12-4" aria-hidden="true" tabindex="-1"></a>).<span class="bu">round</span>(<span class="dv">4</span>)</span>
-<span id="cb12-5"><a href="#cb12-5" aria-hidden="true" tabindex="-1"></a>comparacao</span></code></pre></div><button title="Copiar para a área de transferência" class="code-copy-button"><i class="bi"></i></button></div>
-<div id="tabela-comparacao" class="cell-output cell-output-display" data-execution_count="8">
+<div id="cell-tabela-comparacao" class="cell" data-execution_count="9">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb14"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb14-1"><a href="#cb14-1" aria-hidden="true" tabindex="-1"></a>comparacao <span class="op">=</span> pd.DataFrame(</span>
+<span id="cb14-2"><a href="#cb14-2" aria-hidden="true" tabindex="-1"></a>    {<span class="st">"R²"</span>: [r2_tv, r2_multiplo], <span class="st">"RSE"</span>: [rse_tv, rse_multiplo]},</span>
+<span id="cb14-3"><a href="#cb14-3" aria-hidden="true" tabindex="-1"></a>    index<span class="op">=</span>[<span class="st">"tv sozinho"</span>, <span class="st">"tv + radio + jornal"</span>],</span>
+<span id="cb14-4"><a href="#cb14-4" aria-hidden="true" tabindex="-1"></a>).<span class="bu">round</span>(<span class="dv">4</span>)</span>
+<span id="cb14-5"><a href="#cb14-5" aria-hidden="true" tabindex="-1"></a>comparacao</span></code></pre></div><button title="Copiar para a área de transferência" class="code-copy-button"><i class="bi"></i></button></div>
+<div id="tabela-comparacao" class="cell-output cell-output-display" data-execution_count="9">
 <div>
 
 
@@ -1040,70 +1065,96 @@ Nota
 </div>
 </div>
 </div>
-<p>O modelo de <code>tv</code> sozinho explica 0,6119 da variância de vendas, com erro típico de 3,2587 mil unidades. Somar <code>radio</code> e <code>jornal</code> sobe o R² para 0,8972 e derruba o RSE para 1,6855: as três mídias juntas explicam mais da variância de vendas do que <code>tv</code> sozinho, e erram menos a cada previsão. A régua não muda — R² e RSE continuam sendo as mesmas duas medidas da seção anterior —, só o modelo que elas avaliam.</p>
+<p>O modelo de <code>tv</code> sozinho explica 0,6119 da variância de vendas, com erro típico de 3,2587 mil unidades. Somar <code>radio</code> e <code>jornal</code> sobe o R² para 0,8972 e derruba o RSE para 1,6855. Sobre os duzentos mercados usados no ajuste, as três mídias juntas erram menos, em média, do que <code>tv</code> sozinho.</p>
+<p>Quanto desse ganho é mérito das duas mídias novas? O R² sozinho não responde: ele nunca cai quando se acrescenta um preditor, nem mesmo com uma coluna de ruído no lugar de <code>radio</code>. O que pesa aqui é o tamanho do salto, de 0,6119 para 0,8972, e o RSE, que desconta um grau por coeficiente, cair de 3,2587 para 1,6855, quase à metade.</p>
 </section>
 <section id="a-superfície-ajustada-com-tv-e-radio" class="level2">
 <h2 class="anchored" data-anchor-id="a-superfície-ajustada-com-tv-e-radio">A superfície ajustada com tv e radio</h2>
-<p>Como jornal quase não muda a previsão, a superfície que os coeficientes de <code>tv</code> e <code>radio</code> desenham já carrega quase toda a informação do modelo múltiplo — e, com só dois preditores, dá para desenhar essa superfície inteira.</p>
-<div id="cell-modelo-tv-radio" class="cell" data-execution_count="9">
-<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb13"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb13-1"><a href="#cb13-1" aria-hidden="true" tabindex="-1"></a>X_tv_radio <span class="op">=</span> propaganda[[<span class="st">"tv"</span>, <span class="st">"radio"</span>]]</span>
-<span id="cb13-2"><a href="#cb13-2" aria-hidden="true" tabindex="-1"></a>modelo_tv_radio <span class="op">=</span> LinearRegression().fit(X_tv_radio, y)</span>
-<span id="cb13-3"><a href="#cb13-3" aria-hidden="true" tabindex="-1"></a>yhat_tv_radio <span class="op">=</span> modelo_tv_radio.predict(X_tv_radio)</span>
-<span id="cb13-4"><a href="#cb13-4" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb13-5"><a href="#cb13-5" aria-hidden="true" tabindex="-1"></a>r2_tv_radio <span class="op">=</span> <span class="bu">float</span>(r2_score(y, yhat_tv_radio))</span>
-<span id="cb13-6"><a href="#cb13-6" aria-hidden="true" tabindex="-1"></a><span class="bu">round</span>(r2_tv_radio, <span class="dv">4</span>)</span></code></pre></div><button title="Copiar para a área de transferência" class="code-copy-button"><i class="bi"></i></button></div>
-<div id="modelo-tv-radio" class="cell-output cell-output-display" data-execution_count="9">
-<pre><code>0.8972</code></pre>
+<p>Como jornal quase não muda a previsão, a superfície que os coeficientes de <code>tv</code> e <code>radio</code> desenham já carrega quase toda a informação do modelo múltiplo. E, com só dois preditores, dá para desenhar essa superfície inteira.</p>
+<div id="cell-modelo-tv-radio" class="cell" data-execution_count="10">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb15"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb15-1"><a href="#cb15-1" aria-hidden="true" tabindex="-1"></a>X_tv_radio <span class="op">=</span> propaganda[[<span class="st">"tv"</span>, <span class="st">"radio"</span>]]</span>
+<span id="cb15-2"><a href="#cb15-2" aria-hidden="true" tabindex="-1"></a>modelo_tv_radio <span class="op">=</span> LinearRegression().fit(X_tv_radio, y)</span>
+<span id="cb15-3"><a href="#cb15-3" aria-hidden="true" tabindex="-1"></a>yhat_tv_radio <span class="op">=</span> modelo_tv_radio.predict(X_tv_radio)</span>
+<span id="cb15-4"><a href="#cb15-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb15-5"><a href="#cb15-5" aria-hidden="true" tabindex="-1"></a>r2_tv_radio <span class="op">=</span> <span class="bu">float</span>(r2_score(y, yhat_tv_radio))</span>
+<span id="cb15-6"><a href="#cb15-6" aria-hidden="true" tabindex="-1"></a>coef_tv <span class="op">=</span> <span class="bu">float</span>(modelo_tv_radio.coef_[<span class="dv">0</span>])</span>
+<span id="cb15-7"><a href="#cb15-7" aria-hidden="true" tabindex="-1"></a>coef_radio <span class="op">=</span> <span class="bu">float</span>(modelo_tv_radio.coef_[<span class="dv">1</span>])</span>
+<span id="cb15-8"><a href="#cb15-8" aria-hidden="true" tabindex="-1"></a><span class="bu">round</span>(r2_tv_radio, <span class="dv">4</span>), <span class="bu">round</span>(coef_tv, <span class="dv">4</span>), <span class="bu">round</span>(coef_radio, <span class="dv">4</span>)</span></code></pre></div><button title="Copiar para a área de transferência" class="code-copy-button"><i class="bi"></i></button></div>
+<div id="modelo-tv-radio" class="cell-output cell-output-display" data-execution_count="10">
+<pre><code>(0.8972, 0.0458, 0.188)</code></pre>
 </div>
 </div>
-<div id="cell-fig-superficie-tv-radio" class="cell" data-execution_count="10">
-<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb15"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb15-1"><a href="#cb15-1" aria-hidden="true" tabindex="-1"></a>grade_tv <span class="op">=</span> np.linspace(propaganda[<span class="st">"tv"</span>].<span class="bu">min</span>(), propaganda[<span class="st">"tv"</span>].<span class="bu">max</span>(), <span class="dv">60</span>)</span>
-<span id="cb15-2"><a href="#cb15-2" aria-hidden="true" tabindex="-1"></a>grade_radio <span class="op">=</span> np.linspace(propaganda[<span class="st">"radio"</span>].<span class="bu">min</span>(), propaganda[<span class="st">"radio"</span>].<span class="bu">max</span>(), <span class="dv">60</span>)</span>
-<span id="cb15-3"><a href="#cb15-3" aria-hidden="true" tabindex="-1"></a>malha_tv, malha_radio <span class="op">=</span> np.meshgrid(grade_tv, grade_radio)</span>
-<span id="cb15-4"><a href="#cb15-4" aria-hidden="true" tabindex="-1"></a>grade <span class="op">=</span> pd.DataFrame({<span class="st">"tv"</span>: malha_tv.ravel(), <span class="st">"radio"</span>: malha_radio.ravel()})</span>
-<span id="cb15-5"><a href="#cb15-5" aria-hidden="true" tabindex="-1"></a>superficie <span class="op">=</span> modelo_tv_radio.predict(grade).reshape(malha_tv.shape)</span>
-<span id="cb15-6"><a href="#cb15-6" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb15-7"><a href="#cb15-7" aria-hidden="true" tabindex="-1"></a>azuis <span class="op">=</span> LinearSegmentedColormap.from_list(</span>
-<span id="cb15-8"><a href="#cb15-8" aria-hidden="true" tabindex="-1"></a>    <span class="st">"azuis"</span>, plt.get_cmap(<span class="st">"Blues"</span>)(np.linspace(<span class="fl">0.60</span>, <span class="fl">0.74</span>, <span class="dv">256</span>))</span>
-<span id="cb15-9"><a href="#cb15-9" aria-hidden="true" tabindex="-1"></a>)</span>
-<span id="cb15-10"><a href="#cb15-10" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb15-11"><a href="#cb15-11" aria-hidden="true" tabindex="-1"></a>fig, ax <span class="op">=</span> plt.subplots()</span>
-<span id="cb15-12"><a href="#cb15-12" aria-hidden="true" tabindex="-1"></a>mapa <span class="op">=</span> ax.contourf(malha_tv, malha_radio, superficie, levels<span class="op">=</span><span class="dv">14</span>, cmap<span class="op">=</span>azuis)</span>
-<span id="cb15-13"><a href="#cb15-13" aria-hidden="true" tabindex="-1"></a>ax.scatter(propaganda[<span class="st">"tv"</span>], propaganda[<span class="st">"radio"</span>], color<span class="op">=</span><span class="st">"C1"</span>, s<span class="op">=</span><span class="dv">16</span>, edgecolor<span class="op">=</span><span class="st">"white"</span>, linewidth<span class="op">=</span><span class="fl">0.5</span>)</span>
-<span id="cb15-14"><a href="#cb15-14" aria-hidden="true" tabindex="-1"></a>ax.set_xlabel(<span class="st">"tv (milhares de dólares)"</span>)</span>
-<span id="cb15-15"><a href="#cb15-15" aria-hidden="true" tabindex="-1"></a>ax.set_ylabel(<span class="st">"radio (milhares de dólares)"</span>)</span>
-<span id="cb15-16"><a href="#cb15-16" aria-hidden="true" tabindex="-1"></a>barra <span class="op">=</span> fig.colorbar(mapa, ax<span class="op">=</span>ax, shrink<span class="op">=</span><span class="fl">0.9</span>, pad<span class="op">=</span><span class="fl">0.02</span>)</span>
-<span id="cb15-17"><a href="#cb15-17" aria-hidden="true" tabindex="-1"></a>barra.set_label(<span class="st">"vendas prevista (mil unidades)"</span>)</span>
-<span id="cb15-18"><a href="#cb15-18" aria-hidden="true" tabindex="-1"></a>plt.tight_layout()</span>
-<span id="cb15-19"><a href="#cb15-19" aria-hidden="true" tabindex="-1"></a>plt.show()</span></code></pre></div><button title="Copiar para a área de transferência" class="code-copy-button"><i class="bi"></i></button></div>
+<div id="cell-fig-superficie-tv-radio" class="cell" data-execution_count="11">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb17"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb17-1"><a href="#cb17-1" aria-hidden="true" tabindex="-1"></a>grade_tv <span class="op">=</span> np.linspace(propaganda[<span class="st">"tv"</span>].<span class="bu">min</span>(), propaganda[<span class="st">"tv"</span>].<span class="bu">max</span>(), <span class="dv">60</span>)</span>
+<span id="cb17-2"><a href="#cb17-2" aria-hidden="true" tabindex="-1"></a>grade_radio <span class="op">=</span> np.linspace(propaganda[<span class="st">"radio"</span>].<span class="bu">min</span>(), propaganda[<span class="st">"radio"</span>].<span class="bu">max</span>(), <span class="dv">60</span>)</span>
+<span id="cb17-3"><a href="#cb17-3" aria-hidden="true" tabindex="-1"></a>malha_tv, malha_radio <span class="op">=</span> np.meshgrid(grade_tv, grade_radio)</span>
+<span id="cb17-4"><a href="#cb17-4" aria-hidden="true" tabindex="-1"></a>grade <span class="op">=</span> pd.DataFrame({<span class="st">"tv"</span>: malha_tv.ravel(), <span class="st">"radio"</span>: malha_radio.ravel()})</span>
+<span id="cb17-5"><a href="#cb17-5" aria-hidden="true" tabindex="-1"></a>superficie <span class="op">=</span> modelo_tv_radio.predict(grade).reshape(malha_tv.shape)</span>
+<span id="cb17-6"><a href="#cb17-6" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb17-7"><a href="#cb17-7" aria-hidden="true" tabindex="-1"></a>laranjas <span class="op">=</span> LinearSegmentedColormap.from_list(</span>
+<span id="cb17-8"><a href="#cb17-8" aria-hidden="true" tabindex="-1"></a>    <span class="st">"laranjas"</span>, plt.get_cmap(<span class="st">"Oranges"</span>)(np.linspace(<span class="fl">0.15</span>, <span class="fl">0.70</span>, <span class="dv">256</span>))</span>
+<span id="cb17-9"><a href="#cb17-9" aria-hidden="true" tabindex="-1"></a>)</span>
+<span id="cb17-10"><a href="#cb17-10" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb17-11"><a href="#cb17-11" aria-hidden="true" tabindex="-1"></a>fig, ax <span class="op">=</span> plt.subplots()</span>
+<span id="cb17-12"><a href="#cb17-12" aria-hidden="true" tabindex="-1"></a>mapa <span class="op">=</span> ax.contourf(malha_tv, malha_radio, superficie, levels<span class="op">=</span><span class="dv">10</span>, cmap<span class="op">=</span>laranjas)</span>
+<span id="cb17-13"><a href="#cb17-13" aria-hidden="true" tabindex="-1"></a>ax.contour(</span>
+<span id="cb17-14"><a href="#cb17-14" aria-hidden="true" tabindex="-1"></a>    malha_tv,</span>
+<span id="cb17-15"><a href="#cb17-15" aria-hidden="true" tabindex="-1"></a>    malha_radio,</span>
+<span id="cb17-16"><a href="#cb17-16" aria-hidden="true" tabindex="-1"></a>    superficie,</span>
+<span id="cb17-17"><a href="#cb17-17" aria-hidden="true" tabindex="-1"></a>    levels<span class="op">=</span>mapa.levels,</span>
+<span id="cb17-18"><a href="#cb17-18" aria-hidden="true" tabindex="-1"></a>    colors<span class="op">=</span><span class="st">"white"</span>,</span>
+<span id="cb17-19"><a href="#cb17-19" aria-hidden="true" tabindex="-1"></a>    linewidths<span class="op">=</span><span class="fl">0.6</span>,</span>
+<span id="cb17-20"><a href="#cb17-20" aria-hidden="true" tabindex="-1"></a>)</span>
+<span id="cb17-21"><a href="#cb17-21" aria-hidden="true" tabindex="-1"></a>ax.scatter(</span>
+<span id="cb17-22"><a href="#cb17-22" aria-hidden="true" tabindex="-1"></a>    propaganda[<span class="st">"tv"</span>],</span>
+<span id="cb17-23"><a href="#cb17-23" aria-hidden="true" tabindex="-1"></a>    propaganda[<span class="st">"radio"</span>],</span>
+<span id="cb17-24"><a href="#cb17-24" aria-hidden="true" tabindex="-1"></a>    color<span class="op">=</span><span class="st">"C0"</span>,</span>
+<span id="cb17-25"><a href="#cb17-25" aria-hidden="true" tabindex="-1"></a>    s<span class="op">=</span><span class="dv">16</span>,</span>
+<span id="cb17-26"><a href="#cb17-26" aria-hidden="true" tabindex="-1"></a>    edgecolor<span class="op">=</span><span class="st">"white"</span>,</span>
+<span id="cb17-27"><a href="#cb17-27" aria-hidden="true" tabindex="-1"></a>    linewidth<span class="op">=</span><span class="fl">0.5</span>,</span>
+<span id="cb17-28"><a href="#cb17-28" aria-hidden="true" tabindex="-1"></a>)</span>
+<span id="cb17-29"><a href="#cb17-29" aria-hidden="true" tabindex="-1"></a>ax.set_xlabel(<span class="st">"tv (milhares de dólares)"</span>)</span>
+<span id="cb17-30"><a href="#cb17-30" aria-hidden="true" tabindex="-1"></a>ax.set_ylabel(<span class="st">"radio (milhares de dólares)"</span>)</span>
+<span id="cb17-31"><a href="#cb17-31" aria-hidden="true" tabindex="-1"></a>barra <span class="op">=</span> fig.colorbar(mapa, ax<span class="op">=</span>ax, shrink<span class="op">=</span><span class="fl">0.9</span>, pad<span class="op">=</span><span class="fl">0.02</span>)</span>
+<span id="cb17-32"><a href="#cb17-32" aria-hidden="true" tabindex="-1"></a>barra.set_label(<span class="st">"vendas previstas (mil unidades)"</span>)</span>
+<span id="cb17-33"><a href="#cb17-33" aria-hidden="true" tabindex="-1"></a>plt.tight_layout()</span>
+<span id="cb17-34"><a href="#cb17-34" aria-hidden="true" tabindex="-1"></a>plt.show()</span></code></pre></div><button title="Copiar para a área de transferência" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-display">
-<div id="fig-superficie-tv-radio" class="quarto-float quarto-figure quarto-figure-center anchored">
+<div id="fig-superficie-tv-radio" class="quarto-float quarto-figure quarto-figure-center anchored" alt="Mapa de cor em faixas laranja paralelas e inclinadas, separadas por linhas brancas, mais claras no canto inferior esquerdo e mais escuras no superior direito, com duzentos pontos azuis espalhados por todo o plano de tv contra radio.">
 <figure class="quarto-float quarto-float-fig figure">
 <div aria-describedby="fig-superficie-tv-radio-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
-<img src="03-regressao-multipla_files/figure-html/fig-superficie-tv-radio-output-1.png" width="851" height="546" class="figure-img">
+<img src="03-regressao-multipla_files/figure-html/fig-superficie-tv-radio-output-1.png" alt="Mapa de cor em faixas laranja paralelas e inclinadas, separadas por linhas brancas, mais claras no canto inferior esquerdo e mais escuras no superior direito, com duzentos pontos azuis espalhados por todo o plano de tv contra radio." width="870" height="546" class="figure-img">
 </div>
 <figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-fig" id="fig-superficie-tv-radio-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
-Figura&nbsp;45.1: Vendas previstas para toda combinação de investimento em tv e radio, pelo modelo ajustado com as duas mídias. Os pontos são os duzentos mercados observados.
+Figura&nbsp;1: Vendas previstas para toda combinação de investimento em tv e radio, pelo modelo ajustado com as duas mídias. Os pontos são os duzentos mercados observados.
 </figcaption>
 </figure>
 </div>
 </div>
 </div>
-<p>Cada curva de nível reúne as combinações de <code>tv</code> e <code>radio</code> que o modelo prevê com a mesma venda; a superfície cresce para a direita e para cima, do mesmo jeito que os dois coeficientes positivos calculados acima já anunciavam.</p>
+<div class="funcao">
+<p><strong><code>LinearSegmentedColormap.from_list(nome, cores)</code></strong>: monta uma escala de cores contínua a partir de uma lista de cores. Aqui, as cores são uma fatia da escala <code>"Oranges"</code>, <code>plt.get_cmap("Oranges")(np.linspace(0.15, 0.70, 256))</code>, que evita os extremos quase brancos e quase pretos da escala.</p>
+<p><strong><code>ax.contourf(x, y, z, levels, cmap)</code></strong>: pinta o plano por faixas de valor de <code>z</code>, como num mapa de relevo; <code>levels</code> é o número de faixas e <code>cmap</code>, a escala de cores. Por cima, o <code>ax.contour</code> da seção 8.1, com os mesmos <code>levels</code>, traça em branco a fronteira entre cada par de faixas vizinhas.</p>
+</div>
+<p>Cada faixa reúne as combinações de <code>tv</code> e <code>radio</code> que o modelo prevê com a mesma venda. As fronteiras entre faixas, em branco, são retas paralelas, porque o modelo é um plano. A superfície cresce para a direita e para cima, como anunciam os dois coeficientes positivos deste ajuste, 0,0458 para <code>tv</code> e 0,1880 para <code>radio</code>.</p>
 </section>
 <section id="o-que-a-superfície-plana-ainda-erra" class="level2">
 <h2 class="anchored" data-anchor-id="o-que-a-superfície-plana-ainda-erra">O que a superfície plana ainda erra</h2>
-<p>O modelo com <code>tv</code> e <code>radio</code> explica 0,8972 da variância de vendas — o mesmo valor, até a quarta casa, do modelo de três mídias da tabela acima, já que <code>jornal</code> quase não muda a previsão —, mas sobra no resíduo um padrão que essa superfície plana não captura.</p>
-<div id="cell-residuo-por-terco" class="cell" data-execution_count="11">
-<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb16"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb16-1"><a href="#cb16-1" aria-hidden="true" tabindex="-1"></a>df_resid <span class="op">=</span> pd.DataFrame({</span>
-<span id="cb16-2"><a href="#cb16-2" aria-hidden="true" tabindex="-1"></a>    <span class="st">"previsto"</span>: yhat_tv_radio,</span>
-<span id="cb16-3"><a href="#cb16-3" aria-hidden="true" tabindex="-1"></a>    <span class="st">"residuo"</span>: y.to_numpy() <span class="op">-</span> yhat_tv_radio,</span>
-<span id="cb16-4"><a href="#cb16-4" aria-hidden="true" tabindex="-1"></a>})</span>
-<span id="cb16-5"><a href="#cb16-5" aria-hidden="true" tabindex="-1"></a>df_resid[<span class="st">"terco"</span>] <span class="op">=</span> pd.qcut(df_resid[<span class="st">"previsto"</span>], <span class="dv">3</span>, labels<span class="op">=</span>[<span class="st">"baixo"</span>, <span class="st">"medio"</span>, <span class="st">"alto"</span>])</span>
-<span id="cb16-6"><a href="#cb16-6" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb16-7"><a href="#cb16-7" aria-hidden="true" tabindex="-1"></a>medias_por_terco <span class="op">=</span> df_resid.groupby(<span class="st">"terco"</span>, observed<span class="op">=</span><span class="va">True</span>)[[<span class="st">"previsto"</span>, <span class="st">"residuo"</span>]].mean()</span>
-<span id="cb16-8"><a href="#cb16-8" aria-hidden="true" tabindex="-1"></a>medias_por_terco.<span class="bu">round</span>(<span class="dv">4</span>)</span></code></pre></div><button title="Copiar para a área de transferência" class="code-copy-button"><i class="bi"></i></button></div>
-<div id="residuo-por-terco" class="cell-output cell-output-display" data-execution_count="11">
+<p>O modelo com <code>tv</code> e <code>radio</code> explica 0,8972 da variância de vendas, o mesmo valor, até a quarta casa, do modelo de três mídias da tabela acima. <code>jornal</code> quase não muda a previsão. Mas sobra no resíduo um padrão que essa superfície plana não captura.</p>
+<div id="cell-residuo-por-terco" class="cell" data-execution_count="12">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb18"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb18-1"><a href="#cb18-1" aria-hidden="true" tabindex="-1"></a>df_resid <span class="op">=</span> pd.DataFrame(</span>
+<span id="cb18-2"><a href="#cb18-2" aria-hidden="true" tabindex="-1"></a>    {</span>
+<span id="cb18-3"><a href="#cb18-3" aria-hidden="true" tabindex="-1"></a>        <span class="st">"previsto"</span>: yhat_tv_radio,</span>
+<span id="cb18-4"><a href="#cb18-4" aria-hidden="true" tabindex="-1"></a>        <span class="st">"residuo"</span>: y.to_numpy() <span class="op">-</span> yhat_tv_radio,</span>
+<span id="cb18-5"><a href="#cb18-5" aria-hidden="true" tabindex="-1"></a>    }</span>
+<span id="cb18-6"><a href="#cb18-6" aria-hidden="true" tabindex="-1"></a>)</span>
+<span id="cb18-7"><a href="#cb18-7" aria-hidden="true" tabindex="-1"></a>df_resid[<span class="st">"terco"</span>] <span class="op">=</span> pd.qcut(df_resid[<span class="st">"previsto"</span>], <span class="dv">3</span>, labels<span class="op">=</span>[<span class="st">"baixo"</span>, <span class="st">"medio"</span>, <span class="st">"alto"</span>])</span>
+<span id="cb18-8"><a href="#cb18-8" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb18-9"><a href="#cb18-9" aria-hidden="true" tabindex="-1"></a>medias_por_terco <span class="op">=</span> df_resid.groupby(<span class="st">"terco"</span>, observed<span class="op">=</span><span class="va">True</span>)[</span>
+<span id="cb18-10"><a href="#cb18-10" aria-hidden="true" tabindex="-1"></a>    [<span class="st">"previsto"</span>, <span class="st">"residuo"</span>]</span>
+<span id="cb18-11"><a href="#cb18-11" aria-hidden="true" tabindex="-1"></a>].mean()</span>
+<span id="cb18-12"><a href="#cb18-12" aria-hidden="true" tabindex="-1"></a>medias_por_terco.<span class="bu">round</span>(<span class="dv">4</span>)</span></code></pre></div><button title="Copiar para a área de transferência" class="code-copy-button"><i class="bi"></i></button></div>
+<div id="residuo-por-terco" class="cell-output cell-output-display" data-execution_count="12">
 <div>
 
 
@@ -1142,37 +1193,41 @@ Figura&nbsp;45.1: Vendas previstas para toda combinação de investimento em tv 
 </div>
 </div>
 </div>
-<p>Dividindo os duzentos mercados em três grupos pelo valor previsto — o terço com a previsão mais baixa, o do meio, o mais alto —, o resíduo médio não fica perto de zero nos três grupos: 0,4307 no terço mais baixo, -0,8077 no do meio, e de volta a 0,3650 no mais alto. O sinal do erro típico muda com a faixa de previsão, em vez de se espalhar ao acaso ao redor de zero — um padrão que uma superfície plana, por definição, não reproduz.</p>
-<div id="cell-fig-residuo-tv-radio" class="cell" data-execution_count="12">
-<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb17"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb17-1"><a href="#cb17-1" aria-hidden="true" tabindex="-1"></a>fig, ax <span class="op">=</span> plt.subplots()</span>
-<span id="cb17-2"><a href="#cb17-2" aria-hidden="true" tabindex="-1"></a>ax.axhline(<span class="dv">0</span>, color<span class="op">=</span><span class="st">"C2"</span>, linewidth<span class="op">=</span><span class="dv">1</span>, linestyle<span class="op">=</span><span class="st">"--"</span>)</span>
-<span id="cb17-3"><a href="#cb17-3" aria-hidden="true" tabindex="-1"></a>ax.scatter(df_resid[<span class="st">"previsto"</span>], df_resid[<span class="st">"residuo"</span>], color<span class="op">=</span><span class="st">"C0"</span>, s<span class="op">=</span><span class="dv">14</span>, alpha<span class="op">=</span><span class="fl">0.6</span>)</span>
-<span id="cb17-4"><a href="#cb17-4" aria-hidden="true" tabindex="-1"></a>ax.plot(</span>
-<span id="cb17-5"><a href="#cb17-5" aria-hidden="true" tabindex="-1"></a>    medias_por_terco[<span class="st">"previsto"</span>],</span>
-<span id="cb17-6"><a href="#cb17-6" aria-hidden="true" tabindex="-1"></a>    medias_por_terco[<span class="st">"residuo"</span>],</span>
-<span id="cb17-7"><a href="#cb17-7" aria-hidden="true" tabindex="-1"></a>    color<span class="op">=</span><span class="st">"C1"</span>,</span>
-<span id="cb17-8"><a href="#cb17-8" aria-hidden="true" tabindex="-1"></a>    linewidth<span class="op">=</span><span class="dv">2</span>,</span>
-<span id="cb17-9"><a href="#cb17-9" aria-hidden="true" tabindex="-1"></a>    marker<span class="op">=</span><span class="st">"o"</span>,</span>
-<span id="cb17-10"><a href="#cb17-10" aria-hidden="true" tabindex="-1"></a>    markersize<span class="op">=</span><span class="dv">7</span>,</span>
-<span id="cb17-11"><a href="#cb17-11" aria-hidden="true" tabindex="-1"></a>)</span>
-<span id="cb17-12"><a href="#cb17-12" aria-hidden="true" tabindex="-1"></a>ax.set_xlabel(<span class="st">"vendas prevista (mil unidades)"</span>)</span>
-<span id="cb17-13"><a href="#cb17-13" aria-hidden="true" tabindex="-1"></a>ax.set_ylabel(<span class="st">"resíduo (vendas observada − prevista)"</span>)</span>
-<span id="cb17-14"><a href="#cb17-14" aria-hidden="true" tabindex="-1"></a>plt.tight_layout()</span>
-<span id="cb17-15"><a href="#cb17-15" aria-hidden="true" tabindex="-1"></a>plt.show()</span></code></pre></div><button title="Copiar para a área de transferência" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="funcao">
+<p><strong><code>pd.qcut(serie, q, labels)</code></strong>: corta os valores de <code>serie</code> em <code>q</code> faixas com o mesmo número de observações cada, pelos quantis, e dá a cada faixa um rótulo de <code>labels</code>. É o primo de <code>pd.cut</code>, que corta nas bordas que recebe.</p>
+<p><strong><code>df.groupby(coluna, observed=True)[colunas].mean()</code></strong>: separa as linhas pelos valores de <code>coluna</code> e tira a média de cada uma das <code>colunas</code> dentro de cada grupo. <code>observed=True</code> mantém só os grupos que de fato aparecem, o comportamento que <code>pandas</code> recomenda para colunas categóricas.</p>
+</div>
+<p>Os duzentos mercados foram divididos em três grupos pelo valor previsto: o terço com a previsão mais baixa, o do meio e o mais alto. O resíduo médio não fica perto de zero nos três grupos: 0,4307 no terço mais baixo, -0,8077 no do meio, e de volta a 0,3650 no mais alto. O sinal do erro muda com a faixa de previsão, em vez de se espalhar ao acaso ao redor de zero.</p>
+<div id="cell-fig-residuo-tv-radio" class="cell" data-execution_count="13">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb19"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb19-1"><a href="#cb19-1" aria-hidden="true" tabindex="-1"></a>fig, ax <span class="op">=</span> plt.subplots()</span>
+<span id="cb19-2"><a href="#cb19-2" aria-hidden="true" tabindex="-1"></a>ax.axhline(<span class="dv">0</span>, color<span class="op">=</span><span class="st">"C2"</span>, linewidth<span class="op">=</span><span class="dv">1</span>, linestyle<span class="op">=</span><span class="st">"--"</span>)</span>
+<span id="cb19-3"><a href="#cb19-3" aria-hidden="true" tabindex="-1"></a>ax.scatter(df_resid[<span class="st">"previsto"</span>], df_resid[<span class="st">"residuo"</span>], color<span class="op">=</span><span class="st">"C0"</span>, s<span class="op">=</span><span class="dv">14</span>, alpha<span class="op">=</span><span class="fl">0.6</span>)</span>
+<span id="cb19-4"><a href="#cb19-4" aria-hidden="true" tabindex="-1"></a>ax.plot(</span>
+<span id="cb19-5"><a href="#cb19-5" aria-hidden="true" tabindex="-1"></a>    medias_por_terco[<span class="st">"previsto"</span>],</span>
+<span id="cb19-6"><a href="#cb19-6" aria-hidden="true" tabindex="-1"></a>    medias_por_terco[<span class="st">"residuo"</span>],</span>
+<span id="cb19-7"><a href="#cb19-7" aria-hidden="true" tabindex="-1"></a>    color<span class="op">=</span><span class="st">"C1"</span>,</span>
+<span id="cb19-8"><a href="#cb19-8" aria-hidden="true" tabindex="-1"></a>    linewidth<span class="op">=</span><span class="dv">2</span>,</span>
+<span id="cb19-9"><a href="#cb19-9" aria-hidden="true" tabindex="-1"></a>    marker<span class="op">=</span><span class="st">"o"</span>,</span>
+<span id="cb19-10"><a href="#cb19-10" aria-hidden="true" tabindex="-1"></a>    markersize<span class="op">=</span><span class="dv">7</span>,</span>
+<span id="cb19-11"><a href="#cb19-11" aria-hidden="true" tabindex="-1"></a>)</span>
+<span id="cb19-12"><a href="#cb19-12" aria-hidden="true" tabindex="-1"></a>ax.set_xlabel(<span class="st">"vendas previstas (mil unidades)"</span>)</span>
+<span id="cb19-13"><a href="#cb19-13" aria-hidden="true" tabindex="-1"></a>ax.set_ylabel(<span class="st">"resíduo (observada − prevista)"</span>)</span>
+<span id="cb19-14"><a href="#cb19-14" aria-hidden="true" tabindex="-1"></a>plt.tight_layout()</span>
+<span id="cb19-15"><a href="#cb19-15" aria-hidden="true" tabindex="-1"></a>plt.show()</span></code></pre></div><button title="Copiar para a área de transferência" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-display">
-<div id="fig-residuo-tv-radio" class="quarto-float quarto-figure quarto-figure-center anchored">
+<div id="fig-residuo-tv-radio" class="quarto-float quarto-figure quarto-figure-center anchored" alt="Nuvem de pontos azuis de resíduo contra vendas previstas, em volta de uma linha tracejada verde no zero, com uma linha laranja de três pontos que desce no meio e sobe nas duas pontas.">
 <figure class="quarto-float quarto-float-fig figure">
 <div aria-describedby="fig-residuo-tv-radio-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
-<img src="03-regressao-multipla_files/figure-html/fig-residuo-tv-radio-output-1.png" width="884" height="546" class="figure-img">
+<img src="03-regressao-multipla_files/figure-html/fig-residuo-tv-radio-output-1.png" alt="Nuvem de pontos azuis de resíduo contra vendas previstas, em volta de uma linha tracejada verde no zero, com uma linha laranja de três pontos que desce no meio e sobe nas duas pontas." width="884" height="546" class="figure-img">
 </div>
 <figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-fig" id="fig-residuo-tv-radio-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
-Figura&nbsp;45.2: Resíduo contra o valor previsto, no modelo de tv e radio. A linha tracejada marca resíduo zero; os três marcadores maiores são a média de cada terço de previsão — abaixo de zero no meio, acima nas duas pontas.
+Figura&nbsp;2: Resíduo contra o valor previsto, no modelo de tv e radio. A linha tracejada marca resíduo zero; os três marcadores laranja são a média de cada terço de previsão, abaixo de zero no meio e acima nas duas pontas.
 </figcaption>
 </figure>
 </div>
 </div>
 </div>
-<p>Essa curvatura — negativa no meio da faixa de previsão, positiva nas duas pontas — é o sinal de que <code>tv</code> e <code>radio</code> não agem de forma independente sobre vendas. A seção 8.5 retoma este mesmo modelo para mostrar o que muda ao deixar as duas mídias interagirem.</p>
+<p>Uma curvatura assim, negativa no meio da faixa de previsão e positiva nas duas pontas, diz que o plano erra de forma sistemática, mas não diz, sozinha, por quê. Ela é compatível com duas causas: o efeito de uma mídia depende do nível da outra, ou alguma mídia age sobre vendas em curva, e não em linha reta. A seção 8.5 testa a primeira hipótese com este mesmo modelo.</p>
 
 
 <div id="refs" class="references csl-bib-body hanging-indent" role="list">

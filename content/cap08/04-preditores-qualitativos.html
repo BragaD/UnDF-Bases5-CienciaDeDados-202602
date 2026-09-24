@@ -747,7 +747,7 @@ window.Quarto = {
 </li>
           <li class="sidebar-item">
   <div class="sidebar-item-container"> 
-  <a href="../../content/cap08/07-regressao-linear-contra-k-vizinhos.html" class="sidebar-item-text sidebar-link"><span class="chapter-title">Regressão Linear contra k-Vizinhos</span></a>
+  <a href="../../content/cap08/07-regressao-linear-contra-k-vizinhos.html" class="sidebar-item-text sidebar-link"><span class="chapter-title">Regressão Linear contra k-NN</span></a>
   </div>
 </li>
       </ul>
@@ -857,181 +857,255 @@ Nota
 <p>Esta seção corresponde à seção 3.3.1 de <span class="citation" data-cites="james2023">James et al. (<a href="#ref-james2023" role="doc-biblioref">2023</a>)</span>.</p>
 </div>
 </div>
-<p>Um coeficiente de regressão multiplica um número por outro, <span class="math inline">\(\beta_j \cdot x_j\)</span>. Todo preditor usado até aqui neste capítulo era numérico — dólares, unidades, anos. <code>Credit</code>, o conjunto que esta seção introduz, tem quatro colunas que não são: <code>imovel_proprio</code>, <code>estudante</code> e <code>casado</code> valem <code>sim</code> ou <code>não</code>; <code>regiao</code> vale <code>Leste</code>, <code>Sul</code> ou <code>Oeste</code>. Nenhuma delas multiplica coeficiente nenhum do jeito que está — e é essa a pergunta que a seção resolve.</p>
+<p>Um coeficiente de regressão multiplica um número por outro, <span class="math inline">\(\beta_j \cdot x_j\)</span>. Um preditor como <code>tv</code>, em milhares de dólares, entra nessa conta sem cerimônia. <code>Credit</code> tem quatro colunas que não são números: <code>imovel_proprio</code>, <code>estudante</code> e <code>casado</code> valem <code>sim</code> ou <code>não</code>, e <code>regiao</code> vale <code>Leste</code>, <code>Sul</code> ou <code>Oeste</code>. Nenhuma delas multiplica coeficiente nenhum do jeito que está. Como fazer uma categoria entrar numa regressão?</p>
 <div id="cell-leitura-credit" class="cell" data-execution_count="2">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb1"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a>credit <span class="op">=</span> pd.read_csv(<span class="st">"dados/Credit.csv"</span>)</span>
-<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a>credit.shape, credit.columns.tolist()</span></code></pre></div><button title="Copiar para a área de transferência" class="code-copy-button"><i class="bi"></i></button></div>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a>credit.shape, credit.select_dtypes(<span class="st">"number"</span>).columns.tolist()</span></code></pre></div><button title="Copiar para a área de transferência" class="code-copy-button"><i class="bi"></i></button></div>
 <div id="leitura-credit" class="cell-output cell-output-display" data-execution_count="2">
 <pre><code>((400, 11),
- ['renda',
-  'limite',
-  'pontuacao',
-  'cartoes',
-  'idade',
-  'escolaridade',
-  'imovel_proprio',
-  'estudante',
-  'casado',
-  'regiao',
-  'saldo'])</code></pre>
+ ['renda', 'limite', 'pontuacao', 'cartoes', 'idade', 'escolaridade', 'saldo'])</code></pre>
 </div>
 </div>
-<p>São 400 clientes e onze colunas: <code>renda</code>, <code>limite</code>, <code>pontuacao</code>, <code>cartoes</code>, <code>idade</code> e <code>escolaridade</code>, numéricas; <code>imovel_proprio</code>, <code>estudante</code> e <code>casado</code>, <code>sim</code>/<code>não</code>; <code>regiao</code>, com três categorias; e <code>saldo</code> — a dívida média no cartão de crédito de cada cliente, em dólares, a resposta que o resto da seção tenta prever a partir de duas dessas colunas categóricas, <code>estudante</code> e <code>regiao</code>.</p>
+<div id="cell-categorias-credit" class="cell" data-execution_count="3">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb3"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a>{</span>
+<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a>    coluna: <span class="bu">sorted</span>(credit[coluna].unique())</span>
+<span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> coluna <span class="kw">in</span> credit.select_dtypes(exclude<span class="op">=</span><span class="st">"number"</span>).columns</span>
+<span id="cb3-4"><a href="#cb3-4" aria-hidden="true" tabindex="-1"></a>}</span></code></pre></div><button title="Copiar para a área de transferência" class="code-copy-button"><i class="bi"></i></button></div>
+<div id="categorias-credit" class="cell-output cell-output-display" data-execution_count="3">
+<pre><code>{'imovel_proprio': ['não', 'sim'],
+ 'estudante': ['não', 'sim'],
+ 'casado': ['não', 'sim'],
+ 'regiao': ['Leste', 'Oeste', 'Sul']}</code></pre>
+</div>
+</div>
+<div class="funcao">
+<p><strong><code>df.select_dtypes("number")</code></strong>: as colunas numéricas de <code>df</code>; com <code>exclude="number"</code>, as demais. <strong><code>serie.unique()</code></strong>: os valores distintos da coluna.</p>
+</div>
+<p>São 400 clientes e onze colunas. Sete são numéricas: seis preditores (<code>renda</code>, <code>limite</code>, <code>pontuacao</code>, <code>cartoes</code>, <code>idade</code> e <code>escolaridade</code>) e <code>saldo</code>. Das quatro que não são números, três valem <code>sim</code> ou <code>não</code> (<code>imovel_proprio</code>, <code>estudante</code> e <code>casado</code>) e <code>regiao</code> tem três categorias. <code>saldo</code> é a dívida média no cartão de crédito de cada cliente, em dólares. É a resposta que o resto da seção tenta prever a partir de duas das colunas categóricas, <code>estudante</code> e <code>regiao</code>.</p>
 <section id="o-saldo-médio-por-ser-estudante-ou-não" class="level2">
 <h2 class="anchored" data-anchor-id="o-saldo-médio-por-ser-estudante-ou-não">O saldo médio, por ser estudante ou não</h2>
-<p>A pergunta mais simples é a de duas categorias: quem é estudante carrega, em média, saldo diferente de quem não é? Uma variável indicadora responde trocando a categoria por um número.</p>
-<div class="conceito">
-<p>Uma <strong>variável indicadora</strong> (ou <em>dummy</em>) troca uma categoria por 0 ou 1: vale 1 quando a observação está no nível escolhido, 0 nos demais. Um preditor qualitativo com <span class="math inline">\(k\)</span> níveis entra no modelo como <span class="math inline">\(k - 1\)</span> indicadoras, nunca <span class="math inline">\(k\)</span> — a categoria que sobra sem indicadora própria é a <strong>base</strong>, e toda previsão para ela sai só do intercepto.</p>
-</div>
-<div id="cell-dummy-estudante" class="cell" data-execution_count="3">
-<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb3"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a>indicadora_estudante <span class="op">=</span> pd.get_dummies(credit[[<span class="st">"estudante"</span>]], drop_first<span class="op">=</span><span class="va">True</span>)</span>
-<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a>indicadora_estudante.columns.tolist()</span></code></pre></div><button title="Copiar para a área de transferência" class="code-copy-button"><i class="bi"></i></button></div>
-<div id="dummy-estudante" class="cell-output cell-output-display" data-execution_count="3">
-<pre><code>['estudante_sim']</code></pre>
-</div>
-</div>
-<p><code>drop_first=True</code> descarta a primeira categoria em ordem alfabética — <code>não</code> vem antes de <code>sim</code> — e fica só <code>estudante_sim</code>, que vale <code>True</code> para quem é estudante e <code>False</code> para quem não é. <code>não</code> é a base: toda observação sem a indicadora marcada pertence a ela.</p>
-<div id="cell-modelo-estudante" class="cell" data-execution_count="4">
-<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb5"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a>modelo_estudante <span class="op">=</span> LinearRegression().fit(indicadora_estudante, credit[<span class="st">"saldo"</span>])</span>
-<span id="cb5-2"><a href="#cb5-2" aria-hidden="true" tabindex="-1"></a>intercepto_estudante <span class="op">=</span> <span class="bu">round</span>(<span class="bu">float</span>(modelo_estudante.intercept_), <span class="dv">2</span>)</span>
-<span id="cb5-3"><a href="#cb5-3" aria-hidden="true" tabindex="-1"></a>coef_estudante_sim <span class="op">=</span> <span class="bu">round</span>(<span class="bu">float</span>(modelo_estudante.coef_[<span class="dv">0</span>]), <span class="dv">2</span>)</span>
-<span id="cb5-4"><a href="#cb5-4" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb5-5"><a href="#cb5-5" aria-hidden="true" tabindex="-1"></a>intercepto_estudante, coef_estudante_sim</span></code></pre></div><button title="Copiar para a área de transferência" class="code-copy-button"><i class="bi"></i></button></div>
-<div id="modelo-estudante" class="cell-output cell-output-display" data-execution_count="4">
-<pre><code>(480.37, 396.46)</code></pre>
-</div>
-</div>
-<div id="cell-medias-por-estudante" class="cell" data-execution_count="5">
-<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb7"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb7-1"><a href="#cb7-1" aria-hidden="true" tabindex="-1"></a>medias_estudante <span class="op">=</span> credit.groupby(<span class="st">"estudante"</span>)[<span class="st">"saldo"</span>].mean()</span>
-<span id="cb7-2"><a href="#cb7-2" aria-hidden="true" tabindex="-1"></a>media_nao_estudante <span class="op">=</span> <span class="bu">round</span>(<span class="bu">float</span>(medias_estudante[<span class="st">"não"</span>]), <span class="dv">2</span>)</span>
-<span id="cb7-3"><a href="#cb7-3" aria-hidden="true" tabindex="-1"></a>media_sim_estudante <span class="op">=</span> <span class="bu">round</span>(<span class="bu">float</span>(medias_estudante[<span class="st">"sim"</span>]), <span class="dv">2</span>)</span>
-<span id="cb7-4"><a href="#cb7-4" aria-hidden="true" tabindex="-1"></a>diferenca_medias_estudante <span class="op">=</span> <span class="bu">round</span>(media_sim_estudante <span class="op">-</span> media_nao_estudante, <span class="dv">2</span>)</span>
-<span id="cb7-5"><a href="#cb7-5" aria-hidden="true" tabindex="-1"></a>estudantes_devem_mais <span class="op">=</span> <span class="bu">bool</span>(diferenca_medias_estudante <span class="op">&gt;</span> <span class="dv">0</span>)</span>
-<span id="cb7-6"><a href="#cb7-6" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb7-7"><a href="#cb7-7" aria-hidden="true" tabindex="-1"></a>media_nao_estudante, media_sim_estudante, diferenca_medias_estudante, estudantes_devem_mais</span></code></pre></div><button title="Copiar para a área de transferência" class="code-copy-button"><i class="bi"></i></button></div>
-<div id="medias-por-estudante" class="cell-output cell-output-display" data-execution_count="5">
-<pre><code>(480.37, 876.83, 396.46, True)</code></pre>
-</div>
-</div>
-<div id="cell-modelo-bate-com-medias-estudante" class="cell" data-execution_count="6">
-<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb9"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb9-1"><a href="#cb9-1" aria-hidden="true" tabindex="-1"></a>intercepto_bate_com_media <span class="op">=</span> intercepto_estudante <span class="op">==</span> media_nao_estudante</span>
-<span id="cb9-2"><a href="#cb9-2" aria-hidden="true" tabindex="-1"></a>coeficiente_bate_com_diferenca <span class="op">=</span> coef_estudante_sim <span class="op">==</span> diferenca_medias_estudante</span>
-<span id="cb9-3"><a href="#cb9-3" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb9-4"><a href="#cb9-4" aria-hidden="true" tabindex="-1"></a>intercepto_bate_com_media, coeficiente_bate_com_diferenca</span></code></pre></div><button title="Copiar para a área de transferência" class="code-copy-button"><i class="bi"></i></button></div>
-<div id="modelo-bate-com-medias-estudante" class="cell-output cell-output-display" data-execution_count="6">
-<pre><code>(True, True)</code></pre>
-</div>
-</div>
-<p>O modelo ajustado só com essa indicadora dá um intercepto de 480,37 e um coeficiente de 396,46. São os mesmos dois números que saem direto do dado, sem ajustar modelo nenhum: 480,37 é o saldo médio de quem não é estudante, e 396,46 é a diferença entre essa média e a de quem é, 876,83 (876,83 − 480,37 = 396,46). <code>intercepto_bate_com_media</code> e <code>coeficiente_bate_com_diferenca</code> confirmam a igualdade nos dois casos. <code>estudantes_devem_mais</code> confirma que quem é estudante carrega, em média, mais saldo que quem não é.</p>
-</section>
-<section id="a-base-é-uma-escolha-e-a-previsão-não-sabe-disso" class="level2">
-<h2 class="anchored" data-anchor-id="a-base-é-uma-escolha-e-a-previsão-não-sabe-disso">A base é uma escolha, e a previsão não sabe disso</h2>
-<p>Trocar qual categoria fica sem indicadora — a base — é uma escolha de quem ajusta o modelo, não um fato sobre o dado. <code>get_dummies</code> descarta, por padrão, a primeira categoria em ordem alfabética; para inverter, basta listar as categorias na ordem desejada antes de gerar a indicadora.</p>
-<div id="cell-dummy-estudante-base-invertida" class="cell" data-execution_count="7">
-<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb11"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb11-1"><a href="#cb11-1" aria-hidden="true" tabindex="-1"></a>estudante_ordenado <span class="op">=</span> pd.Categorical(credit[<span class="st">"estudante"</span>], categories<span class="op">=</span>[<span class="st">"sim"</span>, <span class="st">"não"</span>])</span>
-<span id="cb11-2"><a href="#cb11-2" aria-hidden="true" tabindex="-1"></a>indicadora_estudante_b <span class="op">=</span> pd.get_dummies(pd.DataFrame({<span class="st">"estudante"</span>: estudante_ordenado}), drop_first<span class="op">=</span><span class="va">True</span>)</span>
-<span id="cb11-3"><a href="#cb11-3" aria-hidden="true" tabindex="-1"></a>indicadora_estudante_b.columns.tolist()</span></code></pre></div><button title="Copiar para a área de transferência" class="code-copy-button"><i class="bi"></i></button></div>
-<div id="dummy-estudante-base-invertida" class="cell-output cell-output-display" data-execution_count="7">
-<pre><code>['estudante_não']</code></pre>
-</div>
-</div>
-<div id="cell-modelo-estudante-base-invertida" class="cell" data-execution_count="8">
-<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb13"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb13-1"><a href="#cb13-1" aria-hidden="true" tabindex="-1"></a>modelo_estudante_b <span class="op">=</span> LinearRegression().fit(indicadora_estudante_b, credit[<span class="st">"saldo"</span>])</span>
-<span id="cb13-2"><a href="#cb13-2" aria-hidden="true" tabindex="-1"></a>intercepto_estudante_b <span class="op">=</span> <span class="bu">round</span>(<span class="bu">float</span>(modelo_estudante_b.intercept_), <span class="dv">2</span>)</span>
-<span id="cb13-3"><a href="#cb13-3" aria-hidden="true" tabindex="-1"></a>coef_estudante_nao <span class="op">=</span> <span class="bu">round</span>(<span class="bu">float</span>(modelo_estudante_b.coef_[<span class="dv">0</span>]), <span class="dv">2</span>)</span>
-<span id="cb13-4"><a href="#cb13-4" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb13-5"><a href="#cb13-5" aria-hidden="true" tabindex="-1"></a>intercepto_estudante_b, coef_estudante_nao</span></code></pre></div><button title="Copiar para a área de transferência" class="code-copy-button"><i class="bi"></i></button></div>
-<div id="modelo-estudante-base-invertida" class="cell-output cell-output-display" data-execution_count="8">
-<pre><code>(876.83, -396.46)</code></pre>
-</div>
-</div>
-<p>Com <code>sim</code> como base, o intercepto salta para 876,83 — a mesma média de quem é estudante de antes — e o coeficiente muda de sinal, para -396,46: a mesma diferença de antes, contada na direção oposta.</p>
-<div id="cell-previsoes-identicas" class="cell" data-execution_count="9">
-<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb15"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb15-1"><a href="#cb15-1" aria-hidden="true" tabindex="-1"></a>previsao_original <span class="op">=</span> modelo_estudante.predict(indicadora_estudante)</span>
-<span id="cb15-2"><a href="#cb15-2" aria-hidden="true" tabindex="-1"></a>previsao_invertida <span class="op">=</span> modelo_estudante_b.predict(indicadora_estudante_b)</span>
-<span id="cb15-3"><a href="#cb15-3" aria-hidden="true" tabindex="-1"></a>previsoes_identicas <span class="op">=</span> <span class="bu">bool</span>(np.allclose(previsao_original, previsao_invertida))</span>
-<span id="cb15-4"><a href="#cb15-4" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb15-5"><a href="#cb15-5" aria-hidden="true" tabindex="-1"></a>previsoes_identicas</span></code></pre></div><button title="Copiar para a área de transferência" class="code-copy-button"><i class="bi"></i></button></div>
-<div id="previsoes-identicas" class="cell-output cell-output-display" data-execution_count="9">
-<pre><code>True</code></pre>
-</div>
-</div>
-<p><code>previsoes_identicas</code> confirma que, apesar do intercepto e do coeficiente mudarem, as previsões para os 400 clientes são as mesmas nos dois ajustes — a escolha da base muda a leitura dos coeficientes, não o que o modelo prevê.</p>
-</section>
-<section id="região-quando-a-categoria-tem-mais-de-dois-nomes" class="level2">
-<h2 class="anchored" data-anchor-id="região-quando-a-categoria-tem-mais-de-dois-nomes">Região: quando a categoria tem mais de dois nomes</h2>
-<p><code>regiao</code> tem três categorias — <code>Leste</code>, <code>Sul</code> e <code>Oeste</code> —, não duas. Uma única indicadora não dá conta: sobra uma categoria sem representação. A regra do conceito acima vale de novo, com <span class="math inline">\(k = 3\)</span>: entram <span class="math inline">\(k - 1 = 2\)</span> indicadoras.</p>
-<div id="cell-dummy-regiao" class="cell" data-execution_count="10">
-<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb17"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb17-1"><a href="#cb17-1" aria-hidden="true" tabindex="-1"></a>indicadora_regiao <span class="op">=</span> pd.get_dummies(credit[[<span class="st">"regiao"</span>]], drop_first<span class="op">=</span><span class="va">True</span>)</span>
-<span id="cb17-2"><a href="#cb17-2" aria-hidden="true" tabindex="-1"></a>indicadora_regiao.columns.tolist()</span></code></pre></div><button title="Copiar para a área de transferência" class="code-copy-button"><i class="bi"></i></button></div>
-<div id="dummy-regiao" class="cell-output cell-output-display" data-execution_count="10">
-<pre><code>['regiao_Oeste', 'regiao_Sul']</code></pre>
-</div>
-</div>
-<p>Duas indicadoras, <code>regiao_Oeste</code> e <code>regiao_Sul</code>; <code>Leste</code> fica sem indicadora própria e é a base. Uma terceira indicadora, para <code>Leste</code>, seria redundante: quem não é <code>Oeste</code> nem <code>Sul</code> só pode ser <code>Leste</code>, e o valor dela já está determinado pelas outras duas.</p>
-<div id="cell-modelo-regiao" class="cell" data-execution_count="11">
-<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb19"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb19-1"><a href="#cb19-1" aria-hidden="true" tabindex="-1"></a>modelo_regiao <span class="op">=</span> LinearRegression().fit(indicadora_regiao, credit[<span class="st">"saldo"</span>])</span>
-<span id="cb19-2"><a href="#cb19-2" aria-hidden="true" tabindex="-1"></a>coeficientes_regiao <span class="op">=</span> <span class="bu">dict</span>(<span class="bu">zip</span>(modelo_regiao.feature_names_in_, modelo_regiao.coef_))</span>
-<span id="cb19-3"><a href="#cb19-3" aria-hidden="true" tabindex="-1"></a>coef_oeste <span class="op">=</span> <span class="bu">round</span>(<span class="bu">float</span>(coeficientes_regiao[<span class="st">"regiao_Oeste"</span>]), <span class="dv">2</span>)</span>
-<span id="cb19-4"><a href="#cb19-4" aria-hidden="true" tabindex="-1"></a>coef_sul <span class="op">=</span> <span class="bu">round</span>(<span class="bu">float</span>(coeficientes_regiao[<span class="st">"regiao_Sul"</span>]), <span class="dv">2</span>)</span>
-<span id="cb19-5"><a href="#cb19-5" aria-hidden="true" tabindex="-1"></a>intercepto_regiao <span class="op">=</span> <span class="bu">round</span>(<span class="bu">float</span>(modelo_regiao.intercept_), <span class="dv">2</span>)</span>
-<span id="cb19-6"><a href="#cb19-6" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb19-7"><a href="#cb19-7" aria-hidden="true" tabindex="-1"></a>intercepto_regiao, coef_oeste, coef_sul</span></code></pre></div><button title="Copiar para a área de transferência" class="code-copy-button"><i class="bi"></i></button></div>
-<div id="modelo-regiao" class="cell-output cell-output-display" data-execution_count="11">
-<pre><code>(531.0, -18.69, -12.5)</code></pre>
-</div>
-</div>
-<div id="cell-medias-por-regiao" class="cell" data-execution_count="12">
-<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb21"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb21-1"><a href="#cb21-1" aria-hidden="true" tabindex="-1"></a>medias_regiao <span class="op">=</span> credit.groupby(<span class="st">"regiao"</span>)[<span class="st">"saldo"</span>].mean()</span>
-<span id="cb21-2"><a href="#cb21-2" aria-hidden="true" tabindex="-1"></a>media_leste <span class="op">=</span> <span class="bu">round</span>(<span class="bu">float</span>(medias_regiao[<span class="st">"Leste"</span>]), <span class="dv">2</span>)</span>
-<span id="cb21-3"><a href="#cb21-3" aria-hidden="true" tabindex="-1"></a>media_oeste <span class="op">=</span> <span class="bu">round</span>(<span class="bu">float</span>(medias_regiao[<span class="st">"Oeste"</span>]), <span class="dv">2</span>)</span>
-<span id="cb21-4"><a href="#cb21-4" aria-hidden="true" tabindex="-1"></a>media_sul <span class="op">=</span> <span class="bu">round</span>(<span class="bu">float</span>(medias_regiao[<span class="st">"Sul"</span>]), <span class="dv">2</span>)</span>
-<span id="cb21-5"><a href="#cb21-5" aria-hidden="true" tabindex="-1"></a>leste_tem_a_maior_media <span class="op">=</span> <span class="bu">bool</span>(medias_regiao.idxmax() <span class="op">==</span> <span class="st">"Leste"</span>)</span>
-<span id="cb21-6"><a href="#cb21-6" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb21-7"><a href="#cb21-7" aria-hidden="true" tabindex="-1"></a>media_leste, media_oeste, media_sul, leste_tem_a_maior_media</span></code></pre></div><button title="Copiar para a área de transferência" class="code-copy-button"><i class="bi"></i></button></div>
-<div id="medias-por-regiao" class="cell-output cell-output-display" data-execution_count="12">
-<pre><code>(531.0, 512.31, 518.5, True)</code></pre>
-</div>
-</div>
-<p>O intercepto, 531,0, é o saldo médio de quem mora no Leste — a base. Os coeficientes leem-se como diferenças contra essa base: -18,69 para <code>Oeste</code> e -12,5 para <code>Sul</code>, o mesmo que a tabela de médias mostra: 512,31 − 531,0 = -18,69 e 518,5 − 531,0 = -12,5. <code>leste_tem_a_maior_media</code> confirma que, das três regiões, é no Leste que o saldo médio é o mais alto.</p>
-</section>
-<section id="o-que-o-modelo-prevê-a-média-do-grupo-e-só-ela" class="level2">
-<h2 class="anchored" data-anchor-id="o-que-o-modelo-prevê-a-média-do-grupo-e-só-ela">O que o modelo prevê: a média do grupo, e só ela</h2>
-<p>Com um único preditor qualitativo, o modelo não tem outra informação para usar: toda previsão é a média do grupo a que a observação pertence, e nada mais fino que isso. Para <code>estudante</code>, só existem duas previsões possíveis, 480,37 e 876,83; para <code>regiao</code>, só três, 531,0, 512,31 e 518,5.</p>
-<div id="cell-fig-saldo-por-categoria" class="cell" data-execution_count="13">
-<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb23"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb23-1"><a href="#cb23-1" aria-hidden="true" tabindex="-1"></a>rng <span class="op">=</span> np.random.default_rng(<span class="dv">8</span>)</span>
-<span id="cb23-2"><a href="#cb23-2" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb23-3"><a href="#cb23-3" aria-hidden="true" tabindex="-1"></a>fig, (ax_estudante, ax_regiao) <span class="op">=</span> plt.subplots(<span class="dv">1</span>, <span class="dv">2</span>, figsize<span class="op">=</span>(<span class="dv">10</span>, <span class="fl">4.3</span>), sharey<span class="op">=</span><span class="va">True</span>)</span>
-<span id="cb23-4"><a href="#cb23-4" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb23-5"><a href="#cb23-5" aria-hidden="true" tabindex="-1"></a>paineis <span class="op">=</span> [</span>
-<span id="cb23-6"><a href="#cb23-6" aria-hidden="true" tabindex="-1"></a>    (ax_estudante, <span class="st">"estudante"</span>, [<span class="st">"não"</span>, <span class="st">"sim"</span>], medias_estudante, <span class="st">"estudante"</span>),</span>
-<span id="cb23-7"><a href="#cb23-7" aria-hidden="true" tabindex="-1"></a>    (ax_regiao, <span class="st">"regiao"</span>, [<span class="st">"Leste"</span>, <span class="st">"Sul"</span>, <span class="st">"Oeste"</span>], medias_regiao, <span class="st">"região"</span>),</span>
-<span id="cb23-8"><a href="#cb23-8" aria-hidden="true" tabindex="-1"></a>]</span>
-<span id="cb23-9"><a href="#cb23-9" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> eixo, coluna, ordem, medias, rotulo <span class="kw">in</span> paineis:</span>
-<span id="cb23-10"><a href="#cb23-10" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> posicao, categoria <span class="kw">in</span> <span class="bu">enumerate</span>(ordem):</span>
-<span id="cb23-11"><a href="#cb23-11" aria-hidden="true" tabindex="-1"></a>        valores <span class="op">=</span> credit.loc[credit[coluna] <span class="op">==</span> categoria, <span class="st">"saldo"</span>]</span>
-<span id="cb23-12"><a href="#cb23-12" aria-hidden="true" tabindex="-1"></a>        deslocamento <span class="op">=</span> rng.uniform(<span class="op">-</span><span class="fl">0.15</span>, <span class="fl">0.15</span>, size<span class="op">=</span><span class="bu">len</span>(valores))</span>
-<span id="cb23-13"><a href="#cb23-13" aria-hidden="true" tabindex="-1"></a>        eixo.scatter(posicao <span class="op">+</span> deslocamento, valores, s<span class="op">=</span><span class="dv">12</span>, alpha<span class="op">=</span><span class="fl">0.4</span>, color<span class="op">=</span><span class="st">"C0"</span>)</span>
-<span id="cb23-14"><a href="#cb23-14" aria-hidden="true" tabindex="-1"></a>        eixo.plot([posicao <span class="op">-</span> <span class="fl">0.22</span>, posicao <span class="op">+</span> <span class="fl">0.22</span>], [medias[categoria]] <span class="op">*</span> <span class="dv">2</span>, color<span class="op">=</span><span class="st">"C1"</span>, linewidth<span class="op">=</span><span class="dv">3</span>)</span>
-<span id="cb23-15"><a href="#cb23-15" aria-hidden="true" tabindex="-1"></a>    eixo.set_xticks(<span class="bu">range</span>(<span class="bu">len</span>(ordem)))</span>
-<span id="cb23-16"><a href="#cb23-16" aria-hidden="true" tabindex="-1"></a>    eixo.set_xticklabels(ordem)</span>
-<span id="cb23-17"><a href="#cb23-17" aria-hidden="true" tabindex="-1"></a>    eixo.set_xlabel(rotulo)</span>
-<span id="cb23-18"><a href="#cb23-18" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb23-19"><a href="#cb23-19" aria-hidden="true" tabindex="-1"></a>ax_estudante.set_ylabel(<span class="st">"saldo (dólares)"</span>)</span>
-<span id="cb23-20"><a href="#cb23-20" aria-hidden="true" tabindex="-1"></a>plt.tight_layout()</span>
-<span id="cb23-21"><a href="#cb23-21" aria-hidden="true" tabindex="-1"></a>plt.show()</span></code></pre></div><button title="Copiar para a área de transferência" class="code-copy-button"><i class="bi"></i></button></div>
+<p>A pergunta mais simples é a de duas categorias: quem é estudante carrega, em média, saldo diferente de quem não é? Antes de qualquer modelo, o saldo de cada cliente, separado pelas duas categorias:</p>
+<div id="cell-fig-saldo-por-estudante" class="cell" data-execution_count="4">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb5"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a>rng <span class="op">=</span> np.random.default_rng(<span class="dv">8</span>)</span>
+<span id="cb5-2"><a href="#cb5-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb5-3"><a href="#cb5-3" aria-hidden="true" tabindex="-1"></a>fig, ax <span class="op">=</span> plt.subplots()</span>
+<span id="cb5-4"><a href="#cb5-4" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> posicao, categoria <span class="kw">in</span> <span class="bu">enumerate</span>([<span class="st">"não"</span>, <span class="st">"sim"</span>]):</span>
+<span id="cb5-5"><a href="#cb5-5" aria-hidden="true" tabindex="-1"></a>    valores <span class="op">=</span> credit.loc[credit[<span class="st">"estudante"</span>] <span class="op">==</span> categoria, <span class="st">"saldo"</span>]</span>
+<span id="cb5-6"><a href="#cb5-6" aria-hidden="true" tabindex="-1"></a>    deslocamento <span class="op">=</span> rng.uniform(<span class="op">-</span><span class="fl">0.15</span>, <span class="fl">0.15</span>, size<span class="op">=</span><span class="bu">len</span>(valores))</span>
+<span id="cb5-7"><a href="#cb5-7" aria-hidden="true" tabindex="-1"></a>    ax.scatter(posicao <span class="op">+</span> deslocamento, valores, s<span class="op">=</span><span class="dv">12</span>, alpha<span class="op">=</span><span class="fl">0.4</span>, color<span class="op">=</span><span class="st">"C0"</span>)</span>
+<span id="cb5-8"><a href="#cb5-8" aria-hidden="true" tabindex="-1"></a>ax.set_xticks([<span class="dv">0</span>, <span class="dv">1</span>])</span>
+<span id="cb5-9"><a href="#cb5-9" aria-hidden="true" tabindex="-1"></a>ax.set_xticklabels([<span class="st">"não"</span>, <span class="st">"sim"</span>])</span>
+<span id="cb5-10"><a href="#cb5-10" aria-hidden="true" tabindex="-1"></a>ax.set_xlabel(<span class="st">"estudante"</span>)</span>
+<span id="cb5-11"><a href="#cb5-11" aria-hidden="true" tabindex="-1"></a>ax.set_ylabel(<span class="st">"saldo (dólares)"</span>)</span>
+<span id="cb5-12"><a href="#cb5-12" aria-hidden="true" tabindex="-1"></a>plt.tight_layout()</span>
+<span id="cb5-13"><a href="#cb5-13" aria-hidden="true" tabindex="-1"></a>plt.show()</span></code></pre></div><button title="Copiar para a área de transferência" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-display">
-<div id="fig-saldo-por-categoria" class="quarto-float quarto-figure quarto-figure-center anchored">
+<div id="fig-saldo-por-estudante" class="quarto-float quarto-figure quarto-figure-center anchored" alt="Duas colunas de pontos azuis, uma para não estudantes, com muitos pontos, e outra para estudantes, com poucos pontos, que parecem concentrados mais acima.">
 <figure class="quarto-float quarto-float-fig figure">
-<div aria-describedby="fig-saldo-por-categoria-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
-<img src="04-preditores-qualitativos_files/figure-html/fig-saldo-por-categoria-output-1.png" width="1388" height="588" class="figure-img">
+<div aria-describedby="fig-saldo-por-estudante-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<img src="04-preditores-qualitativos_files/figure-html/fig-saldo-por-estudante-output-1.png" alt="Duas colunas de pontos azuis, uma para não estudantes, com muitos pontos, e outra para estudantes, com poucos pontos, que parecem concentrados mais acima." width="884" height="546" class="figure-img">
 </div>
-<figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-fig" id="fig-saldo-por-categoria-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
-Figura&nbsp;46.1: Saldo de cada um dos 400 clientes, por estudante (esquerda) e por região (direita). Os pontos têm um deslocamento horizontal aleatório só para não empilhar; o traço laranja marca a média de cada grupo — a mesma que o intercepto e os coeficientes reproduzem.
+<figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-fig" id="fig-saldo-por-estudante-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Figura&nbsp;1: Saldo de cada um dos 400 clientes, separado por ser estudante ou não. Os pontos têm um deslocamento horizontal aleatório só para não empilhar.
 </figcaption>
 </figure>
 </div>
 </div>
+</div>
+<div class="funcao">
+<p><strong><code>np.random.default_rng(semente)</code></strong> cria um gerador de números aleatórios com semente fixa, e <strong><code>rng.uniform(inicio, fim, size)</code></strong> sorteia <code>size</code> valores uniformes entre <code>inicio</code> e <code>fim</code>, aqui o pequeno deslocamento horizontal de cada ponto.</p>
+</div>
+<p>A nuvem dos estudantes parece mais alta, mas quanto? Uma variável indicadora responde trocando a categoria por um número.</p>
+<div class="conceito">
+<p>Uma <strong>variável indicadora</strong> (ou <em>dummy</em>) troca uma categoria por 0 ou 1: vale 1 quando a observação está no nível escolhido, 0 nos demais. Um preditor qualitativo com <span class="math inline">\(L\)</span> níveis entra no modelo como <span class="math inline">\(L - 1\)</span> indicadoras, nunca <span class="math inline">\(L\)</span>. A categoria que sobra sem indicadora própria é a <strong>base</strong>. Quando o preditor qualitativo é o único do modelo, toda previsão para a base sai só do intercepto; com outros preditores no modelo, o intercepto passa a ser o valor da base quando os demais valem zero.</p>
+</div>
+<div id="cell-dummy-estudante" class="cell" data-execution_count="5">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb6"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb6-1"><a href="#cb6-1" aria-hidden="true" tabindex="-1"></a>indicadora_estudante <span class="op">=</span> pd.get_dummies(credit[[<span class="st">"estudante"</span>]], drop_first<span class="op">=</span><span class="va">True</span>)</span>
+<span id="cb6-2"><a href="#cb6-2" aria-hidden="true" tabindex="-1"></a>indicadora_estudante.columns.tolist()</span></code></pre></div><button title="Copiar para a área de transferência" class="code-copy-button"><i class="bi"></i></button></div>
+<div id="dummy-estudante" class="cell-output cell-output-display" data-execution_count="5">
+<pre><code>['estudante_sim']</code></pre>
+</div>
+</div>
+<div class="funcao">
+<p><strong><code>pd.get_dummies(df, drop_first)</code></strong>: troca cada coluna categórica de <code>df</code> por uma coluna indicadora por categoria, com nome <code>coluna_categoria</code> e valores <code>True</code>/<code>False</code>.</p>
+<ul>
+<li><code>drop_first=True</code>: descarta a indicadora da primeira categoria, que vira a base.</li>
+</ul>
+</div>
+<p><code>drop_first=True</code> descarta a primeira categoria em ordem alfabética (<code>não</code> vem antes de <code>sim</code>), e fica só <code>estudante_sim</code>, que vale <code>True</code> para quem é estudante e <code>False</code> para quem não é. <code>não</code> é a base: toda observação sem a indicadora marcada pertence a ela.</p>
+<div id="cell-modelo-estudante" class="cell" data-execution_count="6">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb8"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb8-1"><a href="#cb8-1" aria-hidden="true" tabindex="-1"></a>modelo_estudante <span class="op">=</span> LinearRegression().fit(indicadora_estudante, credit[<span class="st">"saldo"</span>])</span>
+<span id="cb8-2"><a href="#cb8-2" aria-hidden="true" tabindex="-1"></a>intercepto_estudante <span class="op">=</span> <span class="bu">float</span>(modelo_estudante.intercept_)</span>
+<span id="cb8-3"><a href="#cb8-3" aria-hidden="true" tabindex="-1"></a>coef_estudante_sim <span class="op">=</span> <span class="bu">float</span>(modelo_estudante.coef_[<span class="dv">0</span>])</span>
+<span id="cb8-4"><a href="#cb8-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb8-5"><a href="#cb8-5" aria-hidden="true" tabindex="-1"></a><span class="bu">round</span>(intercepto_estudante, <span class="dv">3</span>), <span class="bu">round</span>(coef_estudante_sim, <span class="dv">3</span>)</span></code></pre></div><button title="Copiar para a área de transferência" class="code-copy-button"><i class="bi"></i></button></div>
+<div id="modelo-estudante" class="cell-output cell-output-display" data-execution_count="6">
+<pre><code>(480.369, 396.456)</code></pre>
+</div>
+</div>
+<div id="cell-medias-por-estudante" class="cell" data-execution_count="7">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb10"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb10-1"><a href="#cb10-1" aria-hidden="true" tabindex="-1"></a>medias_estudante <span class="op">=</span> credit.groupby(<span class="st">"estudante"</span>)[<span class="st">"saldo"</span>].mean()</span>
+<span id="cb10-2"><a href="#cb10-2" aria-hidden="true" tabindex="-1"></a>media_nao_estudante <span class="op">=</span> <span class="bu">float</span>(medias_estudante[<span class="st">"não"</span>])</span>
+<span id="cb10-3"><a href="#cb10-3" aria-hidden="true" tabindex="-1"></a>media_sim_estudante <span class="op">=</span> <span class="bu">float</span>(medias_estudante[<span class="st">"sim"</span>])</span>
+<span id="cb10-4"><a href="#cb10-4" aria-hidden="true" tabindex="-1"></a>diferenca_medias_estudante <span class="op">=</span> media_sim_estudante <span class="op">-</span> media_nao_estudante</span>
+<span id="cb10-5"><a href="#cb10-5" aria-hidden="true" tabindex="-1"></a>estudantes_devem_mais <span class="op">=</span> <span class="bu">bool</span>(diferenca_medias_estudante <span class="op">&gt;</span> <span class="dv">0</span>)</span>
+<span id="cb10-6"><a href="#cb10-6" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb10-7"><a href="#cb10-7" aria-hidden="true" tabindex="-1"></a>(</span>
+<span id="cb10-8"><a href="#cb10-8" aria-hidden="true" tabindex="-1"></a>    <span class="bu">round</span>(media_nao_estudante, <span class="dv">3</span>),</span>
+<span id="cb10-9"><a href="#cb10-9" aria-hidden="true" tabindex="-1"></a>    <span class="bu">round</span>(media_sim_estudante, <span class="dv">3</span>),</span>
+<span id="cb10-10"><a href="#cb10-10" aria-hidden="true" tabindex="-1"></a>    <span class="bu">round</span>(diferenca_medias_estudante, <span class="dv">3</span>),</span>
+<span id="cb10-11"><a href="#cb10-11" aria-hidden="true" tabindex="-1"></a>    estudantes_devem_mais,</span>
+<span id="cb10-12"><a href="#cb10-12" aria-hidden="true" tabindex="-1"></a>)</span></code></pre></div><button title="Copiar para a área de transferência" class="code-copy-button"><i class="bi"></i></button></div>
+<div id="medias-por-estudante" class="cell-output cell-output-display" data-execution_count="7">
+<pre><code>(480.369, 876.825, 396.456, True)</code></pre>
+</div>
+</div>
+<div id="cell-modelo-bate-com-medias-estudante" class="cell" data-execution_count="8">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb12"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb12-1"><a href="#cb12-1" aria-hidden="true" tabindex="-1"></a>intercepto_bate_com_media <span class="op">=</span> <span class="bu">bool</span>(np.isclose(intercepto_estudante, media_nao_estudante))</span>
+<span id="cb12-2"><a href="#cb12-2" aria-hidden="true" tabindex="-1"></a>coeficiente_bate_com_diferenca <span class="op">=</span> <span class="bu">bool</span>(</span>
+<span id="cb12-3"><a href="#cb12-3" aria-hidden="true" tabindex="-1"></a>    np.isclose(coef_estudante_sim, diferenca_medias_estudante)</span>
+<span id="cb12-4"><a href="#cb12-4" aria-hidden="true" tabindex="-1"></a>)</span>
+<span id="cb12-5"><a href="#cb12-5" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb12-6"><a href="#cb12-6" aria-hidden="true" tabindex="-1"></a>intercepto_bate_com_media, coeficiente_bate_com_diferenca</span></code></pre></div><button title="Copiar para a área de transferência" class="code-copy-button"><i class="bi"></i></button></div>
+<div id="modelo-bate-com-medias-estudante" class="cell-output cell-output-display" data-execution_count="8">
+<pre><code>(True, True)</code></pre>
+</div>
+</div>
+<p>O modelo ajustado só com essa indicadora dá um intercepto de 480,369 e um coeficiente de 396,456. São os mesmos dois números que saem direto do dado, sem ajustar modelo nenhum. 480,369 é o saldo médio de quem não é estudante, e 396,456 é a diferença entre essa média e a de quem é estudante, 876,825 (876,825 − 480,369 = 396,456). <code>intercepto_bate_com_media</code> e <code>coeficiente_bate_com_diferenca</code> confirmam a igualdade nos dois casos, e <code>estudantes_devem_mais</code> confirma que quem é estudante carrega, em média, mais saldo que quem não é.</p>
+</section>
+<section id="a-base-é-uma-escolha-e-a-previsão-não-sabe-disso" class="level2">
+<h2 class="anchored" data-anchor-id="a-base-é-uma-escolha-e-a-previsão-não-sabe-disso">A base é uma escolha, e a previsão não sabe disso</h2>
+<p>Qual categoria fica sem indicadora, a base, é uma escolha de quem ajusta o modelo, e não um fato sobre o dado. Com <code>drop_first=True</code>, <code>get_dummies</code> descarta a primeira categoria da ordem das categorias, que para texto é a alfabética; para inverter, basta listar as categorias na ordem desejada antes de gerar a indicadora.</p>
+<div id="cell-dummy-estudante-base-invertida" class="cell" data-execution_count="9">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb14"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb14-1"><a href="#cb14-1" aria-hidden="true" tabindex="-1"></a>estudante_ordenado <span class="op">=</span> pd.Categorical(credit[<span class="st">"estudante"</span>], categories<span class="op">=</span>[<span class="st">"sim"</span>, <span class="st">"não"</span>])</span>
+<span id="cb14-2"><a href="#cb14-2" aria-hidden="true" tabindex="-1"></a>indicadora_estudante_b <span class="op">=</span> pd.get_dummies(</span>
+<span id="cb14-3"><a href="#cb14-3" aria-hidden="true" tabindex="-1"></a>    pd.DataFrame({<span class="st">"estudante"</span>: estudante_ordenado}), drop_first<span class="op">=</span><span class="va">True</span></span>
+<span id="cb14-4"><a href="#cb14-4" aria-hidden="true" tabindex="-1"></a>)</span>
+<span id="cb14-5"><a href="#cb14-5" aria-hidden="true" tabindex="-1"></a>indicadora_estudante_b.columns.tolist()</span></code></pre></div><button title="Copiar para a área de transferência" class="code-copy-button"><i class="bi"></i></button></div>
+<div id="dummy-estudante-base-invertida" class="cell-output cell-output-display" data-execution_count="9">
+<pre><code>['estudante_não']</code></pre>
+</div>
+</div>
+<div class="funcao">
+<p><strong><code>pd.Categorical(valores, categories)</code></strong>: guarda os valores como categorias numa ordem fixada por <code>categories</code>, em vez da ordem alfabética. É essa ordem que <code>get_dummies</code> usa para decidir qual categoria é a primeira.</p>
+</div>
+<div id="cell-modelo-estudante-base-invertida" class="cell" data-execution_count="10">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb16"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb16-1"><a href="#cb16-1" aria-hidden="true" tabindex="-1"></a>modelo_estudante_b <span class="op">=</span> LinearRegression().fit(indicadora_estudante_b, credit[<span class="st">"saldo"</span>])</span>
+<span id="cb16-2"><a href="#cb16-2" aria-hidden="true" tabindex="-1"></a>intercepto_estudante_b <span class="op">=</span> <span class="bu">float</span>(modelo_estudante_b.intercept_)</span>
+<span id="cb16-3"><a href="#cb16-3" aria-hidden="true" tabindex="-1"></a>coef_estudante_nao <span class="op">=</span> <span class="bu">float</span>(modelo_estudante_b.coef_[<span class="dv">0</span>])</span>
+<span id="cb16-4"><a href="#cb16-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb16-5"><a href="#cb16-5" aria-hidden="true" tabindex="-1"></a><span class="bu">round</span>(intercepto_estudante_b, <span class="dv">3</span>), <span class="bu">round</span>(coef_estudante_nao, <span class="dv">3</span>)</span></code></pre></div><button title="Copiar para a área de transferência" class="code-copy-button"><i class="bi"></i></button></div>
+<div id="modelo-estudante-base-invertida" class="cell-output cell-output-display" data-execution_count="10">
+<pre><code>(876.825, -396.456)</code></pre>
+</div>
+</div>
+<p>Com <code>sim</code> como base, o intercepto salta para 876,825, a média de quem é estudante, e o coeficiente muda de sinal, para -396,456: a mesma diferença de antes, contada na direção oposta.</p>
+<div id="cell-previsoes-identicas" class="cell" data-execution_count="11">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb18"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb18-1"><a href="#cb18-1" aria-hidden="true" tabindex="-1"></a>previsao_original <span class="op">=</span> modelo_estudante.predict(indicadora_estudante)</span>
+<span id="cb18-2"><a href="#cb18-2" aria-hidden="true" tabindex="-1"></a>previsao_invertida <span class="op">=</span> modelo_estudante_b.predict(indicadora_estudante_b)</span>
+<span id="cb18-3"><a href="#cb18-3" aria-hidden="true" tabindex="-1"></a>previsoes_identicas <span class="op">=</span> <span class="bu">bool</span>(np.allclose(previsao_original, previsao_invertida))</span>
+<span id="cb18-4"><a href="#cb18-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb18-5"><a href="#cb18-5" aria-hidden="true" tabindex="-1"></a>previsoes_identicas</span></code></pre></div><button title="Copiar para a área de transferência" class="code-copy-button"><i class="bi"></i></button></div>
+<div id="previsoes-identicas" class="cell-output cell-output-display" data-execution_count="11">
+<pre><code>True</code></pre>
+</div>
+</div>
+<p><code>previsoes_identicas</code> confirma que, apesar de o intercepto e o coeficiente mudarem, as previsões para os 400 clientes são as mesmas nos dois ajustes. A escolha da base muda a leitura dos coeficientes, não o que o modelo prevê.</p>
+</section>
+<section id="região-quando-a-categoria-tem-mais-de-dois-nomes" class="level2">
+<h2 class="anchored" data-anchor-id="região-quando-a-categoria-tem-mais-de-dois-nomes">Região: quando a categoria tem mais de dois nomes</h2>
+<p><code>regiao</code> tem três categorias, <code>Leste</code>, <code>Sul</code> e <code>Oeste</code>. Uma única indicadora não dá conta, porque sobraria uma categoria sem representação. A regra do conceito acima vale de novo, com <span class="math inline">\(L = 3\)</span>: entram <span class="math inline">\(L - 1 = 2\)</span> indicadoras.</p>
+<div id="cell-dummy-regiao" class="cell" data-execution_count="12">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb20"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb20-1"><a href="#cb20-1" aria-hidden="true" tabindex="-1"></a>indicadora_regiao <span class="op">=</span> pd.get_dummies(credit[[<span class="st">"regiao"</span>]], drop_first<span class="op">=</span><span class="va">True</span>)</span>
+<span id="cb20-2"><a href="#cb20-2" aria-hidden="true" tabindex="-1"></a>indicadora_regiao.columns.tolist()</span></code></pre></div><button title="Copiar para a área de transferência" class="code-copy-button"><i class="bi"></i></button></div>
+<div id="dummy-regiao" class="cell-output cell-output-display" data-execution_count="12">
+<pre><code>['regiao_Oeste', 'regiao_Sul']</code></pre>
+</div>
+</div>
+<p>Duas indicadoras, <code>regiao_Oeste</code> e <code>regiao_Sul</code>; <code>Leste</code> fica sem indicadora própria e é a base. Uma terceira indicadora, para <code>Leste</code>, seria redundante: quem não é <code>Oeste</code> nem <code>Sul</code> só pode ser <code>Leste</code>, e o valor dela já está determinado pelas outras duas. Antes de ajustar: se o intercepto vai ser o saldo médio do Leste, o que os dois coeficientes devem medir?</p>
+<div id="cell-modelo-regiao" class="cell" data-execution_count="13">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb22"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb22-1"><a href="#cb22-1" aria-hidden="true" tabindex="-1"></a>modelo_regiao <span class="op">=</span> LinearRegression().fit(indicadora_regiao, credit[<span class="st">"saldo"</span>])</span>
+<span id="cb22-2"><a href="#cb22-2" aria-hidden="true" tabindex="-1"></a>coeficientes_regiao <span class="op">=</span> <span class="bu">dict</span>(<span class="bu">zip</span>(modelo_regiao.feature_names_in_, modelo_regiao.coef_))</span>
+<span id="cb22-3"><a href="#cb22-3" aria-hidden="true" tabindex="-1"></a>coef_oeste <span class="op">=</span> <span class="bu">round</span>(<span class="bu">float</span>(coeficientes_regiao[<span class="st">"regiao_Oeste"</span>]), <span class="dv">2</span>)</span>
+<span id="cb22-4"><a href="#cb22-4" aria-hidden="true" tabindex="-1"></a>coef_sul <span class="op">=</span> <span class="bu">round</span>(<span class="bu">float</span>(coeficientes_regiao[<span class="st">"regiao_Sul"</span>]), <span class="dv">2</span>)</span>
+<span id="cb22-5"><a href="#cb22-5" aria-hidden="true" tabindex="-1"></a>intercepto_regiao <span class="op">=</span> <span class="bu">round</span>(<span class="bu">float</span>(modelo_regiao.intercept_), <span class="dv">2</span>)</span>
+<span id="cb22-6"><a href="#cb22-6" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb22-7"><a href="#cb22-7" aria-hidden="true" tabindex="-1"></a>intercepto_regiao, coef_oeste, coef_sul</span></code></pre></div><button title="Copiar para a área de transferência" class="code-copy-button"><i class="bi"></i></button></div>
+<div id="modelo-regiao" class="cell-output cell-output-display" data-execution_count="13">
+<pre><code>(531.0, -18.69, -12.5)</code></pre>
+</div>
+</div>
+<div id="cell-medias-por-regiao" class="cell" data-execution_count="14">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb24"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb24-1"><a href="#cb24-1" aria-hidden="true" tabindex="-1"></a>medias_regiao <span class="op">=</span> credit.groupby(<span class="st">"regiao"</span>)[<span class="st">"saldo"</span>].mean()</span>
+<span id="cb24-2"><a href="#cb24-2" aria-hidden="true" tabindex="-1"></a>media_leste <span class="op">=</span> <span class="bu">round</span>(<span class="bu">float</span>(medias_regiao[<span class="st">"Leste"</span>]), <span class="dv">2</span>)</span>
+<span id="cb24-3"><a href="#cb24-3" aria-hidden="true" tabindex="-1"></a>media_oeste <span class="op">=</span> <span class="bu">round</span>(<span class="bu">float</span>(medias_regiao[<span class="st">"Oeste"</span>]), <span class="dv">2</span>)</span>
+<span id="cb24-4"><a href="#cb24-4" aria-hidden="true" tabindex="-1"></a>media_sul <span class="op">=</span> <span class="bu">round</span>(<span class="bu">float</span>(medias_regiao[<span class="st">"Sul"</span>]), <span class="dv">2</span>)</span>
+<span id="cb24-5"><a href="#cb24-5" aria-hidden="true" tabindex="-1"></a>leste_tem_a_maior_media <span class="op">=</span> <span class="bu">bool</span>(medias_regiao.idxmax() <span class="op">==</span> <span class="st">"Leste"</span>)</span>
+<span id="cb24-6"><a href="#cb24-6" aria-hidden="true" tabindex="-1"></a>maior_diferenca_entre_regioes <span class="op">=</span> <span class="bu">float</span>(medias_regiao.<span class="bu">max</span>() <span class="op">-</span> medias_regiao.<span class="bu">min</span>())</span>
+<span id="cb24-7"><a href="#cb24-7" aria-hidden="true" tabindex="-1"></a>desvio_saldo <span class="op">=</span> <span class="bu">float</span>(credit[<span class="st">"saldo"</span>].std())</span>
+<span id="cb24-8"><a href="#cb24-8" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb24-9"><a href="#cb24-9" aria-hidden="true" tabindex="-1"></a>(</span>
+<span id="cb24-10"><a href="#cb24-10" aria-hidden="true" tabindex="-1"></a>    media_leste,</span>
+<span id="cb24-11"><a href="#cb24-11" aria-hidden="true" tabindex="-1"></a>    media_oeste,</span>
+<span id="cb24-12"><a href="#cb24-12" aria-hidden="true" tabindex="-1"></a>    media_sul,</span>
+<span id="cb24-13"><a href="#cb24-13" aria-hidden="true" tabindex="-1"></a>    leste_tem_a_maior_media,</span>
+<span id="cb24-14"><a href="#cb24-14" aria-hidden="true" tabindex="-1"></a>    <span class="bu">round</span>(maior_diferenca_entre_regioes, <span class="dv">2</span>),</span>
+<span id="cb24-15"><a href="#cb24-15" aria-hidden="true" tabindex="-1"></a>    <span class="bu">round</span>(desvio_saldo, <span class="dv">2</span>),</span>
+<span id="cb24-16"><a href="#cb24-16" aria-hidden="true" tabindex="-1"></a>)</span></code></pre></div><button title="Copiar para a área de transferência" class="code-copy-button"><i class="bi"></i></button></div>
+<div id="medias-por-regiao" class="cell-output cell-output-display" data-execution_count="14">
+<pre><code>(531.0, 512.31, 518.5, True, 18.69, 459.76)</code></pre>
+</div>
+</div>
+<div class="funcao">
+<p><strong><code>serie.idxmax()</code></strong>: o rótulo da posição onde está o maior valor da série. Aqui, o nome da região com o maior saldo médio.</p>
+</div>
+<p>O intercepto, 531,0, é o saldo médio de quem mora no Leste, a base. Os coeficientes se leem como diferenças contra essa base: -18,69 para <code>Oeste</code> e -12,5 para <code>Sul</code>. É o que a tabela de médias mostra: 512,31 − 531,0 = -18,69 e 518,5 − 531,0 = -12,5. <code>leste_tem_a_maior_media</code> confirma que, das três regiões, é no Leste que o saldo médio é o mais alto. Mas a maior diferença entre as médias das regiões é de 18,69 dólares, num saldo cujo desvio padrão é de 459,76. Os coeficientes de região existem e são lidos do mesmo jeito que o de <code>estudante</code>, mas medem uma diferença quase nula: saber a região de um cliente quase não muda o saldo que se espera dele.</p>
+</section>
+<section id="o-que-o-modelo-prevê-a-média-do-grupo-e-só-ela" class="level2">
+<h2 class="anchored" data-anchor-id="o-que-o-modelo-prevê-a-média-do-grupo-e-só-ela">O que o modelo prevê: a média do grupo, e só ela</h2>
+<p>Com um único preditor qualitativo, o modelo não tem outra informação para usar: toda previsão é a média do grupo a que a observação pertence, e nada mais fino que isso. Para <code>estudante</code>, só existem duas previsões possíveis, 480,369 e 876,825; para <code>regiao</code>, só três, 531,0, 512,31 e 518,5.</p>
+<div id="cell-fig-saldo-por-categoria" class="cell" data-execution_count="15">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb26"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb26-1"><a href="#cb26-1" aria-hidden="true" tabindex="-1"></a>rng <span class="op">=</span> np.random.default_rng(<span class="dv">8</span>)</span>
+<span id="cb26-2"><a href="#cb26-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb26-3"><a href="#cb26-3" aria-hidden="true" tabindex="-1"></a>fig, (ax_estudante, ax_regiao) <span class="op">=</span> plt.subplots(<span class="dv">1</span>, <span class="dv">2</span>, figsize<span class="op">=</span>(<span class="dv">10</span>, <span class="fl">4.3</span>), sharey<span class="op">=</span><span class="va">True</span>)</span>
+<span id="cb26-4"><a href="#cb26-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb26-5"><a href="#cb26-5" aria-hidden="true" tabindex="-1"></a>paineis <span class="op">=</span> [</span>
+<span id="cb26-6"><a href="#cb26-6" aria-hidden="true" tabindex="-1"></a>    (ax_estudante, <span class="st">"estudante"</span>, [<span class="st">"não"</span>, <span class="st">"sim"</span>], medias_estudante, <span class="st">"estudante"</span>),</span>
+<span id="cb26-7"><a href="#cb26-7" aria-hidden="true" tabindex="-1"></a>    (ax_regiao, <span class="st">"regiao"</span>, [<span class="st">"Leste"</span>, <span class="st">"Sul"</span>, <span class="st">"Oeste"</span>], medias_regiao, <span class="st">"região"</span>),</span>
+<span id="cb26-8"><a href="#cb26-8" aria-hidden="true" tabindex="-1"></a>]</span>
+<span id="cb26-9"><a href="#cb26-9" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> eixo, coluna, ordem, medias, rotulo <span class="kw">in</span> paineis:</span>
+<span id="cb26-10"><a href="#cb26-10" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> posicao, categoria <span class="kw">in</span> <span class="bu">enumerate</span>(ordem):</span>
+<span id="cb26-11"><a href="#cb26-11" aria-hidden="true" tabindex="-1"></a>        valores <span class="op">=</span> credit.loc[credit[coluna] <span class="op">==</span> categoria, <span class="st">"saldo"</span>]</span>
+<span id="cb26-12"><a href="#cb26-12" aria-hidden="true" tabindex="-1"></a>        deslocamento <span class="op">=</span> rng.uniform(<span class="op">-</span><span class="fl">0.15</span>, <span class="fl">0.15</span>, size<span class="op">=</span><span class="bu">len</span>(valores))</span>
+<span id="cb26-13"><a href="#cb26-13" aria-hidden="true" tabindex="-1"></a>        eixo.scatter(posicao <span class="op">+</span> deslocamento, valores, s<span class="op">=</span><span class="dv">12</span>, alpha<span class="op">=</span><span class="fl">0.4</span>, color<span class="op">=</span><span class="st">"C0"</span>)</span>
+<span id="cb26-14"><a href="#cb26-14" aria-hidden="true" tabindex="-1"></a>        eixo.plot(</span>
+<span id="cb26-15"><a href="#cb26-15" aria-hidden="true" tabindex="-1"></a>            [posicao <span class="op">-</span> <span class="fl">0.22</span>, posicao <span class="op">+</span> <span class="fl">0.22</span>],</span>
+<span id="cb26-16"><a href="#cb26-16" aria-hidden="true" tabindex="-1"></a>            [medias[categoria]] <span class="op">*</span> <span class="dv">2</span>,</span>
+<span id="cb26-17"><a href="#cb26-17" aria-hidden="true" tabindex="-1"></a>            color<span class="op">=</span><span class="st">"C1"</span>,</span>
+<span id="cb26-18"><a href="#cb26-18" aria-hidden="true" tabindex="-1"></a>            linewidth<span class="op">=</span><span class="dv">3</span>,</span>
+<span id="cb26-19"><a href="#cb26-19" aria-hidden="true" tabindex="-1"></a>        )</span>
+<span id="cb26-20"><a href="#cb26-20" aria-hidden="true" tabindex="-1"></a>    eixo.set_xticks(<span class="bu">range</span>(<span class="bu">len</span>(ordem)))</span>
+<span id="cb26-21"><a href="#cb26-21" aria-hidden="true" tabindex="-1"></a>    eixo.set_xticklabels(ordem)</span>
+<span id="cb26-22"><a href="#cb26-22" aria-hidden="true" tabindex="-1"></a>    eixo.set_xlabel(rotulo)</span>
+<span id="cb26-23"><a href="#cb26-23" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb26-24"><a href="#cb26-24" aria-hidden="true" tabindex="-1"></a>ax_estudante.set_ylabel(<span class="st">"saldo (dólares)"</span>)</span>
+<span id="cb26-25"><a href="#cb26-25" aria-hidden="true" tabindex="-1"></a>plt.tight_layout()</span>
+<span id="cb26-26"><a href="#cb26-26" aria-hidden="true" tabindex="-1"></a>plt.show()</span></code></pre></div><button title="Copiar para a área de transferência" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="cell-output cell-output-display">
+<div id="fig-saldo-por-categoria" class="quarto-float quarto-figure quarto-figure-center anchored" alt="Dois painéis de pontos azuis empilhados em colunas verticais, uma por categoria, com um traço horizontal laranja em cada coluna. À esquerda, o traço dos estudantes fica bem acima do dos não estudantes; à direita, os traços de Leste, Sul e Oeste ficam quase na mesma altura.">
+<figure class="quarto-float quarto-float-fig figure">
+<div aria-describedby="fig-saldo-por-categoria-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<img src="04-preditores-qualitativos_files/figure-html/fig-saldo-por-categoria-output-1.png" alt="Dois painéis de pontos azuis empilhados em colunas verticais, uma por categoria, com um traço horizontal laranja em cada coluna. À esquerda, o traço dos estudantes fica bem acima do dos não estudantes; à direita, os traços de Leste, Sul e Oeste ficam quase na mesma altura." width="1388" height="588" class="figure-img">
+</div>
+<figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-fig" id="fig-saldo-por-categoria-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Figura&nbsp;2: Saldo de cada um dos 400 clientes, por estudante (esquerda) e por região (direita). Os pontos têm um deslocamento horizontal aleatório só para não empilhar; o traço laranja marca a média de cada grupo, a mesma que o intercepto e os coeficientes reproduzem.
+</figcaption>
+</figure>
+</div>
+</div>
+</div>
+<div class="funcao">
+<p><strong><code>plt.subplots(1, 2, sharey=True)</code></strong>: dois painéis lado a lado com o mesmo eixo vertical, para que as alturas se comparem direto de um painel para o outro.</p>
 </div>
 <p>O traço laranja fica na mesma altura para todo ponto do grupo: é essa reta plana, por categoria, que um preditor qualitativo sozinho consegue desenhar.</p>
 
