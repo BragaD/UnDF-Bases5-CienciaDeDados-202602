@@ -4,7 +4,7 @@
 Esta seção corresponde à seção 4.3.5 de @james2023.
 :::
 
-A seção anterior ajustou uma curva logística para um alvo de duas classes, inadimplente ou não. `origem`, em `Auto`, tem três — americano, europeu e japonês —, e a curva em S da seção 9.2 não responde a uma pergunta de três respostas: ela devolve a probabilidade de uma classe contra a outra, e aqui sobra sempre uma terceira sem lugar nessa conta. É essa extensão, de duas classes para $K$, que a logística multinomial resolve.
+`origem`, em `Auto`, tem três classes: americano, europeu e japonês. A curva em S da regressão logística devolve a probabilidade de uma classe contra a outra, e com três classes sempre sobra uma sem lugar nessa conta. Como dar a cada uma das três a sua probabilidade? É essa extensão, de duas classes para $K$, que a logística multinomial faz.
 
 ```{python}
 #| label: setup
@@ -14,7 +14,6 @@ import warnings
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-from matplotlib.lines import Line2D
 from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import confusion_matrix
 
@@ -23,24 +22,27 @@ plt.style.use("estilo-figuras.mplstyle")
 
 ## A base, de novo
 
-A saída é a mesma da seção 8.4: escolhe-se uma classe para servir de referência — a **base** —, e cada uma das outras ganha o seu próprio conjunto de coeficientes, lidos contra essa base. Com $K$ classes e uma base fixada, restam $K - 1$ conjuntos de coeficientes; para um preditor $X = (x_1, \ldots, x_p)$, a probabilidade de uma classe $k$ diferente da base, e da própria base, ficam
+A saída é a mesma da seção 8.4: escolhe-se uma classe para servir de referência, a **base**, e cada uma das outras ganha o seu próprio conjunto de coeficientes, lido contra essa base. Com $K$ classes e uma base fixada, restam $K - 1$ conjuntos de coeficientes. Para preditores $x = (x_1, \ldots, x_p)$, a probabilidade de uma classe $k$ diferente da base, e a da própria base, ficam
 
 $$
-\Pr(Y = k \mid X = x) = \frac{e^{\beta_{k0} + \beta_{k1} x_1 + \cdots + \beta_{kp} x_p}}{1 + \sum_{l \neq \text{base}} e^{\beta_{l0} + \beta_{l1} x_1 + \cdots + \beta_{lp} x_p}}, \qquad
+\Pr(Y = k \mid X = x) = \frac{e^{\beta_{k0} + \beta_{k1} x_1 + \cdots + \beta_{kp} x_p}}{1 + \sum_{l \neq \text{base}} e^{\beta_{l0} + \beta_{l1} x_1 + \cdots + \beta_{lp} x_p}},
+$$
+
+$$
 \Pr(Y = \text{base} \mid X = x) = \frac{1}{1 + \sum_{l \neq \text{base}} e^{\beta_{l0} + \cdots + \beta_{lp} x_p}}.
 $$
 
 ::: {.conceito}
-Com $K$ categorias sem ordem natural, escolhe-se uma como base; as $K - 1$ restantes ganham coeficientes próprios, lidos como log-chance contra essa base — o mesmo gesto da seção 8.4, em que `drop_first` descartava uma categoria e as indicadoras liam-se contra ela.
+Com $K$ categorias sem ordem natural, escolhe-se uma como base, e as $K - 1$ restantes ganham coeficientes próprios, lidos como log-chance contra essa base. É o mesmo gesto da seção 8.4, em que `drop_first` descartava uma categoria de um preditor e as indicadoras se liam contra ela; aqui, a categoria descartada é uma classe da resposta.
 :::
 
-O `scikit-learn`, porém, não ajusta esse formato. Ele usa uma parametrização diferente, chamada *softmax*, que trata as $K$ classes de forma simétrica — nenhuma vira base, e todas ganham o próprio conjunto de coeficientes:
+O `scikit-learn` ajusta uma forma equivalente, chamada *softmax*, que trata as $K$ classes de forma simétrica: nenhuma vira base, e todas ganham o próprio conjunto de coeficientes.
 
 $$
 \Pr(Y = k \mid X = x) = \frac{e^{\beta_{k0} + \beta_{k1} x_1 + \cdots + \beta_{kp} x_p}}{\sum_{l=1}^{K} e^{\beta_{l0} + \beta_{l1} x_1 + \cdots + \beta_{lp} x_p}}, \qquad k = 1, \ldots, K.
 $$
 
-Essa forma tem $K$ conjuntos de coeficientes, não $K - 1$: é sobreparametrizada, porque somar a mesma constante a $\beta_{k0}, \beta_{k1}, \ldots, \beta_{kp}$ em toda classe $k$ não muda probabilidade nenhuma — a constante aparece em todo expoente do numerador e do denominador, e cancela na divisão. É essa sobra que a parametrização com base elimina, zerando de propósito a linha da classe escolhida; a softmax simplesmente deixa a sobra aí, espalhada pelas $K$ linhas. As duas formas dizem a mesma coisa, e o resto da seção mostra isso com o `Auto`.
+Essa forma tem $K$ conjuntos de coeficientes, e não $K - 1$, e por isso sobram constantes livres: uma por coluna de coeficientes. Somar o mesmo número $c_j$ ao coeficiente $\beta_{kj}$ de todas as classes $k$ não muda probabilidade nenhuma, porque $c_j x_j$ aparece em todo expoente do numerador e do denominador e cancela na divisão. Isso vale separadamente para o intercepto e para cada preditor. A parametrização com base elimina essas sobras zerando de propósito a linha da classe escolhida. As duas formas dizem a mesma coisa, e o resto da seção mostra isso com o `Auto`.
 
 ## Três origens, cinco preditores
 
@@ -58,7 +60,11 @@ n_linhas = len(auto_limpo)
 n_total, n_com_interrogacao, n_linhas
 ```
 
-`dados/Auto.csv` tem 397 carros. `potencia` chega como texto, porque cinco linhas trazem `?` em vez de um número; `pd.to_numeric(auto["potencia"], errors="coerce")` converte a coluna para número e transforma esses cinco `?` em ausente, e `dropna()` descarta as cinco linhas ausentes — sobram 392.
+`dados/Auto.csv` tem 397 carros. `potencia` chega como texto, porque cinco linhas trazem `?` em vez de um número. `pd.to_numeric(auto["potencia"], errors="coerce")` converte a coluna para número e transforma esses cinco `?` em ausentes, e `dropna()` descarta as cinco linhas: sobram 392.
+
+::: {.funcao}
+**`pd.to_numeric(serie, errors="coerce")`**: converte uma coluna de texto em número; com `errors="coerce"`, o que não for número vira ausente (`NaN`) em vez de interromper a conversão.
+:::
 
 ```{python}
 #| label: contagem-origem
@@ -66,7 +72,11 @@ contagem_origem = auto_limpo["origem"].value_counts().sort_index()
 contagem_origem
 ```
 
-Das 392 linhas restantes, 245 são americanos (`origem` 1), 68 são europeus (`origem` 2) e 79 são japoneses (`origem` 3). 245 dos 392 carros — 62,5% do conjunto (245/392) — vêm dos Estados Unidos; as outras duas origens dividem o resto. Cinco preditores técnicos — `cilindrada`, `potencia`, `peso`, `aceleracao` e `ano` — tentam prever qual das três é a origem de cada carro.
+::: {.funcao}
+**`serie.value_counts()`**: quantas vezes cada valor aparece. **`.sort_index()`** ordena o resultado pelo próprio valor (1, 2, 3) em vez de pela contagem.
+:::
+
+Das 392 linhas, 245 são americanos (`origem` 1), 68 são europeus (`origem` 2) e 79 são japoneses (`origem` 3). 245 dos 392 carros (62,5%, isto é, 245/392) vêm dos Estados Unidos, e as outras duas origens dividem o resto. Cinco preditores técnicos (`cilindrada`, `potencia`, `peso`, `aceleracao` e `ano`) tentam prever a origem de cada carro.
 
 ## Uma linha de coeficientes por classe
 
@@ -78,27 +88,54 @@ y = auto_limpo["origem"]
 
 with warnings.catch_warnings(record=True) as avisos:
     warnings.simplefilter("always")
-    modelo = LogisticRegression(C=np.inf, max_iter=10000).fit(X, y)
+    modelo = LogisticRegression(C=np.inf, solver="newton-cholesky", tol=1e-8).fit(X, y)
 
-n_iteracoes = int(modelo.n_iter_[0])
 n_avisos = len(avisos)
 acuracia = float(modelo.score(X, y))
 
-n_iteracoes, n_avisos, round(acuracia, 4)
+n_avisos, round(acuracia, 4)
 ```
 
-O ajuste, com o mesmo `C=np.inf` e `max_iter=10000` da seção 9.2, converge em 4.739 iterações; capturando todo aviso emitido durante o `fit`, `n_avisos` sai 0 — nenhum aviso de convergência, nem de nenhum outro tipo. Sobre as mesmas 392 linhas que o treinaram, o modelo acerta 0,7883 das previsões; não é desempenho em dado novo, só a fração de acerto sobre o dado que ele já viu — julgar um classificador em dado que ele não viu é assunto do capítulo 10.
+::: {.funcao}
+**`warnings.catch_warnings(record=True)`**: dentro do bloco `with`, guarda numa lista os avisos emitidos em vez de imprimi-los. Com `simplefilter("always")`, nenhum aviso é descartado, e `len(avisos)` conta quantos houve.
+:::
+
+O ajuste usa a mesma `LogisticRegression` sem penalização da seção 9.2. Capturando todo aviso emitido durante o `fit`, `n_avisos` sai 0: nenhum aviso de convergência, nem de outro tipo. Sobre as mesmas 392 linhas que o treinaram, o modelo acerta 0,7883 das previsões. É a fração de acerto sobre o dado que ele já viu, e não o desempenho em dado novo; para isso seria preciso a taxa de erro de teste da seção 7.7, e o capítulo 10 mostra como estimá-la sem desperdiçar dado.
 
 ```{python}
 #| label: tabela-coeficientes
 tabela_coeficientes = pd.DataFrame(
-    modelo.coef_, index=pd.Index(modelo.classes_, name="origem"), columns=modelo.feature_names_in_
+    modelo.coef_,
+    index=pd.Index(modelo.classes_, name="origem"),
+    columns=modelo.feature_names_in_,
 )
 tabela_coeficientes.insert(0, "intercepto", modelo.intercept_)
 tabela_coeficientes.round(4)
 ```
 
-`coef_` vem com três linhas, não duas: `classes_` dá 1, 2 e 3, a mesma codificação de `origem`, e cada linha traz um coeficiente por coluna de `feature_names_in_`. Nenhuma das três é a base — é a parametrização softmax descrita acima, simétrica, que o `scikit-learn` ajusta por padrão sempre que o alvo tem mais de duas classes.
+::: {.funcao}
+**`modelo.classes_`**: as classes que o ajuste encontrou em `y`, em ordem. Cada linha de `coef_` e cada posição de `intercept_` correspondem a uma delas, na mesma ordem.
+
+**`df.insert(posicao, nome, valores)`**: acrescenta uma coluna na posição pedida, aqui a primeira. **`pd.Index(valores, name)`** monta os rótulos das linhas de uma tabela, e `name` dá nome ao próprio eixo, que aparece no canto da tabela (aqui, "origem").
+:::
+
+`coef_` vem com três linhas, e não duas. `classes_` dá 1, 2 e 3, a mesma codificação de `origem`, e cada linha traz um coeficiente por preditor. Nenhuma das três é a base: é a parametrização softmax, que o `scikit-learn` ajusta sempre que o alvo tem mais de duas classes.
+
+Qual desses números se lê como efeito? Nenhum sozinho. Como sobram essas constantes livres, a softmax sem penalização determina só as diferenças entre as linhas. O `scikit-learn` devolve a versão em que as três linhas somam zero, coluna a coluna:
+
+```{python}
+#| label: linhas-somam-zero
+(
+    bool(np.allclose(modelo.coef_.sum(axis=0), 0)),
+    bool(np.isclose(modelo.intercept_.sum(), 0)),
+)
+```
+
+::: {.funcao}
+**`np.allclose(a, b)`** e **`np.isclose(a, b)`**: `True` se os valores coincidem até uma tolerância pequena, que absorve o último dígito de arredondamento. `allclose` responde por um array inteiro; `isclose`, elemento a elemento, ou para um número só.
+:::
+
+Por isso o 13,8958 do intercepto europeu não tem significado próprio. O que se lê é a diferença entre duas linhas.
 
 ## A base muda, a previsão não
 
@@ -110,21 +147,15 @@ coef_recentrado = modelo.coef_ - modelo.coef_[0]
 intercepto_recentrado = modelo.intercept_ - modelo.intercept_[0]
 
 tabela_recentrada = pd.DataFrame(
-    coef_recentrado, index=pd.Index(modelo.classes_, name="origem"), columns=modelo.feature_names_in_
+    coef_recentrado,
+    index=pd.Index(modelo.classes_, name="origem"),
+    columns=modelo.feature_names_in_,
 )
 tabela_recentrada.insert(0, "intercepto", intercepto_recentrado)
-
-tabela_lado_a_lado = pd.concat(
-    {
-        "parametrização softmax": tabela_coeficientes,
-        f"contra a base (origem {classe_base})": tabela_recentrada,
-    },
-    axis=1,
-)
-tabela_lado_a_lado.round(4)
+tabela_recentrada.round(4)
 ```
 
-Subtrair a linha da origem 1 de toda linha de `coef_` — e o mesmo em `intercept_` — produz exatamente a forma com base descrita no começo desta seção: a linha da origem 1 zera por completo, e as outras duas passam a ler-se contra ela. É de novo o gesto do `drop_first` da seção 8.4, agora sobre três classes em vez de duas categorias, e sem reajustar modelo nenhum — a tabela acima só reorganiza os mesmos coeficientes que `ajuste-multinomial` já tinha produzido.
+Subtrair a linha da origem 1 de toda linha de `coef_`, e o mesmo em `intercept_`, produz exatamente a forma com base do começo da seção: a linha da origem 1 zera, e as outras duas passam a ser lidas contra ela. O intercepto da origem 2, por exemplo, vira 19,9400, a diferença entre 13,8958 e -6,0442 da tabela anterior. Nada foi reajustado: a tabela só reorganiza os coeficientes do ajuste original. Mas a previsão continua a mesma?
 
 ```{python}
 #| label: probabilidades-lado-a-lado
@@ -134,113 +165,123 @@ probabilidades_manuais = exp_logitos / exp_logitos.sum(axis=1, keepdims=True)
 
 probabilidades_sklearn = modelo.predict_proba(X)
 diferenca_maxima = float(np.abs(probabilidades_manuais - probabilidades_sklearn).max())
-probabilidades_batem = bool(np.allclose(probabilidades_manuais, probabilidades_sklearn))
+diferenca_abaixo_de_1e_12 = bool(diferenca_maxima < 1e-12)
 
 previsao_manual = modelo.classes_[probabilidades_manuais.argmax(axis=1)]
 previsao_sklearn = modelo.predict(X)
 previsoes_batem = bool(np.array_equal(previsao_manual, previsao_sklearn))
 
-f"{diferenca_maxima:.2e}", probabilidades_batem, previsoes_batem
+diferenca_abaixo_de_1e_12, previsoes_batem
 ```
 
-Recalculando a probabilidade à mão a partir desses logitos recentrados — a exponencial de cada logito dividida pela soma da linha, a própria definição de softmax — e comparando com o `predict_proba` do ajuste original: a diferença máxima, sobre as 392 × 3 entradas, é 1,11e-15, e `probabilidades_batem` sai `True`. A previsão — a classe de maior probabilidade em cada linha — também bate: `previsoes_batem` sai `True`. Os coeficientes mudam de número; o que o modelo prevê para cada um dos 392 carros, não.
+::: {.funcao}
+**`A @ B.T`**: o produto de matrizes com a transposta de `B`. Aqui, multiplica cada carro (uma linha de `X`) por cada linha de coeficientes, e dá um logito por carro e por classe.
 
-## Três classes não são uma escala
+**`arr.sum(axis=1, keepdims=True)`** soma cada linha e mantém o resultado como uma coluna, para que a divisão seja feita linha a linha. **`arr.argmax(axis=1)`** dá, em cada linha, a posição do maior valor.
+:::
 
-A seção 9.1 mostrou esse problema do lado da codificação: rotular derrame, overdose e convulsão como 1, 2 e 3 inventa uma ordem e uma distância que a lista de diagnósticos não tinha. A matriz de confusão — a tabela que cruza a classe verdadeira com a classe prevista, uma célula por par — do ajuste sobre `Auto` mostra o mesmo problema do lado do erro.
+A probabilidade recalculada à mão a partir desses logitos recentrados (a exponencial de cada logito dividida pela soma da linha, a própria definição de softmax) coincide com o `predict_proba` do ajuste original: a maior diferença, sobre as 392 × 3 entradas, fica abaixo de $10^{-12}$, e `diferenca_abaixo_de_1e_12` sai `True`. A previsão, a classe de maior probabilidade em cada linha, também bate: `previsoes_batem` sai `True`. Os coeficientes mudam de número; o que o modelo prevê para cada um dos 392 carros, não.
+
+## Quais origens se confundem
+
+Trocar a base não muda nada, e trocar a numeração das classes também não: o modelo multinomial não usa a ordem 1 < 2 < 3 em lugar nenhum. O problema da seção 9.1, uma escala inventada pela codificação, não existe aqui. O que resta perguntar é quais origens o modelo separa bem e quais confunde. A **matriz de confusão** responde: uma tabela que cruza a classe verdadeira com a classe prevista, uma célula por par.
 
 ```{python}
 #| label: matriz-confusao
 y_previsto = modelo.predict(X)
 matriz = confusion_matrix(y, y_previsto, labels=modelo.classes_)
 
+nomes = ["americano", "europeu", "japonês"]
 matriz_rotulada = pd.DataFrame(
     matriz,
-    index=pd.Index(modelo.classes_, name="origem verdadeira"),
-    columns=pd.Index(modelo.classes_, name="origem prevista"),
+    index=pd.Index(nomes, name="origem verdadeira"),
+    columns=pd.Index(nomes, name="origem prevista"),
 )
 matriz_rotulada
 ```
 
-`confusion_matrix(y, y_previsto)` do `scikit-learn` devolve linha = origem verdadeira, coluna = origem prevista — por isso a tabela acima, e a figura a seguir, rotulam os dois eixos em vez de deixar por conta da memória.
+::: {.funcao}
+**`confusion_matrix(y_verdadeiro, y_previsto, labels)`**: conta, para cada par de classes, quantas observações da classe da linha foram previstas como a classe da coluna. A diagonal são os acertos.
 
-```{python}
-#| label: erros-por-distancia
-erros_1_2 = int(matriz[0, 1] + matriz[1, 0])
-erros_2_3 = int(matriz[1, 2] + matriz[2, 1])
-erros_1_3 = int(matriz[0, 2] + matriz[2, 0])
+- `labels=modelo.classes_`: fixa a ordem das linhas e colunas, para que ela não dependa de quais classes aparecem no dado.
+:::
 
-longe_supera_1_2 = bool(erros_1_3 > erros_1_2)
-
-erros_1_2, erros_2_3, erros_1_3, longe_supera_1_2
-```
-
-Contagem crua, porém, não controla pelo tamanho de cada origem — 245, 68 e 79 carros, a contagem por origem impressa acima —, e um par que reúne mais carros tem mais chance de acumular erro só por isso.
+A linha é a origem verdadeira e a coluna, a prevista; por isso a tabela, e a figura a seguir, rotulam os dois eixos. Contar os erros de cada par não basta, porque as origens têm tamanhos bem diferentes (245, 68 e 79 carros) e um par que reúne mais carros acumula mais erro só por isso. Dividindo os erros de cada par pelo número de carros que ele reúne:
 
 ```{python}
 #| label: taxas-de-confusao
-n_1_2 = int(contagem_origem[1] + contagem_origem[2])
-n_2_3 = int(contagem_origem[2] + contagem_origem[3])
-n_1_3 = int(contagem_origem[1] + contagem_origem[3])
+pares = {
+    "americano–europeu": (0, 1),
+    "europeu–japonês": (1, 2),
+    "americano–japonês": (0, 2),
+}
+taxas_de_confusao = pd.Series(
+    {
+        par: (matriz[i, j] + matriz[j, i])
+        / (contagem_origem.iloc[i] + contagem_origem.iloc[j])
+        for par, (i, j) in pares.items()
+    }
+)
 
-taxa_1_2 = erros_1_2 / n_1_2
-taxa_2_3 = erros_2_3 / n_2_3
-taxa_1_3 = erros_1_3 / n_1_3
-
-longe_supera_1_2_em_taxa = bool(taxa_1_3 > taxa_1_2)
-
-round(taxa_1_2 * 100, 2), round(taxa_2_3 * 100, 2), round(taxa_1_3 * 100, 2), longe_supera_1_2_em_taxa
+(taxas_de_confusao * 100).round(2).to_dict(), taxas_de_confusao.idxmax()
 ```
 
 ```{python}
 #| label: fig-matriz-confusao
-#| fig-cap: "Matriz de confusão do ajuste sobre as 392 linhas de `Auto`, como bolhas: a área de cada bolha cresce com a raiz quadrada da contagem da célula (maior para célula mais frequente, sem ser proporcional a ela), e o número exato está escrito dentro dela. Azul marca acerto (a diagonal); verde marca erro entre origens vizinhas na numeração (1-2 ou 2-3); laranja marca erro entre os dois extremos da numeração (1-3). Eixo vertical: origem verdadeira; eixo horizontal: origem prevista."
-rotulos = ["americano", "europeu", "japonês"]
-
-grupos = {
-    "acerto": ([], [], [], "C0"),
-    "vizinha na numeração (1-2 ou 2-3)": ([], [], [], "C2"),
-    "extremos da numeração (1-3)": ([], [], [], "C1"),
-}
+#| fig-cap: "Matriz de confusão do ajuste sobre as 392 linhas de `Auto`, como bolhas: a área de cada bolha cresce com a raiz quadrada da contagem da célula, e o número exato está escrito dentro dela. Azul marca acerto (a diagonal); laranja marca erro. Eixo vertical: origem verdadeira; eixo horizontal: origem prevista."
+#| fig-alt: "Grade de três por três bolhas. Na diagonal, três bolhas azuis, a dos americanos bem maior que as outras. Fora da diagonal, bolhas laranja menores; a maior delas marca europeus previstos como japoneses, e a seguinte, americanos previstos como japoneses."
+fig, ax = plt.subplots(figsize=(6.2, 5.0))
 for i in range(3):
     for j in range(3):
         contagem = int(matriz[i, j])
-        if i == j:
-            chave = "acerto"
-        elif abs(i - j) == 1:
-            chave = "vizinha na numeração (1-2 ou 2-3)"
-        else:
-            chave = "extremos da numeração (1-3)"
-        grupos[chave][0].append(j)
-        grupos[chave][1].append(i)
-        grupos[chave][2].append(contagem)
-
-fig, ax = plt.subplots(figsize=(6.2, 5.4))
-for rotulo_legenda, (xs, ys, contagens, cor) in grupos.items():
-    tamanhos = [70 * np.sqrt(c) for c in contagens]
-    ax.scatter(xs, ys, s=tamanhos, color=cor, zorder=3)
-    for x_pos, y_pos, c in zip(xs, ys, contagens):
-        ax.annotate(str(c), xy=(x_pos, y_pos), ha="center", va="center", fontsize=9, color="white", zorder=4)
+        cor = "C0" if i == j else "C1"
+        ax.scatter([j], [i], s=70 * np.sqrt(contagem), color=cor, zorder=3)
+        ax.annotate(
+            str(contagem),
+            xy=(j, i),
+            ha="center",
+            va="center",
+            fontsize=9,
+            color="white",
+            zorder=4,
+        )
 
 ax.set_xticks([0, 1, 2])
-ax.set_xticklabels(rotulos)
+ax.set_xticklabels(nomes)
 ax.set_yticks([0, 1, 2])
-ax.set_yticklabels(rotulos)
+ax.set_yticklabels(nomes)
 ax.set_xlabel("origem prevista")
 ax.set_ylabel("origem verdadeira")
 ax.set_xlim(-0.6, 2.6)
 ax.set_ylim(2.6, -0.6)
-
-marcadores_legenda = [
-    Line2D([], [], marker="o", linestyle="None", color=cor, markersize=9)
-    for _, _, _, cor in grupos.values()
-]
-ax.legend(
-    marcadores_legenda, list(grupos.keys()),
-    title="leitura da célula", loc="upper center", bbox_to_anchor=(0.5, -0.18),
-)
 plt.tight_layout()
 plt.show()
 ```
 
-Se `origem` fosse mesmo uma escala — 1, depois 2, depois 3 —, o par de extremos (1-3) devia ser o mais raro de confundir, não um dos mais comuns. A contagem crua já aponta nessa direção: entre americano e japonês (1-3) o modelo erra 33 vezes (19 + 14), mais que entre americano e europeu (1-2), 17 vezes (7 + 10) — `longe_supera_1_2` sai `True`. Mas as três origens têm tamanhos bem diferentes (245, 68 e 79 carros), e um par que reúne mais carros acumula mais chance de erro só por isso, sem que a numeração tenha nada a ver. Dividindo o erro de cada par pelo total de carros que ele reúne — a taxa de confusão do par —, o quadro muda de escala mas não de conclusão: o par vizinho 1-2 erra em 5,43% dos casos, o par vizinho 2-3 em 22,45%, e o par de extremos, 1-3, em 10,19% — acima da taxa do par vizinho 1-2 (`longe_supera_1_2_em_taxa` sai `True`). O par mais distante na numeração de `origem` não é o mais fácil de separar: a numeração não é a régua que o erro segue.
+Entre americanos e europeus, o modelo confunde um com o outro em 5,43% dos carros do par; entre americanos e japoneses, em 10,19%; e entre europeus e japoneses, em 22,45%. `idxmax` confirma que o par mais confundido é europeu–japonês. Por quê? A média de cada preditor por origem dá uma pista:
+
+```{python}
+#| label: medias-por-origem
+medias_por_origem = auto_limpo.groupby("origem")[preditores].mean().round(1)
+medias_por_origem.index = nomes
+medias_por_origem
+```
+
+```{python}
+#| label: europeu-perto-do-japones
+tamanho = ["cilindrada", "potencia", "peso"]
+dist_europeu_japones = (
+    medias_por_origem.loc["europeu", tamanho]
+    - medias_por_origem.loc["japonês", tamanho]
+).abs()
+dist_europeu_americano = (
+    medias_por_origem.loc["europeu", tamanho]
+    - medias_por_origem.loc["americano", tamanho]
+).abs()
+europeu_mais_perto_do_japones = bool(
+    (dist_europeu_japones < dist_europeu_americano).all()
+)
+europeu_mais_perto_do_japones
+```
+
+Os americanos têm, em média, cilindrada de 247,5 contra 109,6 dos europeus e 102,7 dos japoneses, e peso de 3.372,5 contra 2.433,5 e 2.221,2. Em cilindrada, potência e peso, `europeu_mais_perto_do_japones` confirma que a média europeia fica mais perto da japonesa do que da americana. É entre essas duas origens, parecidas no tamanho do carro, que o modelo mais confunde, em proporção dos carros do par.
