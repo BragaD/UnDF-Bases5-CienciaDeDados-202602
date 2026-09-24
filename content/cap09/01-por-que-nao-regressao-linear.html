@@ -179,6 +179,35 @@ div.csl-indent {
 })();
 </script>
 
+  <script src="https://cdnjs.cloudflare.com/polyfill/v3/polyfill.min.js?features=es6"></script>
+  <script defer="" src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-chtml-full.js" type="text/javascript"></script>
+
+<script type="text/javascript">
+const typesetMath = (el) => {
+  if (window.MathJax) {
+    // MathJax Typeset
+    window.MathJax.typeset([el]);
+  } else if (window.katex) {
+    // KaTeX Render
+    var mathElements = el.getElementsByClassName("math");
+    var macros = [];
+    for (var i = 0; i < mathElements.length; i++) {
+      var texText = mathElements[i].firstChild;
+      if (mathElements[i].tagName == "SPAN" && texText && texText.data) {
+        window.katex.render(texText.data, mathElements[i], {
+          displayMode: mathElements[i].classList.contains('display'),
+          throwOnError: false,
+          macros: macros,
+          fleqn: false
+        });
+      }
+    }
+  }
+}
+window.Quarto = {
+  typesetMath
+};
+</script>
 
 <link rel="stylesheet" href="../../styles.css">
 </head>
@@ -829,7 +858,7 @@ Nota
 <p>Esta seção corresponde às seções 4.1 e 4.2 de <span class="citation" data-cites="james2023">James et al. (<a href="#ref-james2023" role="doc-biblioref">2023</a>)</span>.</p>
 </div>
 </div>
-<p>O capítulo anterior tratou sempre do mesmo tipo de pergunta: dado um conjunto de preditores, que número a resposta deve assumir — vendas em milhares de unidades, consumo em milhas por galão. <code>Default</code> muda o tipo da resposta. Dez mil clientes de cartão de crédito, e a pergunta agora é se um cliente fica inadimplente ou não: <code>inadimplente</code> não é uma quantidade, é uma categoria, <code>sim</code> ou <code>não</code>. <code>saldo</code>, <code>renda</code> e <code>estudante</code> (<code>sim</code>/<code>não</code>) continuam preditores de sempre; o que muda é o alvo, e é essa mudança que o resto do capítulo resolve.</p>
+<p>Dez mil clientes de cartão de crédito, e a pergunta é se cada um fica inadimplente ou não. Em <code>Default</code>, <code>inadimplente</code> não é uma quantidade: é uma categoria, <code>sim</code> ou <code>não</code>. <code>saldo</code>, <code>renda</code> e <code>estudante</code> (<code>sim</code>/<code>não</code>) são preditores como os de sempre; o que muda é o alvo, e é essa mudança que o resto do capítulo resolve.</p>
 <section id="o-default-dez-mil-clientes-um-alvo-qualitativo" class="level2">
 <h2 class="anchored" data-anchor-id="o-default-dez-mil-clientes-um-alvo-qualitativo">O <code>Default</code>: dez mil clientes, um alvo qualitativo</h2>
 <div id="cell-leitura-default" class="cell" data-execution_count="2">
@@ -839,7 +868,7 @@ Nota
 <pre><code>((10000, 4), ['inadimplente', 'estudante', 'saldo', 'renda'])</code></pre>
 </div>
 </div>
-<p>Dez mil linhas, quatro colunas: <code>inadimplente</code> é o alvo; <code>estudante</code> é uma segunda categórica; <code>saldo</code> (quanto o cliente deve no cartão) e <code>renda</code> (a renda anual do cliente) são numéricas, as duas em dólares.</p>
+<p>Dez mil linhas e quatro colunas. <code>inadimplente</code> é o alvo, <code>estudante</code> é uma segunda coluna categórica, e <code>saldo</code> (quanto o cliente deve no cartão) e <code>renda</code> (a renda anual do cliente) são numéricas, as duas em dólares.</p>
 <div id="cell-proporcao-inadimplente" class="cell" data-execution_count="3">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb3"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a>n_sim <span class="op">=</span> <span class="bu">int</span>((base[<span class="st">"inadimplente"</span>] <span class="op">==</span> <span class="st">"sim"</span>).<span class="bu">sum</span>())</span>
 <span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a>n_nao <span class="op">=</span> <span class="bu">int</span>((base[<span class="st">"inadimplente"</span>] <span class="op">==</span> <span class="st">"não"</span>).<span class="bu">sum</span>())</span>
@@ -850,7 +879,7 @@ Nota
 <pre><code>(333, 9667, 0.0333)</code></pre>
 </div>
 </div>
-<p>333 dos 10.000 clientes ficam inadimplentes; 9.667, não. A proporção, 0,0333, é baixa: menos de um em trinta. <code>Default</code> é um conjunto desequilibrado, e um classificador que sempre responder “não” já acerta a maioria — um ponto que volta na seção 9.5, quando “acerta a maioria” deixa de bastar como medida.</p>
+<p>333 dos 10.000 clientes ficam inadimplentes, e 9.667 não. A proporção, 0,0333, é baixa: cerca de um em trinta. <code>Default</code> é um conjunto desequilibrado, e um classificador que sempre responda <code>não</code> já acerta a maioria. O ponto volta na seção 9.5, onde “acertar a maioria” deixa de bastar como medida.</p>
 </section>
 <section id="o-saldo-separa-a-renda-não" class="level2">
 <h2 class="anchored" data-anchor-id="o-saldo-separa-a-renda-não">O saldo separa; a renda, não</h2>
@@ -858,47 +887,66 @@ Nota
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb5"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a>nao <span class="op">=</span> base[base[<span class="st">"inadimplente"</span>] <span class="op">==</span> <span class="st">"não"</span>]</span>
 <span id="cb5-2"><a href="#cb5-2" aria-hidden="true" tabindex="-1"></a>sim <span class="op">=</span> base[base[<span class="st">"inadimplente"</span>] <span class="op">==</span> <span class="st">"sim"</span>]</span>
 <span id="cb5-3"><a href="#cb5-3" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb5-4"><a href="#cb5-4" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> desenha_caixas(ax, dados_nao, dados_sim, rotulo_y):</span>
-<span id="cb5-5"><a href="#cb5-5" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> dados, posicao, cor <span class="kw">in</span> [(dados_nao, <span class="dv">1</span>, <span class="st">"C0"</span>), (dados_sim, <span class="dv">2</span>, <span class="st">"C1"</span>)]:</span>
-<span id="cb5-6"><a href="#cb5-6" aria-hidden="true" tabindex="-1"></a>        propriedades <span class="op">=</span> <span class="bu">dict</span>(color<span class="op">=</span>cor, linewidth<span class="op">=</span><span class="fl">1.6</span>)</span>
-<span id="cb5-7"><a href="#cb5-7" aria-hidden="true" tabindex="-1"></a>        ax.boxplot(</span>
-<span id="cb5-8"><a href="#cb5-8" aria-hidden="true" tabindex="-1"></a>            dados, positions<span class="op">=</span>[posicao], widths<span class="op">=</span><span class="fl">0.5</span>,</span>
-<span id="cb5-9"><a href="#cb5-9" aria-hidden="true" tabindex="-1"></a>            boxprops<span class="op">=</span>propriedades, whiskerprops<span class="op">=</span>propriedades,</span>
-<span id="cb5-10"><a href="#cb5-10" aria-hidden="true" tabindex="-1"></a>            capprops<span class="op">=</span>propriedades, medianprops<span class="op">=</span>propriedades,</span>
-<span id="cb5-11"><a href="#cb5-11" aria-hidden="true" tabindex="-1"></a>            flierprops<span class="op">=</span><span class="bu">dict</span>(markeredgecolor<span class="op">=</span>cor, markersize<span class="op">=</span><span class="dv">3</span>),</span>
-<span id="cb5-12"><a href="#cb5-12" aria-hidden="true" tabindex="-1"></a>        )</span>
-<span id="cb5-13"><a href="#cb5-13" aria-hidden="true" tabindex="-1"></a>    ax.set_xticks([<span class="dv">1</span>, <span class="dv">2</span>])</span>
-<span id="cb5-14"><a href="#cb5-14" aria-hidden="true" tabindex="-1"></a>    ax.set_xticklabels([<span class="st">"não"</span>, <span class="st">"sim"</span>])</span>
-<span id="cb5-15"><a href="#cb5-15" aria-hidden="true" tabindex="-1"></a>    ax.set_xlabel(<span class="st">"inadimplente"</span>)</span>
-<span id="cb5-16"><a href="#cb5-16" aria-hidden="true" tabindex="-1"></a>    ax.set_ylabel(rotulo_y)</span>
-<span id="cb5-17"><a href="#cb5-17" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb5-18"><a href="#cb5-18" aria-hidden="true" tabindex="-1"></a>fig, (ax1, ax2, ax3) <span class="op">=</span> plt.subplots(<span class="dv">1</span>, <span class="dv">3</span>, figsize<span class="op">=</span>(<span class="dv">12</span>, <span class="fl">4.4</span>))</span>
-<span id="cb5-19"><a href="#cb5-19" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb5-20"><a href="#cb5-20" aria-hidden="true" tabindex="-1"></a>ax1.scatter(nao[<span class="st">"saldo"</span>], nao[<span class="st">"renda"</span>], color<span class="op">=</span><span class="st">"C0"</span>, s<span class="op">=</span><span class="dv">3</span>, linewidths<span class="op">=</span><span class="dv">0</span>, label<span class="op">=</span><span class="st">"não"</span>)</span>
-<span id="cb5-21"><a href="#cb5-21" aria-hidden="true" tabindex="-1"></a>ax1.scatter(sim[<span class="st">"saldo"</span>], sim[<span class="st">"renda"</span>], color<span class="op">=</span><span class="st">"C1"</span>, s<span class="op">=</span><span class="dv">9</span>, linewidths<span class="op">=</span><span class="dv">0</span>, label<span class="op">=</span><span class="st">"sim"</span>, zorder<span class="op">=</span><span class="dv">3</span>)</span>
-<span id="cb5-22"><a href="#cb5-22" aria-hidden="true" tabindex="-1"></a>ax1.set_xlabel(<span class="st">"saldo (dólares)"</span>)</span>
-<span id="cb5-23"><a href="#cb5-23" aria-hidden="true" tabindex="-1"></a>ax1.set_ylabel(<span class="st">"renda (dólares)"</span>)</span>
-<span id="cb5-24"><a href="#cb5-24" aria-hidden="true" tabindex="-1"></a>ax1.legend(title<span class="op">=</span><span class="st">"inadimplente"</span>, loc<span class="op">=</span><span class="st">"upper right"</span>, markerscale<span class="op">=</span><span class="fl">1.6</span>)</span>
-<span id="cb5-25"><a href="#cb5-25" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb5-26"><a href="#cb5-26" aria-hidden="true" tabindex="-1"></a>desenha_caixas(ax2, nao[<span class="st">"saldo"</span>], sim[<span class="st">"saldo"</span>], <span class="st">"saldo (dólares)"</span>)</span>
-<span id="cb5-27"><a href="#cb5-27" aria-hidden="true" tabindex="-1"></a>desenha_caixas(ax3, nao[<span class="st">"renda"</span>], sim[<span class="st">"renda"</span>], <span class="st">"renda (dólares)"</span>)</span>
-<span id="cb5-28"><a href="#cb5-28" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb5-29"><a href="#cb5-29" aria-hidden="true" tabindex="-1"></a>plt.tight_layout()</span>
-<span id="cb5-30"><a href="#cb5-30" aria-hidden="true" tabindex="-1"></a>plt.show()</span></code></pre></div><button title="Copiar para a área de transferência" class="code-copy-button"><i class="bi"></i></button></div>
+<span id="cb5-4"><a href="#cb5-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb5-5"><a href="#cb5-5" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> desenha_caixas(ax, dados_nao, dados_sim, rotulo_y):</span>
+<span id="cb5-6"><a href="#cb5-6" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> dados, posicao, cor <span class="kw">in</span> [(dados_nao, <span class="dv">1</span>, <span class="st">"C0"</span>), (dados_sim, <span class="dv">2</span>, <span class="st">"C1"</span>)]:</span>
+<span id="cb5-7"><a href="#cb5-7" aria-hidden="true" tabindex="-1"></a>        propriedades <span class="op">=</span> <span class="bu">dict</span>(color<span class="op">=</span>cor, linewidth<span class="op">=</span><span class="fl">1.6</span>)</span>
+<span id="cb5-8"><a href="#cb5-8" aria-hidden="true" tabindex="-1"></a>        ax.boxplot(</span>
+<span id="cb5-9"><a href="#cb5-9" aria-hidden="true" tabindex="-1"></a>            dados,</span>
+<span id="cb5-10"><a href="#cb5-10" aria-hidden="true" tabindex="-1"></a>            positions<span class="op">=</span>[posicao],</span>
+<span id="cb5-11"><a href="#cb5-11" aria-hidden="true" tabindex="-1"></a>            widths<span class="op">=</span><span class="fl">0.5</span>,</span>
+<span id="cb5-12"><a href="#cb5-12" aria-hidden="true" tabindex="-1"></a>            boxprops<span class="op">=</span>propriedades,</span>
+<span id="cb5-13"><a href="#cb5-13" aria-hidden="true" tabindex="-1"></a>            whiskerprops<span class="op">=</span>propriedades,</span>
+<span id="cb5-14"><a href="#cb5-14" aria-hidden="true" tabindex="-1"></a>            capprops<span class="op">=</span>propriedades,</span>
+<span id="cb5-15"><a href="#cb5-15" aria-hidden="true" tabindex="-1"></a>            medianprops<span class="op">=</span>propriedades,</span>
+<span id="cb5-16"><a href="#cb5-16" aria-hidden="true" tabindex="-1"></a>            flierprops<span class="op">=</span><span class="bu">dict</span>(markeredgecolor<span class="op">=</span>cor, markersize<span class="op">=</span><span class="dv">3</span>),</span>
+<span id="cb5-17"><a href="#cb5-17" aria-hidden="true" tabindex="-1"></a>        )</span>
+<span id="cb5-18"><a href="#cb5-18" aria-hidden="true" tabindex="-1"></a>    ax.set_xticks([<span class="dv">1</span>, <span class="dv">2</span>])</span>
+<span id="cb5-19"><a href="#cb5-19" aria-hidden="true" tabindex="-1"></a>    ax.set_xticklabels([<span class="st">"não"</span>, <span class="st">"sim"</span>])</span>
+<span id="cb5-20"><a href="#cb5-20" aria-hidden="true" tabindex="-1"></a>    ax.set_xlabel(<span class="st">"inadimplente"</span>)</span>
+<span id="cb5-21"><a href="#cb5-21" aria-hidden="true" tabindex="-1"></a>    ax.set_ylabel(rotulo_y)</span>
+<span id="cb5-22"><a href="#cb5-22" aria-hidden="true" tabindex="-1"></a>    ax.set_ylim(bottom<span class="op">=</span><span class="dv">0</span>)</span>
+<span id="cb5-23"><a href="#cb5-23" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb5-24"><a href="#cb5-24" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb5-25"><a href="#cb5-25" aria-hidden="true" tabindex="-1"></a>fig, (ax1, ax2, ax3) <span class="op">=</span> plt.subplots(<span class="dv">1</span>, <span class="dv">3</span>, figsize<span class="op">=</span>(<span class="dv">12</span>, <span class="fl">4.4</span>))</span>
+<span id="cb5-26"><a href="#cb5-26" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb5-27"><a href="#cb5-27" aria-hidden="true" tabindex="-1"></a>ax1.scatter(nao[<span class="st">"saldo"</span>], nao[<span class="st">"renda"</span>], color<span class="op">=</span><span class="st">"C0"</span>, s<span class="op">=</span><span class="dv">3</span>, linewidths<span class="op">=</span><span class="dv">0</span>, label<span class="op">=</span><span class="st">"não"</span>)</span>
+<span id="cb5-28"><a href="#cb5-28" aria-hidden="true" tabindex="-1"></a>ax1.scatter(</span>
+<span id="cb5-29"><a href="#cb5-29" aria-hidden="true" tabindex="-1"></a>    sim[<span class="st">"saldo"</span>], sim[<span class="st">"renda"</span>], color<span class="op">=</span><span class="st">"C1"</span>, s<span class="op">=</span><span class="dv">9</span>, linewidths<span class="op">=</span><span class="dv">0</span>, label<span class="op">=</span><span class="st">"sim"</span>, zorder<span class="op">=</span><span class="dv">3</span></span>
+<span id="cb5-30"><a href="#cb5-30" aria-hidden="true" tabindex="-1"></a>)</span>
+<span id="cb5-31"><a href="#cb5-31" aria-hidden="true" tabindex="-1"></a>ax1.set_xlim(left<span class="op">=</span><span class="dv">0</span>)</span>
+<span id="cb5-32"><a href="#cb5-32" aria-hidden="true" tabindex="-1"></a>ax1.set_ylim(bottom<span class="op">=</span><span class="dv">0</span>)</span>
+<span id="cb5-33"><a href="#cb5-33" aria-hidden="true" tabindex="-1"></a>ax1.set_xlabel(<span class="st">"saldo (dólares)"</span>)</span>
+<span id="cb5-34"><a href="#cb5-34" aria-hidden="true" tabindex="-1"></a>ax1.set_ylabel(<span class="st">"renda (dólares)"</span>)</span>
+<span id="cb5-35"><a href="#cb5-35" aria-hidden="true" tabindex="-1"></a>ax1.legend(</span>
+<span id="cb5-36"><a href="#cb5-36" aria-hidden="true" tabindex="-1"></a>    title<span class="op">=</span><span class="st">"inadimplente"</span>,</span>
+<span id="cb5-37"><a href="#cb5-37" aria-hidden="true" tabindex="-1"></a>    loc<span class="op">=</span><span class="st">"upper left"</span>,</span>
+<span id="cb5-38"><a href="#cb5-38" aria-hidden="true" tabindex="-1"></a>    bbox_to_anchor<span class="op">=</span>(<span class="fl">1.0</span>, <span class="fl">1.0</span>),</span>
+<span id="cb5-39"><a href="#cb5-39" aria-hidden="true" tabindex="-1"></a>    markerscale<span class="op">=</span><span class="fl">1.6</span>,</span>
+<span id="cb5-40"><a href="#cb5-40" aria-hidden="true" tabindex="-1"></a>)</span>
+<span id="cb5-41"><a href="#cb5-41" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb5-42"><a href="#cb5-42" aria-hidden="true" tabindex="-1"></a>desenha_caixas(ax2, nao[<span class="st">"saldo"</span>], sim[<span class="st">"saldo"</span>], <span class="st">"saldo (dólares)"</span>)</span>
+<span id="cb5-43"><a href="#cb5-43" aria-hidden="true" tabindex="-1"></a>desenha_caixas(ax3, nao[<span class="st">"renda"</span>], sim[<span class="st">"renda"</span>], <span class="st">"renda (dólares)"</span>)</span>
+<span id="cb5-44"><a href="#cb5-44" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb5-45"><a href="#cb5-45" aria-hidden="true" tabindex="-1"></a>plt.tight_layout()</span>
+<span id="cb5-46"><a href="#cb5-46" aria-hidden="true" tabindex="-1"></a>plt.show()</span></code></pre></div><button title="Copiar para a área de transferência" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-display">
-<div id="fig-saldo-renda" class="quarto-float quarto-figure quarto-figure-center anchored">
+<div id="fig-saldo-renda" class="quarto-float quarto-figure quarto-figure-center anchored" alt="Três painéis. À esquerda, uma nuvem de pontos azuis de renda contra saldo, com os pontos laranja concentrados à direita, em saldos altos, e espalhados de alto a baixo em renda. No meio, a caixa laranja de saldo fica inteira acima da azul. À direita, as duas caixas de renda ficam quase na mesma altura.">
 <figure class="quarto-float quarto-float-fig figure">
 <div aria-describedby="fig-saldo-renda-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
-<img src="01-por-que-nao-regressao-linear_files/figure-html/fig-saldo-renda-output-1.png" width="1669" height="602" class="figure-img">
+<img src="01-por-que-nao-regressao-linear_files/figure-html/fig-saldo-renda-output-1.png" alt="Três painéis. À esquerda, uma nuvem de pontos azuis de renda contra saldo, com os pontos laranja concentrados à direita, em saldos altos, e espalhados de alto a baixo em renda. No meio, a caixa laranja de saldo fica inteira acima da azul. À direita, as duas caixas de renda ficam quase na mesma altura." width="1669" height="602" class="figure-img">
 </div>
 <figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-fig" id="fig-saldo-renda-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
-Figura&nbsp;1: <code>Default</code>: saldo e renda de 10.000 clientes, com quem ficou inadimplente (<code>sim</code>) destacado sobre quem não ficou (<code>não</code>). Ao lado, os mesmos dois grupos em caixas — quartil 25%, mediana e quartil 75% — para saldo e para renda.
+Figura&nbsp;1: <code>Default</code>: saldo e renda de 10.000 clientes, com quem ficou inadimplente (<code>sim</code>, laranja) destacado sobre quem não ficou (<code>não</code>, azul). Ao lado, os mesmos dois grupos em caixas (quartil de 25%, mediana e quartil de 75%) para saldo e para renda.
 </figcaption>
 </figure>
 </div>
 </div>
 </div>
-<p>A dispersão à esquerda já sugere uma leitura: os pontos laranja (<code>sim</code>) se acumulam à direita, em saldos altos; os azuis (<code>não</code>), à esquerda. Em renda, as duas cores se misturam ao longo de todo o eixo vertical. As caixas ao lado conferem essa leitura em vez de só ilustrá-la:</p>
+<div class="funcao">
+<p><strong><code>ax.boxplot(dados, positions, widths)</code></strong>: desenha uma caixa com os quartis de 25% e 75% nas bordas e a mediana no meio, com hastes até os valores mais afastados que ainda não contam como atípicos. <code>positions</code> põe a caixa numa posição do eixo horizontal, e os <code>...props</code> escolhem a cor de cada parte.</p>
+</div>
+<p>A dispersão à esquerda já sugere uma leitura: os pontos laranja (<code>sim</code>) se acumulam à direita, em saldos altos, e os azuis (<code>não</code>), à esquerda. Em renda, as duas cores se misturam ao longo de todo o eixo vertical. As caixas ao lado dão para conferir essa leitura com números:</p>
 <div id="cell-quartis-saldo-renda" class="cell" data-execution_count="5">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb6"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb6-1"><a href="#cb6-1" aria-hidden="true" tabindex="-1"></a>q1_saldo_nao <span class="op">=</span> <span class="bu">float</span>(nao[<span class="st">"saldo"</span>].quantile(<span class="fl">0.25</span>))</span>
 <span id="cb6-2"><a href="#cb6-2" aria-hidden="true" tabindex="-1"></a>q3_saldo_nao <span class="op">=</span> <span class="bu">float</span>(nao[<span class="st">"saldo"</span>].quantile(<span class="fl">0.75</span>))</span>
@@ -912,28 +960,31 @@ Figura&nbsp;1: <code>Default</code>: saldo e renda de 10.000 clientes, com quem 
 <span id="cb6-10"><a href="#cb6-10" aria-hidden="true" tabindex="-1"></a>q3_renda_sim <span class="op">=</span> <span class="bu">float</span>(sim[<span class="st">"renda"</span>].quantile(<span class="fl">0.75</span>))</span>
 <span id="cb6-11"><a href="#cb6-11" aria-hidden="true" tabindex="-1"></a>sobrepoe_renda <span class="op">=</span> <span class="kw">not</span> (q3_renda_nao <span class="op">&lt;</span> q1_renda_sim <span class="kw">or</span> q3_renda_sim <span class="op">&lt;</span> q1_renda_nao)</span>
 <span id="cb6-12"><a href="#cb6-12" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb6-13"><a href="#cb6-13" aria-hidden="true" tabindex="-1"></a>(</span>
-<span id="cb6-14"><a href="#cb6-14" aria-hidden="true" tabindex="-1"></a>    <span class="bu">round</span>(q1_saldo_nao, <span class="dv">2</span>), <span class="bu">round</span>(q3_saldo_nao, <span class="dv">2</span>), <span class="bu">round</span>(q1_saldo_sim, <span class="dv">2</span>), <span class="bu">round</span>(q3_saldo_sim, <span class="dv">2</span>), sobrepoe_saldo,</span>
-<span id="cb6-15"><a href="#cb6-15" aria-hidden="true" tabindex="-1"></a>    <span class="bu">round</span>(q1_renda_nao, <span class="dv">2</span>), <span class="bu">round</span>(q3_renda_nao, <span class="dv">2</span>), <span class="bu">round</span>(q1_renda_sim, <span class="dv">2</span>), <span class="bu">round</span>(q3_renda_sim, <span class="dv">2</span>), sobrepoe_renda,</span>
-<span id="cb6-16"><a href="#cb6-16" aria-hidden="true" tabindex="-1"></a>)</span></code></pre></div><button title="Copiar para a área de transferência" class="code-copy-button"><i class="bi"></i></button></div>
+<span id="cb6-13"><a href="#cb6-13" aria-hidden="true" tabindex="-1"></a>{</span>
+<span id="cb6-14"><a href="#cb6-14" aria-hidden="true" tabindex="-1"></a>    <span class="st">"saldo (não: q1, q3)"</span>: (<span class="bu">round</span>(q1_saldo_nao, <span class="dv">2</span>), <span class="bu">round</span>(q3_saldo_nao, <span class="dv">2</span>)),</span>
+<span id="cb6-15"><a href="#cb6-15" aria-hidden="true" tabindex="-1"></a>    <span class="st">"saldo (sim: q1, q3)"</span>: (<span class="bu">round</span>(q1_saldo_sim, <span class="dv">2</span>), <span class="bu">round</span>(q3_saldo_sim, <span class="dv">2</span>)),</span>
+<span id="cb6-16"><a href="#cb6-16" aria-hidden="true" tabindex="-1"></a>    <span class="st">"sobrepoe_saldo"</span>: sobrepoe_saldo,</span>
+<span id="cb6-17"><a href="#cb6-17" aria-hidden="true" tabindex="-1"></a>    <span class="st">"renda (não: q1, q3)"</span>: (<span class="bu">round</span>(q1_renda_nao, <span class="dv">2</span>), <span class="bu">round</span>(q3_renda_nao, <span class="dv">2</span>)),</span>
+<span id="cb6-18"><a href="#cb6-18" aria-hidden="true" tabindex="-1"></a>    <span class="st">"renda (sim: q1, q3)"</span>: (<span class="bu">round</span>(q1_renda_sim, <span class="dv">2</span>), <span class="bu">round</span>(q3_renda_sim, <span class="dv">2</span>)),</span>
+<span id="cb6-19"><a href="#cb6-19" aria-hidden="true" tabindex="-1"></a>    <span class="st">"sobrepoe_renda"</span>: sobrepoe_renda,</span>
+<span id="cb6-20"><a href="#cb6-20" aria-hidden="true" tabindex="-1"></a>}</span></code></pre></div><button title="Copiar para a área de transferência" class="code-copy-button"><i class="bi"></i></button></div>
 <div id="quartis-saldo-renda" class="cell-output cell-output-display" data-execution_count="5">
-<pre><code>(465.71,
- 1128.25,
- 1511.61,
- 1988.87,
- False,
- 21405.06,
- 43823.76,
- 19027.51,
- 43067.33,
- True)</code></pre>
+<pre><code>{'saldo (não: q1, q3)': (465.71, 1128.25),
+ 'saldo (sim: q1, q3)': (1511.61, 1988.87),
+ 'sobrepoe_saldo': False,
+ 'renda (não: q1, q3)': (21405.06, 43823.76),
+ 'renda (sim: q1, q3)': (19027.51, 43067.33),
+ 'sobrepoe_renda': True}</code></pre>
 </div>
 </div>
-<p>Em <code>saldo</code>, o quartil 75% de quem não ficou inadimplente (1.128,25) fica abaixo do quartil 25% de quem ficou (1.511,61): as duas caixas nem se tocam, <code>sobrepoe_saldo</code> sai <code>False</code>. Em <code>renda</code>, o intervalo de quem não ficou inadimplente vai de 21.405,06 a 43.823,76, e o de quem ficou, de 19.027,51 a 43.067,33 — um contido quase inteiramente dentro do outro, <code>sobrepoe_renda</code> sai <code>True</code>. O saldo separa os dois grupos; a renda, não.</p>
+<div class="funcao">
+<p><strong><code>serie.quantile(q)</code></strong>: o valor abaixo do qual fica a fração <code>q</code> dos dados. <code>quantile(0.25)</code> e <code>quantile(0.75)</code> são os quartis que formam as bordas da caixa.</p>
+</div>
+<p>Em <code>saldo</code>, o quartil de 75% de quem não ficou inadimplente (1.128,25) fica abaixo do quartil de 25% de quem ficou (1.511,61). As duas caixas nem se tocam, e <code>sobrepoe_saldo</code> sai <code>False</code>. Em <code>renda</code>, o miolo de quem não ficou inadimplente vai de 21.405,06 a 43.823,76, e o de quem ficou, de 19.027,51 a 43.067,33, uma faixa quase inteiramente contida na do outro grupo; <code>sobrepoe_renda</code> sai <code>True</code>. O saldo separa os dois grupos; a renda, não.</p>
 </section>
 <section id="por-que-a-reta-não-serve-para-probabilidade" class="level2">
 <h2 class="anchored" data-anchor-id="por-que-a-reta-não-serve-para-probabilidade">Por que a reta não serve para probabilidade</h2>
-<p>Recodificando <code>inadimplente</code> como 0 (<code>não</code>) e 1 (<code>sim</code>), nada impede de ajustar a mesma <code>LinearRegression</code> do capítulo anterior sobre esse alvo — o método não sabe, e não pergunta, se <code>y</code> é uma venda em milhares de unidades ou uma categoria disfarçada de número. O que ele devolve, porém, deixa de ser uma venda prevista e passa a ser lido como uma probabilidade prevista: a de que aquele cliente fique inadimplente.</p>
+<p>Recodificando <code>inadimplente</code> como 0 (<code>não</code>) e 1 (<code>sim</code>), nada impede de ajustar a mesma <code>LinearRegression</code> do capítulo anterior sobre esse alvo. O método não sabe, e não pergunta, se <code>y</code> é uma venda em milhares de unidades ou uma categoria disfarçada de número. O que ele devolve, porém, passa a ser lido como uma probabilidade prevista: a de que aquele cliente fique inadimplente. Só que uma reta de inclinação positiva não para em zero para os saldos mais baixos. O que ela prevê ali?</p>
 <div id="cell-regressao-sobre-saldo" class="cell" data-execution_count="6">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb8"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb8-1"><a href="#cb8-1" aria-hidden="true" tabindex="-1"></a>y <span class="op">=</span> (base[<span class="st">"inadimplente"</span>] <span class="op">==</span> <span class="st">"sim"</span>).astype(<span class="bu">int</span>)</span>
 <span id="cb8-2"><a href="#cb8-2" aria-hidden="true" tabindex="-1"></a>X <span class="op">=</span> base[[<span class="st">"saldo"</span>]]</span>
@@ -944,63 +995,93 @@ Figura&nbsp;1: <code>Default</code>: saldo e renda de 10.000 clientes, com quem 
 <span id="cb8-7"><a href="#cb8-7" aria-hidden="true" tabindex="-1"></a>n_negativas <span class="op">=</span> <span class="bu">int</span>((previsoes <span class="op">&lt;</span> <span class="dv">0</span>).<span class="bu">sum</span>())</span>
 <span id="cb8-8"><a href="#cb8-8" aria-hidden="true" tabindex="-1"></a>minimo_previsto <span class="op">=</span> <span class="bu">float</span>(previsoes.<span class="bu">min</span>())</span>
 <span id="cb8-9"><a href="#cb8-9" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb8-10"><a href="#cb8-10" aria-hidden="true" tabindex="-1"></a>n_negativas, <span class="bu">round</span>(minimo_previsto, <span class="dv">4</span>)</span></code></pre></div><button title="Copiar para a área de transferência" class="code-copy-button"><i class="bi"></i></button></div>
+<span id="cb8-10"><a href="#cb8-10" aria-hidden="true" tabindex="-1"></a>saldo_minimo <span class="op">=</span> <span class="bu">float</span>(base[<span class="st">"saldo"</span>].<span class="bu">min</span>())</span>
+<span id="cb8-11"><a href="#cb8-11" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb8-12"><a href="#cb8-12" aria-hidden="true" tabindex="-1"></a>n_negativas, <span class="bu">round</span>(minimo_previsto, <span class="dv">4</span>), <span class="bu">round</span>(<span class="bu">float</span>(reta.coef_[<span class="dv">0</span>]), <span class="dv">6</span>), saldo_minimo</span></code></pre></div><button title="Copiar para a área de transferência" class="code-copy-button"><i class="bi"></i></button></div>
 <div id="regressao-sobre-saldo" class="cell-output cell-output-display" data-execution_count="6">
-<pre><code>(3123, -0.0752)</code></pre>
+<pre><code>(3123, -0.0752, 0.00013, 0.0)</code></pre>
 </div>
 </div>
-<p>3.123 dos 10.000 clientes recebem da reta uma previsão negativa — quase um em cada três. O mínimo, -0,0752, é a previsão para quem tem o menor saldo do conjunto. Probabilidade negativa não tem leitura possível: nenhum cliente tem chance “menos que zero por cento” de ficar inadimplente, e é esse o problema — não que a reta erre feio de vez em quando, mas que uma fração inteira das suas previsões caia fora do intervalo em que uma probabilidade pode existir.</p>
+<p>3.123 dos 10.000 clientes recebem da reta uma previsão negativa, quase um em cada três. Como a inclinação é positiva (0,00013 por dólar), a menor previsão, -0,0752, é a de quem tem o menor saldo, que é 0. Probabilidade negativa não tem leitura possível: nenhum cliente tem chance “menos que zero por cento” de ficar inadimplente. Uma fração considerável das previsões da reta cai fora do intervalo em que uma probabilidade pode existir, e não por acaso: é a forma da reta que leva a isso.</p>
 </section>
 <section id="a-curva-que-não-sai-de-0-1" class="level2">
 <h2 class="anchored" data-anchor-id="a-curva-que-não-sai-de-0-1">A curva que não sai de [0, 1]</h2>
 <div id="cell-fig-reta-vs-logistica" class="cell" data-execution_count="7">
-<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb10"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb10-1"><a href="#cb10-1" aria-hidden="true" tabindex="-1"></a>logistica <span class="op">=</span> LogisticRegression(C<span class="op">=</span>np.inf, max_iter<span class="op">=</span><span class="dv">10000</span>).fit(X, y)</span>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb10"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb10-1"><a href="#cb10-1" aria-hidden="true" tabindex="-1"></a>logistica <span class="op">=</span> LogisticRegression(C<span class="op">=</span>np.inf, solver<span class="op">=</span><span class="st">"newton-cholesky"</span>, tol<span class="op">=</span><span class="fl">1e-8</span>).fit(X, y)</span>
 <span id="cb10-2"><a href="#cb10-2" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb10-3"><a href="#cb10-3" aria-hidden="true" tabindex="-1"></a>grade_saldo <span class="op">=</span> pd.DataFrame({<span class="st">"saldo"</span>: np.linspace(base[<span class="st">"saldo"</span>].<span class="bu">min</span>(), base[<span class="st">"saldo"</span>].<span class="bu">max</span>(), <span class="dv">300</span>)})</span>
-<span id="cb10-4"><a href="#cb10-4" aria-hidden="true" tabindex="-1"></a>reta_grade <span class="op">=</span> reta.predict(grade_saldo)</span>
-<span id="cb10-5"><a href="#cb10-5" aria-hidden="true" tabindex="-1"></a>prob_logistica_grade <span class="op">=</span> logistica.predict_proba(grade_saldo)[:, <span class="dv">1</span>]</span>
-<span id="cb10-6"><a href="#cb10-6" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb10-7"><a href="#cb10-7" aria-hidden="true" tabindex="-1"></a>fig, (ax1, ax2) <span class="op">=</span> plt.subplots(<span class="dv">1</span>, <span class="dv">2</span>, figsize<span class="op">=</span>(<span class="dv">11</span>, <span class="fl">4.4</span>), sharey<span class="op">=</span><span class="va">True</span>)</span>
+<span id="cb10-3"><a href="#cb10-3" aria-hidden="true" tabindex="-1"></a>grade_saldo <span class="op">=</span> pd.DataFrame(</span>
+<span id="cb10-4"><a href="#cb10-4" aria-hidden="true" tabindex="-1"></a>    {<span class="st">"saldo"</span>: np.linspace(base[<span class="st">"saldo"</span>].<span class="bu">min</span>(), base[<span class="st">"saldo"</span>].<span class="bu">max</span>(), <span class="dv">300</span>)}</span>
+<span id="cb10-5"><a href="#cb10-5" aria-hidden="true" tabindex="-1"></a>)</span>
+<span id="cb10-6"><a href="#cb10-6" aria-hidden="true" tabindex="-1"></a>reta_grade <span class="op">=</span> reta.predict(grade_saldo)</span>
+<span id="cb10-7"><a href="#cb10-7" aria-hidden="true" tabindex="-1"></a>prob_logistica_grade <span class="op">=</span> logistica.predict_proba(grade_saldo)[:, <span class="dv">1</span>]</span>
 <span id="cb10-8"><a href="#cb10-8" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb10-9"><a href="#cb10-9" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> ax <span class="kw">in</span> (ax1, ax2):</span>
-<span id="cb10-10"><a href="#cb10-10" aria-hidden="true" tabindex="-1"></a>    ax.axhspan(<span class="dv">0</span>, <span class="dv">1</span>, color<span class="op">=</span><span class="st">"C2"</span>, alpha<span class="op">=</span><span class="fl">0.10</span>)</span>
-<span id="cb10-11"><a href="#cb10-11" aria-hidden="true" tabindex="-1"></a>    ax.axhline(<span class="dv">0</span>, color<span class="op">=</span><span class="st">"C2"</span>, linewidth<span class="op">=</span><span class="fl">1.2</span>)</span>
-<span id="cb10-12"><a href="#cb10-12" aria-hidden="true" tabindex="-1"></a>    ax.axhline(<span class="dv">1</span>, color<span class="op">=</span><span class="st">"C2"</span>, linewidth<span class="op">=</span><span class="fl">1.2</span>)</span>
-<span id="cb10-13"><a href="#cb10-13" aria-hidden="true" tabindex="-1"></a>    ax.plot(nao[<span class="st">"saldo"</span>], np.zeros(<span class="bu">len</span>(nao)), <span class="st">"|"</span>, color<span class="op">=</span><span class="st">"C0"</span>, markersize<span class="op">=</span><span class="dv">6</span>, markeredgewidth<span class="op">=</span><span class="fl">0.6</span>)</span>
-<span id="cb10-14"><a href="#cb10-14" aria-hidden="true" tabindex="-1"></a>    ax.plot(sim[<span class="st">"saldo"</span>], np.ones(<span class="bu">len</span>(sim)), <span class="st">"|"</span>, color<span class="op">=</span><span class="st">"C1"</span>, markersize<span class="op">=</span><span class="dv">6</span>, markeredgewidth<span class="op">=</span><span class="fl">0.6</span>)</span>
-<span id="cb10-15"><a href="#cb10-15" aria-hidden="true" tabindex="-1"></a>    ax.set_xlabel(<span class="st">"saldo (dólares)"</span>)</span>
-<span id="cb10-16"><a href="#cb10-16" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb10-17"><a href="#cb10-17" aria-hidden="true" tabindex="-1"></a>ax1.plot(grade_saldo[<span class="st">"saldo"</span>], reta_grade, color<span class="op">=</span><span class="st">"C3"</span>, linewidth<span class="op">=</span><span class="fl">2.2</span>)</span>
-<span id="cb10-18"><a href="#cb10-18" aria-hidden="true" tabindex="-1"></a>ax1.scatter([<span class="fl">0.0</span>], [minimo_previsto], color<span class="op">=</span><span class="st">"C3"</span>, s<span class="op">=</span><span class="dv">40</span>, zorder<span class="op">=</span><span class="dv">3</span>)</span>
-<span id="cb10-19"><a href="#cb10-19" aria-hidden="true" tabindex="-1"></a>ax1.annotate(</span>
-<span id="cb10-20"><a href="#cb10-20" aria-hidden="true" tabindex="-1"></a>    <span class="ss">f"mínimo: </span><span class="sc">{</span>minimo_previsto<span class="sc">:.3f}</span><span class="ss">"</span>,</span>
-<span id="cb10-21"><a href="#cb10-21" aria-hidden="true" tabindex="-1"></a>    xy<span class="op">=</span>(<span class="fl">0.0</span>, minimo_previsto),</span>
-<span id="cb10-22"><a href="#cb10-22" aria-hidden="true" tabindex="-1"></a>    xytext<span class="op">=</span>(<span class="dv">14</span>, <span class="op">-</span><span class="dv">6</span>),</span>
-<span id="cb10-23"><a href="#cb10-23" aria-hidden="true" tabindex="-1"></a>    textcoords<span class="op">=</span><span class="st">"offset points"</span>,</span>
-<span id="cb10-24"><a href="#cb10-24" aria-hidden="true" tabindex="-1"></a>    fontsize<span class="op">=</span><span class="dv">8</span>,</span>
-<span id="cb10-25"><a href="#cb10-25" aria-hidden="true" tabindex="-1"></a>)</span>
-<span id="cb10-26"><a href="#cb10-26" aria-hidden="true" tabindex="-1"></a>ax1.set_ylabel(<span class="st">"previsão / probabilidade de inadimplência"</span>)</span>
-<span id="cb10-27"><a href="#cb10-27" aria-hidden="true" tabindex="-1"></a>ax1.set_title(<span class="st">"reta"</span>)</span>
-<span id="cb10-28"><a href="#cb10-28" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb10-29"><a href="#cb10-29" aria-hidden="true" tabindex="-1"></a>ax2.plot(grade_saldo[<span class="st">"saldo"</span>], prob_logistica_grade, color<span class="op">=</span><span class="st">"C3"</span>, linewidth<span class="op">=</span><span class="fl">2.2</span>)</span>
-<span id="cb10-30"><a href="#cb10-30" aria-hidden="true" tabindex="-1"></a>ax2.set_title(<span class="st">"curva logística"</span>)</span>
-<span id="cb10-31"><a href="#cb10-31" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb10-32"><a href="#cb10-32" aria-hidden="true" tabindex="-1"></a>plt.tight_layout()</span>
-<span id="cb10-33"><a href="#cb10-33" aria-hidden="true" tabindex="-1"></a>plt.show()</span></code></pre></div><button title="Copiar para a área de transferência" class="code-copy-button"><i class="bi"></i></button></div>
+<span id="cb10-9"><a href="#cb10-9" aria-hidden="true" tabindex="-1"></a>fig, (ax1, ax2) <span class="op">=</span> plt.subplots(<span class="dv">1</span>, <span class="dv">2</span>, figsize<span class="op">=</span>(<span class="dv">11</span>, <span class="fl">4.4</span>), sharey<span class="op">=</span><span class="va">True</span>)</span>
+<span id="cb10-10"><a href="#cb10-10" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb10-11"><a href="#cb10-11" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> ax <span class="kw">in</span> (ax1, ax2):</span>
+<span id="cb10-12"><a href="#cb10-12" aria-hidden="true" tabindex="-1"></a>    ax.axhspan(<span class="dv">0</span>, <span class="dv">1</span>, color<span class="op">=</span><span class="st">"C2"</span>, alpha<span class="op">=</span><span class="fl">0.10</span>)</span>
+<span id="cb10-13"><a href="#cb10-13" aria-hidden="true" tabindex="-1"></a>    ax.axhline(<span class="dv">0</span>, color<span class="op">=</span><span class="st">"C2"</span>, linewidth<span class="op">=</span><span class="fl">1.2</span>)</span>
+<span id="cb10-14"><a href="#cb10-14" aria-hidden="true" tabindex="-1"></a>    ax.axhline(<span class="dv">1</span>, color<span class="op">=</span><span class="st">"C2"</span>, linewidth<span class="op">=</span><span class="fl">1.2</span>)</span>
+<span id="cb10-15"><a href="#cb10-15" aria-hidden="true" tabindex="-1"></a>    ax.plot(</span>
+<span id="cb10-16"><a href="#cb10-16" aria-hidden="true" tabindex="-1"></a>        nao[<span class="st">"saldo"</span>],</span>
+<span id="cb10-17"><a href="#cb10-17" aria-hidden="true" tabindex="-1"></a>        np.zeros(<span class="bu">len</span>(nao)),</span>
+<span id="cb10-18"><a href="#cb10-18" aria-hidden="true" tabindex="-1"></a>        <span class="st">"|"</span>,</span>
+<span id="cb10-19"><a href="#cb10-19" aria-hidden="true" tabindex="-1"></a>        color<span class="op">=</span><span class="st">"C0"</span>,</span>
+<span id="cb10-20"><a href="#cb10-20" aria-hidden="true" tabindex="-1"></a>        markersize<span class="op">=</span><span class="dv">6</span>,</span>
+<span id="cb10-21"><a href="#cb10-21" aria-hidden="true" tabindex="-1"></a>        markeredgewidth<span class="op">=</span><span class="fl">0.6</span>,</span>
+<span id="cb10-22"><a href="#cb10-22" aria-hidden="true" tabindex="-1"></a>    )</span>
+<span id="cb10-23"><a href="#cb10-23" aria-hidden="true" tabindex="-1"></a>    ax.plot(</span>
+<span id="cb10-24"><a href="#cb10-24" aria-hidden="true" tabindex="-1"></a>        sim[<span class="st">"saldo"</span>],</span>
+<span id="cb10-25"><a href="#cb10-25" aria-hidden="true" tabindex="-1"></a>        np.ones(<span class="bu">len</span>(sim)),</span>
+<span id="cb10-26"><a href="#cb10-26" aria-hidden="true" tabindex="-1"></a>        <span class="st">"|"</span>,</span>
+<span id="cb10-27"><a href="#cb10-27" aria-hidden="true" tabindex="-1"></a>        color<span class="op">=</span><span class="st">"C1"</span>,</span>
+<span id="cb10-28"><a href="#cb10-28" aria-hidden="true" tabindex="-1"></a>        markersize<span class="op">=</span><span class="dv">6</span>,</span>
+<span id="cb10-29"><a href="#cb10-29" aria-hidden="true" tabindex="-1"></a>        markeredgewidth<span class="op">=</span><span class="fl">0.6</span>,</span>
+<span id="cb10-30"><a href="#cb10-30" aria-hidden="true" tabindex="-1"></a>    )</span>
+<span id="cb10-31"><a href="#cb10-31" aria-hidden="true" tabindex="-1"></a>    ax.set_xlim(left<span class="op">=</span><span class="dv">0</span>)</span>
+<span id="cb10-32"><a href="#cb10-32" aria-hidden="true" tabindex="-1"></a>    ax.set_xlabel(<span class="st">"saldo (dólares)"</span>)</span>
+<span id="cb10-33"><a href="#cb10-33" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb10-34"><a href="#cb10-34" aria-hidden="true" tabindex="-1"></a>ax1.plot(grade_saldo[<span class="st">"saldo"</span>], reta_grade, color<span class="op">=</span><span class="st">"C3"</span>, linewidth<span class="op">=</span><span class="fl">2.2</span>)</span>
+<span id="cb10-35"><a href="#cb10-35" aria-hidden="true" tabindex="-1"></a>ax1.scatter(</span>
+<span id="cb10-36"><a href="#cb10-36" aria-hidden="true" tabindex="-1"></a>    [saldo_minimo], [minimo_previsto], color<span class="op">=</span><span class="st">"C3"</span>, s<span class="op">=</span><span class="dv">40</span>, zorder<span class="op">=</span><span class="dv">3</span>, clip_on<span class="op">=</span><span class="va">False</span></span>
+<span id="cb10-37"><a href="#cb10-37" aria-hidden="true" tabindex="-1"></a>)</span>
+<span id="cb10-38"><a href="#cb10-38" aria-hidden="true" tabindex="-1"></a>ax1.annotate(</span>
+<span id="cb10-39"><a href="#cb10-39" aria-hidden="true" tabindex="-1"></a>    <span class="ss">f"mínimo: </span><span class="sc">{</span>minimo_previsto<span class="sc">:.3f}</span><span class="ss">"</span>.replace(<span class="st">"."</span>, <span class="st">","</span>),</span>
+<span id="cb10-40"><a href="#cb10-40" aria-hidden="true" tabindex="-1"></a>    xy<span class="op">=</span>(saldo_minimo, minimo_previsto),</span>
+<span id="cb10-41"><a href="#cb10-41" aria-hidden="true" tabindex="-1"></a>    xytext<span class="op">=</span>(<span class="dv">14</span>, <span class="op">-</span><span class="dv">6</span>),</span>
+<span id="cb10-42"><a href="#cb10-42" aria-hidden="true" tabindex="-1"></a>    textcoords<span class="op">=</span><span class="st">"offset points"</span>,</span>
+<span id="cb10-43"><a href="#cb10-43" aria-hidden="true" tabindex="-1"></a>    fontsize<span class="op">=</span><span class="dv">9</span>,</span>
+<span id="cb10-44"><a href="#cb10-44" aria-hidden="true" tabindex="-1"></a>)</span>
+<span id="cb10-45"><a href="#cb10-45" aria-hidden="true" tabindex="-1"></a>ax1.set_ylabel(<span class="st">"previsão / probabilidade de inadimplência"</span>)</span>
+<span id="cb10-46"><a href="#cb10-46" aria-hidden="true" tabindex="-1"></a>ax1.set_title(<span class="st">"reta"</span>)</span>
+<span id="cb10-47"><a href="#cb10-47" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb10-48"><a href="#cb10-48" aria-hidden="true" tabindex="-1"></a>ax2.plot(grade_saldo[<span class="st">"saldo"</span>], prob_logistica_grade, color<span class="op">=</span><span class="st">"C3"</span>, linewidth<span class="op">=</span><span class="fl">2.2</span>)</span>
+<span id="cb10-49"><a href="#cb10-49" aria-hidden="true" tabindex="-1"></a>ax2.set_title(<span class="st">"curva logística"</span>)</span>
+<span id="cb10-50"><a href="#cb10-50" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb10-51"><a href="#cb10-51" aria-hidden="true" tabindex="-1"></a>plt.tight_layout()</span>
+<span id="cb10-52"><a href="#cb10-52" aria-hidden="true" tabindex="-1"></a>plt.show()</span></code></pre></div><button title="Copiar para a área de transferência" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-display">
-<div id="fig-reta-vs-logistica" class="quarto-float quarto-figure quarto-figure-center anchored">
+<div id="fig-reta-vs-logistica" class="quarto-float quarto-figure quarto-figure-center anchored" alt="Dois painéis de previsão contra saldo, cada um com uma faixa verde clara entre 0 e 1 e traços azuis embaixo e laranja no alto. À esquerda, uma reta roxa sobe devagar e começa abaixo de zero, marcada com o ponto do mínimo. À direita, uma curva roxa em S fica perto de zero para saldos baixos e sobe para perto de 1 nos saldos mais altos, sem sair da faixa.">
 <figure class="quarto-float quarto-float-fig figure">
 <div aria-describedby="fig-reta-vs-logistica-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
-<img src="01-por-que-nao-regressao-linear_files/figure-html/fig-reta-vs-logistica-output-1.png" width="1529" height="602" class="figure-img">
+<img src="01-por-que-nao-regressao-linear_files/figure-html/fig-reta-vs-logistica-output-1.png" alt="Dois painéis de previsão contra saldo, cada um com uma faixa verde clara entre 0 e 1 e traços azuis embaixo e laranja no alto. À esquerda, uma reta roxa sobe devagar e começa abaixo de zero, marcada com o ponto do mínimo. À direita, uma curva roxa em S fica perto de zero para saldos baixos e sobe para perto de 1 nos saldos mais altos, sem sair da faixa." width="1529" height="602" class="figure-img">
 </div>
 <figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-fig" id="fig-reta-vs-logistica-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
-Figura&nbsp;2: Saldo contra a previsão de inadimplência, para os mesmos clientes de <code>Default</code>. Esquerda: a reta ajustada acima, que cruza a faixa sombreada — o intervalo [0, 1] — e sai por baixo dela. Direita: uma curva logística ajustada aos mesmos dados; os traços no alto e embaixo marcam, para cada cliente, se ele ficou inadimplente (sim, no topo) ou não (não, embaixo).
+Figura&nbsp;2: Saldo contra a previsão de inadimplência, para os mesmos clientes de <code>Default</code>. Esquerda: a reta ajustada acima, que cruza a faixa sombreada (o intervalo [0, 1]) e sai por baixo dela. Direita: uma curva logística ajustada aos mesmos dados. Nos dois painéis, os traços no alto e embaixo marcam, para cada cliente, se ele ficou inadimplente (no topo) ou não (embaixo).
 </figcaption>
 </figure>
 </div>
 </div>
 </div>
-<p>A reta (esquerda) atravessa a faixa sombreada e sai por baixo dela para saldos próximos de zero — a mesma previsão negativa medida acima, agora como curva. A curva logística (direita), ajustada aos mesmos clientes, tem outro formato: um S que se aproxima de 0 e de 1 sem nunca alcançá-los.</p>
+<div class="funcao">
+<p><strong><code>LogisticRegression(C, solver, tol).fit(X, y)</code></strong>: ajusta uma regressão logística, a curva em S da seção 9.2.</p>
+<ul>
+<li><code>C=np.inf</code>: desliga a penalização que o <code>scikit-learn</code> aplica por padrão, para que o ajuste seja o de máxima verossimilhança.</li>
+<li><code>solver="newton-cholesky"</code> e <code>tol=1e-8</code>: o método de otimização e a tolerância para parar. Com eles, o ajuste chega ao máximo em poucas iterações, com o mesmo resultado em qualquer máquina.</li>
+</ul>
+<p><strong><code>np.zeros(n)</code></strong> e <strong><code>np.ones(n)</code></strong>: <code>n</code> zeros ou <code>n</code> uns, aqui a altura dos traços embaixo e no alto. <strong><code>np.linspace(inicio, fim, n)</code></strong>: <code>n</code> números igualmente espaçados de <code>inicio</code> a <code>fim</code>, aqui os saldos em que a reta e a curva são desenhadas. <strong><code>ax.axhspan(y0, y1)</code></strong> sombreia a faixa horizontal entre <code>y0</code> e <code>y1</code>, aqui o intervalo [0, 1].</p>
+<p><strong><code>modelo.predict_proba(X)</code></strong>: uma coluna de probabilidades por classe, na ordem de <code>modelo.classes_</code>. Aqui as classes são 0 e 1, e <code>[:, 1]</code> pega a probabilidade de inadimplência.</p>
+</div>
+<p>A reta (esquerda) atravessa a faixa sombreada e sai por baixo dela para saldos próximos de zero: é a mesma previsão negativa medida acima, agora como curva. A curva logística (direita), ajustada aos mesmos clientes, tem outro formato: um S que se aproxima de 0 e de 1 sem nunca chegar a eles.</p>
 <div id="cell-extremos-logistica" class="cell" data-execution_count="8">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb11"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb11-1"><a href="#cb11-1" aria-hidden="true" tabindex="-1"></a>minimo_logistica <span class="op">=</span> <span class="bu">float</span>(prob_logistica_grade.<span class="bu">min</span>())</span>
 <span id="cb11-2"><a href="#cb11-2" aria-hidden="true" tabindex="-1"></a>maximo_logistica <span class="op">=</span> <span class="bu">float</span>(prob_logistica_grade.<span class="bu">max</span>())</span>
@@ -1011,11 +1092,12 @@ Figura&nbsp;2: Saldo contra a previsão de inadimplência, para os mesmos client
 <pre><code>(2e-05, 0.981, 0)</code></pre>
 </div>
 </div>
-<p>Sobre a mesma grade de 300 valores de saldo usada na figura, a curva logística vai de 0,00002 a 0,9810 — perto das bordas, mas sem cruzá-las — e <code>n_fora_logistica</code> conta zero pontos fora de [0, 1]. Como a curva se ajusta e por que ela tem esse formato é assunto da próxima seção; o que importa aqui é só que ela existe, e que resolve o problema que a reta tem.</p>
+<p>Sobre a mesma grade de 300 valores de saldo usada na figura, a curva logística vai de 0,00002 a 0,9810, perto das bordas sem cruzá-las, e <code>n_fora_logistica</code> conta zero pontos fora de [0, 1]. Como a curva se ajusta, e por que ela tem esse formato, é o assunto da seção 9.2.</p>
 </section>
 <section id="mais-de-duas-classes-e-a-ordem-que-a-codificação-inventa" class="level2">
 <h2 class="anchored" data-anchor-id="mais-de-duas-classes-e-a-ordem-que-a-codificação-inventa">Mais de duas classes, e a ordem que a codificação inventa</h2>
-<p>O problema muda de figura, mas não desaparece, quando o alvo tem mais de duas categorias. Um paciente chega ao pronto-socorro com sintomas que apontam para um de três diagnósticos — derrame, overdose ou convulsão —, e codificar isso como <code>Y = 1</code> para derrame, <code>2</code> para overdose e <code>3</code> para convulsão impõe duas coisas que a lista de diagnósticos não tinha: uma ordem entre os três, e a afirmação de que a distância entre derrame e overdose é a mesma que entre overdose e convulsão. Trocar a ordem — <code>1</code> para convulsão, <code>2</code> para derrame, <code>3</code> para overdose — é uma codificação igualmente válida, e produz um modelo linear diferente do primeiro; nenhuma das duas é mais correta, porque não existe uma escala numérica por trás do diagnóstico que a codificação possa recuperar. Reta ou curva, uma resposta com mais de duas categorias sem ordem natural pede outro tratamento — o que a seção 9.3 faz.</p>
+<p>O problema muda de figura, mas não desaparece, quando o alvo tem mais de duas categorias. Um paciente chega ao pronto-socorro com sintomas que apontam para um de três diagnósticos: derrame, overdose ou convulsão. Que número dar a cada um, para que uma reta possa prevê-los? Codificar isso como <span class="math inline">\(Y = 1\)</span> para derrame, <span class="math inline">\(2\)</span> para overdose e <span class="math inline">\(3\)</span> para convulsão impõe duas coisas que a lista de diagnósticos não tinha: uma ordem entre os três, e a afirmação de que a distância entre derrame e overdose é a mesma que entre overdose e convulsão.</p>
+<p>Trocar a ordem (<span class="math inline">\(1\)</span> para convulsão, <span class="math inline">\(2\)</span> para derrame, <span class="math inline">\(3\)</span> para overdose) é uma codificação igualmente válida, e produz um modelo linear diferente do primeiro. Nenhuma das duas é mais correta, porque não existe uma escala numérica por trás do diagnóstico que a codificação possa recuperar. Uma resposta com mais de duas categorias sem ordem natural pede outro tratamento, que é o da seção 9.3.</p>
 
 
 <div id="refs" class="references csl-bib-body hanging-indent" role="list">
