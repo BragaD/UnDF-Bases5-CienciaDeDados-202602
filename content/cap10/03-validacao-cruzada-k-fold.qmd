@@ -4,7 +4,358 @@
 Esta seção corresponde à seção 5.1.3 de @james2023.
 :::
 
-::: {.callout-warning}
-## Em construção
-O conteúdo desta seção ainda será escrito.
+Entre separar metade das observações uma vez e separar uma de cada vez $n$ vezes há um meio-termo. Divide-se a tabela em alguns grupos, e cada grupo, na sua vez, fica de fora enquanto os outros ajustam o modelo.
+
+```{python}
+#| label: setup
+#| include: false
+import matplotlib.pyplot as plt
+import numpy as np
+import pandas as pd
+from matplotlib.patches import Patch
+from sklearn.linear_model import LinearRegression
+from sklearn.metrics import mean_squared_error
+from sklearn.model_selection import KFold, LeaveOneOut, cross_val_score, train_test_split
+from sklearn.pipeline import make_pipeline
+from sklearn.preprocessing import PolynomialFeatures, StandardScaler
+
+plt.style.use("estilo-figuras.mplstyle")
+
+auto = pd.read_csv("dados/Auto.csv")
+auto["potencia"] = pd.to_numeric(auto["potencia"], errors="coerce")
+auto = auto.dropna(subset=["potencia"]).reset_index(drop=True)
+
+X = auto[["potencia"]]
+y = auto["milhas_por_galao"]
+
+
+def modelo_polinomial(grau):
+    return make_pipeline(
+        StandardScaler(),
+        PolynomialFeatures(grau, include_bias=False),
+        LinearRegression(),
+    )
+
+
+graus = range(1, 11)
+```
+
+::: {.conceito}
+A **validação cruzada *k-fold*** divide as $n$ observações, ao acaso, em $k$ grupos (em inglês, *folds*) de tamanho parecido. No passo $i$, o grupo $i$ é o conjunto de validação: o modelo é ajustado nos outros $k-1$ grupos e o erro das previsões no grupo $i$ é $\mathrm{MSE}_i$. A estimativa do MSE de teste é a média dos $k$ erros:
+
+$$
+\mathrm{CV}_{(k)} = \frac{1}{k}\sum_{i=1}^k \mathrm{MSE}_i.
+$$
 :::
+
+A LOOCV é o caso $k = n$: $n$ grupos de uma observação cada. Na prática, usa-se $k = 5$ ou $k = 10$.
+
+## Três maneiras de separar
+
+A figura reúne os três esquemas, com dez observações. Cada linha é um ajuste; em cada linha, as células azuis ajustam o modelo e as laranja o julgam.
+
+```{python}
+#| label: fig-esquemas
+#| fig-cap: "Os três esquemas de divisão com dez observações, já embaralhadas. Cada linha é um ajuste; azul é treino, laranja é validação. Conjunto de validação: um ajuste, metade das observações de fora. LOOCV: dez ajustes, uma observação de fora em cada. 5-fold: cinco ajustes, um quinto das observações de fora em cada."
+#| fig-alt: "Três blocos de faixas horizontais de dez células. O primeiro, 'conjunto de validação', tem uma faixa com as cinco primeiras células azuis e as cinco últimas laranja. O segundo, 'LOOCV', tem dez faixas; em cada uma, uma única célula é laranja, e a célula laranja desce em diagonal da primeira à décima posição. O terceiro, '5-fold', tem cinco faixas; em cada uma, duas células vizinhas são laranja, e o par laranja desce em diagonal."
+n_ilustra = 10
+
+
+def desenha_esquema(ax, validacao_por_ajuste, titulo):
+    n_ajustes = len(validacao_por_ajuste)
+    for linha, validacao in enumerate(validacao_por_ajuste):
+        cores = ["C1" if j in validacao else "C0" for j in range(n_ilustra)]
+        ax.barh(
+            [n_ajustes - 1 - linha] * n_ilustra, [0.9] * n_ilustra,
+            left=np.arange(n_ilustra), height=0.8, color=cores, align="edge",
+        )
+    ax.set_xlim(0, n_ilustra)
+    ax.set_ylim(0, n_ajustes)
+    ax.set_title(titulo, loc="left")
+    ax.set_axis_off()
+
+
+esquemas = [
+    ([range(5, 10)], "conjunto de validação"),
+    ([[j] for j in range(n_ilustra)], "LOOCV"),
+    ([range(2 * i, 2 * i + 2) for i in range(5)], "5-fold"),
+]
+
+fig, eixos = plt.subplots(
+    3, 1, figsize=(6.4, 5.6), gridspec_kw={"height_ratios": [1, 10, 5]}
+)
+for ax, (validacao_por_ajuste, titulo) in zip(eixos, esquemas):
+    desenha_esquema(ax, validacao_por_ajuste, titulo)
+fig.legend(
+    handles=[Patch(color="C0", label="treino"), Patch(color="C1", label="validação")],
+    loc="lower center", ncol=2,
+)
+plt.tight_layout(rect=(0, 0.05, 1, 1))
+plt.show()
+```
+
+::: {.funcao}
+**`ax.barh(y, width, left, height, color, align)`**: desenha barras horizontais, uma para cada altura em `y`. Aqui, cada barra é uma célula de uma faixa.
+
+- `width`: o comprimento de cada barra; 0,9 deixa um espaço entre células vizinhas.
+- `left`: onde cada barra começa no eixo horizontal.
+- `height`: a espessura da barra; menor que 1, deixa um espaço entre as faixas.
+- `color`: uma cor por barra.
+- `align="edge"`: a barra começa na altura `y`, em vez de se centrar nela.
+
+**`ax.set_axis_off()`**: esconde os eixos, as marcas e a malha, e deixa só o que foi desenhado.
+
+**`Patch(color, label)`**: um retângulo de cor, usado aqui só para dar à legenda uma entrada por cor.
+:::
+
+No conjunto de validação, cada observação está de um lado só. Na LOOCV e no 5-fold, toda observação passa uma vez pela validação e, em todos os outros ajustes, pelo treino. A diferença entre os dois está no número de linhas: $n$ ajustes contra $k$. Num 10-fold com $n$ observações, quantas cada ajuste vê?
+
+Esse número é o preço. Para regressão por mínimos quadrados, a fórmula da seção 10.2 faz a LOOCV com um ajuste só; para quase todos os outros métodos ela não existe, e a LOOCV exige mesmo os $n$ ajustes. Com um método que demore para ajustar, ou com $n$ grande, a diferença decide o que é viável.
+
+## O k-fold nos carros
+
+A pergunta de trabalho continua a mesma: que grau de polinômio em `potencia` prevê melhor `milhas_por_galao` nos dados `Auto`? No `scikit-learn`, os grupos do *k*-fold saem de um `KFold`, que vai no argumento `cv` do `cross_val_score`.
+
+```{python}
+#| label: kfold-grau-1
+dez_grupos = KFold(10, shuffle=True, random_state=10)
+cv_grau_1 = -cross_val_score(
+    modelo_polinomial(1), X, y, cv=dez_grupos, scoring="neg_mean_squared_error"
+).mean()
+
+len(X), round(float(cv_grau_1), 2)
+```
+
+::: {.funcao}
+**`KFold(n_splits, shuffle, random_state)`**: o esquema de divisão do *k*-fold.
+
+- `n_splits=10`: o número de grupos, o $k$.
+- `shuffle=True`: embaralha as linhas antes de cortar os grupos. Sem ele, o primeiro grupo são as primeiras linhas da tabela, o segundo as seguintes, e assim por diante.
+- `random_state=10`: a semente do embaralhamento.
+:::
+
+Com 392 carros, a LOOCV do grau 1 custa 392 ajustes; o 10-fold custa 10. O erro estimado para a reta é 24,13.
+
+O `shuffle=True` não é detalhe. A tabela `Auto` não está em ordem aleatória:
+
+```{python}
+#| label: sem-embaralhar
+cv_grau_1_sem_embaralhar = -cross_val_score(
+    modelo_polinomial(1), X, y, cv=KFold(10), scoring="neg_mean_squared_error"
+).mean()
+
+bool(auto["ano"].is_monotonic_increasing), round(float(cv_grau_1_sem_embaralhar), 2)
+```
+
+Os carros estão em ordem de `ano`, do mais antigo ao mais novo. Sem embaralhar, cada grupo é uma época, e o modelo que o julga foi ajustado quase só com carros de outros anos. O erro estimado da reta sobe de 24,13 para 27,44. A mesma coisa acontece com qualquer tabela ordenada por data, por cliente ou por região, e nenhum aviso aparece na tela. O que deveria mudar na conta se o objetivo fosse, de propósito, prever carros de anos que o modelo não viu?
+
+## Nove partições
+
+O embaralhamento é um sorteio, e outra semente dá outros grupos. O 10-fold, repetido com as sementes de 10 a 18, dá nove curvas.
+
+```{python}
+#| label: nove-particoes
+cv_nove = np.array([
+    [
+        -cross_val_score(
+            modelo_polinomial(grau), X, y,
+            cv=KFold(10, shuffle=True, random_state=semente),
+            scoring="neg_mean_squared_error",
+        ).mean()
+        for grau in graus
+    ]
+    for semente in range(10, 19)
+])
+
+grau_minimo_por_particao = [int(graus[i]) for i in np.argmin(cv_nove, axis=1)]
+todas_escolhem_o_grau_7 = set(grau_minimo_por_particao) == {7}
+
+grau_minimo_por_particao, todas_escolhem_o_grau_7
+```
+
+`todas_escolhem_o_grau_7` confirma que as nove partições apontam o mesmo grau de menor MSE estimado, o 7. Para comparar a dispersão com a do conjunto de validação, o chunk abaixo refaz as dez divisões ao meio da seção 10.1, com as mesmas sementes de 10 a 19, e mede a amplitude grau a grau nos dois esquemas: o maior MSE estimado menos o menor.
+
+```{python}
+#| label: amplitudes
+mse_dez_divisoes = []
+for semente in range(10, 20):
+    X_tr, X_va, y_tr, y_va = train_test_split(X, y, test_size=196, random_state=semente)
+    mse_dez_divisoes.append([
+        mean_squared_error(y_va, modelo_polinomial(grau).fit(X_tr, y_tr).predict(X_va))
+        for grau in graus
+    ])
+mse_dez_divisoes = np.array(mse_dez_divisoes)
+
+amplitude_validacao = mse_dez_divisoes.max(axis=0) - mse_dez_divisoes.min(axis=0)
+amplitude_kfold = cv_nove.max(axis=0) - cv_nove.min(axis=0)
+
+pd.DataFrame(
+    {
+        "validação (10 divisões)": [round(float(v), 2) for v in amplitude_validacao],
+        "10-fold (9 partições)": [round(float(v), 2) for v in amplitude_kfold],
+    },
+    index=pd.Index(graus, name="grau"),
+)
+```
+
+```{python}
+#| label: amplitudes-compara
+kfold_menos_disperso_em_todos_os_graus = bool((amplitude_kfold < amplitude_validacao).all())
+kfold_menos_disperso_em_todos_os_graus
+```
+
+`kfold_menos_disperso_em_todos_os_graus` confirma que, nos dez graus, as nove estimativas do 10-fold se espalham menos que as dez do conjunto de validação. No grau 2, a validação espalha 7,49 e o 10-fold, 0,15; no grau 10, 8,88 contra 1,15.
+
+A curva da LOOCV, que não depende de sorteio, entra na figura para comparação:
+
+```{python}
+#| label: loocv
+loocv = np.array([
+    -cross_val_score(
+        modelo_polinomial(grau), X, y, cv=LeaveOneOut(), scoring="neg_mean_squared_error"
+    ).mean()
+    for grau in graus
+])
+
+loocv_dentro_das_nove = bool(
+    ((loocv >= cv_nove.min(axis=0)) & (loocv <= cv_nove.max(axis=0))).all()
+)
+
+int(graus[np.argmin(loocv)]), loocv_dentro_das_nove
+```
+
+```{python}
+#| label: fig-kfold-auto
+#| fig-cap: "MSE estimado contra o grau do polinômio em potencia, nos dados Auto. As curvas azuis são o 10-fold com nove partições diferentes (sementes 10 a 18); a curva laranja tracejada é a LOOCV. O eixo vertical é o mesmo da figura do conjunto de validação, de 13 a 29."
+#| fig-alt: "Nove curvas azuis finas, quase sobrepostas, caem de cerca de 24 no grau 1 para cerca de 19 no grau 2 e seguem quase planas até o grau 10, abrindo-se um pouco nos graus altos. Uma curva laranja tracejada acompanha o feixe azul do começo ao fim."
+fig, ax = plt.subplots(figsize=(6, 4.2))
+for linha in cv_nove:
+    ax.plot(graus, linha, color="C0", linewidth=1.2)
+ax.plot([], [], color="C0", linewidth=1.2, label="10-fold (9 partições)")
+ax.plot(graus, loocv, color="C1", linewidth=2, linestyle="--", label="LOOCV")
+ax.set_xlabel("grau do polinômio")
+ax.set_ylabel("MSE estimado")
+ax.set_xticks(list(graus))
+ax.set_xlim(0.5, 10.5)
+ax.set_ylim(13, 29)
+ax.legend(loc="upper center")
+plt.tight_layout()
+plt.show()
+```
+
+O eixo vertical é o da figura da seção 10.1, e a diferença de dispersão entre as duas se vê sem ler números: lá, dez curvas em alturas bem diferentes; aqui, nove curvas quase sobrepostas. A LOOCV também tem o mínimo no grau 7, e `loocv_dentro_das_nove` confirma que, em todos os graus, ela fica entre a menor e a maior das nove estimativas do 10-fold. No 10-fold, todo carro é julgado uma vez, por um modelo ajustado com os outros nove décimos da tabela; trocar a partição muda só quais carros se juntam em cada grupo, e isso mexe pouco na média.
+
+## A validação cruzada contra o teste verdadeiro
+
+Nos carros, não há como saber se a validação cruzada acertou: o MSE de teste verdadeiro é desconhecido. Com dado simulado, ele é conhecido, porque dá para sortear quantos pontos novos se quiser da mesma $f$.
+
+São três cenários. O primeiro é o da seção 7.6: $f(x) = 4 + 0{,}3x + 3\sin x$, com ruído de desvio padrão 1,5. O segundo quase não tem curva; o terceiro tem uma curva mais apertada e pouco ruído. Em cada um, 100 pontos de treino, 20.000 de teste, polinômios de grau 1 a 10, e três curvas: o MSE de teste, a LOOCV e o 10-fold, as duas últimas calculadas só com os 100 pontos de treino.
+
+```{python}
+#| label: cenarios
+cenarios = {
+    "seno": (lambda x: 4 + 0.3 * x + 3 * np.sin(x), 1.5),
+    "quase linear": (lambda x: 4 + 0.3 * x + 0.3 * np.sin(x), 1.5),
+    "curva forte, pouco ruído": (lambda x: 4 + 0.3 * x + 3 * np.sin(1.3 * x), 0.5),
+}
+
+rng = np.random.default_rng(10)
+curvas = {}
+for nome, (f, desvio) in cenarios.items():
+    x_treino = rng.uniform(0, 10, size=100).reshape(-1, 1)
+    y_treino = f(x_treino.ravel()) + rng.normal(0, desvio, size=100)
+    x_teste = rng.uniform(0, 10, size=20_000).reshape(-1, 1)
+    y_teste = f(x_teste.ravel()) + rng.normal(0, desvio, size=20_000)
+
+    teste, cv_loo, cv_10 = [], [], []
+    for grau in graus:
+        modelo = modelo_polinomial(grau)
+        teste.append(mean_squared_error(y_teste, modelo.fit(x_treino, y_treino).predict(x_teste)))
+        cv_loo.append(-cross_val_score(
+            modelo, x_treino, y_treino, cv=LeaveOneOut(), scoring="neg_mean_squared_error"
+        ).mean())
+        cv_10.append(-cross_val_score(
+            modelo, x_treino, y_treino, cv=KFold(10, shuffle=True, random_state=10),
+            scoring="neg_mean_squared_error",
+        ).mean())
+    curvas[nome] = {
+        "teste": np.array(teste), "LOOCV": np.array(cv_loo), "10-fold": np.array(cv_10)
+    }
+```
+
+::: {.funcao}
+**`arr.reshape(-1, 1)`**: transforma um array de uma dimensão numa matriz de uma coluna, a forma que o `fit` espera para `X`. O `-1` deixa o `numpy` calcular o número de linhas.
+
+**`arr.ravel()`**: o caminho de volta, a matriz de uma coluna achatada num array de uma dimensão.
+:::
+
+```{python}
+#| label: fig-cv-contra-teste
+#| fig-cap: "MSE de teste verdadeiro (azul), LOOCV (cinza tracejado) e 10-fold (laranja) contra o grau do polinômio, em três cenários simulados com 100 pontos de treino. O x marca o mínimo de cada curva. Cada painel tem a sua escala vertical."
+#| fig-alt: "Três painéis lado a lado. No primeiro, 'seno', as três curvas caem de 6 a 8 no grau 1 para perto de 3 a partir do grau 4; as duas de validação cruzada ficam acima da azul em toda a faixa. No segundo, 'quase linear', as três curvas sobem devagar de cerca de 2,3 para cerca de 2,6, com as de validação cruzada um pouco acima da azul, e os três mínimos no grau 1. No terceiro, 'curva forte, pouco ruído', as três curvas caem de cerca de 4 nos graus baixos para menos de 0,5 a partir do grau 7, com as de validação cruzada abaixo da azul nos graus de 1 a 4, e os três mínimos no grau 9."
+fig, eixos = plt.subplots(1, 3, figsize=(11, 3.8))
+estilos = {
+    "teste": {"color": "C0", "linestyle": "-", "label": "teste"},
+    "LOOCV": {"color": "0.45", "linestyle": "--", "label": "LOOCV"},
+    "10-fold": {"color": "C1", "linestyle": "-", "label": "10-fold"},
+}
+for ax, (nome, curvas_do_cenario) in zip(eixos, curvas.items()):
+    for chave, valores in curvas_do_cenario.items():
+        ax.plot(graus, valores, linewidth=2, **estilos[chave])
+        i = int(np.argmin(valores))
+        ax.plot(
+            graus[i], valores[i], marker="x", markersize=10, markeredgewidth=2.5,
+            color=estilos[chave]["color"], linestyle="none", label="_nolegend_",
+        )
+    ax.set_title(nome)
+    ax.set_xlabel("grau do polinômio")
+    ax.set_xticks(list(graus))
+    ax.set_xlim(0.5, 10.5)
+eixos[0].set_ylabel("MSE")
+eixos[0].legend()
+plt.tight_layout()
+plt.show()
+```
+
+A tabela resume o que a figura mostra: onde cai o mínimo de cada curva, e quanto se perde, em MSE de teste, por usar o grau que a validação cruzada escolheu em vez do grau que o teste escolheria.
+
+```{python}
+#| label: leitura-cenarios
+linhas = {}
+for nome, c in curvas.items():
+    grau_teste = int(np.argmin(c["teste"]))
+    grau_loo = int(np.argmin(c["LOOCV"]))
+    grau_10 = int(np.argmin(c["10-fold"]))
+    linhas[nome] = {
+        "grau: teste": grau_teste + 1,
+        "grau: LOOCV": grau_loo + 1,
+        "grau: 10-fold": grau_10 + 1,
+        "MSE de teste mínimo": round(float(c["teste"][grau_teste]), 2),
+        "perda: LOOCV": round(float(c["teste"][grau_loo] - c["teste"][grau_teste]), 2),
+        "perda: 10-fold": round(float(c["teste"][grau_10] - c["teste"][grau_teste]), 2),
+    }
+pd.DataFrame.from_dict(linhas, orient="index")
+```
+
+```{python}
+#| label: nivel-cenarios
+nivel = {}
+for nome, c in curvas.items():
+    as_duas_abaixo = (c["LOOCV"] < c["teste"]) & (c["10-fold"] < c["teste"])
+    nivel[nome] = {
+        "LOOCV acima": int(np.sum(c["LOOCV"] > c["teste"])),
+        "10-fold acima": int(np.sum(c["10-fold"] > c["teste"])),
+        "as duas abaixo": ", ".join(str(g) for g, b in zip(graus, as_duas_abaixo) if b),
+        "maior distância": round(float(np.max(np.abs(c["10-fold"] - c["teste"]))), 2),
+        "no grau": int(graus[np.argmax(np.abs(c["10-fold"] - c["teste"]))]),
+    }
+pd.DataFrame.from_dict(nivel, orient="index")
+```
+
+As três primeiras colunas contam graus, de 1 a 10: em quantos cada curva de validação cruzada fica acima do teste, e em quais as duas ficam abaixo dele. As duas últimas dão a maior distância entre o 10-fold e o teste, e o grau em que ela acontece.
+
+O **nível** das curvas de validação cruzada erra, e erra de jeitos diferentes. No cenário do seno, as duas ficam acima do teste nos dez graus, e o 10-fold chega a se afastar 1,57 dele, no grau 1. No cenário quase linear, também ficam acima nos dez graus, mas mais perto: a maior distância do 10-fold ao teste é 0,18. Na curva forte com pouco ruído, as duas ficam abaixo do teste nos graus 1 a 4, 6, 8 e 9, e a maior distância, 0,45, está no grau 1.
+
+O **ponto de mínimo** erra pouco. No cenário quase linear e no da curva forte, as três curvas apontam o mesmo grau, e a perda é zero. No seno, o teste aponta o grau 8, a LOOCV o 9 e o 10-fold o 6; usar o grau da LOOCV custa 0,17 de MSE de teste, e o do 10-fold, 0,04, sobre um mínimo de 2,56.
+
+São três amostras, e é isso o que três amostras mostram. Às vezes o que interessa é o valor do erro de teste, porque se quer saber quão bem um modelo vai prever; aí o nível importa, e ele pode errar para qualquer lado. Mas, para escolher entre modelos, o que interessa é **onde está o mínimo**, e para isso as curvas de validação cruzada serviram nos três cenários.
