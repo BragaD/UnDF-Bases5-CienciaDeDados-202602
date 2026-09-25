@@ -354,10 +354,13 @@ ESTILO = 'plt.style.use("estilo-figuras.mplstyle")'
 # Seções sem figura, e por quê. Cada entrada é uma decisão registrada, não um
 # esquecimento — daí o dicionário em vez de uma lista.
 SECOES_SEM_FIGURA: dict[str, str] = {
-    # Os seis stubs do capítulo 10: nenhum tem conteúdo ainda, então nenhum
-    # tem figura. Cada um sai desta lista quando a respectiva seção for
-    # escrita, com a figura que a seção trouxer.
-    "cap10/04-vies-e-variancia-na-validacao-cruzada.qmd": "stub; a figura entra quando a seção for escrita",
+    # A 10.4 fica aqui por decisão do autor. As outras entradas do capítulo 10
+    # são stubs sem conteúdo; cada uma sai desta lista quando a respectiva
+    # seção for escrita, com a figura que a seção trouxer.
+    "cap10/04-vies-e-variancia-na-validacao-cruzada.qmd": (
+        "decisão do autor: a seção corresponde ao ISLP 5.1.4, que é só texto, "
+        "e a medição de viés e variância cabe numa tabela de médias e desvios"
+    ),
     "cap10/05-validacao-cruzada-em-classificacao.qmd": "stub; a figura entra quando a seção for escrita",
     "cap10/06-vazamento.qmd": "stub; a figura entra quando a seção for escrita",
 }
