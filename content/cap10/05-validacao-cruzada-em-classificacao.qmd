@@ -4,7 +4,350 @@
 Esta seção corresponde à seção 5.1.5 de @james2023.
 :::
 
-::: {.callout-warning}
-## Em construção
-O conteúdo desta seção ainda será escrito.
+Quando a resposta é uma classe, a validação cruzada funciona do mesmo jeito que na regressão: separa-se uma parte das observações, ajusta-se o modelo no resto e mede-se o erro na parte separada. Só a régua muda. No lugar do MSE entra a taxa de erro, a fração de observações classificadas na classe errada.
+
+```{python}
+#| label: setup
+#| include: false
+import matplotlib.pyplot as plt
+import numpy as np
+import pandas as pd
+from sklearn.compose import ColumnTransformer
+from sklearn.linear_model import LogisticRegression
+from sklearn.model_selection import StratifiedKFold, cross_val_score
+from sklearn.neighbors import KNeighborsClassifier
+from sklearn.pipeline import make_pipeline
+from sklearn.preprocessing import PolynomialFeatures, StandardScaler
+
+plt.style.use("estilo-figuras.mplstyle")
+```
+
+::: {.conceito}
+Na LOOCV de um classificador, cada observação $i$ fica de fora uma vez, e o erro dela é $\mathrm{Err}_i = I(y_i \neq \hat y_i)$, a variável indicadora da seção 7.7: 1 se o modelo ajustado sem ela erra a sua classe, 0 se acerta. A estimativa da taxa de erro de teste é a média:
+
+$$
+\mathrm{CV}_{(n)} = \frac{1}{n}\sum_{i=1}^n \mathrm{Err}_i.
+$$
+
+No *k*-fold, $\mathrm{Err}_i$ passa a ser a taxa de erro no grupo $i$, e $\mathrm{CV}_{(k)}$ é a média das $k$ taxas. No conjunto de validação, é a taxa de erro na metade separada.
 :::
+
+Um aviso sobre o nome. Nesta seção, como na 7.7, *k* é o número de vizinhos do *k*-NN. A validação cruzada usada aqui é o 10-fold, e os grupos dela são chamados sempre de "10 grupos", para as duas letras não se confundirem.
+
+## Os pontos da seção 7.7
+
+O dado é o simulado da seção 7.7: dois preditores uniformes em $[0, 10]$, a classe sorteada com probabilidade $\Pr(Y = 1 \mid X = x) = 1/(1 + e^{-(3\sin(x_1) - x_2 + 5)})$, 300 pontos de treino e 20.000 de teste. O gerador é o mesmo, com a mesma semente e as chamadas na mesma ordem.
+
+```{python}
+#| label: dados-classificacao
+def p_verdadeiro(x1, x2):
+    return 1.0 / (1.0 + np.exp(-(3.0 * np.sin(x1) - x2 + 5.0)))
+
+rng = np.random.default_rng(7)
+
+def gerar(rng, n):
+    x1 = rng.uniform(0, 10, size=n)
+    x2 = rng.uniform(0, 10, size=n)
+    p = p_verdadeiro(x1, x2)
+    y = (rng.uniform(size=n) < p).astype(int)
+    return np.column_stack([x1, x2]), y
+
+X_treino, y_treino = gerar(rng, 300)
+X_teste, y_teste = gerar(rng, 20_000)
+
+grade_integral = np.linspace(0, 10, 4001)
+G1, G2 = np.meshgrid(grade_integral, grade_integral)
+Pg = p_verdadeiro(G1, G2)
+piso_bayes = float(np.mean(np.minimum(Pg, 1 - Pg)))
+
+X_treino.shape, X_teste.shape, round(piso_bayes * 100, 2)
+```
+
+A taxa de erro de Bayes, a menor taxa de erro de teste esperada que um classificador pode ter, é 13,26%, calculada como na seção 7.7.
+
+A varredura do *k*-NN vai de $k = 1$ a $k = 269$, de quatro em quatro. Ela para em 269 por causa da validação cruzada: com 10 grupos sobre 300 pontos, cada ajuste vê só 270 pontos, e um *k*-NN não tem como consultar mais vizinhos do que o treino tem. Com $k \ge 271$, o `scikit-learn` não levanta exceção; ele avisa, devolve `nan` como pontuação daquele grupo e segue, e um `np.argmin` sobre um array com `nan` devolve a posição do `nan`. O primeiro passo é conferir, só com treino e teste, que os pontos são os mesmos da seção 7.7.
+
+```{python}
+#| label: knn-treino-teste
+ks = list(range(1, 270, 4))
+knn_treino = []
+knn_teste = []
+for k in ks:
+    modelo = KNeighborsClassifier(n_neighbors=k).fit(X_treino, y_treino)
+    knn_treino.append(float(np.mean(modelo.predict(X_treino) != y_treino)))
+    knn_teste.append(float(np.mean(modelo.predict(X_teste) != y_teste)))
+knn_treino = np.array(knn_treino)
+knn_teste = np.array(knn_teste)
+
+k_menor_teste = ks[int(np.argmin(knn_teste))]
+len(ks), k_menor_teste, round(float(knn_teste.min()) * 100, 2)
+```
+
+::: {.funcao}
+**`KNeighborsClassifier(n_neighbors)`**: o *k*-NN para resposta qualitativa, que prevê a classe mais comum entre os `n_neighbors` vizinhos mais próximos. Ajusta-se com `.fit(X, y)` e prevê com `.predict(X)`.
+:::
+
+São 68 valores de $k$, e o menor erro de teste sai em $k = 9$, com 15,08%: os dois números da seção 7.7. Lá, esse $k = 9$ foi escolhido olhando o próprio conjunto de teste. A pergunta desta seção é qual $k$ a validação cruzada escolhe sem olhar.
+
+## Logística com polinômios
+
+A regressão logística do capítulo 9 separa as classes com uma reta: a fronteira é onde a combinação linear dos preditores zera. A fronteira de Bayes aqui é a curva $x_2 = 3\sin(x_1) + 5$, e uma reta não a acompanha. O remédio é o mesmo da regressão linear: acrescentar potências dos preditores. Com grau 2, o modelo é
+
+$$
+\log\left(\frac{p}{1-p}\right) = \beta_0 + \beta_1 X_1 + \beta_2 X_1^2 + \beta_3 X_2 + \beta_4 X_2^2,
+$$
+
+e com grau $d$ entram $X_1, \dots, X_1^d$ e $X_2, \dots, X_2^d$. As potências de cada preditor ficam separadas, sem produtos como $X_1 X_2$.
+
+```{python}
+#| label: logistica-polinomial
+def logistica_polinomial(grau):
+    potencias = ColumnTransformer([
+        ("x1", PolynomialFeatures(grau, include_bias=False), [0]),
+        ("x2", PolynomialFeatures(grau, include_bias=False), [1]),
+    ])
+    # C=np.inf: o ajuste sem penalização, como no capítulo 9
+    return make_pipeline(
+        StandardScaler(), potencias, LogisticRegression(C=np.inf, max_iter=10000)
+    )
+
+logistica_polinomial(2).fit(X_treino, y_treino)[:-1].transform(X_treino[:1]).shape
+```
+
+::: {.funcao}
+**`ColumnTransformer([(nome, transformação, colunas), ...])`**: aplica cada transformação só às colunas indicadas e junta os resultados lado a lado. Aqui, a coluna 0 ganha as suas potências e a coluna 1 as dela, e nenhuma potência mistura as duas.
+
+**`LogisticRegression(C, max_iter)`**: a regressão logística.
+
+- `C=np.inf`: sem penalização, o ajuste por máxima verossimilhança do capítulo 9.
+- `max_iter=10000`: o teto de iterações do otimizador, alto para os graus maiores convergirem.
+
+**`pipeline[:-1]`**: o `Pipeline` sem o último passo, só com as transformações.
+:::
+
+Com grau 2, o `ColumnTransformer` entrega quatro colunas ao modelo: $X_1$, $X_1^2$, $X_2$ e $X_2^2$, os quatro preditores da fórmula. O `StandardScaler` vem antes, pelo mesmo motivo do capítulo inteiro: potências altas de números entre 0 e 10 ficam em escalas muito diferentes.
+
+```{python}
+#| label: quatro-graus
+grade_fig = np.linspace(0, 10, 200)
+Xg, Yg = np.meshgrid(grade_fig, grade_fig)
+pontos_grade = np.column_stack([Xg.ravel(), Yg.ravel()])
+
+graus_fronteira = [1, 2, 3, 4]
+modelos_fronteira = [
+    logistica_polinomial(grau).fit(X_treino, y_treino) for grau in graus_fronteira
+]
+erro_teste_fronteira = [
+    float(np.mean(m.predict(X_teste) != y_teste)) for m in modelos_fronteira
+]
+[round(e * 100, 2) for e in erro_teste_fronteira]
+```
+
+```{python}
+#| label: fig-fronteiras-logistica
+#| fig-cap: "Fronteiras de decisão da regressão logística com polinômios de grau 1 a 4 (verde), sobre os 300 pontos de treino coloridos pela classe verdadeira, com a fronteira de Bayes (roxo tracejado). O título de cada painel traz a taxa de erro de teste do ajuste, medida nos 20.000 pontos de teste."
+#| fig-alt: "Quatro painéis em grade dois por dois, com os mesmos pontos azuis e laranja. Em cada um, uma linha verde separa as classes e uma curva roxa tracejada em forma de onda marca a fronteira de Bayes. No grau 1 a linha verde é reta; nos graus 2 e 3 ela se curva; no grau 4 ela acompanha a onda roxa de perto. Os títulos dão erros de teste de 21,25%, 19,93%, 18,67% e 14,57%."
+proba_bayes = p_verdadeiro(Xg, Yg)
+
+fig, eixos = plt.subplots(2, 2, figsize=(8, 7.4), sharex=True, sharey=True)
+for ax, grau, modelo, erro in zip(
+    eixos.ravel(), graus_fronteira, modelos_fronteira, erro_teste_fronteira
+):
+    proba = modelo.predict_proba(pontos_grade)[:, 1].reshape(Xg.shape)
+    ax.scatter(
+        X_treino[y_treino == 0, 0], X_treino[y_treino == 0, 1],
+        s=12, alpha=0.6, color="C0", label="classe 0",
+    )
+    ax.scatter(
+        X_treino[y_treino == 1, 0], X_treino[y_treino == 1, 1],
+        s=12, alpha=0.6, color="C1", label="classe 1",
+    )
+    ax.contour(Xg, Yg, proba, levels=[0.5], colors="C2", linewidths=2)
+    ax.contour(Xg, Yg, proba_bayes, levels=[0.5], colors="C3", linestyles="--", linewidths=1.5)
+    ax.set_title(f"grau {grau}: erro de teste {erro * 100:.2f}%".replace(".", ","))
+for ax in eixos[1]:
+    ax.set_xlabel("x1")
+for ax in eixos[:, 0]:
+    ax.set_ylabel("x2")
+eixos[0, 0].plot([], [], color="C2", linewidth=2, label="fronteira da logística")
+eixos[0, 0].plot([], [], color="C3", linestyle="--", linewidth=1.5, label="fronteira de Bayes")
+alcas, rotulos = eixos[0, 0].get_legend_handles_labels()
+fig.legend(alcas, rotulos, loc="lower center", ncols=2, frameon=False)
+plt.tight_layout(rect=(0, 0.08, 1, 1))
+plt.show()
+```
+
+::: {.funcao}
+**`modelo.predict_proba(X)`**: a probabilidade estimada de cada classe para cada linha de `X`, uma coluna por classe; `[:, 1]` separa a da classe 1.
+
+**`ax.contour(x, y, z, levels)`**: desenha as curvas onde `z` vale cada número de `levels`. Com `levels=[0.5]`, a curva onde a probabilidade da classe 1 é meio: a fronteira de decisão.
+
+**`fig.legend(alcas, rotulos, loc, ncols)`**: uma legenda só para a figura inteira, fora dos painéis.
+:::
+
+A reta do grau 1 erra 21,25% do teste. O grau 2 dobra a fronteira, mas numa parábola que não segue a onda, e o erro cai pouco, para 19,93%. O grau 3 chega a 18,67%, e o grau 4, cuja fronteira já tem as duas curvaturas da de Bayes, a 14,57%. Até que grau vale subir? Com dado real não há 20.000 pontos de teste para responder, e é aí que entra a validação cruzada.
+
+## Treino, teste e validação cruzada
+
+Para cada grau de 1 a 10, três taxas de erro: a de treino, medida nos 300 pontos do ajuste; a de teste, nos 20.000; e a do 10-fold, calculada só com os 300 pontos de treino.
+
+```{python}
+#| label: curvas-logistica
+dez_grupos = StratifiedKFold(10, shuffle=True, random_state=10)
+
+graus = range(1, 11)
+log_treino, log_teste, log_cv = [], [], []
+for grau in graus:
+    modelo = logistica_polinomial(grau).fit(X_treino, y_treino)
+    log_treino.append(float(np.mean(modelo.predict(X_treino) != y_treino)))
+    log_teste.append(float(np.mean(modelo.predict(X_teste) != y_teste)))
+    log_cv.append(
+        1 - cross_val_score(logistica_polinomial(grau), X_treino, y_treino, cv=dez_grupos).mean()
+    )
+log_treino, log_teste, log_cv = np.array(log_treino), np.array(log_teste), np.array(log_cv)
+
+proporcao_classe_1 = float(y_treino.mean())
+proporcao_por_grupo = [float(y_treino[validacao].mean()) for _, validacao in dez_grupos.split(X_treino, y_treino)]
+round(proporcao_classe_1 * 100, 2), round(min(proporcao_por_grupo) * 100, 2), round(max(proporcao_por_grupo) * 100, 2)
+```
+
+::: {.funcao}
+**`StratifiedKFold(n_splits, shuffle, random_state)`**: o *k*-fold para classificação. Divide as linhas em `n_splits` grupos mantendo, em cada grupo, a proporção de classes do conjunto todo. `shuffle=True` embaralha antes de dividir, e `random_state` é a semente do embaralhamento.
+
+**`esquema.split(X, y)`**: percorre as divisões do esquema; cada uma é um par de arrays de posições, as do treino e as da validação.
+:::
+
+Em classificação, `cross_val_score` devolve a **acurácia** de cada grupo, a fração de acertos, e a taxa de erro é `1 -` a média delas.
+
+Dos 300 pontos de treino, 55,67% são da classe 1. Um grupo de 30 pontos não tem como ter exatamente essa proporção, e o `StratifiedKFold` chega o mais perto possível: a proporção da classe 1 em cada grupo fica entre 53,33% e 56,67%, isto é, 16 ou 17 dos 30 pontos. Estratificar evita que um grupo saia, por azar do sorteio, com uma classe sub-representada, o que tornaria o erro daquele grupo pouco parecido com o dos outros. O `cross_val_score` já estratifica sozinho quando recebe um classificador e um número inteiro em `cv`, mas sem embaralhar.
+
+O *k*-NN recebe a mesma validação cruzada, com os mesmos 10 grupos:
+
+```{python}
+#| label: curvas-knn
+knn_cv = np.array([
+    1 - cross_val_score(
+        KNeighborsClassifier(n_neighbors=k), X_treino, y_treino, cv=dez_grupos
+    ).mean()
+    for k in ks
+])
+bool(np.isnan(knn_cv).any())
+```
+
+Nenhuma pontuação saiu `nan`: com $k$ até 269, todo ajuste tem vizinhos suficientes.
+
+```{python}
+#| label: fig-curvas-cv
+#| fig-cap: "Taxa de erro de treino (azul), de teste (laranja) e do 10-fold (verde) no dado simulado, com a taxa de erro de Bayes (cinza tracejado). Esquerda: regressão logística com polinômios de grau 1 a 10. Direita: k-NN contra 1/k, em escala log, com a vizinhança maior à esquerda. O x marca o mínimo da curva de teste (laranja) e o da curva do 10-fold (verde)."
+#| fig-alt: "Dois painéis com o mesmo eixo vertical de taxa de erro, de 0% a 50%. No da esquerda, as três curvas caem do grau 1 ao grau 4 e oscilam pouco depois; a verde, do 10-fold, fica acima da laranja, de teste, em todos os graus, e os dois x caem no grau 6. No da direita, a curva azul de treino desce até zero na ponta direita; a laranja e a verde passam de 40% na ponta esquerda, descem e voltam a subir na direita, a verde acima da laranja em quase toda a faixa, com o x laranja em k = 9 e o x verde em k = 13. A linha cinza tracejada, perto de 13%, fica abaixo das curvas de teste e do 10-fold."
+estilos = {
+    "treino": {"color": "C0", "label": "erro de treino"},
+    "teste": {"color": "C1", "label": "erro de teste"},
+    "10-fold": {"color": "C2", "label": "erro do 10-fold"},
+}
+paineis = [
+    (list(graus), {"treino": log_treino, "teste": log_teste, "10-fold": log_cv}),
+    (1 / np.array(ks), {"treino": knn_treino, "teste": knn_teste, "10-fold": knn_cv}),
+]
+
+fig, eixos = plt.subplots(1, 2, figsize=(11, 4.4), sharey=True)
+for ax, (x, curvas) in zip(eixos, paineis):
+    for nome, valores in curvas.items():
+        ax.plot(x, valores, linewidth=2, **estilos[nome])
+        if nome != "treino":
+            i = int(np.argmin(valores))
+            ax.plot(
+                x[i], valores[i], marker="x", markersize=10, markeredgewidth=2.5,
+                color=estilos[nome]["color"], linestyle="none", label="_nolegend_",
+            )
+    ax.axhline(piso_bayes, color="0.45", linestyle="--", linewidth=1.5, label="taxa de erro de Bayes")
+
+eixos[0].set_xticks(list(graus))
+eixos[0].set_xlim(0.5, 10.5)
+eixos[0].set_xlabel("grau do polinômio")
+eixos[0].set_title("regressão logística")
+eixos[1].set_xscale("log")
+eixos[1].set_xlim(1 / ks[-1] * 0.8, 1.25)
+eixos[1].set_xlabel("1/k (escala log; mais flexível →)")
+eixos[1].set_title("k-NN")
+eixos[0].set_ylim(0, None)
+eixos[0].yaxis.set_major_formatter(lambda valor, _: f"{valor:.0%}")
+eixos[0].set_ylabel("taxa de erro")
+eixos[0].legend()
+plt.tight_layout()
+plt.show()
+```
+
+Nos dois painéis, as curvas de teste e do 10-fold têm o mesmo desenho: caem enquanto a flexibilidade corrige o viés e param de cair, ou voltam a subir, quando a variância passa a pesar. A curva de treino tem outro desenho, e o fim desta seção volta a ela.
+
+## O que a validação cruzada escolhe
+
+A regra é a de sempre: o grau, ou o $k$, com o menor erro do 10-fold. O chunk abaixo faz a escolha e depois, só para conferir, olha o teste: o erro de teste no escolhido e o menor erro de teste da curva inteira.
+
+```{python}
+#| label: escolha
+def escolha(opcoes, cv, teste):
+    i = int(np.argmin(cv))
+    j = int(np.argmin(teste))
+    return {
+        "escolhido pela CV": opcoes[i],
+        "erro do 10-fold nele (%)": round(float(cv[i]) * 100, 2),
+        "empates no mínimo": int(np.sum(np.isclose(cv, cv.min()))),
+        "erro de teste nele (%)": round(float(teste[i]) * 100, 2),
+        "menor erro de teste (%)": round(float(teste[j]) * 100, 2),
+        "onde": opcoes[j],
+    }
+
+pd.DataFrame.from_dict(
+    {
+        "logística (grau)": escolha(list(graus), log_cv, log_teste),
+        "k-NN (k)": escolha(ks, knn_cv, knn_teste),
+    },
+    orient="index",
+)
+```
+
+A taxa de erro de um grupo de 30 pontos só pode ser um múltiplo de 1/30, e a média dos 10 grupos anda em degraus. Por isso dois graus, ou dois valores de $k$, podem empatar no mínimo; quando empatam, `np.argmin` fica com o primeiro, o menos flexível. Aqui a coluna de empates mostra 1 nos dois métodos: o mínimo é único.
+
+Na logística, o 10-fold escolhe o grau 6, com 17,00% de erro estimado, e o erro de teste do grau 6 é 14,49%, o menor da curva de teste inteira. No *k*-NN, o 10-fold escolhe $k = 13$, também com 17,00%; o erro de teste de $k = 13$ é 15,42%, contra os 15,08% de $k = 9$, o $k$ que a seção 7.7 escolheu olhando o teste. A escolha feita sem tocar no teste custa 15,42 − 15,08 = 0,34 ponto percentual. É o número que faltava à seção 7.7: uma taxa de erro obtida por um procedimento que não usou o conjunto de teste para decidir.
+
+```{python}
+#| label: logistica-contra-knn
+logistica_escolhida_erra_menos = bool(log_teste[np.argmin(log_cv)] < knn_teste.min())
+logistica_escolhida_erra_menos
+```
+
+`logistica_escolhida_erra_menos` confirma que a logística no grau escolhido pelo 10-fold erra menos no teste do que o *k*-NN no melhor $k$ da curva inteira. Compare o lado direito do modelo com polinômios, uma soma de potências de $X_1$ com potências de $X_2$, com o expoente de $\Pr(Y = 1 \mid X = x)$ nesta simulação, $3\sin(x_1) - x_2 + 5$. O que os dois têm em comum, e o que o *k*-NN, que não supõe forma nenhuma, deixa de aproveitar?
+
+## O nível das curvas, e a curva de treino
+
+Na figura, a curva do 10-fold passa por cima da de teste em quase toda a faixa.
+
+```{python}
+#| label: nivel
+bayes_no_treino = float(np.mean(
+    (p_verdadeiro(X_treino[:, 0], X_treino[:, 1]) > 0.5).astype(int) != y_treino
+))
+(
+    int(np.sum(log_cv < log_teste)), len(log_cv),
+    int(np.sum(knn_cv < knn_teste)), len(knn_cv),
+    round(bayes_no_treino * 100, 2), round(piso_bayes * 100, 2),
+)
+```
+
+O 10-fold fica abaixo do teste em nenhum dos 10 graus da logística e em só 4 dos 68 valores de $k$. Nesta amostra, portanto, a validação cruzada **superestima** a taxa de erro de teste. A causa é a que a seção 7.7 encontrou para o erro de treino: a amostra de 300 pontos saiu difícil. Até a regra de Bayes, que conhece $\Pr(Y \mid X)$, erra 16,33% desses 300 pontos, contra 13,26% no quadrado inteiro. Toda taxa medida nesses pontos herda esse azar, e a validação cruzada só tem esses pontos para medir. Com outra amostra de treino, o nível poderia sair abaixo do teste; é a mesma lição dos três cenários da seção 10.3. O nível erra, e o que decide a escolha do modelo é **onde** fica o mínimo.
+
+A curva de treino não serve para isso.
+
+```{python}
+#| label: minimo-do-treino
+grau_menor_treino = int(graus[np.argmin(log_treino)])
+k_menor_treino = ks[int(np.argmin(knn_treino))]
+(
+    grau_menor_treino, round(float(log_teste[np.argmin(log_treino)]), 4),
+    k_menor_treino, round(float(knn_treino.min()), 4),
+    round(float(knn_teste[np.argmin(knn_treino)]), 4),
+)
+```
+
+Escolher pelo erro de treino leva ao modelo mais flexível da grade nos dois métodos: o grau 10, com 16,29% de erro de teste, e $k = 1$, que tem 0% de erro de treino (cada ponto é o seu próprio vizinho mais próximo) e 20,92% de erro de teste. O treino mede o quanto o modelo reproduz os pontos que já viu, e quem se dobra mais consegue reproduzi-los melhor, sem que isso diga nada sobre pontos novos.

@@ -361,7 +361,6 @@ SECOES_SEM_FIGURA: dict[str, str] = {
         "decisão do autor: a seção corresponde ao ISLP 5.1.4, que é só texto, "
         "e a medição de viés e variância cabe numa tabela de médias e desvios"
     ),
-    "cap10/05-validacao-cruzada-em-classificacao.qmd": "stub; a figura entra quando a seção for escrita",
     "cap10/06-vazamento.qmd": "stub; a figura entra quando a seção for escrita",
 }
 
