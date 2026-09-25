@@ -108,7 +108,9 @@ def logistica_polinomial(grau):
     ])
     # C=np.inf: o ajuste sem penalização, como no capítulo 9
     return make_pipeline(
-        StandardScaler(), potencias, LogisticRegression(C=np.inf, max_iter=10000)
+        StandardScaler(),
+        potencias,
+        LogisticRegression(C=np.inf, solver="newton-cholesky", tol=1e-8),
     )
 
 logistica_polinomial(2).fit(X_treino, y_treino)[:-1].transform(X_treino[:1]).shape
@@ -117,10 +119,10 @@ logistica_polinomial(2).fit(X_treino, y_treino)[:-1].transform(X_treino[:1]).sha
 ::: {.funcao}
 **`ColumnTransformer([(nome, transformação, colunas), ...])`**: aplica cada transformação só às colunas indicadas e junta os resultados lado a lado. Aqui, a coluna 0 ganha as suas potências e a coluna 1 as dela, e nenhuma potência mistura as duas.
 
-**`LogisticRegression(C, max_iter)`**: a regressão logística.
+**`LogisticRegression(C, solver, tol)`**: a regressão logística.
 
 - `C=np.inf`: sem penalização, o ajuste por máxima verossimilhança do capítulo 9.
-- `max_iter=10000`: o teto de iterações do otimizador, alto para os graus maiores convergirem.
+- `solver="newton-cholesky"` e `tol=1e-8`: o método de otimização e a tolerância para parar, como no capítulo 9. Com eles, mesmo os graus altos chegam ao máximo, com o mesmo resultado em qualquer máquina.
 
 **`pipeline[:-1]`**: o `Pipeline` sem o último passo, só com as transformações.
 :::
@@ -146,7 +148,7 @@ erro_teste_fronteira = [
 ```{python}
 #| label: fig-fronteiras-logistica
 #| fig-cap: "Fronteiras de decisão da regressão logística com polinômios de grau 1 a 4 (verde), sobre os 300 pontos de treino coloridos pela classe verdadeira, com a fronteira de Bayes (roxo tracejado). O título de cada painel traz a taxa de erro de teste do ajuste, medida nos 20.000 pontos de teste."
-#| fig-alt: "Quatro painéis em grade dois por dois, com os mesmos pontos azuis e laranja. Em cada um, uma linha verde separa as classes e uma curva roxa tracejada em forma de onda marca a fronteira de Bayes. No grau 1 a linha verde é reta; nos graus 2 e 3 ela se curva; no grau 4 ela acompanha a onda roxa de perto. Os títulos dão erros de teste de 21,25%, 19,93%, 18,67% e 14,57%."
+#| fig-alt: "Quatro painéis em grade dois por dois, com os mesmos pontos azuis e laranja. Em cada um, uma linha verde separa as classes e uma curva roxa tracejada em forma de onda marca a fronteira de Bayes. No grau 1 a linha verde é reta; nos graus 2 e 3 ela se curva; no grau 4 ela acompanha a onda roxa de perto. Os títulos dão erros de teste de 21,25%, 19,93%, 18,67% e 14,59%."
 proba_bayes = p_verdadeiro(Xg, Yg)
 
 fig, eixos = plt.subplots(2, 2, figsize=(8, 7.4), sharex=True, sharey=True)
@@ -185,7 +187,7 @@ plt.show()
 **`fig.legend(alcas, rotulos, loc, ncols)`**: uma legenda só para a figura inteira, fora dos painéis.
 :::
 
-A reta do grau 1 erra 21,25% do teste. O grau 2 dobra a fronteira, mas numa parábola que não segue a onda, e o erro cai pouco, para 19,93%. O grau 3 chega a 18,67%, e o grau 4, cuja fronteira já tem as duas curvaturas da de Bayes, a 14,57%. Até que grau vale subir? Com dado real não há 20.000 pontos de teste para responder, e é aí que entra a validação cruzada.
+A reta do grau 1 erra 21,25% do teste. O grau 2 dobra a fronteira, mas numa parábola que não segue a onda, e o erro cai pouco, para 19,93%. O grau 3 chega a 18,67%, e o grau 4, cuja fronteira já tem as duas curvaturas da de Bayes, a 14,59%. Até que grau vale subir? Com dado real não há 20.000 pontos de teste para responder, e é aí que entra a validação cruzada.
 
 ## Treino, teste e validação cruzada
 
@@ -343,11 +345,13 @@ A curva de treino não serve para isso.
 #| label: minimo-do-treino
 grau_menor_treino = int(graus[np.argmin(log_treino)])
 k_menor_treino = ks[int(np.argmin(knn_treino))]
+no_extremo_flexivel = grau_menor_treino == max(graus) and k_menor_treino == min(ks)
 (
     grau_menor_treino, round(float(log_teste[np.argmin(log_treino)]), 4),
     k_menor_treino, round(float(knn_treino.min()), 4),
     round(float(knn_teste[np.argmin(knn_treino)]), 4),
+    no_extremo_flexivel,
 )
 ```
 
-Escolher pelo erro de treino leva ao modelo mais flexível da grade nos dois métodos: o grau 10, com 16,29% de erro de teste, e $k = 1$, que tem 0% de erro de treino (cada ponto é o seu próprio vizinho mais próximo) e 20,92% de erro de teste. O treino mede o quanto o modelo reproduz os pontos que já viu, e quem se dobra mais consegue reproduzi-los melhor, sem que isso diga nada sobre pontos novos.
+Escolher pelo erro de treino leva, nos dois métodos, à ponta mais flexível da grade, o que `no_extremo_flexivel` confirma: o grau 10, com 16,18% de erro de teste, e $k = 1$, que tem 0% de erro de treino (cada ponto é o seu próprio vizinho mais próximo) e 20,92% de erro de teste. O treino mede o quanto o modelo reproduz os pontos que já viu, e quem se dobra mais consegue reproduzi-los melhor, sem que isso diga nada sobre pontos novos.

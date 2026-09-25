@@ -129,12 +129,14 @@ A conferência é fazer as duas contas e comparar. Para a fórmula, o chunk ajus
 ```{python}
 #| label: formula-atalho
 formula = []
+condicao = []
 for grau in graus:
     previsto = modelo_polinomial(grau).fit(X, y).predict(X)
     colunas = make_pipeline(
         StandardScaler(), PolynomialFeatures(grau, include_bias=False)
     ).fit_transform(X)
     X_design = np.column_stack([np.ones(len(X)), colunas])
+    condicao.append(float(np.linalg.cond(X_design.T @ X_design)))
     H = X_design @ np.linalg.inv(X_design.T @ X_design) @ X_design.T
     h = np.diag(H)
     formula.append(np.mean(((y - previsto) / (1 - h)) ** 2))
@@ -158,17 +160,23 @@ pd.DataFrame(
 #| label: formula-confere
 formula_bate_com_loocv = bool(np.allclose(loocv, formula))
 diferenca = np.abs(loocv - formula)
-maior_diferenca = f"{diferenca.max():.1e}"
+abaixo_de_um_milionesimo = bool(diferenca.max() < 1e-6)
 grau_da_maior_diferenca = int(graus[np.argmax(diferenca)])
+condicao_sobe_com_o_grau = bool(np.all(np.diff(condicao) > 0))
 
-formula_bate_com_loocv, maior_diferenca, grau_da_maior_diferenca
+(
+    formula_bate_com_loocv, abaixo_de_um_milionesimo, grau_da_maior_diferenca,
+    condicao_sobe_com_o_grau, f"{condicao[0]:.0e}", f"{condicao[-1]:.0e}",
+)
 ```
 
 ::: {.funcao}
 **`np.allclose(a, b)`**: `True` se os dois arrays são iguais elemento a elemento, a menos de uma tolerância pequena para o arredondamento de ponto flutuante.
+
+**`np.linalg.cond(M)`**: o número de condição da matriz `M`. Quanto maior, mais os erros de arredondamento se amplificam ao inverter `M`. **`np.diff(a)`**: as diferenças entre elementos vizinhos de `a`; `np.all(np.diff(a) > 0)` diz se `a` só sobe.
 :::
 
-`formula_bate_com_loocv` confirma `True`: nos dez graus, um ajuste só dá o mesmo número que 392. A maior diferença entre as duas colunas é de $8{,}8 \times 10^{-8}$, no grau 10. Ela aparece no grau mais alto porque a matriz $X^\top X$ de um polinômio de grau alto é difícil de inverter com precisão, não porque a fórmula deixe de valer.
+`formula_bate_com_loocv` confirma `True`: nos dez graus, um ajuste só dá o mesmo número que 392. A maior diferença entre as duas colunas fica abaixo de um milionésimo e aparece no grau 10. Ela vem do arredondamento, não da fórmula: o número de condição de $X^\top X$, que mede o quanto a inversão amplifica os erros de arredondamento, sobe a cada grau, de cerca de 1 no grau 1 a cerca de $2 \times 10^{11}$ no grau 10.
 
 Há uma pergunta que o leitor atento faz aqui. Dentro da LOOCV, o `StandardScaler` é reajustado a cada um dos 392 ajustes, com a média e o desvio padrão de 391 carros; na fórmula, a padronização usa os 392. Por que a igualdade sobrevive? Porque padronizar é trocar $x$ por $(x - m)/s$, e um polinômio de grau $d$ em $(x - m)/s$ é, depois de expandido, um polinômio de grau $d$ em $x$. Os mínimos quadrados escolhem a melhor curva entre os mesmos polinômios, com ou sem a troca, e chegam à mesma curva; só os coeficientes que a descrevem mudam. A frase explica, e o `True` impresso acima prova.
 
