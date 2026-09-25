@@ -108,6 +108,7 @@ Onze aulas de conteúdo, doze capítulos novos. A aula de gradiente descendente 
 | 7 | Além da linearidade: polinômios, degraus, splines | pouco uso em trabalho tabular hoje; não cabe em onze aulas |
 | 11 | Análise de sobrevivência | fora do escopo de um primeiro curso de ML |
 | 13 | Testes múltiplos | é inferência, que a disciplina não faz |
+| 5.2, 5.3.3 | O bootstrap | no ISLP ele serve para estimar erro-padrão, que é inferência; a reamostragem com reposição entra no capítulo 13, com o bagging |
 | 6.3.2 | Partial least squares | PCR cobre a ideia de redução de dimensão |
 | 8.2.4 | BART | não há implementação no `scikit-learn` |
 | 10.3, 10.5 | Redes convolucionais e recorrentes | exigem `torch`; são a matéria da disciplina de Deep Learning |
@@ -168,7 +169,17 @@ São **71 seções novas**. O material fecha com **17 capítulos, 92 seções, 1
 3. Validação cruzada *k*-fold — 5.1.3
 4. Viés e variância na validação cruzada — 5.1.4
 5. Validação cruzada em classificação — 5.1.5
-6. O bootstrap — 5.2
+6. Vazamento: o pré-processamento dentro da validação — sem ISLP
+
+#### Emenda de 2026-09-24, no início do capítulo 10
+
+O autor fechou quatro pontos ao definir o capítulo:
+
+- **Sem bootstrap.** No ISLP, a seção 5.2 e o lab 5.3.3 usam o bootstrap para estimar **erro-padrão** — de α̂ na carteira do `Portfolio` e de β̂₀, β̂₁ contra a fórmula da seção 3.1.2. É inferência, que a disciplina não faz. Sai a seção, e o `Portfolio` não entra em `dados/`. **Consequência para o capítulo 13:** a seção de bagging passa a apresentar ela mesma a reamostragem com reposição, de que o bagging e o erro *out-of-bag* dependem.
+- **Entra o vazamento (10.6), sem correspondência no ISLP.** Ajustar o `StandardScaler` (ou qualquer transformação que aprende do dado) antes de dividir os grupos contamina a estimativa; a correção é o `Pipeline` dentro de `cross_val_score`. É o erro mais comum na prática, o ISLP não o trata, e o capítulo 17 depende dele. A 10.6 não traz callout de correspondência — exceção registrada no teste, como os capítulos 6 e 17. `GridSearchCV` fica para a seção 11.5.
+- **A 10.5 usa o simulado da seção 7.7** (fronteira $x_2 = 3\sin(x_1) + 5$, taxa de erro de Bayes conhecida), não o da figura 2.13 do ISLP. Aquele conjunto não é publicado: não está no `ISLR2`, e o `mixture.example` do `ElemStatLearn`, conferido contra a figura em 2026-09-24, é outra nuvem de pontos. O gerador da 7.7 permite o mesmo que a figura 5.8 faz — erro de treino, CV com 10 grupos e erro de teste verdadeiro lado a lado — e fecha a ressalva que a 7.7 deixou aberta: o *k* = 9 de lá foi escolhido olhando o teste.
+- **A 10.4 fica sem figura** (o ISLP 5.1.4 também é só texto), registrada em `SECOES_SEM_FIGURA` com o motivo.
+- **A fórmula (5.2) do LOOCV entra com conferência:** um chunk calcula a alavancagem $h_i$ (apresentada na 8.6) e mostra que a fórmula dá o mesmo número que o `LeaveOneOut` com *n* ajustes.
 
 ### 11 — Seleção de modelos e regularização (7 seções, ISLP 6)
 
@@ -190,7 +201,7 @@ São **71 seções novas**. O material fecha com **17 capítulos, 92 seções, 1
 
 ### 13 — Bagging, florestas e boosting (6 seções, ISLP 8.2)
 
-1. Bagging — 8.2.1
+1. Bagging — 8.2.1 (apresenta a reamostragem com reposição, que o capítulo 10 não cobre)
 2. Erro out-of-bag — 8.2.1
 3. Florestas aleatórias — 8.2.2
 4. Boosting — 8.2.3
