@@ -177,6 +177,11 @@ export MPLBACKEND=Agg PYTHONHASHSEED=0          # os mesmos ENV do Dockerfile
 
 Os dois modos são complementares e ambos importam: `executar-secoes.py` reproduz o **site** (um kernel por página), `executar-notebooks.py` reproduz a **aula** (um kernel por capítulo).
 
+**O host é para iterar; o número da prosa se confere no container.** O `.venv` tem o mesmo lock, mas não a mesma máquina: arquitetura, BLAS e sistema diferem, e há resultados que mudam com isso **sem erro nenhum**. No capítulo 10, três números conferidos no host saíram diferentes na página renderizada. A `LogisticRegression` com o solver padrão (lbfgs) convergiu para outro ponto nos polinômios de grau alto: o site diria "grau 10", com a tabela ao lado mostrando grau 9, e um erro de teste de 14,49% que a página imprimia como 14,51%. E uma diferença no nível do arredondamento (8,8e-8 no host, 2,9e-8 no container) teria ido para a prosa. Duas regras saem disso:
+
+- **Antes de dar a seção por pronta, rode `make secoes CAP=NN`** (o mesmo script, dentro do container, sem lock e sem tocar no `_freeze/`), e confira a prosa contra a saída **dele**. É o container que o `make render` e o CI usam.
+- **Não escreva na prosa um número que dependa da plataforma.** Logística sem penalização usa `solver="newton-cholesky", tol=1e-8`, como nos capítulos 9 e 10: converge para o mesmo ponto nas duas máquinas. Diferença no nível do arredondamento se afirma como limite ("abaixo de um milionésimo"), com o booleano impresso, nunca pelo valor.
+
 **Mostrar um erro na página exige `try/except`, nunca `#| error: true`.** A opção do Quarto que deixaria uma célula levantar exceção sem derrubar o render **não é honrada aqui**: `scripts/executar-secoes.py` e `scripts/executar-notebooks.py` constroem o `NotebookClient` sem `allow_errors`, e `scripts/gerar-notebooks.py` só entende a opção `eval`. Uma célula que levanta exceção mata a verificação e o `make notebooks-teste`. Para mostrar um erro como conteúdo — a seção 6.3 faz isso com um `TypeError` de conversão de tipo —, capture com `try/except` e **trunque** a mensagem antes de imprimir: a exceção crua do `TypeError` daquela seção tem 12.722 caracteres, porque o `pandas` concatena a coluna inteira dentro do texto do erro.
 
 **Porta 4201, não 4200.** O `bases_3_estatistica` ocupa a 4200, e os dois livros são editados na mesma tarde.
