@@ -357,7 +357,6 @@ SECOES_SEM_FIGURA: dict[str, str] = {
     # Os seis stubs do capítulo 10: nenhum tem conteúdo ainda, então nenhum
     # tem figura. Cada um sai desta lista quando a respectiva seção for
     # escrita, com a figura que a seção trouxer.
-    "cap10/01-o-conjunto-de-validacao.qmd": "stub; a figura entra quando a seção for escrita",
     "cap10/02-leave-one-out.qmd": "stub; a figura entra quando a seção for escrita",
     "cap10/03-validacao-cruzada-k-fold.qmd": "stub; a figura entra quando a seção for escrita",
     "cap10/04-vies-e-variancia-na-validacao-cruzada.qmd": "stub; a figura entra quando a seção for escrita",

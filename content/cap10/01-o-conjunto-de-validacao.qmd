@@ -4,7 +4,197 @@
 Esta seção corresponde à seção 5.1.1 de @james2023.
 :::
 
-::: {.callout-warning}
-## Em construção
-O conteúdo desta seção ainda será escrito.
+O número que decide entre dois modelos é o MSE de teste, definido na seção 7.6: o erro medido em observações que ficaram de fora do ajuste. Numa simulação, basta sortear mais pontos da mesma $f$. Com dado real quase nunca há um conjunto de teste separado de antemão; há uma tabela, e todas as linhas dela são candidatas a ajustar o modelo. A saída mais simples é fabricar o conjunto de teste: separar ao acaso uma parte das observações, ajustar o modelo no resto e medir o erro na parte separada.
+
+```{python}
+#| label: setup
+#| include: false
+import matplotlib.pyplot as plt
+import numpy as np
+import pandas as pd
+from sklearn.linear_model import LinearRegression
+from sklearn.metrics import mean_squared_error
+from sklearn.model_selection import train_test_split
+from sklearn.pipeline import make_pipeline
+from sklearn.preprocessing import PolynomialFeatures, StandardScaler
+
+plt.style.use("estilo-figuras.mplstyle")
+```
+
+::: {.conceito}
+A **abordagem do conjunto de validação** divide as observações disponíveis, ao acaso, em duas partes. O **conjunto de treino** ajusta o modelo; o **conjunto de validação** (em inglês, *hold-out set*) não participa do ajuste e serve só para medir o erro das previsões. O MSE sobre o conjunto de validação é uma estimativa do MSE de teste.
 :::
+
+## Os carros e os polinômios
+
+A pergunta de trabalho vem dos dados `Auto`: de que grau deve ser o polinômio em `potencia` que prevê `milhas_por_galao`? Na seção 8.5, o R² de treino subiu do grau 1 para o 2 e para o 5, como sobe sempre que o modelo ganha colunas, e por isso não servia para responder. O conjunto de validação serve.
+
+```{python}
+#| label: leitura-auto
+auto = pd.read_csv("dados/Auto.csv")
+n_interrogacao = int((auto["potencia"] == "?").sum())
+auto["potencia"] = pd.to_numeric(auto["potencia"], errors="coerce")
+auto = auto.dropna(subset=["potencia"]).reset_index(drop=True)
+
+X = auto[["potencia"]]
+y = auto["milhas_por_galao"]
+
+n_interrogacao, len(auto)
+```
+
+Cinco carros trazem `potencia` como o texto `"?"`; `pd.to_numeric(..., errors="coerce")` os transforma em `NaN` e `dropna` os descarta, e restam 392 carros.
+
+```{python}
+#| label: modelo-polinomial
+def modelo_polinomial(grau):
+    return make_pipeline(
+        StandardScaler(),
+        PolynomialFeatures(grau, include_bias=False),
+        LinearRegression(),
+    )
+
+
+graus = range(1, 11)
+```
+
+::: {.funcao}
+**`make_pipeline(passo1, ..., estimador)`**: encadeia transformações e um estimador num objeto só, que se ajusta com `fit` e prevê com `predict` repetindo as mesmas transformações.
+
+**`StandardScaler()`**: deixa cada coluna com média 0 e desvio padrão 1.
+
+**`PolynomialFeatures(grau, include_bias=False)`**: troca a coluna $x$ por $x, x^2, \dots, x^{\text{grau}}$, sem a coluna de 1, que o `LinearRegression` já cobre com o intercepto.
+
+**`LinearRegression()`**: ajusta os coeficientes por mínimos quadrados.
+:::
+
+`modelo_polinomial(grau)` devolve o modelo de um grau qualquer, e `graus` percorre de 1 a 10. O `StandardScaler` vem antes das potências pelo motivo da seção 8.5: elevar `potencia` à décima potência sem padronizar deixa as colunas em escalas tão distantes que a solução de mínimos quadrados perde precisão.
+
+## Uma divisão
+
+Metade dos 392 carros ajusta, a outra metade valida.
+
+```{python}
+#| label: uma-divisao
+X_treino, X_validacao, y_treino, y_validacao = train_test_split(
+    X, y, test_size=196, random_state=10
+)
+
+mse_uma_divisao = np.array([
+    mean_squared_error(
+        y_validacao, modelo_polinomial(grau).fit(X_treino, y_treino).predict(X_validacao)
+    )
+    for grau in graus
+])
+
+len(X_treino), len(X_validacao)
+```
+
+::: {.funcao}
+**`train_test_split(X, y, test_size, random_state)`**: sorteia quais linhas vão para cada lado e devolve, nesta ordem, `X` de treino, `X` de validação, `y` de treino e `y` de validação.
+
+- `test_size=196`: um número inteiro é a quantidade de linhas separadas, não uma fração.
+- `random_state=10`: a semente do sorteio, que deixa a divisão reproduzível.
+
+**`mean_squared_error(y_verdadeiro, y_previsto)`**: a média dos quadrados das diferenças entre os dois.
+:::
+
+Cada grau é ajustado nos 196 carros de treino e julgado nos 196 de validação:
+
+```{python}
+#| label: tabela-uma-divisao
+pd.DataFrame(
+    {"MSE de validação": [round(float(v), 2) for v in mse_uma_divisao]},
+    index=pd.Index(graus, name="grau"),
+)
+```
+
+```{python}
+#| label: minimo-uma-divisao
+grau_minimo_uma_divisao = int(graus[np.argmin(mse_uma_divisao)])
+ganho_grau_2 = round(float(mse_uma_divisao[0] - mse_uma_divisao[1]), 2)
+amplitude_graus_2_a_4 = round(
+    float(mse_uma_divisao[1:4].max() - mse_uma_divisao[1:4].min()), 2
+)
+
+grau_minimo_uma_divisao, ganho_grau_2, amplitude_graus_2_a_4
+```
+
+::: {.funcao}
+**`np.argmin(arr, axis)`**: a posição do menor valor de `arr`. Sem `axis`, no array inteiro; com `axis=1`, a posição do menor valor em cada linha.
+:::
+
+A reta erra 23,06; a parábola, 19,72. A curvatura derruba o erro em 3,34. Dali em diante a tabela é quase plana: entre o maior e o menor MSE dos graus 2, 3 e 4 a diferença é de 0,01, e o menor MSE de validação cai no grau 5, com 19,26, como aponta o `np.argmin`. Por esta divisão, o polinômio de grau 5 seria o escolhido. Mas a divisão foi um sorteio. O que acontece com essa escolha se os carros caírem de outro jeito?
+
+## Dez divisões
+
+A mesma conta, repetida com as sementes de 10 a 19: dez sorteios diferentes dos 196 carros de validação, dez curvas.
+
+```{python}
+#| label: dez-divisoes
+sementes = range(10, 20)
+mse_dez = []
+for semente in sementes:
+    X_tr, X_va, y_tr, y_va = train_test_split(
+        X, y, test_size=196, random_state=semente
+    )
+    mse_dez.append([
+        mean_squared_error(y_va, modelo_polinomial(grau).fit(X_tr, y_tr).predict(X_va))
+        for grau in graus
+    ])
+mse_dez = np.array(mse_dez)
+
+grau_minimo_por_divisao = [int(graus[i]) for i in np.argmin(mse_dez, axis=1)]
+grau_2_abaixo_do_1_em_todas = bool((mse_dez[:, 1] < mse_dez[:, 0]).all())
+
+grau_minimo_por_divisao, grau_2_abaixo_do_1_em_todas
+```
+
+O grau de menor MSE muda de divisão para divisão: 5, 2, 9, 7, 9, 5, 2, 9, 7 e 10, na ordem das sementes. Uma coisa não muda: `grau_2_abaixo_do_1_em_todas` confirma que, nas dez divisões, a parábola erra menos que a reta.
+
+```{python}
+#| label: amplitude-por-grau
+amplitude_por_grau = mse_dez.max(axis=0) - mse_dez.min(axis=0)
+pd.DataFrame(
+    {"amplitude entre as dez divisões": [round(float(v), 2) for v in amplitude_por_grau]},
+    index=pd.Index(graus, name="grau"),
+)
+```
+
+A amplitude é o MSE de validação da pior divisão menos o da melhor, grau a grau. Para a reta, as dez estimativas se espalham por 7,53; para a parábola, por 7,49.
+
+```{python}
+#| label: fig-validacao-auto
+#| fig-cap: "MSE de validação contra o grau do polinômio em potencia, nos dados Auto, com 196 carros de treino e 196 de validação. Esquerda: uma divisão (semente 10). Direita: dez divisões (sementes 10 a 19); a curva laranja é a mesma da esquerda."
+#| fig-alt: "Dois painéis com o mesmo eixo vertical, de 13 a 29. À esquerda, uma curva laranja com marcadores cai de cerca de 23 no grau 1 para perto de 20 no grau 2 e fica quase plana até o grau 10. À direita, dez curvas finas, nove azuis e uma laranja, todas caindo do grau 1 para o grau 2, em alturas bem diferentes entre si, de cerca de 14 a cerca de 27; uma delas tem um pico isolado perto de 28 no grau 8."
+fig, (ax_uma, ax_dez) = plt.subplots(1, 2, figsize=(10, 4.2), sharey=True)
+
+ax_uma.plot(graus, mse_uma_divisao, color="C1", marker="o", linewidth=2)
+ax_uma.set_title("uma divisão")
+
+for linha in mse_dez[1:]:
+    ax_dez.plot(graus, linha, color="C0", linewidth=1.2)
+ax_dez.plot([], [], color="C0", linewidth=1.2, label="sementes 11 a 19")
+ax_dez.plot(graus, mse_dez[0], color="C1", linewidth=2, label="semente 10")
+ax_dez.set_title("dez divisões")
+ax_dez.legend(loc="upper center")
+
+for ax in (ax_uma, ax_dez):
+    ax.set_xlabel("grau do polinômio")
+    ax.set_xticks(list(graus))
+ax_uma.set_ylabel("MSE de validação")
+ax_uma.set_ylim(13, 29)
+plt.tight_layout()
+plt.show()
+```
+
+As dez curvas descem do grau 1 para o grau 2, cada uma numa altura própria. O painel direito não autoriza escolher entre o grau 2 e o grau 9, porque divisões diferentes discordam sobre isso. O que ele sustenta é mais modesto: a reta não basta.
+
+## As duas desvantagens
+
+A validação é fácil de entender e de programar, e cobra dois preços por isso.
+
+**Variância alta.** A estimativa depende de quais carros caíram no treino e quais caíram na validação. A amplitude de 7,53 no grau 1 é esse preço medido: dez sorteios da mesma tabela, com o mesmo modelo, dão estimativas de erro que se espalham por mais de sete unidades de MSE.
+
+**Viés para cima.** O modelo é ajustado com metade dos carros. Um modelo ajustado com menos dados tende a errar mais que o mesmo modelo ajustado com todos, e o erro medido na validação tende a superestimar o erro do modelo que se vai usar de fato, ajustado nos 392. O tamanho desse viés é medido na seção 10.4.
+
+As duas desvantagens vêm da mesma escolha, a de separar uma metade fixa, uma vez só. A validação cruzada muda essa escolha: cada observação passa pelos dois lados, e os ajustes podem usar bem mais que a metade dos dados.
