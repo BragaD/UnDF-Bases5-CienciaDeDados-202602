@@ -27,7 +27,7 @@ auto = auto.dropna(subset=["potencia"]).reset_index(drop=True)
 
 ## Padronizar antes ou dentro
 
-O *k*-NN mede distância entre observações, e por isso precisa de padronização: sem ela, a coluna de maior escala decide sozinha quem é vizinho de quem, como a seção 7.3 mostrou. Nos dados `Auto`, um *k*-NN com 10 vizinhos prevê `milhas_por_galao` a partir de `potencia`, `peso`, `cilindrada` e `aceleracao`, e o 10-fold mede o erro de três jeitos: sem padronizar, padronizando os 392 carros de uma vez antes da validação cruzada, e com o `StandardScaler` dentro do `Pipeline`.
+O *k*-NN mede distância entre observações, e por isso precisa de padronização: sem ela, a coluna de maior escala decide sozinha quem é vizinho de quem, como a seção 7.3 mostrou. Nos dados `Auto`, um *k*-NN com 10 vizinhos prevê `milhas_por_galao` a partir de `potencia`, `peso`, `cilindrada` e `aceleracao`, e o 10-fold mede o erro de três jeitos: sem padronizar, padronizando a tabela toda de uma vez antes da validação cruzada, e com o `StandardScaler` dentro do `Pipeline`.
 
 ```{python}
 #| label: auto-knn
@@ -72,26 +72,23 @@ pd.DataFrame(
 )
 ```
 
-A diferença entre os dois códigos é onde o `fit` do `StandardScaler` acontece. No errado, ele acontece uma vez, nos 392 carros, e cada grupo de validação é padronizado com uma média e um desvio que ele mesmo ajudou a calcular. No certo, o `cross_val_score` ajusta o `Pipeline` inteiro em cada grupo de treino: o `StandardScaler` aprende a média e o desvio só dos carros de treino, e o grupo de validação é padronizado com esses números, como um carro novo seria.
+A diferença entre os dois códigos é onde o `fit` do `StandardScaler` acontece. No errado, ele acontece uma vez, em todos os carros, e cada grupo de validação é padronizado com uma média e um desvio que ele mesmo ajudou a calcular. No certo, o `cross_val_score` ajusta o `Pipeline` inteiro em cada grupo de treino: o `StandardScaler` aprende a média e o desvio só dos carros de treino, e o grupo de validação é padronizado com esses números, como um carro novo seria.
 
 Padronizar importa: o MSE cai de 17,43, sem padronizar, para 15,06, com o `StandardScaler` dentro, uma diferença de 2,37. **Onde** padronizar importa pouco neste caso: 14,93 no jeito errado contra 15,06 no certo, uma diferença de 0,13. O motivo aparece nos números que o `StandardScaler` aprende.
 
 ```{python}
 #| label: medias-treino
 treino, validacao = next(dez_grupos.split(X))
+print(f"{len(X)} carros: {len(treino)} de treino e {len(validacao)} de validação")
 pd.DataFrame({
-    "média, 392 carros": X.mean().round(2),
+    f"média, {len(X)} carros": X.mean().round(2),
     f"média, {len(treino)} de treino": X.iloc[treino].mean().round(2),
-    "desvio, 392 carros": X.std().round(2),
+    f"desvio, {len(X)} carros": X.std().round(2),
     f"desvio, {len(treino)} de treino": X.iloc[treino].std().round(2),
 })
 ```
 
-::: {.funcao}
-**`next(iterador)`**: o primeiro elemento de um iterador. Aqui, a primeira divisão do `KFold`, um par com as posições do treino e as da validação.
-:::
-
-No primeiro grupo, tirar os 40 carros de validação move a média de `peso` de 2.977,58 para 2.952,62, e a padronização quase não muda. O vazamento existe, e é pequeno porque uma média de centenas de carros mal sente 40 deles. Há etapas em que ele não é pequeno.
+`next(dez_grupos.split(X))` pega só a primeira das dez divisões, um par com as posições do treino e as da validação. No primeiro grupo, tirar os 40 carros de validação move a média de `peso` de 2.977,58 para 2.952,62, e a padronização quase não muda. O vazamento existe, e é pequeno porque uma média de centenas de carros mal sente 40 deles. Há etapas em que ele não é pequeno.
 
 ## Quando o vazamento decide tudo
 
