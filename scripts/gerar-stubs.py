@@ -115,6 +115,14 @@ LIVRO = [
         ("05-avaliando-um-classificador", "Avaliando um Classificador", "4.4.2"),
         ("06-comparando-os-metodos", "Comparando os Métodos", "4.5"),
     ]),
+    (10, "Reamostragem", 5, [
+        ("01-o-conjunto-de-validacao", "O Conjunto de Validação", "5.1.1"),
+        ("02-leave-one-out", "Validação Cruzada Leave-One-Out", "5.1.2"),
+        ("03-validacao-cruzada-k-fold", "Validação Cruzada k-Fold", "5.1.3"),
+        ("04-vies-e-variancia-na-validacao-cruzada", "Viés e Variância na Validação Cruzada", "5.1.4"),
+        ("05-validacao-cruzada-em-classificacao", "Validação Cruzada em Classificação", "5.1.5"),
+        ("06-vazamento", "Vazamento: o Pré-processamento Dentro da Validação", None),
+    ]),
 ]
 
 

@@ -135,36 +135,36 @@ def test_nenhuma_secao_inventa_numero_de_secao_do_grus():
     assert not ofensores, "número de seção inventado em: " + ", ".join(sorted(ofensores))
 
 
-def test_nove_capitulos():
-    """Nove, e não dezessete.
+def test_dez_capitulos():
+    """Dez, e não dezessete.
 
     Os capítulos 6 a 17 saíram do livro em 2026-09-10, com o abandono da
-    abordagem do Grus, e estão em `arquivo/grus/`. Os capítulos 7, 8 e 9
+    abordagem do Grus, e estão em `arquivo/grus/`. Os capítulos 7, 8, 9 e 10
     entraram depois, já na fundação ISLP. Este teste falha tanto se um
     capítulo do Grus voltar por engano quanto se um capítulo novo entrar em
     `content/` sem passar pelo `LIVRO` de `scripts/gerar-stubs.py`.
     """
     dirs = sorted(d.name for d in CONTENT.iterdir() if d.is_dir())
-    assert dirs == [f"cap{n:02d}" for n in range(1, 10)]
+    assert dirs == [f"cap{n:02d}" for n in range(1, 11)]
 
 
 def test_cada_capitulo_tem_index():
-    for n in range(1, 10):
+    for n in range(1, 11):
         assert (CONTENT / f"cap{n:02d}" / "index.qmd").is_file(), f"falta cap{n:02d}/index.qmd"
 
 
-def test_livro_completo_47_secoes_56_arquivos():
+def test_livro_completo_53_secoes_63_arquivos():
     """Nenhum outro teste deste arquivo detecta uma seção inteira sumindo.
 
     `test_todo_qmd_esta_registrado_no_quarto_yml` e
     `test_todo_href_do_quarto_yml_existe_no_disco` são checagens de diferença
     simétrica: apagar um `.qmd` E as duas linhas correspondentes do
-    `_quarto.yml` no mesmo commit passa nos dois. `test_nove_capitulos`
+    `_quarto.yml` no mesmo commit passa nos dois. `test_dez_capitulos`
     só conta diretórios; `test_cada_capitulo_tem_index` só confere o
     `index.qmd`. A fonte da verdade sobre o que o livro DEVE conter é o
     `LIVRO` de `scripts/gerar-stubs.py`, então este teste confere, capítulo
     por capítulo, que cada arquivo esperado existe em disco E aparece no
-    `_quarto.yml`, e fecha nos totais (9 capítulos, 47 seções, 56 arquivos).
+    `_quarto.yml`, e fecha nos totais (10 capítulos, 53 seções, 63 arquivos).
     Como fim de linha, também pega um arquivo de seção com nome digitado
     errado (por exemplo com um `_` no início, que `qmds_no_disco()` ignora de
     propósito): o nome exato esperado não existiria em nenhum dos dois lados.
@@ -173,7 +173,7 @@ def test_livro_completo_47_secoes_56_arquivos():
     saíram do livro — ver a spec da ruptura com o Grus.
     """
     livro = carregar_livro()
-    assert len(livro) == 9, f"esperava 9 capítulos no LIVRO, achei {len(livro)}"
+    assert len(livro) == 10, f"esperava 10 capítulos no LIVRO, achei {len(livro)}"
 
     hrefs = hrefs_registrados()
     total_arquivos = 0
@@ -195,8 +195,8 @@ def test_livro_completo_47_secoes_56_arquivos():
             total_arquivos += 1
             total_secoes += 1
 
-    assert total_secoes == 47, f"esperava 47 seções, achei {total_secoes}"
-    assert total_arquivos == 56, f"esperava 56 arquivos, achei {total_arquivos}"
+    assert total_secoes == 53, f"esperava 53 seções, achei {total_secoes}"
+    assert total_arquivos == 63, f"esperava 63 arquivos, achei {total_arquivos}"
 
 
 def test_nenhum_chunk_comeca_com_linha_indentada():
@@ -353,7 +353,17 @@ ESTILO = 'plt.style.use("estilo-figuras.mplstyle")'
 
 # Seções sem figura, e por quê. Cada entrada é uma decisão registrada, não um
 # esquecimento — daí o dicionário em vez de uma lista.
-SECOES_SEM_FIGURA: dict[str, str] = {}
+SECOES_SEM_FIGURA: dict[str, str] = {
+    # Os seis stubs do capítulo 10: nenhum tem conteúdo ainda, então nenhum
+    # tem figura. Cada um sai desta lista quando a respectiva seção for
+    # escrita, com a figura que a seção trouxer.
+    "cap10/01-o-conjunto-de-validacao.qmd": "stub; a figura entra quando a seção for escrita",
+    "cap10/02-leave-one-out.qmd": "stub; a figura entra quando a seção for escrita",
+    "cap10/03-validacao-cruzada-k-fold.qmd": "stub; a figura entra quando a seção for escrita",
+    "cap10/04-vies-e-variancia-na-validacao-cruzada.qmd": "stub; a figura entra quando a seção for escrita",
+    "cap10/05-validacao-cruzada-em-classificacao.qmd": "stub; a figura entra quando a seção for escrita",
+    "cap10/06-vazamento.qmd": "stub; a figura entra quando a seção for escrita",
+}
 
 # Usos de biblioteca proibida liberados: arquivo -> (biblioteca, motivo).
 # `scipy` deixa de ser proibido em pontos específicos, registrados aqui um a
@@ -500,17 +510,30 @@ SEM_CORRESPONDENCIA_NO_ISLP = {
     "cap06": "capítulo de dados escrito para esta disciplina; não há seção equivalente no ISLP",
 }
 
+# Seções sem correspondência no ISLP dentro de capítulos que o seguem. Cada
+# uma é exceção registrada com motivo, pelo mesmo princípio de
+# SECOES_SEM_FIGURA: exceção sem motivo é esquecimento disfarçado de decisão.
+SECOES_SEM_CORRESPONDENCIA_NO_ISLP: dict[str, str] = {
+    "cap10/06-vazamento.qmd": (
+        "vazamento de pré-processamento na validação cruzada; o ISLP não trata "
+        "o assunto, e o capítulo 17 depende dele (emenda de 2026-09-24 da spec)"
+    ),
+}
+
 
 def test_toda_secao_cita_o_islp():
     """Todo `.qmd` de seção dos capítulos que seguem o livro-texto traz `@james2023`.
 
     É o que ancora a seção no ISLP e o que permite conferir o conteúdo depois.
     Os capítulos 1 a 5 são de outra abordagem e ficam fora; os capítulos 6 e 17
-    são exceção com motivo escrito.
+    são exceção com motivo escrito, e, dentro dos capítulos que citam, as
+    seções de `SECOES_SEM_CORRESPONDENCIA_NO_ISLP`.
     """
     sem_citacao = []
     for p in sorted(CONTENT.rglob("*.qmd")):
         if p.parent.name not in CAPITULOS_QUE_CITAM_O_ISLP or p.name == "index.qmd":
+            continue
+        if f"{p.parent.name}/{p.name}" in SECOES_SEM_CORRESPONDENCIA_NO_ISLP:
             continue
         if "@james2023" not in p.read_text(encoding="utf-8"):
             sem_citacao.append(str(p.relative_to(RAIZ)))
@@ -521,6 +544,14 @@ def test_toda_excecao_de_correspondencia_tem_motivo_e_capitulo_real():
     for cap, motivo in SEM_CORRESPONDENCIA_NO_ISLP.items():
         assert (CONTENT / cap).is_dir(), f"{cap} não existe"
         assert len(motivo) > 40, f"exceção de {cap} sem motivo de verdade"
+
+    for chave, motivo in SECOES_SEM_CORRESPONDENCIA_NO_ISLP.items():
+        arquivo = CONTENT / chave
+        assert arquivo.is_file(), f"{chave} não existe"
+        assert len(motivo) > 40, f"exceção de {chave} sem motivo de verdade"
+        assert "Esta seção corresponde" not in arquivo.read_text(encoding="utf-8"), (
+            f"{chave} está isenta de correspondência mas traz o callout"
+        )
 
 
 # Cabeçalhos de antes da tradução "o dado fala português" (2026-09-10) — ver
