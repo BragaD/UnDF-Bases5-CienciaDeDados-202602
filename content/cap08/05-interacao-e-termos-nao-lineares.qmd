@@ -216,11 +216,32 @@ O painel esquerdo mostra o que a suposição sem interação força: duas retas 
 
 ## Potência não anda em linha reta com milhas por galão
 
+Cada linha de `Auto` é um modelo de automóvel, com o consumo de combustível e as características técnicas do carro:
+
+| Coluna | O que registra |
+|---|---|
+| `milhas_por_galao` | consumo: quantas milhas o carro roda com um galão de combustível |
+| `cilindros` | número de cilindros do motor |
+| `cilindrada` | volume do motor, em polegadas cúbicas |
+| `potencia` | potência do motor, em cavalos |
+| `peso` | peso do carro, em libras |
+| `aceleracao` | segundos para ir de 0 a 60 milhas por hora |
+| `ano` | ano do modelo, com dois dígitos (`70` é 1970) |
+| `origem` | onde foi fabricado, em código: `1` americano, `2` europeu, `3` japonês |
+| `nome` | nome do modelo |
+
+As primeiras linhas:
+
+```{python}
+#| label: primeiras-linhas-auto
+auto = pd.read_csv("dados/Auto.csv")
+auto.head()
+```
+
 `Auto` traz uma armadilha de tipo antes de qualquer regressão: a coluna `potencia`, que deveria ser número, chega inteira como texto por causa de cinco linhas.
 
 ```{python}
 #| label: leitura-auto
-auto = pd.read_csv("dados/Auto.csv")
 tipo_de_potencia_na_leitura = str(auto["potencia"].dtype)
 n_auto_bruto = len(auto)
 n_potencia_interrogacao = int((auto["potencia"] == "?").sum())
@@ -240,6 +261,22 @@ potencia_maxima = float(auto["potencia"].max())
 ```
 
 São 397 carros no arquivo, e cinco trazem `potencia` como o texto `"?"` em vez de um número. É por isso que a coluna chega do `read_csv` com tipo `object`, de texto, e não como `float`. `pd.to_numeric(..., errors="coerce")` troca cada `"?"` por `NaN` em vez de derrubar a leitura inteira, e `dropna` descarta essas cinco linhas: restam 392 carros para o que segue, com `potencia` chegando a 230 hp. `reset_index(drop=True)` renumera as linhas de 0 a 391, para que as posições voltem a ser contínuas depois do descarte.
+
+Com `potencia` numérica, a relação com o consumo se vê de uma vez:
+
+```{python}
+#| label: fig-auto-dispersao
+#| fig-cap: "milhas_por_galao contra potencia nos 392 carros de Auto com potencia numérica."
+#| fig-alt: "Nuvem de pontos azuis que desce da esquerda para a direita: carros de pouca potência rodam mais milhas por galão. A descida é íngreme no começo e vai achatando para potências altas, desenhando uma curva e não uma reta."
+fig, ax = plt.subplots()
+ax.scatter(auto["potencia"], auto["milhas_por_galao"], s=14, alpha=0.5, color="C0")
+ax.set_xlabel("potência (hp)")
+ax.set_ylabel("milhas por galão")
+plt.tight_layout()
+plt.show()
+```
+
+Carro mais potente roda menos com um galão, mas a queda não tem ritmo constante: é íngreme entre os carros de pouca potência e vai achatando conforme a potência cresce. Uma reta não acompanha essa forma, e é ela que motiva ajustar polinômios.
 
 ```{python}
 #| label: modelos-polinomiais
