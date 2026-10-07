@@ -1,0 +1,2397 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" lang="pt" xml:lang="pt"><head>
+
+<meta charset="utf-8">
+<meta name="generator" content="quarto-1.9.38">
+
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
+
+<meta name="author" content="Douglas Braga">
+
+<title>Ajustando uma Rede: Retropropagação, Gradiente Estocástico e Regularização – Ciência de Dados - Bases 5</title>
+<style>
+/* Default styles provided by pandoc.
+** See https://pandoc.org/MANUAL.html#variables-for-html for config info.
+*/
+code{white-space: pre-wrap;}
+span.smallcaps{font-variant: small-caps;}
+div.columns{display: flex; gap: min(4vw, 1.5em);}
+div.column{flex: auto; overflow-x: auto;}
+div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+ul.task-list{list-style: none;}
+ul.task-list li input[type="checkbox"] {
+  width: 0.8em;
+  margin: 0 0.8em 0.2em -1em; /* quarto-specific, see https://github.com/quarto-dev/quarto-cli/issues/4556 */ 
+  vertical-align: middle;
+}
+/* CSS for syntax highlighting */
+html { -webkit-text-size-adjust: 100%; }
+pre > code.sourceCode { white-space: pre; position: relative; }
+pre > code.sourceCode > span { display: inline-block; line-height: 1.25; }
+pre > code.sourceCode > span:empty { height: 1.2em; }
+.sourceCode { overflow: visible; }
+code.sourceCode > span { color: inherit; text-decoration: inherit; }
+div.sourceCode { margin: 1em 0; }
+pre.sourceCode { margin: 0; }
+@media screen {
+div.sourceCode { overflow: auto; }
+}
+@media print {
+pre > code.sourceCode { white-space: pre-wrap; }
+pre > code.sourceCode > span { text-indent: -5em; padding-left: 5em; }
+}
+pre.numberSource code
+  { counter-reset: source-line 0; }
+pre.numberSource code > span
+  { position: relative; left: -4em; counter-increment: source-line; }
+pre.numberSource code > span > a:first-child::before
+  { content: counter(source-line);
+    position: relative; left: -1em; text-align: right; vertical-align: baseline;
+    border: none; display: inline-block;
+    -webkit-touch-callout: none; -webkit-user-select: none;
+    -khtml-user-select: none; -moz-user-select: none;
+    -ms-user-select: none; user-select: none;
+    padding: 0 4px; width: 4em;
+  }
+pre.numberSource { margin-left: 3em;  padding-left: 4px; }
+div.sourceCode
+  {   }
+@media screen {
+pre > code.sourceCode > span > a:first-child::before { text-decoration: underline; }
+}
+/* CSS for citations */
+div.csl-bib-body { }
+div.csl-entry {
+  clear: both;
+}
+.hanging-indent div.csl-entry {
+  margin-left:2em;
+  text-indent:-2em;
+}
+div.csl-left-margin {
+  min-width:2em;
+  float:left;
+}
+div.csl-right-inline {
+  margin-left:2em;
+  padding-left:1em;
+}
+div.csl-indent {
+  margin-left: 2em;
+}</style>
+
+
+<script src="../../site_libs/quarto-nav/quarto-nav.js"></script>
+<script src="../../site_libs/quarto-nav/headroom.min.js"></script>
+<script src="../../site_libs/clipboard/clipboard.min.js"></script>
+<script src="../../site_libs/quarto-search/autocomplete.umd.js"></script>
+<script src="../../site_libs/quarto-search/fuse.min.js"></script>
+<script src="../../site_libs/quarto-search/quarto-search.js"></script>
+<meta name="quarto:offset" content="../../">
+<link href="../../content/cap14/04-mlpclassifier-e-mlpregressor-na-pratica.html" rel="next">
+<link href="../../content/cap14/02-redes-multicamada.html" rel="prev">
+<link href="../../images/favicon.png" rel="icon" type="image/png">
+<script src="../../site_libs/quarto-html/quarto.js" type="module"></script>
+<script src="../../site_libs/quarto-html/tabsets/tabsets.js" type="module"></script>
+<script src="../../site_libs/quarto-html/popper.min.js"></script>
+<script src="../../site_libs/quarto-html/tippy.umd.min.js"></script>
+<script src="../../site_libs/quarto-html/anchor.min.js"></script>
+<link href="../../site_libs/quarto-html/tippy.css" rel="stylesheet">
+<link href="../../site_libs/quarto-html/quarto-syntax-highlighting-15634bcf2e68342d4ad2dfa704d543f6.css" rel="stylesheet" class="quarto-color-scheme" id="quarto-text-highlighting-styles">
+<link href="../../site_libs/quarto-html/quarto-syntax-highlighting-dark-0a6b7249c26820e032cb0bd839ff02b1.css" rel="stylesheet" class="quarto-color-scheme quarto-color-alternate" id="quarto-text-highlighting-styles">
+<link href="../../site_libs/quarto-html/quarto-syntax-highlighting-15634bcf2e68342d4ad2dfa704d543f6.css" rel="stylesheet" class="quarto-color-scheme-extra" id="quarto-text-highlighting-styles">
+<script src="../../site_libs/bootstrap/bootstrap.min.js"></script>
+<link href="../../site_libs/bootstrap/bootstrap-icons.css" rel="stylesheet">
+<link href="../../site_libs/bootstrap/bootstrap-96de93aeef37c2f55637d13965bee670.min.css" rel="stylesheet" append-hash="true" class="quarto-color-scheme" id="quarto-bootstrap" data-mode="light">
+<link href="../../site_libs/bootstrap/bootstrap-dark-fa5a435faa8b3fd8ba2c629fc35ba32a.min.css" rel="stylesheet" append-hash="true" class="quarto-color-scheme quarto-color-alternate" id="quarto-bootstrap" data-mode="dark">
+<link href="../../site_libs/bootstrap/bootstrap-96de93aeef37c2f55637d13965bee670.min.css" rel="stylesheet" append-hash="true" class="quarto-color-scheme-extra" id="quarto-bootstrap" data-mode="light">
+<script id="quarto-search-options" type="application/json">{
+  "location": "navbar",
+  "copy-button": false,
+  "collapse-after": 3,
+  "panel-placement": "end",
+  "type": "overlay",
+  "limit": 50,
+  "keyboard-shortcut": [
+    "f",
+    "/",
+    "s"
+  ],
+  "show-item-context": false,
+  "language": {
+    "search-no-results-text": "Nenhum resultado",
+    "search-matching-documents-text": "documentos correspondentes",
+    "search-copy-link-title": "Copiar link para a busca",
+    "search-hide-matches-text": "Esconder correspondências adicionais",
+    "search-more-match-text": "mais correspondência neste documento",
+    "search-more-matches-text": "mais correspondências neste documento",
+    "search-clear-button-title": "Limpar",
+    "search-text-placeholder": "",
+    "search-detached-cancel-button-title": "Cancelar",
+    "search-submit-button-title": "Enviar",
+    "search-label": "Procurar"
+  }
+}</script>
+<script>
+// Modo leitura: um botão que esconde as duas barras laterais e centraliza o
+// texto. A escolha é lembrada entre páginas (localStorage). Ver o CSS em
+// styles.css (classe html.modo-leitura e .btn-modo-leitura).
+(function () {
+  // A chave leva o nome do livro porque os dois livros são publicados no
+  // mesmo domínio (bragad.github.io) e, portanto, dividem o localStorage.
+  // Uma chave genérica faria o Bases 3 e o Bases 5 alternarem um ao outro.
+  var CHAVE = "bases5-modo-leitura";
+
+  // 1. Aplicar o estado salvo ANTES do primeiro paint, para não haver flash das
+  //    barras aparecendo e sumindo. Este script está no <head>, então roda antes
+  //    de o <body> ser desenhado.
+  try {
+    if (localStorage.getItem(CHAVE) === "1") {
+      document.documentElement.classList.add("modo-leitura");
+    }
+  } catch (e) {}
+
+  // 2. Injetar o botão e ligar o toggle quando o DOM estiver pronto.
+  document.addEventListener("DOMContentLoaded", function () {
+    var btn = document.createElement("button");
+    btn.className = "btn-modo-leitura";
+    btn.type = "button";
+
+    function rotular() {
+      var ativo = document.documentElement.classList.contains("modo-leitura");
+      btn.innerHTML = ativo
+        ? '<i class="bi bi-layout-sidebar-inset"></i> Mostrar menus'
+        : '<i class="bi bi-arrows-angle-expand"></i> Modo leitura';
+      btn.setAttribute("aria-pressed", ativo ? "true" : "false");
+    }
+
+    rotular();
+
+    btn.addEventListener("click", function () {
+      var ativo = document.documentElement.classList.toggle("modo-leitura");
+      try {
+        localStorage.setItem(CHAVE, ativo ? "1" : "0");
+      } catch (e) {}
+      rotular();
+    });
+
+    document.body.appendChild(btn);
+  });
+})();
+</script>
+
+  <script src="https://cdnjs.cloudflare.com/polyfill/v3/polyfill.min.js?features=es6"></script>
+  <script defer="" src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-chtml-full.js" type="text/javascript"></script>
+
+<script type="text/javascript">
+const typesetMath = (el) => {
+  if (window.MathJax) {
+    // MathJax Typeset
+    window.MathJax.typeset([el]);
+  } else if (window.katex) {
+    // KaTeX Render
+    var mathElements = el.getElementsByClassName("math");
+    var macros = [];
+    for (var i = 0; i < mathElements.length; i++) {
+      var texText = mathElements[i].firstChild;
+      if (mathElements[i].tagName == "SPAN" && texText && texText.data) {
+        window.katex.render(texText.data, mathElements[i], {
+          displayMode: mathElements[i].classList.contains('display'),
+          throwOnError: false,
+          macros: macros,
+          fleqn: false
+        });
+      }
+    }
+  }
+}
+window.Quarto = {
+  typesetMath
+};
+</script>
+
+<link rel="stylesheet" href="../../styles.css">
+</head>
+
+<body class="nav-sidebar floating nav-fixed quarto-light"><script id="quarto-html-before-body" type="application/javascript">
+    const toggleBodyColorMode = (bsSheetEl) => {
+      const mode = bsSheetEl.getAttribute("data-mode");
+      const bodyEl = window.document.querySelector("body");
+      if (mode === "dark") {
+        bodyEl.classList.add("quarto-dark");
+        bodyEl.classList.remove("quarto-light");
+      } else {
+        bodyEl.classList.add("quarto-light");
+        bodyEl.classList.remove("quarto-dark");
+      }
+    }
+    const toggleBodyColorPrimary = () => {
+      const bsSheetEl = window.document.querySelector("link#quarto-bootstrap:not([rel=disabled-stylesheet])");
+      if (bsSheetEl) {
+        toggleBodyColorMode(bsSheetEl);
+      }
+    }
+    const setColorSchemeToggle = (alternate) => {
+      const toggles = window.document.querySelectorAll('.quarto-color-scheme-toggle');
+      for (let i=0; i < toggles.length; i++) {
+        const toggle = toggles[i];
+        if (toggle) {
+          if (alternate) {
+            toggle.classList.add("alternate");
+          } else {
+            toggle.classList.remove("alternate");
+          }
+        }
+      }
+    };
+    const toggleColorMode = (alternate) => {
+      // Switch the stylesheets
+      const primaryStylesheets = window.document.querySelectorAll('link.quarto-color-scheme:not(.quarto-color-alternate)');
+      const alternateStylesheets = window.document.querySelectorAll('link.quarto-color-scheme.quarto-color-alternate');
+      manageTransitions('#quarto-margin-sidebar .nav-link', false);
+      if (alternate) {
+        // note: dark is layered on light, we don't disable primary!
+        enableStylesheet(alternateStylesheets);
+        for (const sheetNode of alternateStylesheets) {
+          if (sheetNode.id === "quarto-bootstrap") {
+            toggleBodyColorMode(sheetNode);
+          }
+        }
+      } else {
+        disableStylesheet(alternateStylesheets);
+        enableStylesheet(primaryStylesheets)
+        toggleBodyColorPrimary();
+      }
+      manageTransitions('#quarto-margin-sidebar .nav-link', true);
+      // Switch the toggles
+      setColorSchemeToggle(alternate)
+      // Hack to workaround the fact that safari doesn't
+      // properly recolor the scrollbar when toggling (#1455)
+      if (navigator.userAgent.indexOf('Safari') > 0 && navigator.userAgent.indexOf('Chrome') == -1) {
+        manageTransitions("body", false);
+        window.scrollTo(0, 1);
+        setTimeout(() => {
+          window.scrollTo(0, 0);
+          manageTransitions("body", true);
+        }, 40);
+      }
+    }
+    const disableStylesheet = (stylesheets) => {
+      for (let i=0; i < stylesheets.length; i++) {
+        const stylesheet = stylesheets[i];
+        stylesheet.rel = 'disabled-stylesheet';
+      }
+    }
+    const enableStylesheet = (stylesheets) => {
+      for (let i=0; i < stylesheets.length; i++) {
+        const stylesheet = stylesheets[i];
+        if(stylesheet.rel !== 'stylesheet') { // for Chrome, which will still FOUC without this check
+          stylesheet.rel = 'stylesheet';
+        }
+      }
+    }
+    const manageTransitions = (selector, allowTransitions) => {
+      const els = window.document.querySelectorAll(selector);
+      for (let i=0; i < els.length; i++) {
+        const el = els[i];
+        if (allowTransitions) {
+          el.classList.remove('notransition');
+        } else {
+          el.classList.add('notransition');
+        }
+      }
+    }
+    const isFileUrl = () => {
+      return window.location.protocol === 'file:';
+    }
+    const hasAlternateSentinel = () => {
+      let styleSentinel = getColorSchemeSentinel();
+      if (styleSentinel !== null) {
+        return styleSentinel === "alternate";
+      } else {
+        return false;
+      }
+    }
+    const setStyleSentinel = (alternate) => {
+      const value = alternate ? "alternate" : "default";
+      if (!isFileUrl()) {
+        window.localStorage.setItem("quarto-color-scheme", value);
+      } else {
+        localAlternateSentinel = value;
+      }
+    }
+    const getColorSchemeSentinel = () => {
+      if (!isFileUrl()) {
+        const storageValue = window.localStorage.getItem("quarto-color-scheme");
+        return storageValue != null ? storageValue : localAlternateSentinel;
+      } else {
+        return localAlternateSentinel;
+      }
+    }
+    const toggleGiscusIfUsed = (isAlternate, darkModeDefault) => {
+      const baseTheme = document.querySelector('#giscus-base-theme')?.value ?? 'light';
+      const alternateTheme = document.querySelector('#giscus-alt-theme')?.value ?? 'dark';
+      let newTheme = '';
+      if(authorPrefersDark) {
+        newTheme = isAlternate ? baseTheme : alternateTheme;
+      } else {
+        newTheme = isAlternate ? alternateTheme : baseTheme;
+      }
+      const changeGiscusTheme = () => {
+        // From: https://github.com/giscus/giscus/issues/336
+        const sendMessage = (message) => {
+          const iframe = document.querySelector('iframe.giscus-frame');
+          if (!iframe) return;
+          iframe.contentWindow.postMessage({ giscus: message }, 'https://giscus.app');
+        }
+        sendMessage({
+          setConfig: {
+            theme: newTheme
+          }
+        });
+      }
+      const isGiscussLoaded = window.document.querySelector('iframe.giscus-frame') !== null;
+      if (isGiscussLoaded) {
+        changeGiscusTheme();
+      }
+    };
+    const authorPrefersDark = false;
+    const darkModeDefault = authorPrefersDark;
+      document.querySelector('link#quarto-text-highlighting-styles.quarto-color-scheme-extra').rel = 'disabled-stylesheet';
+      document.querySelector('link#quarto-bootstrap.quarto-color-scheme-extra').rel = 'disabled-stylesheet';
+    let localAlternateSentinel = darkModeDefault ? 'alternate' : 'default';
+    // Dark / light mode switch
+    window.quartoToggleColorScheme = () => {
+      // Read the current dark / light value
+      let toAlternate = !hasAlternateSentinel();
+      toggleColorMode(toAlternate);
+      setStyleSentinel(toAlternate);
+      toggleGiscusIfUsed(toAlternate, darkModeDefault);
+      window.dispatchEvent(new Event('resize'));
+    };
+    // Switch to dark mode if need be
+    if (hasAlternateSentinel()) {
+      toggleColorMode(true);
+    } else {
+      toggleColorMode(false);
+    }
+  </script>
+
+<div id="quarto-search-results"></div>
+  <header id="quarto-header" class="headroom fixed-top">
+    <nav class="navbar navbar-expand-lg " data-bs-theme="dark">
+      <div class="navbar-container container-fluid">
+      <div class="navbar-brand-container mx-auto">
+    <a href="../../index.html" class="navbar-brand navbar-brand-logo">
+    <img src="../../images/logo-undf.png" alt="Logo UnDF" class="navbar-logo light-content">
+    <img src="../../images/logo-undf.png" alt="Logo UnDF" class="navbar-logo dark-content">
+    </a>
+    <a class="navbar-brand" href="../../index.html">
+    <span class="navbar-title">Ciência de Dados - Bases 5</span>
+    </a>
+  </div>
+        <div class="quarto-navbar-tools tools-end">
+    <a href="https://github.com/BragaD/UnDF-Bases5-CienciaDeDados-202602" title="Código fonte" class="quarto-navigation-tool px-1" aria-label="Código fonte"><i class="bi bi-github"></i></a>
+  <a href="" class="quarto-color-scheme-toggle quarto-navigation-tool  px-1" onclick="window.quartoToggleColorScheme(); return false;" title="Alternar modo escuro"><i class="bi"></i></a>
+</div>
+          <div id="quarto-search" class="" title="Procurar"></div>
+      </div> <!-- /container-fluid -->
+    </nav>
+  <nav class="quarto-secondary-nav">
+    <div class="container-fluid d-flex">
+      <button type="button" class="quarto-btn-toggle btn" data-bs-toggle="collapse" role="button" data-bs-target=".quarto-sidebar-collapse-item" aria-controls="quarto-sidebar" aria-expanded="false" aria-label="Alternar barra lateral" onclick="if (window.quartoToggleHeadroom) { window.quartoToggleHeadroom(); }">
+        <i class="bi bi-layout-text-sidebar-reverse"></i>
+      </button>
+        <nav class="quarto-page-breadcrumbs" aria-label="breadcrumb"><ol class="breadcrumb"><li class="breadcrumb-item"><a href="../../content/cap14/index.html">Capítulo 14: Redes Neurais</a></li><li class="breadcrumb-item"><a href="../../content/cap14/03-ajustando-uma-rede.html"><span class="chapter-title">Ajustando uma Rede: Retropropagação, Gradiente Estocástico e Regularização</span></a></li></ol></nav>
+        <a class="flex-grow-1" role="navigation" data-bs-toggle="collapse" data-bs-target=".quarto-sidebar-collapse-item" aria-controls="quarto-sidebar" aria-expanded="false" aria-label="Alternar barra lateral" onclick="if (window.quartoToggleHeadroom) { window.quartoToggleHeadroom(); }">      
+        </a>
+    </div>
+  </nav>
+</header>
+<!-- content -->
+<div id="quarto-content" class="quarto-container page-columns page-rows-contents page-layout-article page-navbar">
+<!-- sidebar -->
+  <nav id="quarto-sidebar" class="sidebar collapse collapse-horizontal quarto-sidebar-collapse-item sidebar-navigation floating overflow-auto">
+    <div class="sidebar-menu-container"> 
+    <ul class="list-unstyled mt-1">
+        <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../../index.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">Início</span></a>
+  </div>
+</li>
+        <li class="sidebar-item sidebar-item-section">
+      <div class="sidebar-item-container"> 
+            <a class="sidebar-item-text sidebar-link text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-1" role="navigation" aria-expanded="true">
+ <span class="menu-text">Capítulo 1: Introdução</span></a>
+          <a class="sidebar-item-toggle text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-1" role="navigation" aria-expanded="true" aria-label="Alternar seção">
+            <i class="bi bi-chevron-right ms-2"></i>
+          </a> 
+      </div>
+      <ul id="quarto-sidebar-section-1" class="collapse list-unstyled sidebar-section depth1 show">  
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../../content/cap01/index.html" class="sidebar-item-text sidebar-link"><span class="chapter-title">Visão Geral</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../../content/cap01/01-a-ascensao-dos-dados.html" class="sidebar-item-text sidebar-link"><span class="chapter-title">A Ascensão dos Dados</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../../content/cap01/02-o-que-e-ciencia-de-dados.html" class="sidebar-item-text sidebar-link"><span class="chapter-title">O que é Ciência de Dados?</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../../content/cap01/03-hipotese-motivadora-datasciencester.html" class="sidebar-item-text sidebar-link"><span class="chapter-title">Hipótese Motivadora: DataSciencester</span></a>
+  </div>
+</li>
+      </ul>
+  </li>
+        <li class="sidebar-item sidebar-item-section">
+      <div class="sidebar-item-container"> 
+            <a class="sidebar-item-text sidebar-link text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-2" role="navigation" aria-expanded="true">
+ <span class="menu-text">Capítulo 2: Um Curso Rápido de Python</span></a>
+          <a class="sidebar-item-toggle text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-2" role="navigation" aria-expanded="true" aria-label="Alternar seção">
+            <i class="bi bi-chevron-right ms-2"></i>
+          </a> 
+      </div>
+      <ul id="quarto-sidebar-section-2" class="collapse list-unstyled sidebar-section depth1 show">  
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../../content/cap02/index.html" class="sidebar-item-text sidebar-link"><span class="chapter-title">Visão Geral</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../../content/cap02/01-ambiente-e-sintaxe.html" class="sidebar-item-text sidebar-link"><span class="chapter-title">Ambiente e Sintaxe</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../../content/cap02/02-funcoes-strings-excecoes.html" class="sidebar-item-text sidebar-link"><span class="chapter-title">Funções, Strings e Exceções</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../../content/cap02/03-estruturas-de-dados.html" class="sidebar-item-text sidebar-link"><span class="chapter-title">Estruturas de Dados</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../../content/cap02/04-controle-de-fluxo.html" class="sidebar-item-text sidebar-link"><span class="chapter-title">Controle de Fluxo</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../../content/cap02/05-testes-classes-e-geradores.html" class="sidebar-item-text sidebar-link"><span class="chapter-title">Testes, Classes e Geradores</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../../content/cap02/06-ferramentas-e-tipos.html" class="sidebar-item-text sidebar-link"><span class="chapter-title">Ferramentas e Anotações de Tipo</span></a>
+  </div>
+</li>
+      </ul>
+  </li>
+        <li class="sidebar-item sidebar-item-section">
+      <div class="sidebar-item-container"> 
+            <a class="sidebar-item-text sidebar-link text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-3" role="navigation" aria-expanded="true">
+ <span class="menu-text">Capítulo 3: Visualizando Dados</span></a>
+          <a class="sidebar-item-toggle text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-3" role="navigation" aria-expanded="true" aria-label="Alternar seção">
+            <i class="bi bi-chevron-right ms-2"></i>
+          </a> 
+      </div>
+      <ul id="quarto-sidebar-section-3" class="collapse list-unstyled sidebar-section depth1 show">  
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../../content/cap03/index.html" class="sidebar-item-text sidebar-link"><span class="chapter-title">Visão Geral</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../../content/cap03/01-matplotlib.html" class="sidebar-item-text sidebar-link"><span class="chapter-title">matplotlib</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../../content/cap03/02-graficos-de-barras.html" class="sidebar-item-text sidebar-link"><span class="chapter-title">Gráficos de Barras</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../../content/cap03/03-graficos-de-linhas.html" class="sidebar-item-text sidebar-link"><span class="chapter-title">Gráficos de Linhas</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../../content/cap03/04-graficos-de-dispersao.html" class="sidebar-item-text sidebar-link"><span class="chapter-title">Gráficos de Dispersão</span></a>
+  </div>
+</li>
+      </ul>
+  </li>
+        <li class="sidebar-item sidebar-item-section">
+      <div class="sidebar-item-container"> 
+            <a class="sidebar-item-text sidebar-link text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-4" role="navigation" aria-expanded="true">
+ <span class="menu-text">Capítulo 4: Álgebra Linear</span></a>
+          <a class="sidebar-item-toggle text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-4" role="navigation" aria-expanded="true" aria-label="Alternar seção">
+            <i class="bi bi-chevron-right ms-2"></i>
+          </a> 
+      </div>
+      <ul id="quarto-sidebar-section-4" class="collapse list-unstyled sidebar-section depth1 show">  
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../../content/cap04/index.html" class="sidebar-item-text sidebar-link"><span class="chapter-title">Visão Geral</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../../content/cap04/01-vetores.html" class="sidebar-item-text sidebar-link"><span class="chapter-title">Vetores</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../../content/cap04/02-matrizes.html" class="sidebar-item-text sidebar-link"><span class="chapter-title">Matrizes</span></a>
+  </div>
+</li>
+      </ul>
+  </li>
+        <li class="sidebar-item sidebar-item-section">
+      <div class="sidebar-item-container"> 
+            <a class="sidebar-item-text sidebar-link text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-5" role="navigation" aria-expanded="true">
+ <span class="menu-text">Capítulo 5: Gradiente Descendente</span></a>
+          <a class="sidebar-item-toggle text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-5" role="navigation" aria-expanded="true" aria-label="Alternar seção">
+            <i class="bi bi-chevron-right ms-2"></i>
+          </a> 
+      </div>
+      <ul id="quarto-sidebar-section-5" class="collapse list-unstyled sidebar-section depth1 show">  
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../../content/cap05/index.html" class="sidebar-item-text sidebar-link"><span class="chapter-title">Visão Geral</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../../content/cap05/01-a-ideia-por-tras-do-gradiente.html" class="sidebar-item-text sidebar-link"><span class="chapter-title">A Ideia por Trás do Gradiente Descendente</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../../content/cap05/02-estimando-o-gradiente.html" class="sidebar-item-text sidebar-link"><span class="chapter-title">Estimando o Gradiente</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../../content/cap05/03-usando-o-gradiente.html" class="sidebar-item-text sidebar-link"><span class="chapter-title">Usando o Gradiente</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../../content/cap05/04-escolhendo-o-tamanho-do-passo.html" class="sidebar-item-text sidebar-link"><span class="chapter-title">Escolhendo o Tamanho do Passo</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../../content/cap05/05-ajustando-modelos.html" class="sidebar-item-text sidebar-link"><span class="chapter-title">Ajustando Modelos com Gradiente Descendente</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../../content/cap05/06-minibatch-e-estocastico.html" class="sidebar-item-text sidebar-link"><span class="chapter-title">Minibatch e Gradiente Estocástico</span></a>
+  </div>
+</li>
+      </ul>
+  </li>
+        <li class="sidebar-item sidebar-item-section">
+      <div class="sidebar-item-container"> 
+            <a class="sidebar-item-text sidebar-link text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-6" role="navigation" aria-expanded="true">
+ <span class="menu-text">Capítulo 6: Dados: Tipos, Dados Retangulares e pandas</span></a>
+          <a class="sidebar-item-toggle text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-6" role="navigation" aria-expanded="true" aria-label="Alternar seção">
+            <i class="bi bi-chevron-right ms-2"></i>
+          </a> 
+      </div>
+      <ul id="quarto-sidebar-section-6" class="collapse list-unstyled sidebar-section depth1 show">  
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../../content/cap06/index.html" class="sidebar-item-text sidebar-link"><span class="chapter-title">Visão Geral</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../../content/cap06/01-elementos-de-dados-estruturados.html" class="sidebar-item-text sidebar-link"><span class="chapter-title">Elementos de Dados Estruturados</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../../content/cap06/02-dados-retangulares.html" class="sidebar-item-text sidebar-link"><span class="chapter-title">Dados Retangulares</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../../content/cap06/03-lendo-e-tipando-um-arquivo-real.html" class="sidebar-item-text sidebar-link"><span class="chapter-title">Lendo e Tipando um Arquivo Real</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../../content/cap06/04-limpando-e-transformando.html" class="sidebar-item-text sidebar-link"><span class="chapter-title">Limpando e Transformando</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../../content/cap06/05-agrupando-e-resumindo.html" class="sidebar-item-text sidebar-link"><span class="chapter-title">Agrupando e Resumindo</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../../content/cap06/06-da-tabela-para-o-modelo.html" class="sidebar-item-text sidebar-link"><span class="chapter-title">Da Tabela para o Modelo</span></a>
+  </div>
+</li>
+      </ul>
+  </li>
+        <li class="sidebar-item sidebar-item-section">
+      <div class="sidebar-item-container"> 
+            <a class="sidebar-item-text sidebar-link text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-7" role="navigation" aria-expanded="true">
+ <span class="menu-text">Capítulo 7: O que é Aprendizado Estatístico</span></a>
+          <a class="sidebar-item-toggle text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-7" role="navigation" aria-expanded="true" aria-label="Alternar seção">
+            <i class="bi bi-chevron-right ms-2"></i>
+          </a> 
+      </div>
+      <ul id="quarto-sidebar-section-7" class="collapse list-unstyled sidebar-section depth1 show">  
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../../content/cap07/index.html" class="sidebar-item-text sidebar-link"><span class="chapter-title">Visão Geral</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../../content/cap07/01-o-array.html" class="sidebar-item-text sidebar-link"><span class="chapter-title">O Array</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../../content/cap07/02-estimar-f.html" class="sidebar-item-text sidebar-link"><span class="chapter-title">Estimar f: Predição e Inferência</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../../content/cap07/03-parametrico-e-nao-parametrico.html" class="sidebar-item-text sidebar-link"><span class="chapter-title">Paramétrico e Não Paramétrico</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../../content/cap07/04-precisao-contra-interpretabilidade.html" class="sidebar-item-text sidebar-link"><span class="chapter-title">Precisão contra Interpretabilidade</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../../content/cap07/05-supervisionado-e-nao-supervisionado.html" class="sidebar-item-text sidebar-link"><span class="chapter-title">Supervisionado e Não Supervisionado</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../../content/cap07/06-qualidade-do-ajuste-e-vies-variancia.html" class="sidebar-item-text sidebar-link"><span class="chapter-title">Qualidade do Ajuste e o Compromisso Viés-Variância</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../../content/cap07/07-classificacao-e-o-classificador-de-bayes.html" class="sidebar-item-text sidebar-link"><span class="chapter-title">Classificação e o Classificador de Bayes</span></a>
+  </div>
+</li>
+      </ul>
+  </li>
+        <li class="sidebar-item sidebar-item-section">
+      <div class="sidebar-item-container"> 
+            <a class="sidebar-item-text sidebar-link text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-8" role="navigation" aria-expanded="true">
+ <span class="menu-text">Capítulo 8: Regressão Linear</span></a>
+          <a class="sidebar-item-toggle text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-8" role="navigation" aria-expanded="true" aria-label="Alternar seção">
+            <i class="bi bi-chevron-right ms-2"></i>
+          </a> 
+      </div>
+      <ul id="quarto-sidebar-section-8" class="collapse list-unstyled sidebar-section depth1 show">  
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../../content/cap08/index.html" class="sidebar-item-text sidebar-link"><span class="chapter-title">Visão Geral</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../../content/cap08/01-regressao-linear-simples.html" class="sidebar-item-text sidebar-link"><span class="chapter-title">Regressão Linear Simples</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../../content/cap08/02-avaliando-o-ajuste.html" class="sidebar-item-text sidebar-link"><span class="chapter-title">Avaliando o Ajuste: R² e Erro</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../../content/cap08/03-regressao-multipla.html" class="sidebar-item-text sidebar-link"><span class="chapter-title">Regressão Múltipla</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../../content/cap08/04-preditores-qualitativos.html" class="sidebar-item-text sidebar-link"><span class="chapter-title">Preditores Qualitativos</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../../content/cap08/05-interacao-e-termos-nao-lineares.html" class="sidebar-item-text sidebar-link"><span class="chapter-title">Interação e Termos Não Lineares</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../../content/cap08/06-outliers-alavancagem-e-colinearidade.html" class="sidebar-item-text sidebar-link"><span class="chapter-title">Outliers, Alavancagem e Colinearidade</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../../content/cap08/07-regressao-linear-contra-k-vizinhos.html" class="sidebar-item-text sidebar-link"><span class="chapter-title">Regressão Linear contra k-NN</span></a>
+  </div>
+</li>
+      </ul>
+  </li>
+        <li class="sidebar-item sidebar-item-section">
+      <div class="sidebar-item-container"> 
+            <a class="sidebar-item-text sidebar-link text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-9" role="navigation" aria-expanded="true">
+ <span class="menu-text">Capítulo 9: Classificação</span></a>
+          <a class="sidebar-item-toggle text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-9" role="navigation" aria-expanded="true" aria-label="Alternar seção">
+            <i class="bi bi-chevron-right ms-2"></i>
+          </a> 
+      </div>
+      <ul id="quarto-sidebar-section-9" class="collapse list-unstyled sidebar-section depth1 show">  
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../../content/cap09/index.html" class="sidebar-item-text sidebar-link"><span class="chapter-title">Visão Geral</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../../content/cap09/01-por-que-nao-regressao-linear.html" class="sidebar-item-text sidebar-link"><span class="chapter-title">Por que Não Regressão Linear</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../../content/cap09/02-regressao-logistica.html" class="sidebar-item-text sidebar-link"><span class="chapter-title">Regressão Logística</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../../content/cap09/03-logistica-multinomial.html" class="sidebar-item-text sidebar-link"><span class="chapter-title">Logística Multinomial</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../../content/cap09/04-modelos-generativos.html" class="sidebar-item-text sidebar-link"><span class="chapter-title">Modelos Generativos: LDA, QDA e Naive Bayes</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../../content/cap09/05-avaliando-um-classificador.html" class="sidebar-item-text sidebar-link"><span class="chapter-title">Avaliando um Classificador</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../../content/cap09/06-comparando-os-metodos.html" class="sidebar-item-text sidebar-link"><span class="chapter-title">Comparando os Métodos</span></a>
+  </div>
+</li>
+      </ul>
+  </li>
+        <li class="sidebar-item sidebar-item-section">
+      <div class="sidebar-item-container"> 
+            <a class="sidebar-item-text sidebar-link text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-10" role="navigation" aria-expanded="true">
+ <span class="menu-text">Capítulo 10: Reamostragem</span></a>
+          <a class="sidebar-item-toggle text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-10" role="navigation" aria-expanded="true" aria-label="Alternar seção">
+            <i class="bi bi-chevron-right ms-2"></i>
+          </a> 
+      </div>
+      <ul id="quarto-sidebar-section-10" class="collapse list-unstyled sidebar-section depth1 show">  
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../../content/cap10/index.html" class="sidebar-item-text sidebar-link"><span class="chapter-title">Visão Geral</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../../content/cap10/01-o-conjunto-de-validacao.html" class="sidebar-item-text sidebar-link"><span class="chapter-title">O Conjunto de Validação</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../../content/cap10/02-leave-one-out.html" class="sidebar-item-text sidebar-link"><span class="chapter-title">Validação Cruzada Leave-One-Out</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../../content/cap10/03-validacao-cruzada-k-fold.html" class="sidebar-item-text sidebar-link"><span class="chapter-title">Validação Cruzada k-Fold</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../../content/cap10/04-vies-e-variancia-na-validacao-cruzada.html" class="sidebar-item-text sidebar-link"><span class="chapter-title">Viés e Variância na Validação Cruzada</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../../content/cap10/05-validacao-cruzada-em-classificacao.html" class="sidebar-item-text sidebar-link"><span class="chapter-title">Validação Cruzada em Classificação</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../../content/cap10/06-vazamento.html" class="sidebar-item-text sidebar-link"><span class="chapter-title">Vazamento: o Pré-processamento Dentro da Validação</span></a>
+  </div>
+</li>
+      </ul>
+  </li>
+        <li class="sidebar-item sidebar-item-section">
+      <div class="sidebar-item-container"> 
+            <a class="sidebar-item-text sidebar-link text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-11" role="navigation" aria-expanded="true">
+ <span class="menu-text">Capítulo 11: Seleção de Modelos e Regularização</span></a>
+          <a class="sidebar-item-toggle text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-11" role="navigation" aria-expanded="true" aria-label="Alternar seção">
+            <i class="bi bi-chevron-right ms-2"></i>
+          </a> 
+      </div>
+      <ul id="quarto-sidebar-section-11" class="collapse list-unstyled sidebar-section depth1 show">  
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../../content/cap11/index.html" class="sidebar-item-text sidebar-link"><span class="chapter-title">Visão Geral</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../../content/cap11/01-selecao-de-subconjuntos.html" class="sidebar-item-text sidebar-link"><span class="chapter-title">Seleção de Subconjuntos</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../../content/cap11/02-escolhendo-o-modelo.html" class="sidebar-item-text sidebar-link"><span class="chapter-title">Escolhendo o Modelo: Cp, AIC, BIC e Validação</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../../content/cap11/03-regressao-ridge.html" class="sidebar-item-text sidebar-link"><span class="chapter-title">Regressão Ridge</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../../content/cap11/04-o-lasso.html" class="sidebar-item-text sidebar-link"><span class="chapter-title">O Lasso</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../../content/cap11/05-escolhendo-o-parametro-de-regularizacao.html" class="sidebar-item-text sidebar-link"><span class="chapter-title">Escolhendo o Parâmetro de Regularização</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../../content/cap11/06-regressao-por-componentes-principais.html" class="sidebar-item-text sidebar-link"><span class="chapter-title">Regressão por Componentes Principais</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../../content/cap11/07-o-que-muda-em-alta-dimensao.html" class="sidebar-item-text sidebar-link"><span class="chapter-title">O que Muda em Alta Dimensão</span></a>
+  </div>
+</li>
+      </ul>
+  </li>
+        <li class="sidebar-item sidebar-item-section">
+      <div class="sidebar-item-container"> 
+            <a class="sidebar-item-text sidebar-link text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-12" role="navigation" aria-expanded="true">
+ <span class="menu-text">Capítulo 12: Árvores de Decisão</span></a>
+          <a class="sidebar-item-toggle text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-12" role="navigation" aria-expanded="true" aria-label="Alternar seção">
+            <i class="bi bi-chevron-right ms-2"></i>
+          </a> 
+      </div>
+      <ul id="quarto-sidebar-section-12" class="collapse list-unstyled sidebar-section depth1 show">  
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../../content/cap12/index.html" class="sidebar-item-text sidebar-link"><span class="chapter-title">Visão Geral</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../../content/cap12/01-arvores-de-regressao.html" class="sidebar-item-text sidebar-link"><span class="chapter-title">Árvores de Regressão</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../../content/cap12/02-podando-a-arvore.html" class="sidebar-item-text sidebar-link"><span class="chapter-title">Podando a Árvore</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../../content/cap12/03-arvores-de-classificacao.html" class="sidebar-item-text sidebar-link"><span class="chapter-title">Árvores de Classificação</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../../content/cap12/04-arvores-contra-modelos-lineares.html" class="sidebar-item-text sidebar-link"><span class="chapter-title">Árvores contra Modelos Lineares</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../../content/cap12/05-vantagens-e-desvantagens.html" class="sidebar-item-text sidebar-link"><span class="chapter-title">Vantagens e Desvantagens das Árvores</span></a>
+  </div>
+</li>
+      </ul>
+  </li>
+        <li class="sidebar-item sidebar-item-section">
+      <div class="sidebar-item-container"> 
+            <a class="sidebar-item-text sidebar-link text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-13" role="navigation" aria-expanded="true">
+ <span class="menu-text">Capítulo 13: Bagging, Florestas e Boosting</span></a>
+          <a class="sidebar-item-toggle text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-13" role="navigation" aria-expanded="true" aria-label="Alternar seção">
+            <i class="bi bi-chevron-right ms-2"></i>
+          </a> 
+      </div>
+      <ul id="quarto-sidebar-section-13" class="collapse list-unstyled sidebar-section depth1 show">  
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../../content/cap13/index.html" class="sidebar-item-text sidebar-link"><span class="chapter-title">Visão Geral</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../../content/cap13/01-bagging.html" class="sidebar-item-text sidebar-link"><span class="chapter-title">Bagging</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../../content/cap13/02-erro-out-of-bag.html" class="sidebar-item-text sidebar-link"><span class="chapter-title">Erro Out-of-Bag</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../../content/cap13/03-florestas-aleatorias.html" class="sidebar-item-text sidebar-link"><span class="chapter-title">Florestas Aleatórias</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../../content/cap13/04-boosting.html" class="sidebar-item-text sidebar-link"><span class="chapter-title">Boosting</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../../content/cap13/05-importancia-de-variaveis.html" class="sidebar-item-text sidebar-link"><span class="chapter-title">Importância de Variáveis</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../../content/cap13/06-resumo-dos-metodos-de-ensemble.html" class="sidebar-item-text sidebar-link"><span class="chapter-title">Resumo dos Métodos de Ensemble</span></a>
+  </div>
+</li>
+      </ul>
+  </li>
+        <li class="sidebar-item sidebar-item-section">
+      <div class="sidebar-item-container"> 
+            <a class="sidebar-item-text sidebar-link text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-14" role="navigation" aria-expanded="true">
+ <span class="menu-text">Capítulo 14: Redes Neurais</span></a>
+          <a class="sidebar-item-toggle text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-14" role="navigation" aria-expanded="true" aria-label="Alternar seção">
+            <i class="bi bi-chevron-right ms-2"></i>
+          </a> 
+      </div>
+      <ul id="quarto-sidebar-section-14" class="collapse list-unstyled sidebar-section depth1 show">  
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../../content/cap14/index.html" class="sidebar-item-text sidebar-link"><span class="chapter-title">Visão Geral</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../../content/cap14/01-uma-rede-de-camada-unica.html" class="sidebar-item-text sidebar-link"><span class="chapter-title">Uma Rede de Camada Única</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../../content/cap14/02-redes-multicamada.html" class="sidebar-item-text sidebar-link"><span class="chapter-title">Redes Multicamada</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../../content/cap14/03-ajustando-uma-rede.html" class="sidebar-item-text sidebar-link active"><span class="chapter-title">Ajustando uma Rede: Retropropagação, Gradiente Estocástico e Regularização</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../../content/cap14/04-mlpclassifier-e-mlpregressor-na-pratica.html" class="sidebar-item-text sidebar-link"><span class="chapter-title">MLPClassifier e MLPRegressor na Prática</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../../content/cap14/05-quando-usar-deep-learning.html" class="sidebar-item-text sidebar-link"><span class="chapter-title">Quando Usar Deep Learning</span></a>
+  </div>
+</li>
+      </ul>
+  </li>
+        <li class="sidebar-item sidebar-item-section">
+      <div class="sidebar-item-container"> 
+            <a class="sidebar-item-text sidebar-link text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-15" role="navigation" aria-expanded="true">
+ <span class="menu-text">Capítulo 15: Aprendizado Não Supervisionado</span></a>
+          <a class="sidebar-item-toggle text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-15" role="navigation" aria-expanded="true" aria-label="Alternar seção">
+            <i class="bi bi-chevron-right ms-2"></i>
+          </a> 
+      </div>
+      <ul id="quarto-sidebar-section-15" class="collapse list-unstyled sidebar-section depth1 show">  
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../../content/cap15/index.html" class="sidebar-item-text sidebar-link"><span class="chapter-title">Visão Geral</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../../content/cap15/01-o-desafio-do-nao-supervisionado.html" class="sidebar-item-text sidebar-link"><span class="chapter-title">O Desafio do Não Supervisionado</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../../content/cap15/02-componentes-principais.html" class="sidebar-item-text sidebar-link"><span class="chapter-title">Componentes Principais</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../../content/cap15/03-proporcao-da-variancia-explicada.html" class="sidebar-item-text sidebar-link"><span class="chapter-title">Proporção da Variância Explicada</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../../content/cap15/04-k-means.html" class="sidebar-item-text sidebar-link"><span class="chapter-title">k-Means</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../../content/cap15/05-clustering-hierarquico.html" class="sidebar-item-text sidebar-link"><span class="chapter-title">Clustering Hierárquico</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../../content/cap15/06-questoes-praticas-em-clustering.html" class="sidebar-item-text sidebar-link"><span class="chapter-title">Questões Práticas em Clustering</span></a>
+  </div>
+</li>
+      </ul>
+  </li>
+        <li class="sidebar-item sidebar-item-section">
+      <div class="sidebar-item-container"> 
+            <a class="sidebar-item-text sidebar-link text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-16" role="navigation" aria-expanded="true">
+ <span class="menu-text">Capítulo 16: Máquinas de Vetores de Suporte</span></a>
+          <a class="sidebar-item-toggle text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-16" role="navigation" aria-expanded="true" aria-label="Alternar seção">
+            <i class="bi bi-chevron-right ms-2"></i>
+          </a> 
+      </div>
+      <ul id="quarto-sidebar-section-16" class="collapse list-unstyled sidebar-section depth1 show">  
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../../content/cap16/index.html" class="sidebar-item-text sidebar-link"><span class="chapter-title">Visão Geral</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../../content/cap16/01-hiperplanos-e-o-classificador-de-margem-maxima.html" class="sidebar-item-text sidebar-link"><span class="chapter-title">Hiperplanos e o Classificador de Margem Máxima</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../../content/cap16/02-o-classificador-de-vetores-de-suporte.html" class="sidebar-item-text sidebar-link"><span class="chapter-title">O Classificador de Vetores de Suporte</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../../content/cap16/03-kernels.html" class="sidebar-item-text sidebar-link"><span class="chapter-title">Kernels</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../../content/cap16/04-mais-de-duas-classes.html" class="sidebar-item-text sidebar-link"><span class="chapter-title">Mais de Duas Classes</span></a>
+  </div>
+</li>
+      </ul>
+  </li>
+        <li class="sidebar-item sidebar-item-section">
+      <div class="sidebar-item-container"> 
+            <a class="sidebar-item-text sidebar-link text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-17" role="navigation" aria-expanded="true">
+ <span class="menu-text">Capítulo 17: Um Problema do Começo ao Fim</span></a>
+          <a class="sidebar-item-toggle text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-17" role="navigation" aria-expanded="true" aria-label="Alternar seção">
+            <i class="bi bi-chevron-right ms-2"></i>
+          </a> 
+      </div>
+      <ul id="quarto-sidebar-section-17" class="collapse list-unstyled sidebar-section depth1 show">  
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../../content/cap17/index.html" class="sidebar-item-text sidebar-link"><span class="chapter-title">Visão Geral</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../../content/cap17/01-o-problema-e-o-dado-cru.html" class="sidebar-item-text sidebar-link"><span class="chapter-title">O Problema e o Dado Cru</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../../content/cap17/02-separar-antes-de-olhar.html" class="sidebar-item-text sidebar-link"><span class="chapter-title">Separar antes de Olhar: Treino, Teste e Vazamento</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../../content/cap17/03-pre-processamento-como-parte-do-modelo.html" class="sidebar-item-text sidebar-link"><span class="chapter-title">Pré-processamento como Parte do Modelo: ColumnTransformer e Pipeline</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../../content/cap17/04-comparando-modelos-por-validacao-cruzada.html" class="sidebar-item-text sidebar-link"><span class="chapter-title">Comparando Modelos por Validação Cruzada</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../../content/cap17/05-ajuste-de-hiperparametros-com-gridsearchcv.html" class="sidebar-item-text sidebar-link"><span class="chapter-title">Ajuste de Hiperparâmetros com GridSearchCV</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../../content/cap17/06-reportar.html" class="sidebar-item-text sidebar-link"><span class="chapter-title">Reportar: a Métrica Certa, e o que o Resultado Não Diz</span></a>
+  </div>
+</li>
+      </ul>
+  </li>
+    </ul>
+    </div>
+</nav>
+<div id="quarto-sidebar-glass" class="quarto-sidebar-collapse-item" data-bs-toggle="collapse" data-bs-target=".quarto-sidebar-collapse-item"></div>
+<!-- margin-sidebar -->
+    <div id="quarto-margin-sidebar" class="sidebar margin-sidebar">
+        <nav id="TOC" role="doc-toc" class="toc-active">
+    <h2 id="toc-title">Nesta página</h2>
+   
+  <ul>
+  <li><a href="#um-problema-com-vários-mínimos" id="toc-um-problema-com-vários-mínimos" class="nav-link active" data-scroll-target="#um-problema-com-vários-mínimos">Um problema com vários mínimos</a></li>
+  <li><a href="#gradiente-descendente-e-retropropagação" id="toc-gradiente-descendente-e-retropropagação" class="nav-link" data-scroll-target="#gradiente-descendente-e-retropropagação">Gradiente descendente e retropropagação</a></li>
+  <li><a href="#lotes-e-épocas" id="toc-lotes-e-épocas" class="nav-link" data-scroll-target="#lotes-e-épocas">Lotes e épocas</a></li>
+  <li><a href="#regularização" id="toc-regularização" class="nav-link" data-scroll-target="#regularização">Regularização</a></li>
+  <li><a href="#dropout" id="toc-dropout" class="nav-link" data-scroll-target="#dropout"><em>Dropout</em></a></li>
+  <li><a href="#onde-o-ajuste-termina" id="toc-onde-o-ajuste-termina" class="nav-link" data-scroll-target="#onde-o-ajuste-termina">Onde o ajuste termina</a></li>
+  </ul>
+<div class="toc-actions"><ul><li><a href="https://github.com/BragaD/UnDF-Bases5-CienciaDeDados-202602/issues/new" class="toc-action"><i class="bi bi-github"></i>Criar uma issue</a></li></ul></div></nav>
+    </div>
+<!-- main -->
+<main class="content" id="quarto-document-content">
+
+
+<header id="title-block-header" class="quarto-title-block default"><nav class="quarto-page-breadcrumbs quarto-title-breadcrumbs d-none d-lg-block" aria-label="breadcrumb"><ol class="breadcrumb"><li class="breadcrumb-item"><a href="../../content/cap14/index.html">Capítulo 14: Redes Neurais</a></li><li class="breadcrumb-item"><a href="../../content/cap14/03-ajustando-uma-rede.html"><span class="chapter-title">Ajustando uma Rede: Retropropagação, Gradiente Estocástico e Regularização</span></a></li></ol></nav>
+<div class="quarto-title">
+<h1 class="title"><span class="chapter-title">Ajustando uma Rede: Retropropagação, Gradiente Estocástico e Regularização</span></h1>
+</div>
+
+
+
+<div class="quarto-title-meta">
+
+    <div>
+    <div class="quarto-title-meta-heading">Autor</div>
+    <div class="quarto-title-meta-contents">
+             <p>Douglas Braga <a href="mailto:douglas.braga@undf.edu.br" class="quarto-title-author-email"><i class="bi bi-envelope"></i></a> </p>
+          </div>
+  </div>
+    
+  
+    
+  </div>
+  
+
+
+</header>
+
+
+<div class="callout callout-style-default callout-note callout-titled">
+<div class="callout-header d-flex align-content-center">
+<div class="callout-icon-container">
+<i class="callout-icon"></i>
+</div>
+<div class="callout-title-container flex-fill">
+Nota
+</div>
+</div>
+<div class="callout-body-container callout-body">
+<p>Esta seção corresponde à seção 10.7 de <span class="citation" data-cites="james2023">James et al. (<a href="#ref-james2023" role="doc-biblioref">2023</a>)</span>.</p>
+</div>
+</div>
+<p>Uma rede de cinco unidades ReLU liga os anos de carreira ao log do salário dos jogadores de beisebol, e o ajuste dela começa por pesos sorteados. Se o sorteio muda, sai a mesma curva? Se o ajuste pode terminar em lugares diferentes conforme o ponto de partida, como ele anda de um ponto a outro, e quando deve parar?</p>
+<p>A função <code>numero_br</code> escreve os números com a pontuação brasileira:</p>
+<div id="numero-br" class="cell" data-execution_count="2">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb1"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a>numero_br <span class="op">=</span> <span class="kw">lambda</span> valor, casas<span class="op">=</span><span class="dv">2</span>: (</span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a>    <span class="ss">f"</span><span class="sc">{</span>valor<span class="sc">:,.</span>{casas}f<span class="sc">}</span><span class="ss">"</span>.replace(<span class="st">","</span>, <span class="st">"_"</span>).replace(<span class="st">"."</span>, <span class="st">","</span>).replace(<span class="st">"_"</span>, <span class="st">"."</span>)</span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a>    .replace(<span class="st">"-"</span>, <span class="st">"−"</span>)</span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a>)</span></code></pre></div><button title="Copiar para a área de transferência" class="code-copy-button"><i class="bi"></i></button></div>
+</div>
+<section id="um-problema-com-vários-mínimos" class="level2">
+<h2 class="anchored" data-anchor-id="um-problema-com-vários-mínimos">Um problema com vários mínimos</h2>
+<p>O código abaixo lê os jogadores com salário e ajusta a mesma rede, cinco unidades ReLU sobre os anos padronizados, com o mesmo método de busca dos pesos, <code>solver="lbfgs"</code>, dez vezes. Só muda a semente (<code>random_state</code> de 0 a 9), e com ela os pesos sorteados no começo. Para cada ajuste, imprime o MSE de treino e confere se o <code>lbfgs</code> parou antes do limite de 5.000 iterações, isto é, porque o MSE deixou de cair e não porque as iterações acabaram:</p>
+<div id="sementes" class="cell" data-execution_count="3">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb2"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a>hitters <span class="op">=</span> pd.read_csv(<span class="st">"dados/Hitters.csv"</span>).dropna()</span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">"jogadores:"</span>, <span class="bu">len</span>(hitters))</span>
+<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a>y <span class="op">=</span> np.log(hitters[<span class="st">"salario"</span>])</span>
+<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a>X <span class="op">=</span> hitters[[<span class="st">"anos"</span>]]</span>
+<span id="cb2-5"><a href="#cb2-5" aria-hidden="true" tabindex="-1"></a>grade <span class="op">=</span> pd.DataFrame({<span class="st">"anos"</span>: np.linspace(<span class="dv">1</span>, <span class="dv">24</span>, <span class="dv">300</span>)})</span>
+<span id="cb2-6"><a href="#cb2-6" aria-hidden="true" tabindex="-1"></a>mse, curvas, redes, iteracoes <span class="op">=</span> {}, {}, {}, {}</span>
+<span id="cb2-7"><a href="#cb2-7" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> semente <span class="kw">in</span> <span class="bu">range</span>(<span class="dv">10</span>):</span>
+<span id="cb2-8"><a href="#cb2-8" aria-hidden="true" tabindex="-1"></a>    rede <span class="op">=</span> make_pipeline(</span>
+<span id="cb2-9"><a href="#cb2-9" aria-hidden="true" tabindex="-1"></a>        StandardScaler(),</span>
+<span id="cb2-10"><a href="#cb2-10" aria-hidden="true" tabindex="-1"></a>        MLPRegressor(hidden_layer_sizes<span class="op">=</span>(<span class="dv">5</span>,), solver<span class="op">=</span><span class="st">"lbfgs"</span>,</span>
+<span id="cb2-11"><a href="#cb2-11" aria-hidden="true" tabindex="-1"></a>                     max_iter<span class="op">=</span><span class="dv">5000</span>, random_state<span class="op">=</span>semente))</span>
+<span id="cb2-12"><a href="#cb2-12" aria-hidden="true" tabindex="-1"></a>    rede.fit(X, y)</span>
+<span id="cb2-13"><a href="#cb2-13" aria-hidden="true" tabindex="-1"></a>    mse[semente] <span class="op">=</span> mean_squared_error(y, rede.predict(X))</span>
+<span id="cb2-14"><a href="#cb2-14" aria-hidden="true" tabindex="-1"></a>    curvas[semente] <span class="op">=</span> rede.predict(grade)</span>
+<span id="cb2-15"><a href="#cb2-15" aria-hidden="true" tabindex="-1"></a>    redes[semente] <span class="op">=</span> rede</span>
+<span id="cb2-16"><a href="#cb2-16" aria-hidden="true" tabindex="-1"></a>    iteracoes[semente] <span class="op">=</span> rede[<span class="op">-</span><span class="dv">1</span>].n_iter_</span>
+<span id="cb2-17"><a href="#cb2-17" aria-hidden="true" tabindex="-1"></a>mse <span class="op">=</span> pd.Series(mse).<span class="bu">round</span>(<span class="dv">4</span>)</span>
+<span id="cb2-18"><a href="#cb2-18" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> semente, valor <span class="kw">in</span> mse.items():</span>
+<span id="cb2-19"><a href="#cb2-19" aria-hidden="true" tabindex="-1"></a>    <span class="bu">print</span>(<span class="ss">f"semente </span><span class="sc">{</span>semente<span class="sc">}</span><span class="ss">: MSE </span><span class="sc">{</span>numero_br(valor, <span class="dv">4</span>)<span class="sc">}</span><span class="ss">"</span>)</span>
+<span id="cb2-20"><a href="#cb2-20" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">"valores distintos:"</span>, mse.nunique())</span>
+<span id="cb2-21"><a href="#cb2-21" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">"de"</span>, numero_br(mse.<span class="bu">min</span>(), <span class="dv">4</span>), <span class="st">"a"</span>, numero_br(mse.<span class="bu">max</span>(), <span class="dv">4</span>))</span>
+<span id="cb2-22"><a href="#cb2-22" aria-hidden="true" tabindex="-1"></a>comum <span class="op">=</span> mse.value_counts()</span>
+<span id="cb2-23"><a href="#cb2-23" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">"o mais repetido:"</span>, numero_br(comum.index[<span class="dv">0</span>], <span class="dv">4</span>),</span>
+<span id="cb2-24"><a href="#cb2-24" aria-hidden="true" tabindex="-1"></a>      <span class="ss">f"(</span><span class="sc">{</span>comum<span class="sc">.</span>iloc[<span class="dv">0</span>]<span class="sc">}</span><span class="ss"> sementes)"</span>)</span>
+<span id="cb2-25"><a href="#cb2-25" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">"todas pararam antes de 5.000:"</span>,</span>
+<span id="cb2-26"><a href="#cb2-26" aria-hidden="true" tabindex="-1"></a>      <span class="bu">max</span>(iteracoes.values()) <span class="op">&lt;</span> <span class="dv">5000</span>)</span></code></pre></div><button title="Copiar para a área de transferência" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>jogadores: 263
+semente 0: MSE 0,3953
+semente 1: MSE 0,3928
+semente 2: MSE 0,3958
+semente 3: MSE 0,3953
+semente 4: MSE 0,3885
+semente 5: MSE 0,3946
+semente 6: MSE 0,3953
+semente 7: MSE 0,3953
+semente 8: MSE 0,3868
+semente 9: MSE 0,3953
+valores distintos: 6
+de 0,3868 a 0,3958
+o mais repetido: 0,3953 (5 sementes)
+todas pararam antes de 5.000: True</code></pre>
+</div>
+</div>
+<div class="funcao">
+<p><strong><code>serie.round(4)</code></strong> — cada valor arredondado a quatro casas. <strong><code>serie.nunique()</code></strong> — quantos valores diferentes a série tem. Em <strong><code>comum.index[0]</code></strong> e <strong><code>comum.iloc[0]</code></strong>, o resultado de <code>value_counts()</code> vem do valor mais frequente para o menos frequente: o primeiro rótulo é o MSE mais repetido, e o primeiro valor, quantas sementes chegaram a ele. Com <code>solver="lbfgs"</code>, <strong><code>.n_iter_</code></strong> conta as iterações do método, e não épocas.</p>
+</div>
+<p>Os 263 jogadores e as dez sementes dão seis valores diferentes de MSE de treino, de 0,3868 a 0,3958. O mais repetido, 0,3953, sai de cinco sementes. Nenhum ajuste esgotou as 5.000 iterações: todos pararam porque o MSE deixou de cair. Como a rede e os dados não mudam, a diferença vem só do ponto de partida. A figura mostra três das curvas: a da semente de menor MSE, a da primeira semente com o MSE mais repetido, e a da semente de maior MSE.</p>
+<div id="cell-fig-sementes" class="cell" data-execution_count="4">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb4"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a>repetida <span class="op">=</span> mse.index[mse <span class="op">==</span> comum.index[<span class="dv">0</span>]][<span class="dv">0</span>]</span>
+<span id="cb4-2"><a href="#cb4-2" aria-hidden="true" tabindex="-1"></a>escolhidas <span class="op">=</span> [mse.idxmin(), repetida, mse.idxmax()]</span>
+<span id="cb4-3"><a href="#cb4-3" aria-hidden="true" tabindex="-1"></a>tres_anos <span class="op">=</span> pd.DataFrame({<span class="st">"anos"</span>: [<span class="dv">1</span>, <span class="dv">9</span>, <span class="dv">24</span>]})</span>
+<span id="cb4-4"><a href="#cb4-4" aria-hidden="true" tabindex="-1"></a>nove <span class="op">=</span> grade[<span class="st">"anos"</span>] <span class="op">&gt;=</span> <span class="dv">9</span></span>
+<span id="cb4-5"><a href="#cb4-5" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> semente <span class="kw">in</span> escolhidas:</span>
+<span id="cb4-6"><a href="#cb4-6" aria-hidden="true" tabindex="-1"></a>    f <span class="op">=</span> redes[semente].predict(tres_anos)</span>
+<span id="cb4-7"><a href="#cb4-7" aria-hidden="true" tabindex="-1"></a>    <span class="bu">print</span>(<span class="ss">f"semente </span><span class="sc">{</span>semente<span class="sc">}</span><span class="ss">, f̂ em 1, 9, 24 anos:"</span>)</span>
+<span id="cb4-8"><a href="#cb4-8" aria-hidden="true" tabindex="-1"></a>    <span class="bu">print</span>(<span class="st">"  "</span>, <span class="st">" · "</span>.join(numero_br(v) <span class="cf">for</span> v <span class="kw">in</span> f))</span>
+<span id="cb4-9"><a href="#cb4-9" aria-hidden="true" tabindex="-1"></a>    variacao <span class="op">=</span> np.ptp(curvas[semente][nove])</span>
+<span id="cb4-10"><a href="#cb4-10" aria-hidden="true" tabindex="-1"></a>    <span class="bu">print</span>(<span class="st">"  variação de 9 a 24:"</span>, numero_br(variacao))</span>
+<span id="cb4-11"><a href="#cb4-11" aria-hidden="true" tabindex="-1"></a>rng <span class="op">=</span> np.random.default_rng(<span class="dv">14</span>)</span>
+<span id="cb4-12"><a href="#cb4-12" aria-hidden="true" tabindex="-1"></a>tremor <span class="op">=</span> rng.uniform(<span class="op">-</span><span class="fl">0.25</span>, <span class="fl">0.25</span>, size<span class="op">=</span><span class="bu">len</span>(X))</span>
+<span id="cb4-13"><a href="#cb4-13" aria-hidden="true" tabindex="-1"></a>fig, (ax, ax_z) <span class="op">=</span> plt.subplots(<span class="dv">2</span>, <span class="dv">1</span>, figsize<span class="op">=</span>(<span class="fl">3.8</span>, <span class="fl">5.0</span>))</span>
+<span id="cb4-14"><a href="#cb4-14" aria-hidden="true" tabindex="-1"></a>ax.scatter(X[<span class="st">"anos"</span>] <span class="op">+</span> tremor, y, s<span class="op">=</span><span class="dv">10</span>, color<span class="op">=</span><span class="st">"0.45"</span>, alpha<span class="op">=</span><span class="fl">0.4</span>,</span>
+<span id="cb4-15"><a href="#cb4-15" aria-hidden="true" tabindex="-1"></a>           linewidths<span class="op">=</span><span class="dv">0</span>)</span>
+<span id="cb4-16"><a href="#cb4-16" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> semente, cor, traco <span class="kw">in</span> <span class="bu">zip</span>(escolhidas, [<span class="st">"C0"</span>, <span class="st">"C1"</span>, <span class="st">"C2"</span>],</span>
+<span id="cb4-17"><a href="#cb4-17" aria-hidden="true" tabindex="-1"></a>                               [<span class="st">"-"</span>, <span class="st">"-"</span>, <span class="st">"--"</span>]):</span>
+<span id="cb4-18"><a href="#cb4-18" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> eixo <span class="kw">in</span> (ax, ax_z):</span>
+<span id="cb4-19"><a href="#cb4-19" aria-hidden="true" tabindex="-1"></a>        eixo.plot(grade[<span class="st">"anos"</span>], curvas[semente], color<span class="op">=</span>cor,</span>
+<span id="cb4-20"><a href="#cb4-20" aria-hidden="true" tabindex="-1"></a>                  linestyle<span class="op">=</span>traco, linewidth<span class="op">=</span><span class="fl">1.8</span>,</span>
+<span id="cb4-21"><a href="#cb4-21" aria-hidden="true" tabindex="-1"></a>                  label<span class="op">=</span><span class="ss">f"semente </span><span class="sc">{</span>semente<span class="sc">}</span><span class="ss">"</span>)</span>
+<span id="cb4-22"><a href="#cb4-22" aria-hidden="true" tabindex="-1"></a>ax.set_xlim(<span class="dv">0</span>, <span class="dv">25</span>)</span>
+<span id="cb4-23"><a href="#cb4-23" aria-hidden="true" tabindex="-1"></a>ax_z.set_xlim(<span class="dv">9</span>, <span class="dv">24</span>)</span>
+<span id="cb4-24"><a href="#cb4-24" aria-hidden="true" tabindex="-1"></a>ax_z.set_ylim(<span class="fl">6.2</span>, <span class="fl">6.6</span>)</span>
+<span id="cb4-25"><a href="#cb4-25" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> eixo <span class="kw">in</span> (ax, ax_z):</span>
+<span id="cb4-26"><a href="#cb4-26" aria-hidden="true" tabindex="-1"></a>    eixo.set_xlabel(<span class="st">"anos de carreira"</span>)</span>
+<span id="cb4-27"><a href="#cb4-27" aria-hidden="true" tabindex="-1"></a>    eixo.set_ylabel(<span class="st">"log do salário"</span>)</span>
+<span id="cb4-28"><a href="#cb4-28" aria-hidden="true" tabindex="-1"></a>    eixo.yaxis.set_major_formatter(<span class="kw">lambda</span> v, _: <span class="ss">f"</span><span class="sc">{</span>v<span class="sc">:g}</span><span class="ss">"</span>.replace(<span class="st">"."</span>, <span class="st">","</span>))</span>
+<span id="cb4-29"><a href="#cb4-29" aria-hidden="true" tabindex="-1"></a>ax.legend(loc<span class="op">=</span><span class="st">"lower center"</span>, bbox_to_anchor<span class="op">=</span>(<span class="fl">0.5</span>, <span class="fl">1.0</span>), ncol<span class="op">=</span><span class="dv">3</span>,</span>
+<span id="cb4-30"><a href="#cb4-30" aria-hidden="true" tabindex="-1"></a>          handlelength<span class="op">=</span><span class="fl">1.5</span>, columnspacing<span class="op">=</span><span class="dv">1</span>)</span>
+<span id="cb4-31"><a href="#cb4-31" aria-hidden="true" tabindex="-1"></a>plt.tight_layout()</span>
+<span id="cb4-32"><a href="#cb4-32" aria-hidden="true" tabindex="-1"></a>plt.show()</span></code></pre></div><button title="Copiar para a área de transferência" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>semente 8, f̂ em 1, 9, 24 anos:
+   4,71 · 6,47 · 6,32
+  variação de 9 a 24: 0,15
+semente 0, f̂ em 1, 9, 24 anos:
+   4,56 · 6,46 · 6,34
+  variação de 9 a 24: 0,12
+semente 2, f̂ em 1, 9, 24 anos:
+   4,56 · 6,44 · 6,44
+  variação de 9 a 24: 0,00</code></pre>
+</div>
+<div class="cell-output cell-output-display">
+<div id="fig-sementes" class="quarto-float quarto-figure quarto-figure-center anchored" alt="Dois gráficos empilhados com os anos de carreira no eixo horizontal e o log do salário no vertical. No de cima, de 1 a 24 anos, os jogadores aparecem como pontos cinza e as três curvas sobem rápido nos primeiros anos e depois se achatam; a azul começa mais alta que as outras duas. No de baixo, só as curvas, de 9 a 24 anos, com o eixo vertical de 6,2 a 6,6: a verde tracejada fica horizontal em 6,44, e a azul e a laranja descem devagar, a azul de 6,47 para 6,32 e a laranja de 6,46 para 6,34.">
+<figure class="quarto-float quarto-float-fig figure">
+<div aria-describedby="fig-sementes-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<img src="03-ajustando-uma-rede_files/figure-html/fig-sementes-output-2.png" alt="Dois gráficos empilhados com os anos de carreira no eixo horizontal e o log do salário no vertical. No de cima, de 1 a 24 anos, os jogadores aparecem como pontos cinza e as três curvas sobem rápido nos primeiros anos e depois se achatam; a azul começa mais alta que as outras duas. No de baixo, só as curvas, de 9 a 24 anos, com o eixo vertical de 6,2 a 6,6: a verde tracejada fica horizontal em 6,44, e a azul e a laranja descem devagar, a azul de 6,47 para 6,32 e a laranja de 6,46 para 6,34." width="524" height="685" class="figure-img">
+</div>
+<figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-fig" id="fig-sementes-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Figura&nbsp;1: Log do salário contra os anos de carreira e a curva ajustada pela mesma rede de cinco unidades ReLU com três sementes: a de menor MSE de treino (azul), a primeira com o MSE mais repetido (laranja) e a de maior (verde, tracejada). Em cima, todos os anos, com os jogadores em cinza, deslocados um pouco na horizontal, ao acaso, para os pontos de um mesmo ano não se sobreporem; embaixo, só as curvas, de 9 a 24 anos, com o eixo vertical ampliado.
+</figcaption>
+</figure>
+</div>
+</div>
+</div>
+<div class="funcao">
+<p><strong><code>np.ptp(v)</code></strong> — a diferença entre o maior e o menor valor de <code>v</code>. <strong><code>" · ".join(textos)</code></strong> — junta os textos numa linha só, separados por ” · “. Em <strong><code>ax.legend</code></strong>, <code>handlelength</code> e <code>columnspacing</code> encurtam o traço de amostra e o espaço entre as colunas da legenda, para ela caber na largura da figura.</p>
+</div>
+<p>A semente 8, a de menor MSE, começa mais alta: prevê 4,71 para um jogador de 1 ano, contra 4,56 das outras duas. A semente 2, a de maior MSE, fica horizontal, em 6,44: dos 9 aos 24 anos, a variação impressa é 0,00. As outras duas terminam, aos 24 anos, abaixo do valor que tinham aos 9: a semente 8 vai de 6,47 a 6,32, e a semente 0, de 6,46 a 6,34. São três funções diferentes, com MSE de treino próximos.</p>
+<p>Por que o ajuste não chega sempre ao mesmo lugar? Junte todos os pesos da rede, os <span class="math inline">\(w\)</span> e os <span class="math inline">\(\beta\)</span>, num vetor só, <span class="math inline">\(\theta\)</span>. O ajuste procura o <span class="math inline">\(\theta\)</span> que torna pequeno <span class="math display">\[
+R(\theta) = \frac12 \sum_{i=1}^{n} \big(y_i - f_\theta(x_i)\big)^2,
+\]</span> a metade do RSS, com <span class="math inline">\(f_\theta\)</span> a rede com os pesos <span class="math inline">\(\theta\)</span>. O fator <span class="math inline">\(\tfrac12\)</span> não muda onde fica o mínimo e deixa as derivadas mais limpas. Na regressão linear, <span class="math inline">\(R\)</span> é uma tigela, com um único fundo. Na rede, os pesos entram uns dentro dos outros, <span class="math inline">\(\beta_k\)</span> multiplicando <span class="math inline">\(g\)</span> de uma combinação dos <span class="math inline">\(w_{kj}\)</span>, e <span class="math inline">\(R(\theta)\)</span> pode ter vários vales. Um exemplo simples: trocar de lugar duas unidades, com os seus pesos, dá a mesma função com outro <span class="math inline">\(\theta\)</span>, e então um mesmo fundo aparece em vários pontos. E há vales de fundos diferentes, como sugerem os seis valores de MSE.</p>
+<div class="conceito">
+<p>Uma função é <strong><em>convexa</em></strong> quando tem a forma de uma tigela, como a <span class="math inline">\(R\)</span> da regressão linear: o segmento de reta entre dois pontos quaisquer do gráfico nunca passa por baixo dele, e o fundo é um só. A <span class="math inline">\(R(\theta)\)</span> de uma rede é <strong><em>não convexa</em></strong>: pode ter vários vales. O fundo de um vale, um ponto em que nenhum passo pequeno diminui <span class="math inline">\(R\)</span>, é um <strong><em>mínimo local</em></strong>; o mais baixo de todos é o <strong><em>mínimo global</em></strong>. O ajuste de uma rede anda a partir de um ponto sorteado e tende a parar no fundo do vale em que caiu, que depende do ponto de partida e não precisa ser o global.</p>
+</div>
+<p>Não dá para desenhar <span class="math inline">\(R(\theta)\)</span> inteira, com um eixo por peso, mas dá para andar por ela em linha reta. O MSE de treino é <span class="math inline">\(R\)</span> vezes <span class="math inline">\(2/n\)</span> e tem os mesmos vales. O código abaixo toma os pesos ajustados de duas sementes, a de menor e a de maior MSE, <span class="math inline">\(\theta_a\)</span> e <span class="math inline">\(\theta_b\)</span>, e mede o MSE de treino nos pesos <span class="math display">\[
+\theta(t) = (1 - t)\,\theta_a + t\,\theta_b,
+\]</span> com <span class="math inline">\(t\)</span> de <span class="math inline">\(-0{,}2\)</span> a <span class="math inline">\(1{,}2\)</span>: em <span class="math inline">\(t = 0\)</span> ficam os pesos da primeira semente, em <span class="math inline">\(t = 1\)</span> os da segunda, e entre os dois, uma mistura deles. A rede não é ajustada de novo; só os pesos dela são trocados antes de cada previsão:</p>
+<div id="cell-fig-vale" class="cell" data-execution_count="5">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb6"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb6-1"><a href="#cb6-1" aria-hidden="true" tabindex="-1"></a>s_a, s_b <span class="op">=</span> escolhidas[<span class="dv">0</span>], escolhidas[<span class="op">-</span><span class="dv">1</span>]</span>
+<span id="cb6-2"><a href="#cb6-2" aria-hidden="true" tabindex="-1"></a>rede_a, rede_b <span class="op">=</span> redes[s_a][<span class="op">-</span><span class="dv">1</span>], redes[s_b][<span class="op">-</span><span class="dv">1</span>]</span>
+<span id="cb6-3"><a href="#cb6-3" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">"pesos da rede:"</span>, <span class="bu">sum</span>(W.size <span class="cf">for</span> W <span class="kw">in</span> rede_a.coefs_)</span>
+<span id="cb6-4"><a href="#cb6-4" aria-hidden="true" tabindex="-1"></a>      <span class="op">+</span> <span class="bu">sum</span>(v.size <span class="cf">for</span> v <span class="kw">in</span> rede_a.intercepts_))</span>
+<span id="cb6-5"><a href="#cb6-5" aria-hidden="true" tabindex="-1"></a>mistura <span class="op">=</span> copy.deepcopy(redes[s_a])</span>
+<span id="cb6-6"><a href="#cb6-6" aria-hidden="true" tabindex="-1"></a>ts <span class="op">=</span> np.linspace(<span class="op">-</span><span class="fl">0.2</span>, <span class="fl">1.2</span>, <span class="dv">57</span>).<span class="bu">round</span>(<span class="dv">3</span>)</span>
+<span id="cb6-7"><a href="#cb6-7" aria-hidden="true" tabindex="-1"></a>caminho <span class="op">=</span> []</span>
+<span id="cb6-8"><a href="#cb6-8" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> t <span class="kw">in</span> ts:</span>
+<span id="cb6-9"><a href="#cb6-9" aria-hidden="true" tabindex="-1"></a>    mistura[<span class="op">-</span><span class="dv">1</span>].coefs_ <span class="op">=</span> [(<span class="dv">1</span> <span class="op">-</span> t) <span class="op">*</span> A <span class="op">+</span> t <span class="op">*</span> B <span class="cf">for</span> A, B</span>
+<span id="cb6-10"><a href="#cb6-10" aria-hidden="true" tabindex="-1"></a>                          <span class="kw">in</span> <span class="bu">zip</span>(rede_a.coefs_, rede_b.coefs_)]</span>
+<span id="cb6-11"><a href="#cb6-11" aria-hidden="true" tabindex="-1"></a>    mistura[<span class="op">-</span><span class="dv">1</span>].intercepts_ <span class="op">=</span> [(<span class="dv">1</span> <span class="op">-</span> t) <span class="op">*</span> A <span class="op">+</span> t <span class="op">*</span> B <span class="cf">for</span> A, B</span>
+<span id="cb6-12"><a href="#cb6-12" aria-hidden="true" tabindex="-1"></a>                               <span class="kw">in</span> <span class="bu">zip</span>(rede_a.intercepts_,</span>
+<span id="cb6-13"><a href="#cb6-13" aria-hidden="true" tabindex="-1"></a>                                      rede_b.intercepts_)]</span>
+<span id="cb6-14"><a href="#cb6-14" aria-hidden="true" tabindex="-1"></a>    caminho.append(mean_squared_error(y, mistura.predict(X)))</span>
+<span id="cb6-15"><a href="#cb6-15" aria-hidden="true" tabindex="-1"></a>caminho <span class="op">=</span> pd.Series(caminho, index<span class="op">=</span>ts)</span>
+<span id="cb6-16"><a href="#cb6-16" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="ss">f"t = 0 (semente </span><span class="sc">{</span>s_a<span class="sc">}</span><span class="ss">):"</span>, numero_br(caminho[<span class="fl">0.0</span>], <span class="dv">4</span>))</span>
+<span id="cb6-17"><a href="#cb6-17" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="ss">f"t = 1 (semente </span><span class="sc">{</span>s_b<span class="sc">}</span><span class="ss">):"</span>, numero_br(caminho[<span class="fl">1.0</span>], <span class="dv">4</span>))</span>
+<span id="cb6-18"><a href="#cb6-18" aria-hidden="true" tabindex="-1"></a>entre <span class="op">=</span> caminho[(ts <span class="op">&gt;</span> <span class="dv">0</span>) <span class="op">&amp;</span> (ts <span class="op">&lt;</span> <span class="dv">1</span>)]</span>
+<span id="cb6-19"><a href="#cb6-19" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">"maior MSE entre 0 e 1:"</span>, numero_br(entre.<span class="bu">max</span>(), <span class="dv">1</span>))</span>
+<span id="cb6-20"><a href="#cb6-20" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">"  em t ="</span>, numero_br(entre.idxmax(), <span class="dv">2</span>))</span>
+<span id="cb6-21"><a href="#cb6-21" aria-hidden="true" tabindex="-1"></a>passo <span class="op">=</span> <span class="fl">0.025</span></span>
+<span id="cb6-22"><a href="#cb6-22" aria-hidden="true" tabindex="-1"></a>fundos <span class="op">=</span> <span class="bu">all</span>(caminho[<span class="bu">round</span>(c <span class="op">+</span> d, <span class="dv">3</span>)] <span class="op">&gt;</span> caminho[c]</span>
+<span id="cb6-23"><a href="#cb6-23" aria-hidden="true" tabindex="-1"></a>             <span class="cf">for</span> c <span class="kw">in</span> (<span class="fl">0.0</span>, <span class="fl">1.0</span>) <span class="cf">for</span> d <span class="kw">in</span> (<span class="op">-</span>passo, passo))</span>
+<span id="cb6-24"><a href="#cb6-24" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">"sobe dos dois lados de 0 e de 1:"</span>, fundos)</span>
+<span id="cb6-25"><a href="#cb6-25" aria-hidden="true" tabindex="-1"></a>fig, ax <span class="op">=</span> plt.subplots(figsize<span class="op">=</span>(<span class="fl">3.8</span>, <span class="fl">3.0</span>))</span>
+<span id="cb6-26"><a href="#cb6-26" aria-hidden="true" tabindex="-1"></a>ax.plot(caminho.index, caminho, color<span class="op">=</span><span class="st">"0.45"</span>, linewidth<span class="op">=</span><span class="fl">1.8</span>)</span>
+<span id="cb6-27"><a href="#cb6-27" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> t, semente, cor <span class="kw">in</span> [(<span class="fl">0.0</span>, s_a, <span class="st">"C0"</span>), (<span class="fl">1.0</span>, s_b, <span class="st">"C2"</span>)]:</span>
+<span id="cb6-28"><a href="#cb6-28" aria-hidden="true" tabindex="-1"></a>    ax.plot(t, caminho[t], <span class="st">"o"</span>, color<span class="op">=</span>cor, markersize<span class="op">=</span><span class="dv">8</span>,</span>
+<span id="cb6-29"><a href="#cb6-29" aria-hidden="true" tabindex="-1"></a>            label<span class="op">=</span><span class="ss">f"semente </span><span class="sc">{</span>semente<span class="sc">}</span><span class="ss">"</span>)</span>
+<span id="cb6-30"><a href="#cb6-30" aria-hidden="true" tabindex="-1"></a>ax.set_xlim(<span class="op">-</span><span class="fl">0.25</span>, <span class="fl">1.25</span>)</span>
+<span id="cb6-31"><a href="#cb6-31" aria-hidden="true" tabindex="-1"></a>ax.set_xlabel(<span class="st">"t"</span>)</span>
+<span id="cb6-32"><a href="#cb6-32" aria-hidden="true" tabindex="-1"></a>ax.set_ylabel(<span class="st">"MSE de treino"</span>)</span>
+<span id="cb6-33"><a href="#cb6-33" aria-hidden="true" tabindex="-1"></a>ax.set_ylim(bottom<span class="op">=</span><span class="dv">0</span>)</span>
+<span id="cb6-34"><a href="#cb6-34" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> eixo <span class="kw">in</span> (ax.xaxis, ax.yaxis):</span>
+<span id="cb6-35"><a href="#cb6-35" aria-hidden="true" tabindex="-1"></a>    eixo.set_major_formatter(<span class="kw">lambda</span> v, _: <span class="ss">f"</span><span class="sc">{</span>v<span class="sc">:g}</span><span class="ss">"</span>.replace(<span class="st">"."</span>, <span class="st">","</span>)</span>
+<span id="cb6-36"><a href="#cb6-36" aria-hidden="true" tabindex="-1"></a>                             .replace(<span class="st">"-"</span>, <span class="st">"−"</span>))</span>
+<span id="cb6-37"><a href="#cb6-37" aria-hidden="true" tabindex="-1"></a>ax.legend(loc<span class="op">=</span><span class="st">"lower center"</span>, bbox_to_anchor<span class="op">=</span>(<span class="fl">0.5</span>, <span class="fl">1.0</span>), ncol<span class="op">=</span><span class="dv">2</span>)</span>
+<span id="cb6-38"><a href="#cb6-38" aria-hidden="true" tabindex="-1"></a>plt.tight_layout()</span>
+<span id="cb6-39"><a href="#cb6-39" aria-hidden="true" tabindex="-1"></a>plt.show()</span></code></pre></div><button title="Copiar para a área de transferência" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>pesos da rede: 16
+t = 0 (semente 8): 0,3868
+t = 1 (semente 2): 0,3958
+maior MSE entre 0 e 1: 3,3
+  em t = 0,40
+sobe dos dois lados de 0 e de 1: True</code></pre>
+</div>
+<div class="cell-output cell-output-display">
+<div id="fig-vale" class="quarto-float quarto-figure quarto-figure-center anchored" alt="Gráfico de linha com t, de −0,2 a 1,2, no eixo horizontal e o MSE de treino no vertical. A curva desce de um valor alto em t = −0,2 até um fundo perto de 0,4 em t = 0, marcado em azul; sobe até cerca de 3,3 perto de t = 0,4; desce até outro fundo perto de 0,4 em t = 1, marcado em verde; e volta a subir, menos, até t = 1,2.">
+<figure class="quarto-float quarto-float-fig figure">
+<div aria-describedby="fig-vale-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<img src="03-ajustando-uma-rede_files/figure-html/fig-vale-output-2.png" alt="Gráfico de linha com t, de −0,2 a 1,2, no eixo horizontal e o MSE de treino no vertical. A curva desce de um valor alto em t = −0,2 até um fundo perto de 0,4 em t = 0, marcado em azul; sobe até cerca de 3,3 perto de t = 0,4; desce até outro fundo perto de 0,4 em t = 1, marcado em verde; e volta a subir, menos, até t = 1,2." width="519" height="405" class="figure-img">
+</div>
+<figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-fig" id="fig-vale-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Figura&nbsp;2: MSE de treino da rede dos anos de carreira nos pesos do caminho em linha reta entre os pesos ajustados de duas sementes: a de menor MSE, em t = 0 (azul), e a de maior, em t = 1 (verde).
+</figcaption>
+</figure>
+</div>
+</div>
+</div>
+<div class="funcao">
+<p><strong><code>copy.deepcopy(objeto)</code></strong> — uma cópia independente, com os pesos ajustados junto, para que trocar <code>coefs_</code> e <code>intercepts_</code> da cópia mude o que o <code>predict</code> dela calcula sem mexer na rede original. <strong><code>.round(3)</code></strong> num vetor do <code>numpy</code> — arredonda a três casas, para que 0 e 1 fiquem exatos na grade de <span class="math inline">\(t\)</span>.</p>
+</div>
+<p>Em <span class="math inline">\(t = 0\)</span> e <span class="math inline">\(t = 1\)</span>, o MSE é o das duas sementes, 0,3868 e 0,3958. Entre elas, o caminho sobe até cerca de 3,3, perto de <span class="math inline">\(t = 0{,}4\)</span>, e, a partir de cada extremo, o MSE sobe para os dois lados: em linha reta, não se passa de uma semente à outra sem subir um morro. Isso sozinho não separa os vales. A linha reta é só um caminho entre muitos, e entre duas cópias do mesmo fundo, com as unidades trocadas de lugar, ela também pode subir. O que mostra que as duas sementes pararam em fundos diferentes são os dois MSE, 0,3868 e 0,3958, e as curvas diferentes da figura anterior.</p>
+</section>
+<section id="gradiente-descendente-e-retropropagação" class="level2">
+<h2 class="anchored" data-anchor-id="gradiente-descendente-e-retropropagação">Gradiente descendente e retropropagação</h2>
+<p>O ajuste anda pelos vales com o gradiente descendente do capítulo 5: a partir de um ponto, calcula para onde <span class="math inline">\(R\)</span> sobe mais depressa e dá um passo pequeno no sentido contrário. Uma <strong><em>derivada parcial</em></strong> mede quanto <span class="math inline">\(R\)</span> muda quando só um peso muda um pouco, com todos os outros parados. O <strong><em>gradiente</em></strong> de <span class="math inline">\(R\)</span> no ponto <span class="math inline">\(\theta^m\)</span> é o vetor de todas as derivadas parciais, uma por peso, calculadas no ponto atual: <span class="math display">\[
+\nabla R(\theta^m) = \frac{\partial R(\theta)}{\partial \theta}\bigg|_{\theta = \theta^m}.
+\]</span> O passo é <span class="math display">\[
+\theta^{m+1} \leftarrow \theta^m - \rho\, \nabla R(\theta^m),
+\]</span> em que <span class="math inline">\(\rho\)</span> é a <strong><em>taxa de aprendizado</em></strong>, o tamanho do passo. Com <span class="math inline">\(\rho\)</span> pequeno o bastante, cada passo não aumenta <span class="math inline">\(R\)</span>; com <span class="math inline">\(\rho\)</span> grande demais, os passos pulam o fundo do vale, como no capítulo 5. O processo repete até <span class="math inline">\(R\)</span> parar de cair.</p>
+<p><span class="math inline">\(R\)</span> é uma soma de parcelas, uma por jogador, e o gradiente de uma soma é a soma dos gradientes. Para a rede de uma camada, escreva <span class="math inline">\(z_{ik} = w_{k0} + \sum_j w_{kj} x_{ij}\)</span>, a entrada da unidade <span class="math inline">\(k\)</span> no jogador <span class="math inline">\(i\)</span>. A previsão para ele é <span class="math display">\[
+f_\theta(x_i) = \beta_0 + \sum_{k=1}^{K} \beta_k\, g(z_{ik}),
+\]</span> e a parcela dele em <span class="math inline">\(R\)</span> é <span class="math display">\[
+R_i(\theta) = \frac12 \big(y_i - f_\theta(x_i)\big)^2.
+\]</span></p>
+<p>Comece pelas derivadas parciais de <span class="math inline">\(R_i\)</span> em relação aos pesos da saída, os <span class="math inline">\(\beta_k\)</span>, que multiplicam <span class="math inline">\(g(z_{ik})\)</span> diretamente. A regra da cadeia dá <span class="math display">\[
+\frac{\partial R_i}{\partial \beta_k} = -\big(y_i - f_\theta(x_i)\big)\, g(z_{ik}):
+\]</span> o resíduo do jogador <span class="math inline">\(i\)</span>, com o sinal trocado, vezes a ativação da unidade <span class="math inline">\(k\)</span>. A unidade que ativa mais nesse jogador recebe uma parte maior do resíduo.</p>
+<p>O código abaixo faz essa conta para o segundo jogador da tabela, na rede da semente de menor MSE: a previsão, o resíduo e, para cada unidade <span class="math inline">\(k\)</span>, a ativação <span class="math inline">\(g(z_{ik})\)</span>, calculada com os pesos de <code>coefs_</code> e <code>intercepts_</code>, e a derivada <span class="math inline">\(\partial R_i / \partial \beta_k\)</span>:</p>
+<div id="um-jogador" class="cell" data-execution_count="6">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb8"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb8-1"><a href="#cb8-1" aria-hidden="true" tabindex="-1"></a>ajustada <span class="op">=</span> redes[s_a]</span>
+<span id="cb8-2"><a href="#cb8-2" aria-hidden="true" tabindex="-1"></a>jogador <span class="op">=</span> X.iloc[[<span class="dv">1</span>]]</span>
+<span id="cb8-3"><a href="#cb8-3" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">"anos de carreira:"</span>, jogador[<span class="st">"anos"</span>].iloc[<span class="dv">0</span>])</span>
+<span id="cb8-4"><a href="#cb8-4" aria-hidden="true" tabindex="-1"></a>f_i <span class="op">=</span> ajustada.predict(jogador)[<span class="dv">0</span>]</span>
+<span id="cb8-5"><a href="#cb8-5" aria-hidden="true" tabindex="-1"></a>residuo <span class="op">=</span> y.iloc[<span class="dv">1</span>] <span class="op">-</span> f_i</span>
+<span id="cb8-6"><a href="#cb8-6" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">"y:"</span>, numero_br(y.iloc[<span class="dv">1</span>], <span class="dv">3</span>), <span class="st">"· f̂:"</span>, numero_br(f_i, <span class="dv">3</span>))</span>
+<span id="cb8-7"><a href="#cb8-7" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">"resíduo:"</span>, numero_br(residuo))</span>
+<span id="cb8-8"><a href="#cb8-8" aria-hidden="true" tabindex="-1"></a>W, v <span class="op">=</span> ajustada[<span class="op">-</span><span class="dv">1</span>].coefs_, ajustada[<span class="op">-</span><span class="dv">1</span>].intercepts_</span>
+<span id="cb8-9"><a href="#cb8-9" aria-hidden="true" tabindex="-1"></a>z <span class="op">=</span> ajustada[<span class="dv">0</span>].transform(jogador) <span class="op">@</span> W[<span class="dv">0</span>] <span class="op">+</span> v[<span class="dv">0</span>]</span>
+<span id="cb8-10"><a href="#cb8-10" aria-hidden="true" tabindex="-1"></a>g_z <span class="op">=</span> np.maximum(<span class="dv">0</span>, z).ravel()</span>
+<span id="cb8-11"><a href="#cb8-11" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">"confere com o predict:"</span>,</span>
+<span id="cb8-12"><a href="#cb8-12" aria-hidden="true" tabindex="-1"></a>      np.isclose(g_z <span class="op">@</span> W[<span class="dv">1</span>].ravel() <span class="op">+</span> v[<span class="dv">1</span>][<span class="dv">0</span>], f_i))</span>
+<span id="cb8-13"><a href="#cb8-13" aria-hidden="true" tabindex="-1"></a>derivadas <span class="op">=</span> pd.DataFrame(</span>
+<span id="cb8-14"><a href="#cb8-14" aria-hidden="true" tabindex="-1"></a>    {<span class="st">"g(z)"</span>: g_z, <span class="st">"derivada"</span>: <span class="op">-</span>residuo <span class="op">*</span> g_z <span class="op">+</span> <span class="fl">0.0</span>},</span>
+<span id="cb8-15"><a href="#cb8-15" aria-hidden="true" tabindex="-1"></a>    index<span class="op">=</span>[<span class="ss">f"unidade </span><span class="sc">{</span>k<span class="sc">}</span><span class="ss">"</span> <span class="cf">for</span> k <span class="kw">in</span> <span class="bu">range</span>(<span class="dv">1</span>, <span class="dv">6</span>)])</span>
+<span id="cb8-16"><a href="#cb8-16" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(derivadas.<span class="bu">map</span>(numero_br).to_string())</span></code></pre></div><button title="Copiar para a área de transferência" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>anos de carreira: 3
+y: 6,174 · f̂: 5,037
+resíduo: 1,14
+confere com o predict: True
+           g(z) derivada
+unidade 1  0,00     0,00
+unidade 2  0,00     0,00
+unidade 3  0,00     0,00
+unidade 4  0,60    −0,68
+unidade 5  0,94    −1,07</code></pre>
+</div>
+</div>
+<div class="funcao">
+<p><strong><code>ajustada[0].transform(jogador)</code></strong> — aplica ao jogador a padronização do primeiro passo do pipeline, a mesma que o <code>predict</code> aplica antes da rede. <strong><code>z @ W[0]</code></strong> — multiplica a linha do jogador pela tabela de pesos das entradas: uma soma <span class="math inline">\(\sum_j w_{kj} x_{ij}\)</span> por unidade. <strong><code>np.isclose(a, b)</code></strong> — <code>True</code> se os dois números são iguais a menos de uma diferença muito pequena. <strong><code>+ 0.0</code></strong> — transforma em <code>0.0</code> o <code>-0.0</code> que sai de multiplicar zero por um número negativo, para a tabela não imprimir “−0,00”.</p>
+</div>
+<p>O jogador tem 3 anos de carreira e log do salário 6,174; a rede prevê 5,037, e o resíduo, 6,174 − 5,037 = 1,137 (1,14 na saída, com duas casas), é positivo: a previsão ficou abaixo. As unidades 1 a 3 têm ativação 0 para ele, e a derivada em relação aos <span class="math inline">\(\beta_k\)</span> delas é 0. As unidades 4 e 5 ativam, com 0,60 e 0,94, e as derivadas são −0,68 e −1,07, negativas. O passo anda contra o gradiente: por conta deste jogador, <span class="math inline">\(\beta_4\)</span> e <span class="math inline">\(\beta_5\)</span> aumentam, o <span class="math inline">\(\beta_5\)</span> mais que o <span class="math inline">\(\beta_4\)</span>, e a previsão para ele sobe na direção do valor observado.</p>
+<p>Os pesos das unidades, os <span class="math inline">\(w_{kj}\)</span>, estão um elo mais para dentro: mudar <span class="math inline">\(w_{kj}\)</span> muda <span class="math inline">\(z_{ik}\)</span>, que muda <span class="math inline">\(g(z_{ik})\)</span>, que, multiplicado por <span class="math inline">\(\beta_k\)</span>, muda a previsão. A cadeia ganha esses elos: <span class="math display">\[
+\begin{aligned}
+\frac{\partial R_i}{\partial w_{kj}} = {}&amp;-\big(y_i - f_\theta(x_i)\big)\\
+&amp;\cdot \beta_k\, g'(z_{ik})\, x_{ij}.
+\end{aligned}
+\]</span> O mesmo resíduo chega à unidade <span class="math inline">\(k\)</span> passando pelo peso <span class="math inline">\(\beta_k\)</span> e pela derivada <span class="math inline">\(g'\)</span>, e dali a cada preditor <span class="math inline">\(j\)</span>. Com a ReLU, <span class="math inline">\(g'(z)\)</span> vale 0 para <span class="math inline">\(z\)</span> negativo e 1 para <span class="math inline">\(z\)</span> positivo: uma unidade desligada para o jogador <span class="math inline">\(i\)</span> não recebe nada do resíduo dele, e os pesos dela não mudam por causa desse jogador.</p>
+<div class="conceito">
+<p><strong><em>Retropropagação</em></strong> (<em>backpropagation</em>) é o cálculo do gradiente pela regra da cadeia, da saída para a entrada: o resíduo de cada observação é repartido entre os pesos da última camada e, por eles, levado de volta camada a camada até os pesos da primeira. Numa rede com mais camadas, a conta é a mesma, com mais elos na cadeia.</p>
+</div>
+<p>O gradiente tem uma derivada por peso. O código abaixo conta os pesos de uma rede com 784 entradas, duas camadas escondidas de 256 e 128 unidades e 10 saídas, a forma da rede dos dígitos adiante, e mostra dois padrões do <code>MLPClassifier</code>, o método de busca e o tamanho do passo:</p>
+<div id="tamanho" class="cell" data-execution_count="7">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb10"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb10-1"><a href="#cb10-1" aria-hidden="true" tabindex="-1"></a>camadas <span class="op">=</span> [<span class="dv">784</span>, <span class="dv">256</span>, <span class="dv">128</span>, <span class="dv">10</span>]</span>
+<span id="cb10-2"><a href="#cb10-2" aria-hidden="true" tabindex="-1"></a>pesos <span class="op">=</span> <span class="bu">sum</span>((entra <span class="op">+</span> <span class="dv">1</span>) <span class="op">*</span> sai</span>
+<span id="cb10-3"><a href="#cb10-3" aria-hidden="true" tabindex="-1"></a>            <span class="cf">for</span> entra, sai <span class="kw">in</span> <span class="bu">zip</span>(camadas[:<span class="op">-</span><span class="dv">1</span>], camadas[<span class="dv">1</span>:]))</span>
+<span id="cb10-4"><a href="#cb10-4" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">"pesos de 784-256-128-10:"</span>, numero_br(pesos, <span class="dv">0</span>))</span>
+<span id="cb10-5"><a href="#cb10-5" aria-hidden="true" tabindex="-1"></a>padrao <span class="op">=</span> MLPClassifier()</span>
+<span id="cb10-6"><a href="#cb10-6" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">"solver padrão:"</span>, padrao.solver)</span>
+<span id="cb10-7"><a href="#cb10-7" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">"learning_rate_init:"</span>, numero_br(padrao.learning_rate_init, <span class="dv">3</span>))</span>
+<span id="cb10-8"><a href="#cb10-8" aria-hidden="true" tabindex="-1"></a>regressor <span class="op">=</span> MLPRegressor()</span>
+<span id="cb10-9"><a href="#cb10-9" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">"iguais no MLPRegressor:"</span>,</span>
+<span id="cb10-10"><a href="#cb10-10" aria-hidden="true" tabindex="-1"></a>      regressor.solver <span class="op">==</span> padrao.solver</span>
+<span id="cb10-11"><a href="#cb10-11" aria-hidden="true" tabindex="-1"></a>      <span class="kw">and</span> regressor.learning_rate_init <span class="op">==</span> padrao.learning_rate_init)</span></code></pre></div><button title="Copiar para a área de transferência" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>pesos de 784-256-128-10: 235.146
+solver padrão: adam
+learning_rate_init: 0,001
+iguais no MLPRegressor: True</code></pre>
+</div>
+</div>
+<div class="funcao">
+<p><strong><code>(entra + 1) * sai</code></strong> — os pesos de uma camada: um por par de unidades das duas camadas, mais um viés por unidade de saída. <strong><code>MLPClassifier().solver</code></strong> e <strong><code>.learning_rate_init</code></strong> — os valores padrão desses dois parâmetros, lidos de uma rede ainda não ajustada.</p>
+</div>
+<p>Na rede dos anos de carreira, são 16 derivadas a cada passo; numa rede dessa forma, 235.146, e a retropropagação calcula todas numa passada de ida pela rede, para as previsões, e uma de volta, para as derivadas. No <code>scikit-learn</code>, <span class="math inline">\(\rho\)</span> é o parâmetro <code>learning_rate_init</code>, 0,001 no padrão. O método padrão do <code>MLPRegressor</code> e do <code>MLPClassifier</code>, <code>solver="adam"</code>, parte desse <span class="math inline">\(\rho\)</span> e ajusta o tamanho do passo de cada peso a partir dos gradientes dos passos anteriores, um dos otimizadores adaptativos da seção 5.4. O <code>solver="lbfgs"</code> da rede dos anos de carreira também anda por passos guiados pelo gradiente, calculado com todos os jogadores a cada passo.</p>
+</section>
+<section id="lotes-e-épocas" class="level2">
+<h2 class="anchored" data-anchor-id="lotes-e-épocas">Lotes e épocas</h2>
+<p>Somar o gradiente de todas as <span class="math inline">\(n\)</span> observações a cada passo custa caro quando <span class="math inline">\(n\)</span> é grande. A alternativa é calcular cada passo com uma amostra pequena das observações, um <strong><em>lote</em></strong> (<em>minibatch</em>): o gradiente do lote aponta mais ou menos para onde aponta o gradiente de todas, e sai muito mais barato. É o gradiente por <em>minibatch</em> da seção 5.6. Em redes neurais, esse método leva o nome de <strong><em>gradiente descendente estocástico</em></strong> (SGD, de <em>stochastic gradient descent</em>) qualquer que seja o tamanho do lote, e não só com uma observação por passo, que é o método que a seção 5.6 chama de estocástico. Uma <strong><em>época</em></strong> é uma passada por todas as observações de treino: com lotes de <span class="math inline">\(b\)</span> observações, uma época tem cerca de <span class="math inline">\(n/b\)</span> passos.</p>
+<p>Para ver o que acontece ao longo das épocas, é preciso medir, depois de cada uma, o erro em imagens que não entraram no ajuste. O próximo trecho lê as imagens de treino e de teste do MNIST e separa das de treino um quinto para <strong><em>validação</em></strong>, com a mesma proporção de cada dígito; as outras ficam para o ajuste dos pesos. O lote padrão do <code>MLPClassifier</code> tem <span class="math inline">\(b = \min(200, n)\)</span> imagens:</p>
+<div id="dados-mnist" class="cell" data-execution_count="8">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb12"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb12-1"><a href="#cb12-1" aria-hidden="true" tabindex="-1"></a>treino <span class="op">=</span> pd.read_csv(<span class="st">"dados/mnist_treino.csv.gz"</span>)</span>
+<span id="cb12-2"><a href="#cb12-2" aria-hidden="true" tabindex="-1"></a>teste <span class="op">=</span> pd.read_csv(<span class="st">"dados/mnist_teste.csv.gz"</span>)</span>
+<span id="cb12-3"><a href="#cb12-3" aria-hidden="true" tabindex="-1"></a>treino_X <span class="op">=</span> treino.drop(columns<span class="op">=</span><span class="st">"digito"</span>) <span class="op">/</span> <span class="dv">255</span></span>
+<span id="cb12-4"><a href="#cb12-4" aria-hidden="true" tabindex="-1"></a>treino_y <span class="op">=</span> treino[<span class="st">"digito"</span>]</span>
+<span id="cb12-5"><a href="#cb12-5" aria-hidden="true" tabindex="-1"></a>teste_X <span class="op">=</span> teste.drop(columns<span class="op">=</span><span class="st">"digito"</span>) <span class="op">/</span> <span class="dv">255</span></span>
+<span id="cb12-6"><a href="#cb12-6" aria-hidden="true" tabindex="-1"></a>teste_y <span class="op">=</span> teste[<span class="st">"digito"</span>]</span>
+<span id="cb12-7"><a href="#cb12-7" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">"treino:"</span>, numero_br(<span class="bu">len</span>(treino), <span class="dv">0</span>),</span>
+<span id="cb12-8"><a href="#cb12-8" aria-hidden="true" tabindex="-1"></a>      <span class="st">"· teste:"</span>, numero_br(<span class="bu">len</span>(teste), <span class="dv">0</span>))</span>
+<span id="cb12-9"><a href="#cb12-9" aria-hidden="true" tabindex="-1"></a>ajuste_X, valid_X, ajuste_y, valid_y <span class="op">=</span> train_test_split(</span>
+<span id="cb12-10"><a href="#cb12-10" aria-hidden="true" tabindex="-1"></a>    treino_X, treino_y, test_size<span class="op">=</span><span class="fl">0.2</span>, random_state<span class="op">=</span><span class="dv">14</span>,</span>
+<span id="cb12-11"><a href="#cb12-11" aria-hidden="true" tabindex="-1"></a>    stratify<span class="op">=</span>treino_y)</span>
+<span id="cb12-12"><a href="#cb12-12" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">"ajuste:"</span>, numero_br(<span class="bu">len</span>(ajuste_X), <span class="dv">0</span>), <span class="st">"imagens"</span>)</span>
+<span id="cb12-13"><a href="#cb12-13" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">"validação:"</span>, numero_br(<span class="bu">len</span>(valid_X), <span class="dv">0</span>), <span class="st">"imagens"</span>)</span>
+<span id="cb12-14"><a href="#cb12-14" aria-hidden="true" tabindex="-1"></a>lote <span class="op">=</span> <span class="bu">min</span>(<span class="dv">200</span>, <span class="bu">len</span>(ajuste_X))</span>
+<span id="cb12-15"><a href="#cb12-15" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">"lote:"</span>, lote, <span class="st">"imagens"</span>)</span>
+<span id="cb12-16"><a href="#cb12-16" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">"passos por época:"</span>, <span class="bu">len</span>(ajuste_X) <span class="op">//</span> lote)</span></code></pre></div><button title="Copiar para a área de transferência" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>treino: 6.000 · teste: 2.000
+ajuste: 4.800 imagens
+validação: 1.200 imagens
+lote: 200 imagens
+passos por época: 24</code></pre>
+</div>
+</div>
+<div class="funcao">
+<p><strong><code>train_test_split(X, y, test_size, random_state, stratify)</code></strong> — separa as linhas em duas partes sorteadas: <code>test_size=0.2</code> põe um quinto na segunda parte, <code>random_state</code> fixa o sorteio e <code>stratify=treino_y</code> mantém em cada parte a proporção de cada dígito. Devolve as duas partes de <code>X</code> e depois as duas de <code>y</code>.</p>
+</div>
+<p>Das 6.000 imagens de treino, 4.800 ficam para o ajuste e 1.200 para a validação. Com lotes de 200, uma época são <span class="math inline">\(4.800 / 200 = 24\)</span> passos de gradiente.</p>
+<p>O ajuste abaixo avança uma época por vez, com <code>partial_fit</code>, e depois de cada época guarda as probabilidades que a rede dá a cada dígito nas imagens de ajuste, nas de validação e nas 2.000 de teste. A rede é a de duas camadas escondidas, com 256 e 128 unidades. O laço fica numa função, <code>treina</code>, porque vai ser repetido mais adiante com outra penalidade e com outras sementes:</p>
+<div id="epocas" class="cell" data-execution_count="9">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb14"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb14-1"><a href="#cb14-1" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> treina(alpha, semente<span class="op">=</span><span class="dv">14</span>, epocas<span class="op">=</span><span class="dv">30</span>):</span>
+<span id="cb14-2"><a href="#cb14-2" aria-hidden="true" tabindex="-1"></a>    rede <span class="op">=</span> MLPClassifier(hidden_layer_sizes<span class="op">=</span>(<span class="dv">256</span>, <span class="dv">128</span>), alpha<span class="op">=</span>alpha,</span>
+<span id="cb14-3"><a href="#cb14-3" aria-hidden="true" tabindex="-1"></a>                         random_state<span class="op">=</span>np.random.RandomState(semente))</span>
+<span id="cb14-4"><a href="#cb14-4" aria-hidden="true" tabindex="-1"></a>    probs <span class="op">=</span> []</span>
+<span id="cb14-5"><a href="#cb14-5" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> epoca <span class="kw">in</span> <span class="bu">range</span>(epocas):</span>
+<span id="cb14-6"><a href="#cb14-6" aria-hidden="true" tabindex="-1"></a>        rede.partial_fit(ajuste_X, ajuste_y, classes<span class="op">=</span>np.arange(<span class="dv">10</span>))</span>
+<span id="cb14-7"><a href="#cb14-7" aria-hidden="true" tabindex="-1"></a>        probs.append([rede.predict_proba(Z)</span>
+<span id="cb14-8"><a href="#cb14-8" aria-hidden="true" tabindex="-1"></a>                      <span class="cf">for</span> Z <span class="kw">in</span> (ajuste_X, valid_X, teste_X)])</span>
+<span id="cb14-9"><a href="#cb14-9" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> rede, probs</span>
+<span id="cb14-10"><a href="#cb14-10" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb14-11"><a href="#cb14-11" aria-hidden="true" tabindex="-1"></a>rede, probs <span class="op">=</span> treina(alpha<span class="op">=</span><span class="fl">1e-4</span>)</span>
+<span id="cb14-12"><a href="#cb14-12" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">"épocas:"</span>, <span class="bu">len</span>(probs))</span>
+<span id="cb14-13"><a href="#cb14-13" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">"passos:"</span>, <span class="bu">len</span>(probs) <span class="op">*</span> <span class="bu">len</span>(ajuste_X) <span class="op">//</span> lote)</span>
+<span id="cb14-14"><a href="#cb14-14" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">"imagens processadas (t_):"</span>, numero_br(rede.t_, <span class="dv">0</span>))</span></code></pre></div><button title="Copiar para a área de transferência" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>épocas: 30
+passos: 720
+imagens processadas (t_): 144.000</code></pre>
+</div>
+</div>
+<div class="funcao">
+<p><strong><code>rede.partial_fit(X, y, classes)</code></strong> — faz <strong>uma</strong> época de ajuste a partir dos pesos atuais, sem recomeçar; na primeira chamada, <code>classes</code> lista todas as classes possíveis. <strong><code>np.random.RandomState(14)</code></strong> — um gerador de números aleatórios com semente 14. Passado como <code>random_state</code>, ele continua de uma chamada de <code>partial_fit</code> para a outra, e cada época embaralha as imagens de um jeito. Com o número 14 no lugar dele, cada chamada recomeçaria o sorteio do zero; a primeira gasta parte dele nos pesos iniciais, e da segunda época em diante o embaralhamento seria sempre o mesmo. <strong><code>rede.t_</code></strong> — o número de imagens processadas no ajuste, somado ao longo das épocas.</p>
+</div>
+<p>Foram 30 épocas, <span class="math inline">\(30 \times 24 = 720\)</span> passos de gradiente, e cada uma das 4.800 imagens de ajuste passou 30 vezes pela rede: <span class="math inline">\(30 \times 4.800 = 144.000\)</span> imagens processadas. Das probabilidades de cada época saem a entropia cruzada média e o número de erros em cada parte das imagens:</p>
+<div id="mede" class="cell" data-execution_count="10">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb16"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb16-1"><a href="#cb16-1" aria-hidden="true" tabindex="-1"></a>partes <span class="op">=</span> {<span class="st">"ajuste"</span>: ajuste_y, <span class="st">"valid"</span>: valid_y, <span class="st">"teste"</span>: teste_y}</span>
+<span id="cb16-2"><a href="#cb16-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb16-3"><a href="#cb16-3" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> mede(probs):</span>
+<span id="cb16-4"><a href="#cb16-4" aria-hidden="true" tabindex="-1"></a>    linhas <span class="op">=</span> []</span>
+<span id="cb16-5"><a href="#cb16-5" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> p_epoca <span class="kw">in</span> probs:</span>
+<span id="cb16-6"><a href="#cb16-6" aria-hidden="true" tabindex="-1"></a>        linha <span class="op">=</span> {}</span>
+<span id="cb16-7"><a href="#cb16-7" aria-hidden="true" tabindex="-1"></a>        <span class="cf">for</span> (nome, alvo), p <span class="kw">in</span> <span class="bu">zip</span>(partes.items(), p_epoca):</span>
+<span id="cb16-8"><a href="#cb16-8" aria-hidden="true" tabindex="-1"></a>            linha[<span class="ss">f"perda_</span><span class="sc">{</span>nome<span class="sc">}</span><span class="ss">"</span>] <span class="op">=</span> log_loss(alvo, p)</span>
+<span id="cb16-9"><a href="#cb16-9" aria-hidden="true" tabindex="-1"></a>            linha[<span class="ss">f"erros_</span><span class="sc">{</span>nome<span class="sc">}</span><span class="ss">"</span>] <span class="op">=</span> (p.argmax(axis<span class="op">=</span><span class="dv">1</span>) <span class="op">!=</span> alvo).<span class="bu">sum</span>()</span>
+<span id="cb16-10"><a href="#cb16-10" aria-hidden="true" tabindex="-1"></a>        linhas.append(linha)</span>
+<span id="cb16-11"><a href="#cb16-11" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> pd.DataFrame(linhas, index<span class="op">=</span><span class="bu">range</span>(<span class="dv">1</span>, <span class="bu">len</span>(probs) <span class="op">+</span> <span class="dv">1</span>))</span>
+<span id="cb16-12"><a href="#cb16-12" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb16-13"><a href="#cb16-13" aria-hidden="true" tabindex="-1"></a>curva <span class="op">=</span> mede(probs)</span>
+<span id="cb16-14"><a href="#cb16-14" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">"épocas:"</span>, <span class="bu">len</span>(curva))</span>
+<span id="cb16-15"><a href="#cb16-15" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">"colunas:"</span>, <span class="bu">len</span>(curva.columns))</span></code></pre></div><button title="Copiar para a área de transferência" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>épocas: 30
+colunas: 6</code></pre>
+</div>
+</div>
+<div class="funcao">
+<p><strong><code>zip(partes.items(), p_epoca)</code></strong> — anda junto pelos pares (nome, respostas certas) e pelas três tabelas de probabilidades da época. <strong><code>pd.DataFrame(linhas, index=...)</code></strong> — uma tabela com uma linha por dicionário, com as épocas, de 1 a 30, como rótulos das linhas.</p>
+</div>
+<p>Depois de 30 épocas, a entropia cruzada nas imagens de validação continua caindo, como nas de ajuste? E a taxa de erro? Faça o seu palpite antes de olhar as curvas:</p>
+<div id="cell-fig-epocas" class="cell" data-execution_count="11">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb18"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb18-1"><a href="#cb18-1" aria-hidden="true" tabindex="-1"></a>fig, (ax_p, ax_e) <span class="op">=</span> plt.subplots(<span class="dv">2</span>, <span class="dv">1</span>, figsize<span class="op">=</span>(<span class="fl">3.8</span>, <span class="fl">4.6</span>), sharex<span class="op">=</span><span class="va">True</span>)</span>
+<span id="cb18-2"><a href="#cb18-2" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> coluna, nome, cor <span class="kw">in</span> [(<span class="st">"ajuste"</span>, <span class="st">"ajuste"</span>, <span class="st">"C0"</span>),</span>
+<span id="cb18-3"><a href="#cb18-3" aria-hidden="true" tabindex="-1"></a>                          (<span class="st">"valid"</span>, <span class="st">"validação"</span>, <span class="st">"C1"</span>)]:</span>
+<span id="cb18-4"><a href="#cb18-4" aria-hidden="true" tabindex="-1"></a>    ax_p.plot(curva.index, curva[<span class="ss">f"perda_</span><span class="sc">{</span>coluna<span class="sc">}</span><span class="ss">"</span>], color<span class="op">=</span>cor,</span>
+<span id="cb18-5"><a href="#cb18-5" aria-hidden="true" tabindex="-1"></a>              label<span class="op">=</span>nome)</span>
+<span id="cb18-6"><a href="#cb18-6" aria-hidden="true" tabindex="-1"></a>    ax_e.plot(curva.index,</span>
+<span id="cb18-7"><a href="#cb18-7" aria-hidden="true" tabindex="-1"></a>              curva[<span class="ss">f"erros_</span><span class="sc">{</span>coluna<span class="sc">}</span><span class="ss">"</span>] <span class="op">/</span> <span class="bu">len</span>(partes[coluna]), color<span class="op">=</span>cor)</span>
+<span id="cb18-8"><a href="#cb18-8" aria-hidden="true" tabindex="-1"></a>ax_p.set_ylabel(<span class="st">"entropia cruzada"</span>)</span>
+<span id="cb18-9"><a href="#cb18-9" aria-hidden="true" tabindex="-1"></a>ax_e.set_ylabel(<span class="st">"taxa de erro"</span>)</span>
+<span id="cb18-10"><a href="#cb18-10" aria-hidden="true" tabindex="-1"></a>ax_e.set_xlabel(<span class="st">"época"</span>)</span>
+<span id="cb18-11"><a href="#cb18-11" aria-hidden="true" tabindex="-1"></a>ax_e.set_xlim(<span class="dv">0</span>, <span class="dv">31</span>)</span>
+<span id="cb18-12"><a href="#cb18-12" aria-hidden="true" tabindex="-1"></a>ax_p.set_ylim(bottom<span class="op">=</span><span class="dv">0</span>)</span>
+<span id="cb18-13"><a href="#cb18-13" aria-hidden="true" tabindex="-1"></a>ax_e.set_ylim(bottom<span class="op">=</span><span class="dv">0</span>)</span>
+<span id="cb18-14"><a href="#cb18-14" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> ax <span class="kw">in</span> (ax_p, ax_e):</span>
+<span id="cb18-15"><a href="#cb18-15" aria-hidden="true" tabindex="-1"></a>    ax.yaxis.set_major_formatter(<span class="kw">lambda</span> v, _: numero_br(v, <span class="dv">2</span>))</span>
+<span id="cb18-16"><a href="#cb18-16" aria-hidden="true" tabindex="-1"></a>ax_p.legend(loc<span class="op">=</span><span class="st">"lower center"</span>, bbox_to_anchor<span class="op">=</span>(<span class="fl">0.5</span>, <span class="fl">1.0</span>), ncol<span class="op">=</span><span class="dv">2</span>)</span>
+<span id="cb18-17"><a href="#cb18-17" aria-hidden="true" tabindex="-1"></a>plt.tight_layout()</span>
+<span id="cb18-18"><a href="#cb18-18" aria-hidden="true" tabindex="-1"></a>plt.show()</span></code></pre></div><button title="Copiar para a área de transferência" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="cell-output cell-output-display">
+<div id="fig-epocas" class="quarto-float quarto-figure quarto-figure-center anchored" alt="Dois gráficos empilhados com as épocas, de 1 a 30, no eixo horizontal. No de cima, a entropia cruzada: a curva azul, de ajuste, desce sem parar até quase zero; a laranja, de validação, desce até cerca de 0,21 na época 10 e depois oscila e sobe devagar, terminando perto de 0,24. No de baixo, a taxa de erro: a azul desce até zero; a laranja desce e fica pouco acima de 0,05 nas últimas épocas.">
+<figure class="quarto-float quarto-float-fig figure">
+<div aria-describedby="fig-epocas-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<img src="03-ajustando-uma-rede_files/figure-html/fig-epocas-output-1.png" alt="Dois gráficos empilhados com as épocas, de 1 a 30, no eixo horizontal. No de cima, a entropia cruzada: a curva azul, de ajuste, desce sem parar até quase zero; a laranja, de validação, desce até cerca de 0,21 na época 10 e depois oscila e sobe devagar, terminando perto de 0,24. No de baixo, a taxa de erro: a azul desce até zero; a laranja desce e fica pouco acima de 0,05 nas últimas épocas." width="519" height="630" class="figure-img">
+</div>
+<figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-fig" id="fig-epocas-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Figura&nbsp;3: Entropia cruzada média (em cima) e taxa de erro (embaixo) da rede de duas camadas escondidas depois de cada época, nas 4.800 imagens de ajuste (azul) e nas 1.200 de validação (laranja).
+</figcaption>
+</figure>
+</div>
+</div>
+</div>
+<div class="funcao">
+<p><strong><code>ax.set_ylim(bottom=0)</code></strong> — fixa só o limite de baixo do eixo vertical, aqui em zero. <strong><code>ax.set_xlim(0, 31)</code></strong> — os limites do eixo horizontal, que o <code>sharex=True</code> estende ao gráfico de cima.</p>
+</div>
+<p>Nas imagens de ajuste, as duas curvas descem até perto de zero. Nas de validação, a entropia cruzada desce nas primeiras épocas e depois para de descer. Os números:</p>
+<div id="sobe-depois" class="cell" data-execution_count="12">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb19"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb19-1"><a href="#cb19-1" aria-hidden="true" tabindex="-1"></a>pv <span class="op">=</span> curva[<span class="st">"perda_valid"</span>]</span>
+<span id="cb19-2"><a href="#cb19-2" aria-hidden="true" tabindex="-1"></a>melhor <span class="op">=</span> pv.idxmin()</span>
+<span id="cb19-3"><a href="#cb19-3" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">"menor perda de validação:"</span>, numero_br(pv.<span class="bu">min</span>(), <span class="dv">4</span>))</span>
+<span id="cb19-4"><a href="#cb19-4" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">"  na época"</span>, melhor)</span>
+<span id="cb19-5"><a href="#cb19-5" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">"perda na época 30:"</span>, numero_br(pv[<span class="dv">30</span>], <span class="dv">4</span>))</span>
+<span id="cb19-6"><a href="#cb19-6" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">"época 30 acima do mínimo:"</span>, pv[<span class="dv">30</span>] <span class="op">&gt;</span> pv.<span class="bu">min</span>())</span>
+<span id="cb19-7"><a href="#cb19-7" aria-hidden="true" tabindex="-1"></a>pa <span class="op">=</span> curva[<span class="st">"perda_ajuste"</span>]</span>
+<span id="cb19-8"><a href="#cb19-8" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">"perda de ajuste sempre cai:"</span>, (pa.diff().dropna() <span class="op">&lt;</span> <span class="dv">0</span>).<span class="bu">all</span>())</span>
+<span id="cb19-9"><a href="#cb19-9" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">"perda de ajuste na 30:"</span>, numero_br(pa[<span class="dv">30</span>], <span class="dv">4</span>))</span>
+<span id="cb19-10"><a href="#cb19-10" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">"erros de ajuste na 30:"</span>, curva.loc[<span class="dv">30</span>, <span class="st">"erros_ajuste"</span>])</span>
+<span id="cb19-11"><a href="#cb19-11" aria-hidden="true" tabindex="-1"></a>ev <span class="op">=</span> curva[<span class="st">"erros_valid"</span>]</span>
+<span id="cb19-12"><a href="#cb19-12" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">"menos erros de validação:"</span>, ev.<span class="bu">min</span>(), <span class="st">"de"</span>,</span>
+<span id="cb19-13"><a href="#cb19-13" aria-hidden="true" tabindex="-1"></a>      numero_br(<span class="bu">len</span>(valid_y), <span class="dv">0</span>))</span>
+<span id="cb19-14"><a href="#cb19-14" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">"  nas épocas"</span>, ev.index[ev <span class="op">==</span> ev.<span class="bu">min</span>()].tolist())</span>
+<span id="cb19-15"><a href="#cb19-15" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">"erros de validação na 30:"</span>, ev[<span class="dv">30</span>])</span></code></pre></div><button title="Copiar para a área de transferência" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>menor perda de validação: 0,2090
+  na época 10
+perda na época 30: 0,2405
+época 30 acima do mínimo: True
+perda de ajuste sempre cai: True
+perda de ajuste na 30: 0,0023
+erros de ajuste na 30: 0
+menos erros de validação: 61 de 1.200
+  nas épocas [23, 27]
+erros de validação na 30: 65</code></pre>
+</div>
+</div>
+<div class="funcao">
+<p><strong><code>serie.diff()</code></strong> — a diferença de cada valor para o anterior; o primeiro fica vazio, e <strong><code>.dropna()</code></strong> o tira. <strong><code>serie.index[condicao]</code></strong> — os rótulos das linhas em que a condição vale <code>True</code>. Em <code>curva</code>, os rótulos são as épocas, e <code>idxmin()</code> devolve a época de menor perda.</p>
+</div>
+<p>A entropia cruzada de validação chega ao menor valor, 0,2090, na época 10, e termina a época 30 em 0,2405, acima dele. Nas imagens de ajuste, ela cai a cada época, da primeira à 30ª, até 0,0023, e na época 30 a rede não erra nenhuma das 4.800. É o sobreajuste da seção 7.6, agora ao longo do tempo de ajuste: a rede continua melhorando nas imagens que vê e deixa de melhorar nas que não vê.</p>
+<p>O menor número de erros de validação, 61 de 1.200, aparece nas épocas 23 e 27, bem depois da época 10, e na época 30 são 65. Como a perda pode subir enquanto os erros caem? A entropia cruzada média é a média, nas 1.200 imagens, da parcela <span class="math inline">\(-\log\)</span> da probabilidade dada ao dígito certo, e dá para separá-la em duas partes: a soma das parcelas das imagens erradas e a das acertadas, cada uma dividida por 1.200. O código abaixo faz isso nas épocas 10 e 30:</p>
+<div id="partes-da-perda" class="cell" data-execution_count="13">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb21"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb21-1"><a href="#cb21-1" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> partes_da_perda(p_val):</span>
+<span id="cb21-2"><a href="#cb21-2" aria-hidden="true" tabindex="-1"></a>    alvo <span class="op">=</span> valid_y.to_numpy()</span>
+<span id="cb21-3"><a href="#cb21-3" aria-hidden="true" tabindex="-1"></a>    parcela <span class="op">=</span> <span class="op">-</span>np.log(p_val[np.arange(<span class="bu">len</span>(alvo)), alvo])</span>
+<span id="cb21-4"><a href="#cb21-4" aria-hidden="true" tabindex="-1"></a>    errou <span class="op">=</span> p_val.argmax(axis<span class="op">=</span><span class="dv">1</span>) <span class="op">!=</span> alvo</span>
+<span id="cb21-5"><a href="#cb21-5" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> (errou.<span class="bu">sum</span>(), parcela[errou].<span class="bu">sum</span>() <span class="op">/</span> <span class="bu">len</span>(alvo),</span>
+<span id="cb21-6"><a href="#cb21-6" aria-hidden="true" tabindex="-1"></a>            parcela[<span class="op">~</span>errou].<span class="bu">sum</span>() <span class="op">/</span> <span class="bu">len</span>(alvo))</span>
+<span id="cb21-7"><a href="#cb21-7" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb21-8"><a href="#cb21-8" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> e <span class="kw">in</span> (melhor, <span class="dv">30</span>):</span>
+<span id="cb21-9"><a href="#cb21-9" aria-hidden="true" tabindex="-1"></a>    n_err, erradas, certas <span class="op">=</span> partes_da_perda(probs[e <span class="op">-</span> <span class="dv">1</span>][<span class="dv">1</span>])</span>
+<span id="cb21-10"><a href="#cb21-10" aria-hidden="true" tabindex="-1"></a>    <span class="bu">print</span>(<span class="ss">f"época </span><span class="sc">{</span>e<span class="sc">}</span><span class="ss">: </span><span class="sc">{</span>n_err<span class="sc">}</span><span class="ss"> erradas"</span>)</span>
+<span id="cb21-11"><a href="#cb21-11" aria-hidden="true" tabindex="-1"></a>    <span class="bu">print</span>(<span class="st">"  parte das erradas:"</span>, numero_br(erradas, <span class="dv">3</span>))</span>
+<span id="cb21-12"><a href="#cb21-12" aria-hidden="true" tabindex="-1"></a>    <span class="bu">print</span>(<span class="st">"  parte das acertadas:"</span>, numero_br(certas, <span class="dv">3</span>))</span></code></pre></div><button title="Copiar para a área de transferência" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>época 10: 72 erradas
+  parte das erradas: 0,164
+  parte das acertadas: 0,045
+época 30: 65 erradas
+  parte das erradas: 0,221
+  parte das acertadas: 0,019</code></pre>
+</div>
+</div>
+<div class="funcao">
+<p><strong><code>~errou</code></strong> — troca <code>True</code> por <code>False</code> e vice-versa: as imagens acertadas. <strong><code>probs[e - 1][1]</code></strong> — as probabilidades de validação da época <code>e</code>; a lista começa na posição 0, que é a época 1.</p>
+</div>
+<p>Da época 10 para a 30, a parte das imagens erradas sobe de 0,164 para 0,221, e a das acertadas cai de 0,045 para 0,019. A rede passa a acertar algumas imagens a mais e fica mais segura nas que acerta, mas também nas que erra, e a entropia cruzada pune essa segurança: a subida da parte das erradas, <span class="math inline">\(0{,}221 - 0{,}164 = 0{,}057\)</span>, é maior que a da perda inteira, <span class="math inline">\(0{,}2405 - 0{,}2090 = 0{,}0315\)</span>.</p>
+<p>Isso sugere parar o ajuste antes do fim: acompanhar a perda de validação a cada época e ficar com os pesos da época de menor perda. É a <strong><em>parada antecipada</em></strong> (<em>early stopping</em>), uma forma de regularização, porque impede que os pesos se ajustem demais às imagens de ajuste. O código abaixo compara, nas 2.000 imagens de teste, três épocas: a 10, de menor perda de validação; a primeira de menos erros de validação; e a 30:</p>
+<div id="parada" class="cell" data-execution_count="14">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb23"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb23-1"><a href="#cb23-1" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> e <span class="kw">in</span> (melhor, ev.idxmin(), <span class="dv">30</span>):</span>
+<span id="cb23-2"><a href="#cb23-2" aria-hidden="true" tabindex="-1"></a>    <span class="bu">print</span>(<span class="ss">f"época </span><span class="sc">{</span>e<span class="sc">}</span><span class="ss">: perda de teste"</span>,</span>
+<span id="cb23-3"><a href="#cb23-3" aria-hidden="true" tabindex="-1"></a>          numero_br(curva.loc[e, <span class="st">"perda_teste"</span>], <span class="dv">4</span>))</span>
+<span id="cb23-4"><a href="#cb23-4" aria-hidden="true" tabindex="-1"></a>    <span class="bu">print</span>(<span class="st">"  erros de teste:"</span>, curva.loc[e, <span class="st">"erros_teste"</span>])</span></code></pre></div><button title="Copiar para a área de transferência" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>época 10: perda de teste 0,2748
+  erros de teste: 164
+época 23: perda de teste 0,2841
+  erros de teste: 144
+época 30: perda de teste 0,2929
+  erros de teste: 140</code></pre>
+</div>
+</div>
+<p>Com a semente 14, parar na época 10 dá, no teste, entropia cruzada 0,2748, contra 0,2929 na época 30: pela perda, a parada ganha. Mas a rede da época 10 erra 164 imagens de teste, contra 140 da época 30. Parar pelos erros de validação, na época 23, também não resolve aqui: 144 erros. O critério de parada tem de ser o que interessa: se o que se usa são as probabilidades, a perda de validação; se é o número de acertos, a taxa de erro. O <code>MLPClassifier</code> tem a parada antecipada como opção pronta, que aparece na seção 14.4.</p>
+</section>
+<section id="regularização" class="level2">
+<h2 class="anchored" data-anchor-id="regularização">Regularização</h2>
+<p>A outra forma de conter o ajuste é a penalidade da ridge, da seção 11.3, sobre os pesos. Na classificação dos dígitos, com <span class="math inline">\(y_{im}\)</span> igual a 1 se a imagem <span class="math inline">\(i\)</span> é do dígito <span class="math inline">\(m\)</span>, o ajuste minimiza <span class="math display">\[
+\begin{aligned}
+R(\theta; \lambda) = {}&amp;-\sum_{i=1}^{n} \sum_{m=0}^{9} y_{im} \log f_m(x_i)\\
+&amp;+ \lambda \sum_j \theta_j^2,
+\end{aligned}
+\]</span> a entropia cruzada somada mais <span class="math inline">\(\lambda\)</span> vezes a soma dos quadrados dos pesos. Quanto maior o <span class="math inline">\(\lambda\)</span>, mais os pesos são puxados para zero.</p>
+<p>No <code>MLPClassifier</code>, a força da penalidade é o parâmetro <code>alpha</code>, e a correspondência com o <span class="math inline">\(\lambda\)</span> da fórmula é <span class="math display">\[
+\lambda = \frac{\texttt{alpha}\cdot n}{2b},
+\]</span> com <span class="math inline">\(n\)</span> imagens de ajuste e lotes de <span class="math inline">\(b\)</span> imagens. A rede ajustada até aqui usou o padrão, <code>alpha=1e-4</code>. O código abaixo calcula o <span class="math inline">\(\lambda\)</span> dos dois valores de <code>alpha</code> e repete o ajuste com <code>alpha=1</code>:</p>
+<div id="alpha-grande" class="cell" data-execution_count="15">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb25"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb25-1"><a href="#cb25-1" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> nome, a <span class="kw">in</span> [(<span class="st">"0,0001"</span>, <span class="fl">1e-4</span>), (<span class="st">"1"</span>, <span class="dv">1</span>)]:</span>
+<span id="cb25-2"><a href="#cb25-2" aria-hidden="true" tabindex="-1"></a>    <span class="bu">print</span>(<span class="ss">f"alpha </span><span class="sc">{</span>nome<span class="sc">}</span><span class="ss">: λ ="</span>,</span>
+<span id="cb25-3"><a href="#cb25-3" aria-hidden="true" tabindex="-1"></a>          numero_br(a <span class="op">*</span> <span class="bu">len</span>(ajuste_X) <span class="op">/</span> (<span class="dv">2</span> <span class="op">*</span> lote), <span class="dv">4</span>))</span>
+<span id="cb25-4"><a href="#cb25-4" aria-hidden="true" tabindex="-1"></a>rede_pen, probs_pen <span class="op">=</span> treina(alpha<span class="op">=</span><span class="dv">1</span>)</span>
+<span id="cb25-5"><a href="#cb25-5" aria-hidden="true" tabindex="-1"></a>curva_pen <span class="op">=</span> mede(probs_pen)</span>
+<span id="cb25-6"><a href="#cb25-6" aria-hidden="true" tabindex="-1"></a>nomes <span class="op">=</span> [<span class="st">"alpha 0,0001"</span>, <span class="st">"alpha 1"</span>]</span>
+<span id="cb25-7"><a href="#cb25-7" aria-hidden="true" tabindex="-1"></a>tabela <span class="op">=</span> pd.DataFrame(</span>
+<span id="cb25-8"><a href="#cb25-8" aria-hidden="true" tabindex="-1"></a>    {nome: [c[<span class="st">"perda_valid"</span>].<span class="bu">min</span>(), c.loc[<span class="dv">30</span>, <span class="st">"perda_valid"</span>]]</span>
+<span id="cb25-9"><a href="#cb25-9" aria-hidden="true" tabindex="-1"></a>     <span class="cf">for</span> nome, c <span class="kw">in</span> <span class="bu">zip</span>(nomes, (curva, curva_pen))},</span>
+<span id="cb25-10"><a href="#cb25-10" aria-hidden="true" tabindex="-1"></a>    index<span class="op">=</span>[<span class="st">"mínimo"</span>, <span class="st">"fim"</span>])</span>
+<span id="cb25-11"><a href="#cb25-11" aria-hidden="true" tabindex="-1"></a>tabela.loc[<span class="st">"subida"</span>] <span class="op">=</span> tabela.loc[<span class="st">"fim"</span>] <span class="op">-</span> tabela.loc[<span class="st">"mínimo"</span>]</span>
+<span id="cb25-12"><a href="#cb25-12" aria-hidden="true" tabindex="-1"></a>tabela.loc[<span class="st">"erradas"</span>] <span class="op">=</span> [partes_da_perda(p[<span class="op">-</span><span class="dv">1</span>][<span class="dv">1</span>])[<span class="dv">1</span>]</span>
+<span id="cb25-13"><a href="#cb25-13" aria-hidden="true" tabindex="-1"></a>                         <span class="cf">for</span> p <span class="kw">in</span> (probs, probs_pen)]</span>
+<span id="cb25-14"><a href="#cb25-14" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">"perda de validação (fim: época 30):"</span>)</span>
+<span id="cb25-15"><a href="#cb25-15" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(tabela.<span class="bu">map</span>(<span class="kw">lambda</span> v: numero_br(v, <span class="dv">4</span>)).to_string())</span>
+<span id="cb25-16"><a href="#cb25-16" aria-hidden="true" tabindex="-1"></a>contagens <span class="op">=</span> pd.DataFrame(</span>
+<span id="cb25-17"><a href="#cb25-17" aria-hidden="true" tabindex="-1"></a>    {nome: c.loc[<span class="dv">30</span>, [<span class="st">"erros_ajuste"</span>, <span class="st">"erros_valid"</span>, <span class="st">"erros_teste"</span>]]</span>
+<span id="cb25-18"><a href="#cb25-18" aria-hidden="true" tabindex="-1"></a>     .to_numpy() <span class="cf">for</span> nome, c <span class="kw">in</span> <span class="bu">zip</span>(nomes, (curva, curva_pen))},</span>
+<span id="cb25-19"><a href="#cb25-19" aria-hidden="true" tabindex="-1"></a>    index<span class="op">=</span>[<span class="st">"ajuste"</span>, <span class="st">"validação"</span>, <span class="st">"teste"</span>]).astype(<span class="bu">int</span>)</span>
+<span id="cb25-20"><a href="#cb25-20" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">"erros na época 30:"</span>)</span>
+<span id="cb25-21"><a href="#cb25-21" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(contagens.to_string())</span>
+<span id="cb25-22"><a href="#cb25-22" aria-hidden="true" tabindex="-1"></a>quadrados <span class="op">=</span> [<span class="bu">sum</span>((W <span class="op">**</span> <span class="dv">2</span>).<span class="bu">sum</span>() <span class="cf">for</span> W <span class="kw">in</span> r.coefs_)</span>
+<span id="cb25-23"><a href="#cb25-23" aria-hidden="true" tabindex="-1"></a>             <span class="cf">for</span> r <span class="kw">in</span> (rede, rede_pen)]</span>
+<span id="cb25-24"><a href="#cb25-24" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">"soma dos quadrados dos pesos:"</span>)</span>
+<span id="cb25-25"><a href="#cb25-25" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">"  alpha 0,0001:"</span>, numero_br(quadrados[<span class="dv">0</span>], <span class="dv">0</span>))</span>
+<span id="cb25-26"><a href="#cb25-26" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">"  alpha 1:"</span>, numero_br(quadrados[<span class="dv">1</span>], <span class="dv">0</span>))</span></code></pre></div><button title="Copiar para a área de transferência" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>alpha 0,0001: λ = 0,0012
+alpha 1: λ = 12,0000
+perda de validação (fim: época 30):
+        alpha 0,0001 alpha 1
+mínimo        0,2090  0,1972
+fim           0,2405  0,1990
+subida        0,0315  0,0018
+erradas       0,2213  0,1248
+erros na época 30:
+           alpha 0,0001  alpha 1
+ajuste                0       41
+validação            65       66
+teste               140      160
+soma dos quadrados dos pesos:
+  alpha 0,0001: 750
+  alpha 1: 94</code></pre>
+</div>
+</div>
+<div class="funcao">
+<p><strong><code>MLPClassifier(alpha)</code></strong> — a força da penalidade sobre os pesos (sem os vieses); o padrão é <code>alpha=0.0001</code>. <strong><code>df.loc[nova] = valores</code></strong> — acrescenta uma linha com o rótulo <code>nova</code>. <strong><code>df.astype(int)</code></strong> — converte os valores para inteiros.</p>
+</div>
+<p>Com <span class="math inline">\(n = 4.800\)</span> e <span class="math inline">\(b = 200\)</span>, <code>alpha=1</code> corresponde a <span class="math inline">\(\lambda = 12\)</span>, e o padrão, a <span class="math inline">\(\lambda = 0{,}0012\)</span>. A conta vem de como cada passo é dado: em cada lote de <span class="math inline">\(b\)</span> imagens, o passo reduz a entropia cruzada média do lote mais <span class="math inline">\(\texttt{alpha}/(2b)\)</span> vezes a soma dos quadrados dos pesos. Em média, ao longo dos lotes, isso é a entropia cruzada média das <span class="math inline">\(n\)</span> imagens de ajuste mais o mesmo termo, e multiplicar tudo por <span class="math inline">\(n\)</span> dá a fórmula acima, com <span class="math inline">\(\lambda = \texttt{alpha}\cdot n / (2b)\)</span>. No <code>scikit-learn</code>, a soma dos quadrados inclui os pesos de todas as camadas, inclusive os da saída, mas não os vieses.</p>
+<p>A soma dos quadrados dos pesos caiu de 750 para 94, e a rede penalizada ainda erra, na época 30, 41 das 4.800 imagens de ajuste. A entropia cruzada de validação terminou em 0,1990, só 0,0018 acima do menor valor dela, contra uma subida de 0,0315 sem a penalidade. A parte das imagens de validação erradas na perda média ficou em 0,1248, contra 0,2213: com os pesos contidos, a rede não chega a ficar tão segura nas imagens que erra.</p>
+<p>Na época 30, a rede penalizada erra 66 das 1.200 imagens de validação, contra 65, e 160 das 2.000 de teste, contra 140. Com esta semente, a penalidade conteve a subida da perda, mas a rede penalizada erra mais imagens de teste. Com outras sementes, a comparação se mantém? O código abaixo repete os dois ajustes com as sementes de 0 a 4, com a mesma função <code>treina</code>, e guarda a perda de validação e os erros de teste da época 30:</p>
+<div id="outras-sementes" class="cell" data-execution_count="16">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb27"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb27-1"><a href="#cb27-1" aria-hidden="true" tabindex="-1"></a>erros, perdas <span class="op">=</span> {}, {}</span>
+<span id="cb27-2"><a href="#cb27-2" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> semente <span class="kw">in</span> <span class="bu">range</span>(<span class="dv">5</span>):</span>
+<span id="cb27-3"><a href="#cb27-3" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> nome, a <span class="kw">in</span> <span class="bu">zip</span>(nomes, (<span class="fl">1e-4</span>, <span class="dv">1</span>)):</span>
+<span id="cb27-4"><a href="#cb27-4" aria-hidden="true" tabindex="-1"></a>        _, probs_s <span class="op">=</span> treina(alpha<span class="op">=</span>a, semente<span class="op">=</span>semente)</span>
+<span id="cb27-5"><a href="#cb27-5" aria-hidden="true" tabindex="-1"></a>        fim <span class="op">=</span> mede(probs_s[<span class="op">-</span><span class="dv">1</span>:]).iloc[<span class="dv">0</span>]</span>
+<span id="cb27-6"><a href="#cb27-6" aria-hidden="true" tabindex="-1"></a>        erros[(semente, nome)] <span class="op">=</span> fim[<span class="st">"erros_teste"</span>]</span>
+<span id="cb27-7"><a href="#cb27-7" aria-hidden="true" tabindex="-1"></a>        perdas[(semente, nome)] <span class="op">=</span> fim[<span class="st">"perda_valid"</span>]</span>
+<span id="cb27-8"><a href="#cb27-8" aria-hidden="true" tabindex="-1"></a>erros <span class="op">=</span> pd.Series(erros).unstack().astype(<span class="bu">int</span>)</span>
+<span id="cb27-9"><a href="#cb27-9" aria-hidden="true" tabindex="-1"></a>perdas <span class="op">=</span> pd.Series(perdas).unstack()</span>
+<span id="cb27-10"><a href="#cb27-10" aria-hidden="true" tabindex="-1"></a>erros.index.name <span class="op">=</span> <span class="st">"semente"</span></span>
+<span id="cb27-11"><a href="#cb27-11" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">"erros de teste na época 30:"</span>)</span>
+<span id="cb27-12"><a href="#cb27-12" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(erros.to_string())</span>
+<span id="cb27-13"><a href="#cb27-13" aria-hidden="true" tabindex="-1"></a>mais <span class="op">=</span> (erros[<span class="st">"alpha 1"</span>] <span class="op">&gt;</span> erros[<span class="st">"alpha 0,0001"</span>]).<span class="bu">sum</span>()</span>
+<span id="cb27-14"><a href="#cb27-14" aria-hidden="true" tabindex="-1"></a>menor <span class="op">=</span> (perdas[<span class="st">"alpha 1"</span>] <span class="op">&lt;</span> perdas[<span class="st">"alpha 0,0001"</span>]).<span class="bu">sum</span>()</span>
+<span id="cb27-15"><a href="#cb27-15" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">"alpha 1 com mais erros:"</span>, mais, <span class="st">"de 5"</span>)</span>
+<span id="cb27-16"><a href="#cb27-16" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">"alpha 1 com perda menor:"</span>, menor, <span class="st">"de 5"</span>)</span></code></pre></div><button title="Copiar para a área de transferência" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>erros de teste na época 30:
+         alpha 0,0001  alpha 1
+semente                       
+0                 163      162
+1                 156      161
+2                 150      170
+3                 144      169
+4                 151      169
+alpha 1 com mais erros: 4 de 5
+alpha 1 com perda menor: 5 de 5</code></pre>
+</div>
+</div>
+<div class="funcao">
+<p><strong><code>pd.Series(dicionario)</code></strong> com chaves que são pares (semente, nome) — uma série com rótulo de dois níveis; <strong><code>serie.unstack()</code></strong> passa o segundo nível, o <code>alpha</code>, para as colunas, e fica uma linha por semente. <strong><code>probs_s[-1:]</code></strong> — a lista só com a última época, para que <code>mede</code> meça só ela. <strong><code>df.index.name</code></strong> — o nome dos rótulos das linhas.</p>
+</div>
+<p>Com as sementes de 0 a 4 e a mesma divisão entre ajuste e validação, a rede com <code>alpha=1</code> termina com a perda de validação menor nas cinco e erra mais imagens de teste em quatro delas. Na semente 0, a rede penalizada erra uma imagem a menos, 162 contra 163. Nenhum dos dois valores de <code>alpha</code> foi escolhido; escolher <code>alpha</code> por validação cruzada, junto com o tamanho da rede, é o assunto da seção 14.4.</p>
+<p>As curvas de validação das duas penalidades com a semente 14:</p>
+<div id="cell-fig-alpha" class="cell" data-execution_count="17">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb29"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb29-1"><a href="#cb29-1" aria-hidden="true" tabindex="-1"></a>fig, ax <span class="op">=</span> plt.subplots(figsize<span class="op">=</span>(<span class="fl">3.8</span>, <span class="fl">3.0</span>))</span>
+<span id="cb29-2"><a href="#cb29-2" aria-hidden="true" tabindex="-1"></a>ax.plot(curva.index, curva[<span class="st">"perda_valid"</span>], color<span class="op">=</span><span class="st">"C1"</span>,</span>
+<span id="cb29-3"><a href="#cb29-3" aria-hidden="true" tabindex="-1"></a>        label<span class="op">=</span><span class="st">"alpha 0,0001"</span>)</span>
+<span id="cb29-4"><a href="#cb29-4" aria-hidden="true" tabindex="-1"></a>ax.plot(curva_pen.index, curva_pen[<span class="st">"perda_valid"</span>], color<span class="op">=</span><span class="st">"C2"</span>,</span>
+<span id="cb29-5"><a href="#cb29-5" aria-hidden="true" tabindex="-1"></a>        linestyle<span class="op">=</span><span class="st">"--"</span>, label<span class="op">=</span><span class="st">"alpha 1"</span>)</span>
+<span id="cb29-6"><a href="#cb29-6" aria-hidden="true" tabindex="-1"></a>ax.set_xlim(<span class="dv">0</span>, <span class="dv">31</span>)</span>
+<span id="cb29-7"><a href="#cb29-7" aria-hidden="true" tabindex="-1"></a>ax.set_xlabel(<span class="st">"época"</span>)</span>
+<span id="cb29-8"><a href="#cb29-8" aria-hidden="true" tabindex="-1"></a>ax.set_ylabel(<span class="st">"entropia cruzada"</span>)</span>
+<span id="cb29-9"><a href="#cb29-9" aria-hidden="true" tabindex="-1"></a>ax.set_ylim(bottom<span class="op">=</span><span class="dv">0</span>)</span>
+<span id="cb29-10"><a href="#cb29-10" aria-hidden="true" tabindex="-1"></a>ax.yaxis.set_major_formatter(<span class="kw">lambda</span> v, _: numero_br(v, <span class="dv">2</span>))</span>
+<span id="cb29-11"><a href="#cb29-11" aria-hidden="true" tabindex="-1"></a>ax.legend(loc<span class="op">=</span><span class="st">"lower center"</span>, bbox_to_anchor<span class="op">=</span>(<span class="fl">0.5</span>, <span class="fl">1.0</span>), ncol<span class="op">=</span><span class="dv">2</span>)</span>
+<span id="cb29-12"><a href="#cb29-12" aria-hidden="true" tabindex="-1"></a>plt.tight_layout()</span>
+<span id="cb29-13"><a href="#cb29-13" aria-hidden="true" tabindex="-1"></a>plt.show()</span></code></pre></div><button title="Copiar para a área de transferência" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="cell-output cell-output-display">
+<div id="fig-alpha" class="quarto-float quarto-figure quarto-figure-center anchored" alt="Gráfico de linhas com as épocas, de 1 a 30, no eixo horizontal e a entropia cruzada de validação no vertical. As duas curvas começam altas e descem. A laranja, com a penalidade padrão, chega a cerca de 0,21 na época 10 e depois sobe devagar, oscilando, até cerca de 0,24 na época 30. A verde tracejada, com alpha igual a 1, oscila e termina perto de 0,20, abaixo da laranja.">
+<figure class="quarto-float quarto-float-fig figure">
+<div aria-describedby="fig-alpha-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<img src="03-ajustando-uma-rede_files/figure-html/fig-alpha-output-1.png" alt="Gráfico de linhas com as épocas, de 1 a 30, no eixo horizontal e a entropia cruzada de validação no vertical. As duas curvas começam altas e descem. A laranja, com a penalidade padrão, chega a cerca de 0,21 na época 10 e depois sobe devagar, oscilando, até cerca de 0,24 na época 30. A verde tracejada, com alpha igual a 1, oscila e termina perto de 0,20, abaixo da laranja." width="519" height="406" class="figure-img">
+</div>
+<figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-fig" id="fig-alpha-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Figura&nbsp;4: Entropia cruzada média nas 1.200 imagens de validação depois de cada época, com a penalidade padrão, alpha = 0,0001 (laranja), e com alpha = 1 (verde, tracejada).
+</figcaption>
+</figure>
+</div>
+</div>
+</div>
+</section>
+<section id="dropout" class="level2">
+<h2 class="anchored" data-anchor-id="dropout"><em>Dropout</em></h2>
+<p>Uma terceira forma de regularização sorteia, em vez de penalizar. A cada observação de treino processada, uma fração <span class="math inline">\(\phi\)</span> das unidades de uma camada é sorteada e desligada: as ativações delas viram zero para aquela observação, e as unidades que sobram têm os pesos multiplicados por <span class="math inline">\(1/(1 - \phi)\)</span>, para compensar as que saíram. Com <span class="math inline">\(\phi = 0{,}5\)</span>, por exemplo, numa camada de 128 unidades, cada imagem processada usa cerca de <span class="math inline">\(128 \times 0{,}5 = 64\)</span> delas, sorteadas de novo para a imagem seguinte, mesmo dentro do mesmo lote, e os pesos que saem das que ficaram valem <span class="math inline">\(1/(1 - 0{,}5) = 2\)</span> vezes o que valeriam: uma unidade que, com todas presentes, somaria 0,3 à entrada da camada seguinte soma 0,6. Numa previsão, todas as unidades participam, sem o fator.</p>
+<div class="conceito">
+<p>No <strong><em>dropout</em></strong>, cada observação processada no ajuste passa por uma rede com uma parte das unidades desligada por sorteio. Nenhuma unidade pode contar com a presença de outra específica, e isso impede que algumas unidades se especializem demais nas observações de treino. É uma forma de regularização, semelhante em alguns aspectos à penalidade ridge.</p>
+</div>
+<p>A ideia é parente da floresta aleatória da seção 13.3, que sorteia as colunas que cada corte pode usar para que as árvores não dependam todas das mesmas colunas fortes. O <em>dropout</em> existe nas bibliotecas de aprendizado profundo, como uma camada a mais na definição da rede. O <code>MLPClassifier</code> e o <code>MLPRegressor</code> não o oferecem; as formas de regularização que eles têm são a penalidade <code>alpha</code> e a parada antecipada:</p>
+<div id="sem-dropout" class="cell" data-execution_count="18">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb30"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb30-1"><a href="#cb30-1" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> modelo <span class="kw">in</span> (MLPClassifier(), MLPRegressor()):</span>
+<span id="cb30-2"><a href="#cb30-2" aria-hidden="true" tabindex="-1"></a>    <span class="bu">print</span>(<span class="bu">type</span>(modelo).<span class="va">__name__</span>, <span class="st">"tem 'dropout':"</span>,</span>
+<span id="cb30-3"><a href="#cb30-3" aria-hidden="true" tabindex="-1"></a>          <span class="bu">any</span>(<span class="st">"dropout"</span> <span class="kw">in</span> nome <span class="cf">for</span> nome <span class="kw">in</span> modelo.get_params()))</span></code></pre></div><button title="Copiar para a área de transferência" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>MLPClassifier tem 'dropout': False
+MLPRegressor tem 'dropout': False</code></pre>
+</div>
+</div>
+<div class="funcao">
+<p><strong><code>modelo.get_params()</code></strong> — um dicionário com os parâmetros do modelo e os valores deles; percorrê-lo dá os nomes. <strong><code>type(modelo).__name__</code></strong> — o nome da classe do modelo. <strong><code>any(...)</code></strong> — <code>True</code> se algum dos valores for <code>True</code>.</p>
+</div>
+</section>
+<section id="onde-o-ajuste-termina" class="level2">
+<h2 class="anchored" data-anchor-id="onde-o-ajuste-termina">Onde o ajuste termina</h2>
+<p>A curva dos anos de carreira muda com a semente: a mesma rede, nos mesmos dados, terminou em seis MSE de treino diferentes em dez sementes, e o caminho em linha reta entre duas delas passa por um morro. A busca pelos pesos tende a parar no fundo do vale em que começou. Por isso, o MSE de treino não diz qual dessas redes prevê melhor jogadores novos: essa comparação se faz em dados que não entraram no ajuste, e as escolhas, como a época de parada e o <code>alpha</code>, se fazem na validação, deixando o teste para medir o resultado. O ajuste anda por passos contra o gradiente, calculado pela retropropagação, e, com lotes, dá muitos passos por época. Quando parar e quanto penalizar os pesos também se decide com imagens que não entraram no ajuste, e o critério tem de ser o que interessa: nos dígitos, com a semente 14, parar pela perda de validação deu probabilidades melhores no teste e mais erros. Com a semente 14, a penalidade forte conteve a subida da perda de validação; nas cinco sementes de 0 a 4, deu perda de validação menor e, em quatro delas, mais erros de teste.</p>
+
+
+<div id="refs" class="references csl-bib-body hanging-indent" role="list">
+<div id="ref-james2023" class="csl-entry" role="listitem">
+James, Gareth, Daniela Witten, Trevor Hastie, Robert Tibshirani, e Jonathan Taylor. 2023. <em>An Introduction to Statistical Learning with Applications in Python</em>. Springer.
+</div>
+</div>
+</section>
+
+</main> <!-- /main -->
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+  document.querySelectorAll('.spoiler').forEach(function (spoiler) {
+    const hash    = spoiler.dataset.passwordHash || '';
+    const hint    = spoiler.dataset.hint || 'Conteúdo protegido por senha';
+    const content = spoiler.innerHTML;
+
+    spoiler.innerHTML = `
+      <div class="spoiler-lock">
+        <span class="spoiler-icon">&#128274;</span>
+        <p class="spoiler-hint">${hint}</p>
+        <div class="spoiler-input-group">
+          <input type="password" class="spoiler-input" placeholder="Digite a senha…" autocomplete="off">
+          <button class="spoiler-btn">Acessar</button>
+        </div>
+        <p class="spoiler-error">Senha incorreta.</p>
+      </div>
+      <div class="spoiler-content">${content}</div>
+    `;
+    spoiler.style.display = 'block';
+
+    const lockDiv    = spoiler.querySelector('.spoiler-lock');
+    const contentDiv = spoiler.querySelector('.spoiler-content');
+    const input      = spoiler.querySelector('.spoiler-input');
+    const btn        = spoiler.querySelector('.spoiler-btn');
+    const errorMsg   = spoiler.querySelector('.spoiler-error');
+
+    async function tryUnlock() {
+      const val    = input.value;
+      const buf    = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(val));
+      const hex    = Array.from(new Uint8Array(buf))
+                         .map(b => b.toString(16).padStart(2, '0')).join('');
+
+      if (hex === hash) {
+        lockDiv.style.display    = 'none';
+        contentDiv.style.display = 'block';
+      } else {
+        errorMsg.style.display = 'block';
+        input.value = '';
+        input.focus();
+        setTimeout(() => { errorMsg.style.display = 'none'; }, 2500);
+      }
+    }
+
+    btn.addEventListener('click', tryUnlock);
+    input.addEventListener('keydown', e => { if (e.key === 'Enter') tryUnlock(); });
+  });
+});
+</script>
+<script id="quarto-html-after-body" type="application/javascript">
+  window.document.addEventListener("DOMContentLoaded", function (event) {
+    // Ensure there is a toggle, if there isn't float one in the top right
+    if (window.document.querySelector('.quarto-color-scheme-toggle') === null) {
+      const a = window.document.createElement('a');
+      a.classList.add('top-right');
+      a.classList.add('quarto-color-scheme-toggle');
+      a.href = "";
+      a.onclick = function() { try { window.quartoToggleColorScheme(); } catch {} return false; };
+      const i = window.document.createElement("i");
+      i.classList.add('bi');
+      a.appendChild(i);
+      window.document.body.appendChild(a);
+    }
+    setColorSchemeToggle(hasAlternateSentinel())
+    const icon = "";
+    const anchorJS = new window.AnchorJS();
+    anchorJS.options = {
+      placement: 'right',
+      icon: icon
+    };
+    anchorJS.add('.anchored');
+    const isCodeAnnotation = (el) => {
+      for (const clz of el.classList) {
+        if (clz.startsWith('code-annotation-')) {                     
+          return true;
+        }
+      }
+      return false;
+    }
+    const onCopySuccess = function(e) {
+      // button target
+      const button = e.trigger;
+      // don't keep focus
+      button.blur();
+      // flash "checked"
+      button.classList.add('code-copy-button-checked');
+      var currentTitle = button.getAttribute("title");
+      button.setAttribute("title", "Copiada");
+      let tooltip;
+      if (window.bootstrap) {
+        button.setAttribute("data-bs-toggle", "tooltip");
+        button.setAttribute("data-bs-placement", "left");
+        button.setAttribute("data-bs-title", "Copiada");
+        tooltip = new bootstrap.Tooltip(button, 
+          { trigger: "manual", 
+            customClass: "code-copy-button-tooltip",
+            offset: [0, -8]});
+        tooltip.show();    
+      }
+      setTimeout(function() {
+        if (tooltip) {
+          tooltip.hide();
+          button.removeAttribute("data-bs-title");
+          button.removeAttribute("data-bs-toggle");
+          button.removeAttribute("data-bs-placement");
+        }
+        button.setAttribute("title", currentTitle);
+        button.classList.remove('code-copy-button-checked');
+      }, 1000);
+      // clear code selection
+      e.clearSelection();
+    }
+    const getTextToCopy = function(trigger) {
+      const outerScaffold = trigger.parentElement.cloneNode(true);
+      const codeEl = outerScaffold.querySelector('code');
+      for (const childEl of codeEl.children) {
+        if (isCodeAnnotation(childEl)) {
+          childEl.remove();
+        }
+      }
+      return codeEl.innerText;
+    }
+    const clipboard = new window.ClipboardJS('.code-copy-button:not([data-in-quarto-modal])', {
+      text: getTextToCopy
+    });
+    clipboard.on('success', onCopySuccess);
+    if (window.document.getElementById('quarto-embedded-source-code-modal')) {
+      const clipboardModal = new window.ClipboardJS('.code-copy-button[data-in-quarto-modal]', {
+        text: getTextToCopy,
+        container: window.document.getElementById('quarto-embedded-source-code-modal')
+      });
+      clipboardModal.on('success', onCopySuccess);
+    }
+      var localhostRegex = new RegExp(/^(?:http|https):\/\/localhost\:?[0-9]*\//);
+      var mailtoRegex = new RegExp(/^mailto:/);
+        var filterRegex = new RegExp("https:\/\/BragaD\.github\.io\/UnDF-Bases5-CienciaDeDados-202602");
+      var isInternal = (href) => {
+          return filterRegex.test(href) || localhostRegex.test(href) || mailtoRegex.test(href);
+      }
+      // Inspect non-navigation links and adorn them if external
+     var links = window.document.querySelectorAll('a[href]:not(.nav-link):not(.navbar-brand):not(.toc-action):not(.sidebar-link):not(.sidebar-item-toggle):not(.pagination-link):not(.no-external):not([aria-hidden]):not(.dropdown-item):not(.quarto-navigation-tool):not(.about-link)');
+      for (var i=0; i<links.length; i++) {
+        const link = links[i];
+        if (!isInternal(link.href)) {
+          // undo the damage that might have been done by quarto-nav.js in the case of
+          // links that we want to consider external
+          if (link.dataset.originalHref !== undefined) {
+            link.href = link.dataset.originalHref;
+          }
+            // target, if specified
+            link.setAttribute("target", "_blank");
+            if (link.getAttribute("rel") === null) {
+              link.setAttribute("rel", "noopener");
+            }
+            // default icon
+            link.classList.add("external");
+        }
+      }
+    function tippyHover(el, contentFn, onTriggerFn, onUntriggerFn) {
+      const config = {
+        allowHTML: true,
+        maxWidth: 500,
+        delay: 100,
+        arrow: false,
+        appendTo: function(el) {
+            return el.parentElement;
+        },
+        interactive: true,
+        interactiveBorder: 10,
+        theme: 'quarto',
+        placement: 'bottom-start',
+      };
+      if (contentFn) {
+        config.content = contentFn;
+      }
+      if (onTriggerFn) {
+        config.onTrigger = onTriggerFn;
+      }
+      if (onUntriggerFn) {
+        config.onUntrigger = onUntriggerFn;
+      }
+      window.tippy(el, config); 
+    }
+    const noterefs = window.document.querySelectorAll('a[role="doc-noteref"]');
+    for (var i=0; i<noterefs.length; i++) {
+      const ref = noterefs[i];
+      tippyHover(ref, function() {
+        // use id or data attribute instead here
+        let href = ref.getAttribute('data-footnote-href') || ref.getAttribute('href');
+        try { href = new URL(href).hash; } catch {}
+        const id = href.replace(/^#\/?/, "");
+        const note = window.document.getElementById(id);
+        if (note) {
+          return note.innerHTML;
+        } else {
+          return "";
+        }
+      });
+    }
+    const xrefs = window.document.querySelectorAll('a.quarto-xref');
+    const processXRef = (id, note) => {
+      // Strip column container classes
+      const stripColumnClz = (el) => {
+        el.classList.remove("page-full", "page-columns");
+        if (el.children) {
+          for (const child of el.children) {
+            stripColumnClz(child);
+          }
+        }
+      }
+      stripColumnClz(note)
+      if (id === null || id.startsWith('sec-')) {
+        // Special case sections, only their first couple elements
+        const container = document.createElement("div");
+        if (note.children && note.children.length > 2) {
+          container.appendChild(note.children[0].cloneNode(true));
+          for (let i = 1; i < note.children.length; i++) {
+            const child = note.children[i];
+            if (child.tagName === "P" && child.innerText === "") {
+              continue;
+            } else {
+              container.appendChild(child.cloneNode(true));
+              break;
+            }
+          }
+          if (window.Quarto?.typesetMath) {
+            window.Quarto.typesetMath(container);
+          }
+          return container.innerHTML
+        } else {
+          if (window.Quarto?.typesetMath) {
+            window.Quarto.typesetMath(note);
+          }
+          return note.innerHTML;
+        }
+      } else {
+        // Remove any anchor links if they are present
+        const anchorLink = note.querySelector('a.anchorjs-link');
+        if (anchorLink) {
+          anchorLink.remove();
+        }
+        if (window.Quarto?.typesetMath) {
+          window.Quarto.typesetMath(note);
+        }
+        if (note.classList.contains("callout")) {
+          return note.outerHTML;
+        } else {
+          return note.innerHTML;
+        }
+      }
+    }
+    for (var i=0; i<xrefs.length; i++) {
+      const xref = xrefs[i];
+      tippyHover(xref, undefined, function(instance) {
+        instance.disable();
+        let url = xref.getAttribute('href');
+        let hash = undefined; 
+        if (url.startsWith('#')) {
+          hash = url;
+        } else {
+          try { hash = new URL(url).hash; } catch {}
+        }
+        if (hash) {
+          const id = hash.replace(/^#\/?/, "");
+          const note = window.document.getElementById(id);
+          if (note !== null) {
+            try {
+              const html = processXRef(id, note.cloneNode(true));
+              instance.setContent(html);
+            } finally {
+              instance.enable();
+              instance.show();
+            }
+          } else {
+            // See if we can fetch this
+            fetch(url.split('#')[0])
+            .then(res => res.text())
+            .then(html => {
+              const parser = new DOMParser();
+              const htmlDoc = parser.parseFromString(html, "text/html");
+              const note = htmlDoc.getElementById(id);
+              if (note !== null) {
+                const html = processXRef(id, note);
+                instance.setContent(html);
+              } 
+            }).finally(() => {
+              instance.enable();
+              instance.show();
+            });
+          }
+        } else {
+          // See if we can fetch a full url (with no hash to target)
+          // This is a special case and we should probably do some content thinning / targeting
+          fetch(url)
+          .then(res => res.text())
+          .then(html => {
+            const parser = new DOMParser();
+            const htmlDoc = parser.parseFromString(html, "text/html");
+            const note = htmlDoc.querySelector('main.content');
+            if (note !== null) {
+              // This should only happen for chapter cross references
+              // (since there is no id in the URL)
+              // remove the first header
+              if (note.children.length > 0 && note.children[0].tagName === "HEADER") {
+                note.children[0].remove();
+              }
+              const html = processXRef(null, note);
+              instance.setContent(html);
+            } 
+          }).finally(() => {
+            instance.enable();
+            instance.show();
+          });
+        }
+      }, function(instance) {
+      });
+    }
+        let selectedAnnoteEl;
+        const selectorForAnnotation = ( cell, annotation) => {
+          let cellAttr = 'data-code-cell="' + cell + '"';
+          let lineAttr = 'data-code-annotation="' +  annotation + '"';
+          const selector = 'span[' + cellAttr + '][' + lineAttr + ']';
+          return selector;
+        }
+        const selectCodeLines = (annoteEl) => {
+          const doc = window.document;
+          const targetCell = annoteEl.getAttribute("data-target-cell");
+          const targetAnnotation = annoteEl.getAttribute("data-target-annotation");
+          const annoteSpan = window.document.querySelector(selectorForAnnotation(targetCell, targetAnnotation));
+          const lines = annoteSpan.getAttribute("data-code-lines").split(",");
+          const lineIds = lines.map((line) => {
+            return targetCell + "-" + line;
+          })
+          let top = null;
+          let height = null;
+          let parent = null;
+          if (lineIds.length > 0) {
+              //compute the position of the single el (top and bottom and make a div)
+              const el = window.document.getElementById(lineIds[0]);
+              top = el.offsetTop;
+              height = el.offsetHeight;
+              parent = el.parentElement.parentElement;
+            if (lineIds.length > 1) {
+              const lastEl = window.document.getElementById(lineIds[lineIds.length - 1]);
+              const bottom = lastEl.offsetTop + lastEl.offsetHeight;
+              height = bottom - top;
+            }
+            if (top !== null && height !== null && parent !== null) {
+              // cook up a div (if necessary) and position it 
+              let div = window.document.getElementById("code-annotation-line-highlight");
+              if (div === null) {
+                div = window.document.createElement("div");
+                div.setAttribute("id", "code-annotation-line-highlight");
+                div.style.position = 'absolute';
+                parent.appendChild(div);
+              }
+              div.style.top = top - 2 + "px";
+              div.style.height = height + 4 + "px";
+              div.style.left = 0;
+              let gutterDiv = window.document.getElementById("code-annotation-line-highlight-gutter");
+              if (gutterDiv === null) {
+                gutterDiv = window.document.createElement("div");
+                gutterDiv.setAttribute("id", "code-annotation-line-highlight-gutter");
+                gutterDiv.style.position = 'absolute';
+                const codeCell = window.document.getElementById(targetCell);
+                const gutter = codeCell.querySelector('.code-annotation-gutter');
+                gutter.appendChild(gutterDiv);
+              }
+              gutterDiv.style.top = top - 2 + "px";
+              gutterDiv.style.height = height + 4 + "px";
+            }
+            selectedAnnoteEl = annoteEl;
+          }
+        };
+        const unselectCodeLines = () => {
+          const elementsIds = ["code-annotation-line-highlight", "code-annotation-line-highlight-gutter"];
+          elementsIds.forEach((elId) => {
+            const div = window.document.getElementById(elId);
+            if (div) {
+              div.remove();
+            }
+          });
+          selectedAnnoteEl = undefined;
+        };
+          // Handle positioning of the toggle
+      window.addEventListener(
+        "resize",
+        throttle(() => {
+          elRect = undefined;
+          if (selectedAnnoteEl) {
+            selectCodeLines(selectedAnnoteEl);
+          }
+        }, 10)
+      );
+      function throttle(fn, ms) {
+      let throttle = false;
+      let timer;
+        return (...args) => {
+          if(!throttle) { // first call gets through
+              fn.apply(this, args);
+              throttle = true;
+          } else { // all the others get throttled
+              if(timer) clearTimeout(timer); // cancel #2
+              timer = setTimeout(() => {
+                fn.apply(this, args);
+                timer = throttle = false;
+              }, ms);
+          }
+        };
+      }
+        const annoteTargets = window.document.querySelectorAll('.code-annotation-anchor');
+        for (let i=0; i<annoteTargets.length; i++) {
+          const annoteTarget = annoteTargets[i];
+          const targetCell = annoteTarget.getAttribute("data-target-cell");
+          const targetAnnotation = annoteTarget.getAttribute("data-target-annotation");
+          const contentFn = () => {
+            const content = window.document.querySelector(selectorForAnnotation(targetCell, targetAnnotation));
+            if (content) {
+              const tipContent = content.cloneNode(true);
+              tipContent.classList.add("code-annotation-tip-content");
+              return tipContent.outerHTML;
+            }
+          }
+          const config = {
+            allowHTML: true,
+            content: contentFn,
+            onShow: (instance) => {
+              selectCodeLines(instance.reference);
+              instance.reference.classList.add('code-annotation-active');
+              window.tippy.hideAll();
+            },
+            onHide: (instance) => {
+              unselectCodeLines();
+              instance.reference.classList.remove('code-annotation-active');
+            },
+            maxWidth: 300,
+            delay: [50, 0],
+            duration: [200, 0],
+            offset: [5, 10],
+            arrow: true,
+            appendTo: function(el) {
+              return el.parentElement.parentElement.parentElement;
+            },
+            interactive: true,
+            interactiveBorder: 10,
+            theme: 'quarto',
+            placement: 'right',
+            popperOptions: {
+              modifiers: [
+              {
+                name: 'flip',
+                options: {
+                  flipVariations: false, // true by default
+                  allowedAutoPlacements: ['right'],
+                  fallbackPlacements: ['right', 'top', 'top-start', 'top-end', 'bottom', 'bottom-start', 'bottom-end', 'left'],
+                },
+              },
+              {
+                name: 'preventOverflow',
+                options: {
+                  mainAxis: false,
+                  altAxis: false
+                }
+              }
+              ]        
+            }      
+          };
+          window.tippy(annoteTarget, config); 
+        }
+    const findCites = (el) => {
+      const parentEl = el.parentElement;
+      if (parentEl) {
+        const cites = parentEl.dataset.cites;
+        if (cites) {
+          return {
+            el,
+            cites: cites.split(' ')
+          };
+        } else {
+          return findCites(el.parentElement)
+        }
+      } else {
+        return undefined;
+      }
+    };
+    var bibliorefs = window.document.querySelectorAll('a[role="doc-biblioref"]');
+    for (var i=0; i<bibliorefs.length; i++) {
+      const ref = bibliorefs[i];
+      const citeInfo = findCites(ref);
+      if (citeInfo) {
+        tippyHover(citeInfo.el, function() {
+          var popup = window.document.createElement('div');
+          citeInfo.cites.forEach(function(cite) {
+            var citeDiv = window.document.createElement('div');
+            citeDiv.classList.add('hanging-indent');
+            citeDiv.classList.add('csl-entry');
+            var biblioDiv = window.document.getElementById('ref-' + cite);
+            if (biblioDiv) {
+              citeDiv.innerHTML = biblioDiv.innerHTML;
+            }
+            popup.appendChild(citeDiv);
+          });
+          return popup.innerHTML;
+        });
+      }
+    }
+  });
+  </script>
+<nav class="page-navigation">
+  <div class="nav-page nav-page-previous">
+      <a href="../../content/cap14/02-redes-multicamada.html" class="pagination-link" aria-label="Redes Multicamada">
+        <i class="bi bi-arrow-left-short"></i> <span class="nav-page-text"><span class="chapter-title">Redes Multicamada</span></span>
+      </a>          
+  </div>
+  <div class="nav-page nav-page-next">
+      <a href="../../content/cap14/04-mlpclassifier-e-mlpregressor-na-pratica.html" class="pagination-link" aria-label="MLPClassifier e MLPRegressor na Prática">
+        <span class="nav-page-text"><span class="chapter-title">MLPClassifier e MLPRegressor na Prática</span></span> <i class="bi bi-arrow-right-short"></i>
+      </a>
+  </div>
+</nav>
+</div> <!-- /content -->
+<footer class="footer">
+  <div class="nav-footer">
+    <div class="nav-footer-left">
+<p>UnDF — Ciência da Computação — Ciência de Dados — 2026.2</p>
+</div>   
+    <div class="nav-footer-center">
+      &nbsp;
+    <div class="toc-actions d-sm-block d-md-none"><ul><li><a href="https://github.com/BragaD/UnDF-Bases5-CienciaDeDados-202602/issues/new" class="toc-action"><i class="bi bi-github"></i>Criar uma issue</a></li></ul></div></div>
+    <div class="nav-footer-right">
+      <ul class="footer-items list-unstyled">
+    <li class="nav-item compact">
+    <a class="nav-link" href="https://github.com/BragaD/UnDF-Bases5-CienciaDeDados-202602">
+      <i class="bi bi-github" role="img">
+</i> 
+    </a>
+  </li>  
+</ul>
+    </div>
+  </div>
+</footer>
+
+
+
+
+</body></html>

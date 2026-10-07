@@ -1,0 +1,2092 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" lang="pt" xml:lang="pt"><head>
+
+<meta charset="utf-8">
+<meta name="generator" content="quarto-1.9.38">
+
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
+
+<meta name="author" content="Douglas Braga">
+
+<title>Comparando Modelos por Validação Cruzada – Ciência de Dados - Bases 5</title>
+<style>
+/* Default styles provided by pandoc.
+** See https://pandoc.org/MANUAL.html#variables-for-html for config info.
+*/
+code{white-space: pre-wrap;}
+span.smallcaps{font-variant: small-caps;}
+div.columns{display: flex; gap: min(4vw, 1.5em);}
+div.column{flex: auto; overflow-x: auto;}
+div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+ul.task-list{list-style: none;}
+ul.task-list li input[type="checkbox"] {
+  width: 0.8em;
+  margin: 0 0.8em 0.2em -1em; /* quarto-specific, see https://github.com/quarto-dev/quarto-cli/issues/4556 */ 
+  vertical-align: middle;
+}
+/* CSS for syntax highlighting */
+html { -webkit-text-size-adjust: 100%; }
+pre > code.sourceCode { white-space: pre; position: relative; }
+pre > code.sourceCode > span { display: inline-block; line-height: 1.25; }
+pre > code.sourceCode > span:empty { height: 1.2em; }
+.sourceCode { overflow: visible; }
+code.sourceCode > span { color: inherit; text-decoration: inherit; }
+div.sourceCode { margin: 1em 0; }
+pre.sourceCode { margin: 0; }
+@media screen {
+div.sourceCode { overflow: auto; }
+}
+@media print {
+pre > code.sourceCode { white-space: pre-wrap; }
+pre > code.sourceCode > span { text-indent: -5em; padding-left: 5em; }
+}
+pre.numberSource code
+  { counter-reset: source-line 0; }
+pre.numberSource code > span
+  { position: relative; left: -4em; counter-increment: source-line; }
+pre.numberSource code > span > a:first-child::before
+  { content: counter(source-line);
+    position: relative; left: -1em; text-align: right; vertical-align: baseline;
+    border: none; display: inline-block;
+    -webkit-touch-callout: none; -webkit-user-select: none;
+    -khtml-user-select: none; -moz-user-select: none;
+    -ms-user-select: none; user-select: none;
+    padding: 0 4px; width: 4em;
+  }
+pre.numberSource { margin-left: 3em;  padding-left: 4px; }
+div.sourceCode
+  {   }
+@media screen {
+pre > code.sourceCode > span > a:first-child::before { text-decoration: underline; }
+}
+</style>
+
+
+<script src="https://cdn.jsdelivr.net/npm/jquery@3.5.1/dist/jquery.min.js" integrity="sha384-ZvpUoO/+PpLXR1lu4jmpXWu80pZlYUAfxl5NsBMWOEPSjUn/6Z/hRTt8+pR6L4N2" crossorigin="anonymous"></script><script src="../../site_libs/quarto-nav/quarto-nav.js"></script>
+<script src="../../site_libs/quarto-nav/headroom.min.js"></script>
+<script src="../../site_libs/clipboard/clipboard.min.js"></script>
+<script src="../../site_libs/quarto-search/autocomplete.umd.js"></script>
+<script src="../../site_libs/quarto-search/fuse.min.js"></script>
+<script src="../../site_libs/quarto-search/quarto-search.js"></script>
+<meta name="quarto:offset" content="../../">
+<link href="../../content/cap17/05-ajuste-de-hiperparametros-com-gridsearchcv.html" rel="next">
+<link href="../../content/cap17/03-pre-processamento-como-parte-do-modelo.html" rel="prev">
+<link href="../../images/favicon.png" rel="icon" type="image/png">
+<script src="../../site_libs/quarto-html/quarto.js" type="module"></script>
+<script src="../../site_libs/quarto-html/tabsets/tabsets.js" type="module"></script>
+<script src="../../site_libs/quarto-html/popper.min.js"></script>
+<script src="../../site_libs/quarto-html/tippy.umd.min.js"></script>
+<script src="../../site_libs/quarto-html/anchor.min.js"></script>
+<link href="../../site_libs/quarto-html/tippy.css" rel="stylesheet">
+<link href="../../site_libs/quarto-html/quarto-syntax-highlighting-15634bcf2e68342d4ad2dfa704d543f6.css" rel="stylesheet" class="quarto-color-scheme" id="quarto-text-highlighting-styles">
+<link href="../../site_libs/quarto-html/quarto-syntax-highlighting-dark-0a6b7249c26820e032cb0bd839ff02b1.css" rel="stylesheet" class="quarto-color-scheme quarto-color-alternate" id="quarto-text-highlighting-styles">
+<link href="../../site_libs/quarto-html/quarto-syntax-highlighting-15634bcf2e68342d4ad2dfa704d543f6.css" rel="stylesheet" class="quarto-color-scheme-extra" id="quarto-text-highlighting-styles">
+<script src="../../site_libs/bootstrap/bootstrap.min.js"></script>
+<link href="../../site_libs/bootstrap/bootstrap-icons.css" rel="stylesheet">
+<link href="../../site_libs/bootstrap/bootstrap-96de93aeef37c2f55637d13965bee670.min.css" rel="stylesheet" append-hash="true" class="quarto-color-scheme" id="quarto-bootstrap" data-mode="light">
+<link href="../../site_libs/bootstrap/bootstrap-dark-fa5a435faa8b3fd8ba2c629fc35ba32a.min.css" rel="stylesheet" append-hash="true" class="quarto-color-scheme quarto-color-alternate" id="quarto-bootstrap" data-mode="dark">
+<link href="../../site_libs/bootstrap/bootstrap-96de93aeef37c2f55637d13965bee670.min.css" rel="stylesheet" append-hash="true" class="quarto-color-scheme-extra" id="quarto-bootstrap" data-mode="light">
+<script id="quarto-search-options" type="application/json">{
+  "location": "navbar",
+  "copy-button": false,
+  "collapse-after": 3,
+  "panel-placement": "end",
+  "type": "overlay",
+  "limit": 50,
+  "keyboard-shortcut": [
+    "f",
+    "/",
+    "s"
+  ],
+  "show-item-context": false,
+  "language": {
+    "search-no-results-text": "Nenhum resultado",
+    "search-matching-documents-text": "documentos correspondentes",
+    "search-copy-link-title": "Copiar link para a busca",
+    "search-hide-matches-text": "Esconder correspondências adicionais",
+    "search-more-match-text": "mais correspondência neste documento",
+    "search-more-matches-text": "mais correspondências neste documento",
+    "search-clear-button-title": "Limpar",
+    "search-text-placeholder": "",
+    "search-detached-cancel-button-title": "Cancelar",
+    "search-submit-button-title": "Enviar",
+    "search-label": "Procurar"
+  }
+}</script>
+<script>
+// Modo leitura: um botão que esconde as duas barras laterais e centraliza o
+// texto. A escolha é lembrada entre páginas (localStorage). Ver o CSS em
+// styles.css (classe html.modo-leitura e .btn-modo-leitura).
+(function () {
+  // A chave leva o nome do livro porque os dois livros são publicados no
+  // mesmo domínio (bragad.github.io) e, portanto, dividem o localStorage.
+  // Uma chave genérica faria o Bases 3 e o Bases 5 alternarem um ao outro.
+  var CHAVE = "bases5-modo-leitura";
+
+  // 1. Aplicar o estado salvo ANTES do primeiro paint, para não haver flash das
+  //    barras aparecendo e sumindo. Este script está no <head>, então roda antes
+  //    de o <body> ser desenhado.
+  try {
+    if (localStorage.getItem(CHAVE) === "1") {
+      document.documentElement.classList.add("modo-leitura");
+    }
+  } catch (e) {}
+
+  // 2. Injetar o botão e ligar o toggle quando o DOM estiver pronto.
+  document.addEventListener("DOMContentLoaded", function () {
+    var btn = document.createElement("button");
+    btn.className = "btn-modo-leitura";
+    btn.type = "button";
+
+    function rotular() {
+      var ativo = document.documentElement.classList.contains("modo-leitura");
+      btn.innerHTML = ativo
+        ? '<i class="bi bi-layout-sidebar-inset"></i> Mostrar menus'
+        : '<i class="bi bi-arrows-angle-expand"></i> Modo leitura';
+      btn.setAttribute("aria-pressed", ativo ? "true" : "false");
+    }
+
+    rotular();
+
+    btn.addEventListener("click", function () {
+      var ativo = document.documentElement.classList.toggle("modo-leitura");
+      try {
+        localStorage.setItem(CHAVE, ativo ? "1" : "0");
+      } catch (e) {}
+      rotular();
+    });
+
+    document.body.appendChild(btn);
+  });
+})();
+</script>
+<script src="https://cdn.jsdelivr.net/npm/requirejs@2.3.6/require.min.js" integrity="sha384-c9c+LnTbwQ3aujuU7ULEPVvgLs+Fn6fJUvIGTsuu1ZcCf11fiEubah0ttpca4ntM sha384-6V1/AdqZRWk1KAlWbKBlGhN7VG4iE/yAZcO6NZPMF8od0vukrvr0tg4qY6NSrItx" crossorigin="anonymous"></script>
+
+<script type="application/javascript">define('jquery', [],function() {return window.jQuery;})</script>
+
+  <script src="https://cdnjs.cloudflare.com/polyfill/v3/polyfill.min.js?features=es6"></script>
+  <script defer="" src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-chtml-full.js" type="text/javascript"></script>
+
+<script type="text/javascript">
+const typesetMath = (el) => {
+  if (window.MathJax) {
+    // MathJax Typeset
+    window.MathJax.typeset([el]);
+  } else if (window.katex) {
+    // KaTeX Render
+    var mathElements = el.getElementsByClassName("math");
+    var macros = [];
+    for (var i = 0; i < mathElements.length; i++) {
+      var texText = mathElements[i].firstChild;
+      if (mathElements[i].tagName == "SPAN" && texText && texText.data) {
+        window.katex.render(texText.data, mathElements[i], {
+          displayMode: mathElements[i].classList.contains('display'),
+          throwOnError: false,
+          macros: macros,
+          fleqn: false
+        });
+      }
+    }
+  }
+}
+window.Quarto = {
+  typesetMath
+};
+</script>
+
+<link rel="stylesheet" href="../../styles.css">
+</head>
+
+<body class="nav-sidebar floating nav-fixed quarto-light"><script id="quarto-html-before-body" type="application/javascript">
+    const toggleBodyColorMode = (bsSheetEl) => {
+      const mode = bsSheetEl.getAttribute("data-mode");
+      const bodyEl = window.document.querySelector("body");
+      if (mode === "dark") {
+        bodyEl.classList.add("quarto-dark");
+        bodyEl.classList.remove("quarto-light");
+      } else {
+        bodyEl.classList.add("quarto-light");
+        bodyEl.classList.remove("quarto-dark");
+      }
+    }
+    const toggleBodyColorPrimary = () => {
+      const bsSheetEl = window.document.querySelector("link#quarto-bootstrap:not([rel=disabled-stylesheet])");
+      if (bsSheetEl) {
+        toggleBodyColorMode(bsSheetEl);
+      }
+    }
+    const setColorSchemeToggle = (alternate) => {
+      const toggles = window.document.querySelectorAll('.quarto-color-scheme-toggle');
+      for (let i=0; i < toggles.length; i++) {
+        const toggle = toggles[i];
+        if (toggle) {
+          if (alternate) {
+            toggle.classList.add("alternate");
+          } else {
+            toggle.classList.remove("alternate");
+          }
+        }
+      }
+    };
+    const toggleColorMode = (alternate) => {
+      // Switch the stylesheets
+      const primaryStylesheets = window.document.querySelectorAll('link.quarto-color-scheme:not(.quarto-color-alternate)');
+      const alternateStylesheets = window.document.querySelectorAll('link.quarto-color-scheme.quarto-color-alternate');
+      manageTransitions('#quarto-margin-sidebar .nav-link', false);
+      if (alternate) {
+        // note: dark is layered on light, we don't disable primary!
+        enableStylesheet(alternateStylesheets);
+        for (const sheetNode of alternateStylesheets) {
+          if (sheetNode.id === "quarto-bootstrap") {
+            toggleBodyColorMode(sheetNode);
+          }
+        }
+      } else {
+        disableStylesheet(alternateStylesheets);
+        enableStylesheet(primaryStylesheets)
+        toggleBodyColorPrimary();
+      }
+      manageTransitions('#quarto-margin-sidebar .nav-link', true);
+      // Switch the toggles
+      setColorSchemeToggle(alternate)
+      // Hack to workaround the fact that safari doesn't
+      // properly recolor the scrollbar when toggling (#1455)
+      if (navigator.userAgent.indexOf('Safari') > 0 && navigator.userAgent.indexOf('Chrome') == -1) {
+        manageTransitions("body", false);
+        window.scrollTo(0, 1);
+        setTimeout(() => {
+          window.scrollTo(0, 0);
+          manageTransitions("body", true);
+        }, 40);
+      }
+    }
+    const disableStylesheet = (stylesheets) => {
+      for (let i=0; i < stylesheets.length; i++) {
+        const stylesheet = stylesheets[i];
+        stylesheet.rel = 'disabled-stylesheet';
+      }
+    }
+    const enableStylesheet = (stylesheets) => {
+      for (let i=0; i < stylesheets.length; i++) {
+        const stylesheet = stylesheets[i];
+        if(stylesheet.rel !== 'stylesheet') { // for Chrome, which will still FOUC without this check
+          stylesheet.rel = 'stylesheet';
+        }
+      }
+    }
+    const manageTransitions = (selector, allowTransitions) => {
+      const els = window.document.querySelectorAll(selector);
+      for (let i=0; i < els.length; i++) {
+        const el = els[i];
+        if (allowTransitions) {
+          el.classList.remove('notransition');
+        } else {
+          el.classList.add('notransition');
+        }
+      }
+    }
+    const isFileUrl = () => {
+      return window.location.protocol === 'file:';
+    }
+    const hasAlternateSentinel = () => {
+      let styleSentinel = getColorSchemeSentinel();
+      if (styleSentinel !== null) {
+        return styleSentinel === "alternate";
+      } else {
+        return false;
+      }
+    }
+    const setStyleSentinel = (alternate) => {
+      const value = alternate ? "alternate" : "default";
+      if (!isFileUrl()) {
+        window.localStorage.setItem("quarto-color-scheme", value);
+      } else {
+        localAlternateSentinel = value;
+      }
+    }
+    const getColorSchemeSentinel = () => {
+      if (!isFileUrl()) {
+        const storageValue = window.localStorage.getItem("quarto-color-scheme");
+        return storageValue != null ? storageValue : localAlternateSentinel;
+      } else {
+        return localAlternateSentinel;
+      }
+    }
+    const toggleGiscusIfUsed = (isAlternate, darkModeDefault) => {
+      const baseTheme = document.querySelector('#giscus-base-theme')?.value ?? 'light';
+      const alternateTheme = document.querySelector('#giscus-alt-theme')?.value ?? 'dark';
+      let newTheme = '';
+      if(authorPrefersDark) {
+        newTheme = isAlternate ? baseTheme : alternateTheme;
+      } else {
+        newTheme = isAlternate ? alternateTheme : baseTheme;
+      }
+      const changeGiscusTheme = () => {
+        // From: https://github.com/giscus/giscus/issues/336
+        const sendMessage = (message) => {
+          const iframe = document.querySelector('iframe.giscus-frame');
+          if (!iframe) return;
+          iframe.contentWindow.postMessage({ giscus: message }, 'https://giscus.app');
+        }
+        sendMessage({
+          setConfig: {
+            theme: newTheme
+          }
+        });
+      }
+      const isGiscussLoaded = window.document.querySelector('iframe.giscus-frame') !== null;
+      if (isGiscussLoaded) {
+        changeGiscusTheme();
+      }
+    };
+    const authorPrefersDark = false;
+    const darkModeDefault = authorPrefersDark;
+      document.querySelector('link#quarto-text-highlighting-styles.quarto-color-scheme-extra').rel = 'disabled-stylesheet';
+      document.querySelector('link#quarto-bootstrap.quarto-color-scheme-extra').rel = 'disabled-stylesheet';
+    let localAlternateSentinel = darkModeDefault ? 'alternate' : 'default';
+    // Dark / light mode switch
+    window.quartoToggleColorScheme = () => {
+      // Read the current dark / light value
+      let toAlternate = !hasAlternateSentinel();
+      toggleColorMode(toAlternate);
+      setStyleSentinel(toAlternate);
+      toggleGiscusIfUsed(toAlternate, darkModeDefault);
+      window.dispatchEvent(new Event('resize'));
+    };
+    // Switch to dark mode if need be
+    if (hasAlternateSentinel()) {
+      toggleColorMode(true);
+    } else {
+      toggleColorMode(false);
+    }
+  </script>
+
+<div id="quarto-search-results"></div>
+  <header id="quarto-header" class="headroom fixed-top">
+    <nav class="navbar navbar-expand-lg " data-bs-theme="dark">
+      <div class="navbar-container container-fluid">
+      <div class="navbar-brand-container mx-auto">
+    <a href="../../index.html" class="navbar-brand navbar-brand-logo">
+    <img src="../../images/logo-undf.png" alt="Logo UnDF" class="navbar-logo light-content">
+    <img src="../../images/logo-undf.png" alt="Logo UnDF" class="navbar-logo dark-content">
+    </a>
+    <a class="navbar-brand" href="../../index.html">
+    <span class="navbar-title">Ciência de Dados - Bases 5</span>
+    </a>
+  </div>
+        <div class="quarto-navbar-tools tools-end">
+    <a href="https://github.com/BragaD/UnDF-Bases5-CienciaDeDados-202602" title="Código fonte" class="quarto-navigation-tool px-1" aria-label="Código fonte"><i class="bi bi-github"></i></a>
+  <a href="" class="quarto-color-scheme-toggle quarto-navigation-tool  px-1" onclick="window.quartoToggleColorScheme(); return false;" title="Alternar modo escuro"><i class="bi"></i></a>
+</div>
+          <div id="quarto-search" class="" title="Procurar"></div>
+      </div> <!-- /container-fluid -->
+    </nav>
+  <nav class="quarto-secondary-nav">
+    <div class="container-fluid d-flex">
+      <button type="button" class="quarto-btn-toggle btn" data-bs-toggle="collapse" role="button" data-bs-target=".quarto-sidebar-collapse-item" aria-controls="quarto-sidebar" aria-expanded="false" aria-label="Alternar barra lateral" onclick="if (window.quartoToggleHeadroom) { window.quartoToggleHeadroom(); }">
+        <i class="bi bi-layout-text-sidebar-reverse"></i>
+      </button>
+        <nav class="quarto-page-breadcrumbs" aria-label="breadcrumb"><ol class="breadcrumb"><li class="breadcrumb-item"><a href="../../content/cap17/index.html">Capítulo 17: Um Problema do Começo ao Fim</a></li><li class="breadcrumb-item"><a href="../../content/cap17/04-comparando-modelos-por-validacao-cruzada.html"><span class="chapter-title">Comparando Modelos por Validação Cruzada</span></a></li></ol></nav>
+        <a class="flex-grow-1" role="navigation" data-bs-toggle="collapse" data-bs-target=".quarto-sidebar-collapse-item" aria-controls="quarto-sidebar" aria-expanded="false" aria-label="Alternar barra lateral" onclick="if (window.quartoToggleHeadroom) { window.quartoToggleHeadroom(); }">      
+        </a>
+    </div>
+  </nav>
+</header>
+<!-- content -->
+<div id="quarto-content" class="quarto-container page-columns page-rows-contents page-layout-article page-navbar">
+<!-- sidebar -->
+  <nav id="quarto-sidebar" class="sidebar collapse collapse-horizontal quarto-sidebar-collapse-item sidebar-navigation floating overflow-auto">
+    <div class="sidebar-menu-container"> 
+    <ul class="list-unstyled mt-1">
+        <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../../index.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">Início</span></a>
+  </div>
+</li>
+        <li class="sidebar-item sidebar-item-section">
+      <div class="sidebar-item-container"> 
+            <a class="sidebar-item-text sidebar-link text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-1" role="navigation" aria-expanded="true">
+ <span class="menu-text">Capítulo 1: Introdução</span></a>
+          <a class="sidebar-item-toggle text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-1" role="navigation" aria-expanded="true" aria-label="Alternar seção">
+            <i class="bi bi-chevron-right ms-2"></i>
+          </a> 
+      </div>
+      <ul id="quarto-sidebar-section-1" class="collapse list-unstyled sidebar-section depth1 show">  
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../../content/cap01/index.html" class="sidebar-item-text sidebar-link"><span class="chapter-title">Visão Geral</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../../content/cap01/01-a-ascensao-dos-dados.html" class="sidebar-item-text sidebar-link"><span class="chapter-title">A Ascensão dos Dados</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../../content/cap01/02-o-que-e-ciencia-de-dados.html" class="sidebar-item-text sidebar-link"><span class="chapter-title">O que é Ciência de Dados?</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../../content/cap01/03-hipotese-motivadora-datasciencester.html" class="sidebar-item-text sidebar-link"><span class="chapter-title">Hipótese Motivadora: DataSciencester</span></a>
+  </div>
+</li>
+      </ul>
+  </li>
+        <li class="sidebar-item sidebar-item-section">
+      <div class="sidebar-item-container"> 
+            <a class="sidebar-item-text sidebar-link text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-2" role="navigation" aria-expanded="true">
+ <span class="menu-text">Capítulo 2: Um Curso Rápido de Python</span></a>
+          <a class="sidebar-item-toggle text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-2" role="navigation" aria-expanded="true" aria-label="Alternar seção">
+            <i class="bi bi-chevron-right ms-2"></i>
+          </a> 
+      </div>
+      <ul id="quarto-sidebar-section-2" class="collapse list-unstyled sidebar-section depth1 show">  
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../../content/cap02/index.html" class="sidebar-item-text sidebar-link"><span class="chapter-title">Visão Geral</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../../content/cap02/01-ambiente-e-sintaxe.html" class="sidebar-item-text sidebar-link"><span class="chapter-title">Ambiente e Sintaxe</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../../content/cap02/02-funcoes-strings-excecoes.html" class="sidebar-item-text sidebar-link"><span class="chapter-title">Funções, Strings e Exceções</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../../content/cap02/03-estruturas-de-dados.html" class="sidebar-item-text sidebar-link"><span class="chapter-title">Estruturas de Dados</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../../content/cap02/04-controle-de-fluxo.html" class="sidebar-item-text sidebar-link"><span class="chapter-title">Controle de Fluxo</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../../content/cap02/05-testes-classes-e-geradores.html" class="sidebar-item-text sidebar-link"><span class="chapter-title">Testes, Classes e Geradores</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../../content/cap02/06-ferramentas-e-tipos.html" class="sidebar-item-text sidebar-link"><span class="chapter-title">Ferramentas e Anotações de Tipo</span></a>
+  </div>
+</li>
+      </ul>
+  </li>
+        <li class="sidebar-item sidebar-item-section">
+      <div class="sidebar-item-container"> 
+            <a class="sidebar-item-text sidebar-link text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-3" role="navigation" aria-expanded="true">
+ <span class="menu-text">Capítulo 3: Visualizando Dados</span></a>
+          <a class="sidebar-item-toggle text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-3" role="navigation" aria-expanded="true" aria-label="Alternar seção">
+            <i class="bi bi-chevron-right ms-2"></i>
+          </a> 
+      </div>
+      <ul id="quarto-sidebar-section-3" class="collapse list-unstyled sidebar-section depth1 show">  
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../../content/cap03/index.html" class="sidebar-item-text sidebar-link"><span class="chapter-title">Visão Geral</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../../content/cap03/01-matplotlib.html" class="sidebar-item-text sidebar-link"><span class="chapter-title">matplotlib</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../../content/cap03/02-graficos-de-barras.html" class="sidebar-item-text sidebar-link"><span class="chapter-title">Gráficos de Barras</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../../content/cap03/03-graficos-de-linhas.html" class="sidebar-item-text sidebar-link"><span class="chapter-title">Gráficos de Linhas</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../../content/cap03/04-graficos-de-dispersao.html" class="sidebar-item-text sidebar-link"><span class="chapter-title">Gráficos de Dispersão</span></a>
+  </div>
+</li>
+      </ul>
+  </li>
+        <li class="sidebar-item sidebar-item-section">
+      <div class="sidebar-item-container"> 
+            <a class="sidebar-item-text sidebar-link text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-4" role="navigation" aria-expanded="true">
+ <span class="menu-text">Capítulo 4: Álgebra Linear</span></a>
+          <a class="sidebar-item-toggle text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-4" role="navigation" aria-expanded="true" aria-label="Alternar seção">
+            <i class="bi bi-chevron-right ms-2"></i>
+          </a> 
+      </div>
+      <ul id="quarto-sidebar-section-4" class="collapse list-unstyled sidebar-section depth1 show">  
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../../content/cap04/index.html" class="sidebar-item-text sidebar-link"><span class="chapter-title">Visão Geral</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../../content/cap04/01-vetores.html" class="sidebar-item-text sidebar-link"><span class="chapter-title">Vetores</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../../content/cap04/02-matrizes.html" class="sidebar-item-text sidebar-link"><span class="chapter-title">Matrizes</span></a>
+  </div>
+</li>
+      </ul>
+  </li>
+        <li class="sidebar-item sidebar-item-section">
+      <div class="sidebar-item-container"> 
+            <a class="sidebar-item-text sidebar-link text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-5" role="navigation" aria-expanded="true">
+ <span class="menu-text">Capítulo 5: Gradiente Descendente</span></a>
+          <a class="sidebar-item-toggle text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-5" role="navigation" aria-expanded="true" aria-label="Alternar seção">
+            <i class="bi bi-chevron-right ms-2"></i>
+          </a> 
+      </div>
+      <ul id="quarto-sidebar-section-5" class="collapse list-unstyled sidebar-section depth1 show">  
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../../content/cap05/index.html" class="sidebar-item-text sidebar-link"><span class="chapter-title">Visão Geral</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../../content/cap05/01-a-ideia-por-tras-do-gradiente.html" class="sidebar-item-text sidebar-link"><span class="chapter-title">A Ideia por Trás do Gradiente Descendente</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../../content/cap05/02-estimando-o-gradiente.html" class="sidebar-item-text sidebar-link"><span class="chapter-title">Estimando o Gradiente</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../../content/cap05/03-usando-o-gradiente.html" class="sidebar-item-text sidebar-link"><span class="chapter-title">Usando o Gradiente</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../../content/cap05/04-escolhendo-o-tamanho-do-passo.html" class="sidebar-item-text sidebar-link"><span class="chapter-title">Escolhendo o Tamanho do Passo</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../../content/cap05/05-ajustando-modelos.html" class="sidebar-item-text sidebar-link"><span class="chapter-title">Ajustando Modelos com Gradiente Descendente</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../../content/cap05/06-minibatch-e-estocastico.html" class="sidebar-item-text sidebar-link"><span class="chapter-title">Minibatch e Gradiente Estocástico</span></a>
+  </div>
+</li>
+      </ul>
+  </li>
+        <li class="sidebar-item sidebar-item-section">
+      <div class="sidebar-item-container"> 
+            <a class="sidebar-item-text sidebar-link text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-6" role="navigation" aria-expanded="true">
+ <span class="menu-text">Capítulo 6: Dados: Tipos, Dados Retangulares e pandas</span></a>
+          <a class="sidebar-item-toggle text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-6" role="navigation" aria-expanded="true" aria-label="Alternar seção">
+            <i class="bi bi-chevron-right ms-2"></i>
+          </a> 
+      </div>
+      <ul id="quarto-sidebar-section-6" class="collapse list-unstyled sidebar-section depth1 show">  
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../../content/cap06/index.html" class="sidebar-item-text sidebar-link"><span class="chapter-title">Visão Geral</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../../content/cap06/01-elementos-de-dados-estruturados.html" class="sidebar-item-text sidebar-link"><span class="chapter-title">Elementos de Dados Estruturados</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../../content/cap06/02-dados-retangulares.html" class="sidebar-item-text sidebar-link"><span class="chapter-title">Dados Retangulares</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../../content/cap06/03-lendo-e-tipando-um-arquivo-real.html" class="sidebar-item-text sidebar-link"><span class="chapter-title">Lendo e Tipando um Arquivo Real</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../../content/cap06/04-limpando-e-transformando.html" class="sidebar-item-text sidebar-link"><span class="chapter-title">Limpando e Transformando</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../../content/cap06/05-agrupando-e-resumindo.html" class="sidebar-item-text sidebar-link"><span class="chapter-title">Agrupando e Resumindo</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../../content/cap06/06-da-tabela-para-o-modelo.html" class="sidebar-item-text sidebar-link"><span class="chapter-title">Da Tabela para o Modelo</span></a>
+  </div>
+</li>
+      </ul>
+  </li>
+        <li class="sidebar-item sidebar-item-section">
+      <div class="sidebar-item-container"> 
+            <a class="sidebar-item-text sidebar-link text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-7" role="navigation" aria-expanded="true">
+ <span class="menu-text">Capítulo 7: O que é Aprendizado Estatístico</span></a>
+          <a class="sidebar-item-toggle text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-7" role="navigation" aria-expanded="true" aria-label="Alternar seção">
+            <i class="bi bi-chevron-right ms-2"></i>
+          </a> 
+      </div>
+      <ul id="quarto-sidebar-section-7" class="collapse list-unstyled sidebar-section depth1 show">  
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../../content/cap07/index.html" class="sidebar-item-text sidebar-link"><span class="chapter-title">Visão Geral</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../../content/cap07/01-o-array.html" class="sidebar-item-text sidebar-link"><span class="chapter-title">O Array</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../../content/cap07/02-estimar-f.html" class="sidebar-item-text sidebar-link"><span class="chapter-title">Estimar f: Predição e Inferência</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../../content/cap07/03-parametrico-e-nao-parametrico.html" class="sidebar-item-text sidebar-link"><span class="chapter-title">Paramétrico e Não Paramétrico</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../../content/cap07/04-precisao-contra-interpretabilidade.html" class="sidebar-item-text sidebar-link"><span class="chapter-title">Precisão contra Interpretabilidade</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../../content/cap07/05-supervisionado-e-nao-supervisionado.html" class="sidebar-item-text sidebar-link"><span class="chapter-title">Supervisionado e Não Supervisionado</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../../content/cap07/06-qualidade-do-ajuste-e-vies-variancia.html" class="sidebar-item-text sidebar-link"><span class="chapter-title">Qualidade do Ajuste e o Compromisso Viés-Variância</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../../content/cap07/07-classificacao-e-o-classificador-de-bayes.html" class="sidebar-item-text sidebar-link"><span class="chapter-title">Classificação e o Classificador de Bayes</span></a>
+  </div>
+</li>
+      </ul>
+  </li>
+        <li class="sidebar-item sidebar-item-section">
+      <div class="sidebar-item-container"> 
+            <a class="sidebar-item-text sidebar-link text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-8" role="navigation" aria-expanded="true">
+ <span class="menu-text">Capítulo 8: Regressão Linear</span></a>
+          <a class="sidebar-item-toggle text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-8" role="navigation" aria-expanded="true" aria-label="Alternar seção">
+            <i class="bi bi-chevron-right ms-2"></i>
+          </a> 
+      </div>
+      <ul id="quarto-sidebar-section-8" class="collapse list-unstyled sidebar-section depth1 show">  
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../../content/cap08/index.html" class="sidebar-item-text sidebar-link"><span class="chapter-title">Visão Geral</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../../content/cap08/01-regressao-linear-simples.html" class="sidebar-item-text sidebar-link"><span class="chapter-title">Regressão Linear Simples</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../../content/cap08/02-avaliando-o-ajuste.html" class="sidebar-item-text sidebar-link"><span class="chapter-title">Avaliando o Ajuste: R² e Erro</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../../content/cap08/03-regressao-multipla.html" class="sidebar-item-text sidebar-link"><span class="chapter-title">Regressão Múltipla</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../../content/cap08/04-preditores-qualitativos.html" class="sidebar-item-text sidebar-link"><span class="chapter-title">Preditores Qualitativos</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../../content/cap08/05-interacao-e-termos-nao-lineares.html" class="sidebar-item-text sidebar-link"><span class="chapter-title">Interação e Termos Não Lineares</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../../content/cap08/06-outliers-alavancagem-e-colinearidade.html" class="sidebar-item-text sidebar-link"><span class="chapter-title">Outliers, Alavancagem e Colinearidade</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../../content/cap08/07-regressao-linear-contra-k-vizinhos.html" class="sidebar-item-text sidebar-link"><span class="chapter-title">Regressão Linear contra k-NN</span></a>
+  </div>
+</li>
+      </ul>
+  </li>
+        <li class="sidebar-item sidebar-item-section">
+      <div class="sidebar-item-container"> 
+            <a class="sidebar-item-text sidebar-link text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-9" role="navigation" aria-expanded="true">
+ <span class="menu-text">Capítulo 9: Classificação</span></a>
+          <a class="sidebar-item-toggle text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-9" role="navigation" aria-expanded="true" aria-label="Alternar seção">
+            <i class="bi bi-chevron-right ms-2"></i>
+          </a> 
+      </div>
+      <ul id="quarto-sidebar-section-9" class="collapse list-unstyled sidebar-section depth1 show">  
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../../content/cap09/index.html" class="sidebar-item-text sidebar-link"><span class="chapter-title">Visão Geral</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../../content/cap09/01-por-que-nao-regressao-linear.html" class="sidebar-item-text sidebar-link"><span class="chapter-title">Por que Não Regressão Linear</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../../content/cap09/02-regressao-logistica.html" class="sidebar-item-text sidebar-link"><span class="chapter-title">Regressão Logística</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../../content/cap09/03-logistica-multinomial.html" class="sidebar-item-text sidebar-link"><span class="chapter-title">Logística Multinomial</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../../content/cap09/04-modelos-generativos.html" class="sidebar-item-text sidebar-link"><span class="chapter-title">Modelos Generativos: LDA, QDA e Naive Bayes</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../../content/cap09/05-avaliando-um-classificador.html" class="sidebar-item-text sidebar-link"><span class="chapter-title">Avaliando um Classificador</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../../content/cap09/06-comparando-os-metodos.html" class="sidebar-item-text sidebar-link"><span class="chapter-title">Comparando os Métodos</span></a>
+  </div>
+</li>
+      </ul>
+  </li>
+        <li class="sidebar-item sidebar-item-section">
+      <div class="sidebar-item-container"> 
+            <a class="sidebar-item-text sidebar-link text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-10" role="navigation" aria-expanded="true">
+ <span class="menu-text">Capítulo 10: Reamostragem</span></a>
+          <a class="sidebar-item-toggle text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-10" role="navigation" aria-expanded="true" aria-label="Alternar seção">
+            <i class="bi bi-chevron-right ms-2"></i>
+          </a> 
+      </div>
+      <ul id="quarto-sidebar-section-10" class="collapse list-unstyled sidebar-section depth1 show">  
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../../content/cap10/index.html" class="sidebar-item-text sidebar-link"><span class="chapter-title">Visão Geral</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../../content/cap10/01-o-conjunto-de-validacao.html" class="sidebar-item-text sidebar-link"><span class="chapter-title">O Conjunto de Validação</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../../content/cap10/02-leave-one-out.html" class="sidebar-item-text sidebar-link"><span class="chapter-title">Validação Cruzada Leave-One-Out</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../../content/cap10/03-validacao-cruzada-k-fold.html" class="sidebar-item-text sidebar-link"><span class="chapter-title">Validação Cruzada k-Fold</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../../content/cap10/04-vies-e-variancia-na-validacao-cruzada.html" class="sidebar-item-text sidebar-link"><span class="chapter-title">Viés e Variância na Validação Cruzada</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../../content/cap10/05-validacao-cruzada-em-classificacao.html" class="sidebar-item-text sidebar-link"><span class="chapter-title">Validação Cruzada em Classificação</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../../content/cap10/06-vazamento.html" class="sidebar-item-text sidebar-link"><span class="chapter-title">Vazamento: o Pré-processamento Dentro da Validação</span></a>
+  </div>
+</li>
+      </ul>
+  </li>
+        <li class="sidebar-item sidebar-item-section">
+      <div class="sidebar-item-container"> 
+            <a class="sidebar-item-text sidebar-link text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-11" role="navigation" aria-expanded="true">
+ <span class="menu-text">Capítulo 11: Seleção de Modelos e Regularização</span></a>
+          <a class="sidebar-item-toggle text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-11" role="navigation" aria-expanded="true" aria-label="Alternar seção">
+            <i class="bi bi-chevron-right ms-2"></i>
+          </a> 
+      </div>
+      <ul id="quarto-sidebar-section-11" class="collapse list-unstyled sidebar-section depth1 show">  
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../../content/cap11/index.html" class="sidebar-item-text sidebar-link"><span class="chapter-title">Visão Geral</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../../content/cap11/01-selecao-de-subconjuntos.html" class="sidebar-item-text sidebar-link"><span class="chapter-title">Seleção de Subconjuntos</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../../content/cap11/02-escolhendo-o-modelo.html" class="sidebar-item-text sidebar-link"><span class="chapter-title">Escolhendo o Modelo: Cp, AIC, BIC e Validação</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../../content/cap11/03-regressao-ridge.html" class="sidebar-item-text sidebar-link"><span class="chapter-title">Regressão Ridge</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../../content/cap11/04-o-lasso.html" class="sidebar-item-text sidebar-link"><span class="chapter-title">O Lasso</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../../content/cap11/05-escolhendo-o-parametro-de-regularizacao.html" class="sidebar-item-text sidebar-link"><span class="chapter-title">Escolhendo o Parâmetro de Regularização</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../../content/cap11/06-regressao-por-componentes-principais.html" class="sidebar-item-text sidebar-link"><span class="chapter-title">Regressão por Componentes Principais</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../../content/cap11/07-o-que-muda-em-alta-dimensao.html" class="sidebar-item-text sidebar-link"><span class="chapter-title">O que Muda em Alta Dimensão</span></a>
+  </div>
+</li>
+      </ul>
+  </li>
+        <li class="sidebar-item sidebar-item-section">
+      <div class="sidebar-item-container"> 
+            <a class="sidebar-item-text sidebar-link text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-12" role="navigation" aria-expanded="true">
+ <span class="menu-text">Capítulo 12: Árvores de Decisão</span></a>
+          <a class="sidebar-item-toggle text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-12" role="navigation" aria-expanded="true" aria-label="Alternar seção">
+            <i class="bi bi-chevron-right ms-2"></i>
+          </a> 
+      </div>
+      <ul id="quarto-sidebar-section-12" class="collapse list-unstyled sidebar-section depth1 show">  
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../../content/cap12/index.html" class="sidebar-item-text sidebar-link"><span class="chapter-title">Visão Geral</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../../content/cap12/01-arvores-de-regressao.html" class="sidebar-item-text sidebar-link"><span class="chapter-title">Árvores de Regressão</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../../content/cap12/02-podando-a-arvore.html" class="sidebar-item-text sidebar-link"><span class="chapter-title">Podando a Árvore</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../../content/cap12/03-arvores-de-classificacao.html" class="sidebar-item-text sidebar-link"><span class="chapter-title">Árvores de Classificação</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../../content/cap12/04-arvores-contra-modelos-lineares.html" class="sidebar-item-text sidebar-link"><span class="chapter-title">Árvores contra Modelos Lineares</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../../content/cap12/05-vantagens-e-desvantagens.html" class="sidebar-item-text sidebar-link"><span class="chapter-title">Vantagens e Desvantagens das Árvores</span></a>
+  </div>
+</li>
+      </ul>
+  </li>
+        <li class="sidebar-item sidebar-item-section">
+      <div class="sidebar-item-container"> 
+            <a class="sidebar-item-text sidebar-link text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-13" role="navigation" aria-expanded="true">
+ <span class="menu-text">Capítulo 13: Bagging, Florestas e Boosting</span></a>
+          <a class="sidebar-item-toggle text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-13" role="navigation" aria-expanded="true" aria-label="Alternar seção">
+            <i class="bi bi-chevron-right ms-2"></i>
+          </a> 
+      </div>
+      <ul id="quarto-sidebar-section-13" class="collapse list-unstyled sidebar-section depth1 show">  
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../../content/cap13/index.html" class="sidebar-item-text sidebar-link"><span class="chapter-title">Visão Geral</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../../content/cap13/01-bagging.html" class="sidebar-item-text sidebar-link"><span class="chapter-title">Bagging</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../../content/cap13/02-erro-out-of-bag.html" class="sidebar-item-text sidebar-link"><span class="chapter-title">Erro Out-of-Bag</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../../content/cap13/03-florestas-aleatorias.html" class="sidebar-item-text sidebar-link"><span class="chapter-title">Florestas Aleatórias</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../../content/cap13/04-boosting.html" class="sidebar-item-text sidebar-link"><span class="chapter-title">Boosting</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../../content/cap13/05-importancia-de-variaveis.html" class="sidebar-item-text sidebar-link"><span class="chapter-title">Importância de Variáveis</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../../content/cap13/06-resumo-dos-metodos-de-ensemble.html" class="sidebar-item-text sidebar-link"><span class="chapter-title">Resumo dos Métodos de Ensemble</span></a>
+  </div>
+</li>
+      </ul>
+  </li>
+        <li class="sidebar-item sidebar-item-section">
+      <div class="sidebar-item-container"> 
+            <a class="sidebar-item-text sidebar-link text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-14" role="navigation" aria-expanded="true">
+ <span class="menu-text">Capítulo 14: Redes Neurais</span></a>
+          <a class="sidebar-item-toggle text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-14" role="navigation" aria-expanded="true" aria-label="Alternar seção">
+            <i class="bi bi-chevron-right ms-2"></i>
+          </a> 
+      </div>
+      <ul id="quarto-sidebar-section-14" class="collapse list-unstyled sidebar-section depth1 show">  
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../../content/cap14/index.html" class="sidebar-item-text sidebar-link"><span class="chapter-title">Visão Geral</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../../content/cap14/01-uma-rede-de-camada-unica.html" class="sidebar-item-text sidebar-link"><span class="chapter-title">Uma Rede de Camada Única</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../../content/cap14/02-redes-multicamada.html" class="sidebar-item-text sidebar-link"><span class="chapter-title">Redes Multicamada</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../../content/cap14/03-ajustando-uma-rede.html" class="sidebar-item-text sidebar-link"><span class="chapter-title">Ajustando uma Rede: Retropropagação, Gradiente Estocástico e Regularização</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../../content/cap14/04-mlpclassifier-e-mlpregressor-na-pratica.html" class="sidebar-item-text sidebar-link"><span class="chapter-title">MLPClassifier e MLPRegressor na Prática</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../../content/cap14/05-quando-usar-deep-learning.html" class="sidebar-item-text sidebar-link"><span class="chapter-title">Quando Usar Deep Learning</span></a>
+  </div>
+</li>
+      </ul>
+  </li>
+        <li class="sidebar-item sidebar-item-section">
+      <div class="sidebar-item-container"> 
+            <a class="sidebar-item-text sidebar-link text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-15" role="navigation" aria-expanded="true">
+ <span class="menu-text">Capítulo 15: Aprendizado Não Supervisionado</span></a>
+          <a class="sidebar-item-toggle text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-15" role="navigation" aria-expanded="true" aria-label="Alternar seção">
+            <i class="bi bi-chevron-right ms-2"></i>
+          </a> 
+      </div>
+      <ul id="quarto-sidebar-section-15" class="collapse list-unstyled sidebar-section depth1 show">  
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../../content/cap15/index.html" class="sidebar-item-text sidebar-link"><span class="chapter-title">Visão Geral</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../../content/cap15/01-o-desafio-do-nao-supervisionado.html" class="sidebar-item-text sidebar-link"><span class="chapter-title">O Desafio do Não Supervisionado</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../../content/cap15/02-componentes-principais.html" class="sidebar-item-text sidebar-link"><span class="chapter-title">Componentes Principais</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../../content/cap15/03-proporcao-da-variancia-explicada.html" class="sidebar-item-text sidebar-link"><span class="chapter-title">Proporção da Variância Explicada</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../../content/cap15/04-k-means.html" class="sidebar-item-text sidebar-link"><span class="chapter-title">k-Means</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../../content/cap15/05-clustering-hierarquico.html" class="sidebar-item-text sidebar-link"><span class="chapter-title">Clustering Hierárquico</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../../content/cap15/06-questoes-praticas-em-clustering.html" class="sidebar-item-text sidebar-link"><span class="chapter-title">Questões Práticas em Clustering</span></a>
+  </div>
+</li>
+      </ul>
+  </li>
+        <li class="sidebar-item sidebar-item-section">
+      <div class="sidebar-item-container"> 
+            <a class="sidebar-item-text sidebar-link text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-16" role="navigation" aria-expanded="true">
+ <span class="menu-text">Capítulo 16: Máquinas de Vetores de Suporte</span></a>
+          <a class="sidebar-item-toggle text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-16" role="navigation" aria-expanded="true" aria-label="Alternar seção">
+            <i class="bi bi-chevron-right ms-2"></i>
+          </a> 
+      </div>
+      <ul id="quarto-sidebar-section-16" class="collapse list-unstyled sidebar-section depth1 show">  
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../../content/cap16/index.html" class="sidebar-item-text sidebar-link"><span class="chapter-title">Visão Geral</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../../content/cap16/01-hiperplanos-e-o-classificador-de-margem-maxima.html" class="sidebar-item-text sidebar-link"><span class="chapter-title">Hiperplanos e o Classificador de Margem Máxima</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../../content/cap16/02-o-classificador-de-vetores-de-suporte.html" class="sidebar-item-text sidebar-link"><span class="chapter-title">O Classificador de Vetores de Suporte</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../../content/cap16/03-kernels.html" class="sidebar-item-text sidebar-link"><span class="chapter-title">Kernels</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../../content/cap16/04-mais-de-duas-classes.html" class="sidebar-item-text sidebar-link"><span class="chapter-title">Mais de Duas Classes</span></a>
+  </div>
+</li>
+      </ul>
+  </li>
+        <li class="sidebar-item sidebar-item-section">
+      <div class="sidebar-item-container"> 
+            <a class="sidebar-item-text sidebar-link text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-17" role="navigation" aria-expanded="true">
+ <span class="menu-text">Capítulo 17: Um Problema do Começo ao Fim</span></a>
+          <a class="sidebar-item-toggle text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-17" role="navigation" aria-expanded="true" aria-label="Alternar seção">
+            <i class="bi bi-chevron-right ms-2"></i>
+          </a> 
+      </div>
+      <ul id="quarto-sidebar-section-17" class="collapse list-unstyled sidebar-section depth1 show">  
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../../content/cap17/index.html" class="sidebar-item-text sidebar-link"><span class="chapter-title">Visão Geral</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../../content/cap17/01-o-problema-e-o-dado-cru.html" class="sidebar-item-text sidebar-link"><span class="chapter-title">O Problema e o Dado Cru</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../../content/cap17/02-separar-antes-de-olhar.html" class="sidebar-item-text sidebar-link"><span class="chapter-title">Separar antes de Olhar: Treino, Teste e Vazamento</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../../content/cap17/03-pre-processamento-como-parte-do-modelo.html" class="sidebar-item-text sidebar-link"><span class="chapter-title">Pré-processamento como Parte do Modelo: ColumnTransformer e Pipeline</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../../content/cap17/04-comparando-modelos-por-validacao-cruzada.html" class="sidebar-item-text sidebar-link active"><span class="chapter-title">Comparando Modelos por Validação Cruzada</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../../content/cap17/05-ajuste-de-hiperparametros-com-gridsearchcv.html" class="sidebar-item-text sidebar-link"><span class="chapter-title">Ajuste de Hiperparâmetros com GridSearchCV</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../../content/cap17/06-reportar.html" class="sidebar-item-text sidebar-link"><span class="chapter-title">Reportar: a Métrica Certa, e o que o Resultado Não Diz</span></a>
+  </div>
+</li>
+      </ul>
+  </li>
+    </ul>
+    </div>
+</nav>
+<div id="quarto-sidebar-glass" class="quarto-sidebar-collapse-item" data-bs-toggle="collapse" data-bs-target=".quarto-sidebar-collapse-item"></div>
+<!-- margin-sidebar -->
+    <div id="quarto-margin-sidebar" class="sidebar margin-sidebar">
+        <nav id="TOC" role="doc-toc" class="toc-active">
+    <h2 id="toc-title">Nesta página</h2>
+   
+  <ul>
+  <li><a href="#os-grupos" id="toc-os-grupos" class="nav-link active" data-scroll-target="#os-grupos">Os grupos</a></li>
+  <li><a href="#em-que-escala-medir" id="toc-em-que-escala-medir" class="nav-link" data-scroll-target="#em-que-escala-medir">Em que escala medir</a></li>
+  <li><a href="#três-candidatos" id="toc-três-candidatos" class="nav-link" data-scroll-target="#três-candidatos">Três candidatos</a></li>
+  <li><a href="#uma-comparação-pareada" id="toc-uma-comparação-pareada" class="nav-link" data-scroll-target="#uma-comparação-pareada">Uma comparação pareada</a></li>
+  </ul>
+<div class="toc-actions"><ul><li><a href="https://github.com/BragaD/UnDF-Bases5-CienciaDeDados-202602/issues/new" class="toc-action"><i class="bi bi-github"></i>Criar uma issue</a></li></ul></div></nav>
+    </div>
+<!-- main -->
+<main class="content" id="quarto-document-content">
+
+
+<header id="title-block-header" class="quarto-title-block default"><nav class="quarto-page-breadcrumbs quarto-title-breadcrumbs d-none d-lg-block" aria-label="breadcrumb"><ol class="breadcrumb"><li class="breadcrumb-item"><a href="../../content/cap17/index.html">Capítulo 17: Um Problema do Começo ao Fim</a></li><li class="breadcrumb-item"><a href="../../content/cap17/04-comparando-modelos-por-validacao-cruzada.html"><span class="chapter-title">Comparando Modelos por Validação Cruzada</span></a></li></ol></nav>
+<div class="quarto-title">
+<h1 class="title"><span class="chapter-title">Comparando Modelos por Validação Cruzada</span></h1>
+</div>
+
+
+
+<div class="quarto-title-meta">
+
+    <div>
+    <div class="quarto-title-meta-heading">Autor</div>
+    <div class="quarto-title-meta-contents">
+             <p>Douglas Braga <a href="mailto:douglas.braga@undf.edu.br" class="quarto-title-author-email"><i class="bi bi-envelope"></i></a> </p>
+          </div>
+  </div>
+    
+  
+    
+  </div>
+  
+
+
+</header>
+
+
+<p>Três candidatos disputam a sugestão de preço: prever para todo anúncio o mesmo número, a média; a regressão linear; e o <em>k</em>-NN com dez vizinhos. Qual deles erra menos num anúncio que ainda não chegou? O teste guardado responderia, mas ele só pode ser aberto uma vez, para o modelo já escolhido. A escolha precisa sair do treino.</p>
+<p>A função <code>numero_br</code> escreve os números com a pontuação brasileira:</p>
+<div id="numero-br" class="cell" data-execution_count="2">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb1"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a>numero_br <span class="op">=</span> <span class="kw">lambda</span> valor, casas<span class="op">=</span><span class="dv">2</span>: (</span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a>    <span class="ss">f"</span><span class="sc">{</span>valor<span class="sc">:,.</span>{casas}f<span class="sc">}</span><span class="ss">"</span>.replace(<span class="st">","</span>, <span class="st">"_"</span>).replace(<span class="st">"."</span>, <span class="st">","</span>).replace(<span class="st">"_"</span>, <span class="st">"."</span>)</span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a>    .replace(<span class="st">"-"</span>, <span class="st">"−"</span>)</span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a>)</span></code></pre></div><button title="Copiar para a área de transferência" class="code-copy-button"><i class="bi"></i></button></div>
+</div>
+<p>O ponto de partida é a tabela sem linhas repetidas, a divisão estratificada por cidade, os dez preditores e o logaritmo do aluguel como resposta. O <code>preparo</code> é o da seção 17.3: as colunas categóricas viram colunas de 0 e 1; área, condomínio e IPTU passam por <code>np.log1p</code> e são padronizados; o andar ausente vira 0, com uma coluna que marca onde ele faltava; e as contagens são padronizadas.</p>
+<div id="estado" class="cell" data-execution_count="3">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb2"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a>alugueis <span class="op">=</span> pd.read_csv(<span class="st">"dados/alugueis.csv"</span>, na_values<span class="op">=</span>[<span class="st">"-"</span>]).drop_duplicates()</span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a>preditores <span class="op">=</span> [<span class="st">"cidade"</span>, <span class="st">"area_m2"</span>, <span class="st">"quartos"</span>, <span class="st">"banheiros"</span>, <span class="st">"vagas"</span>, <span class="st">"andar"</span>,</span>
+<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a>              <span class="st">"aceita_animal"</span>, <span class="st">"mobiliado"</span>, <span class="st">"condominio"</span>, <span class="st">"iptu"</span>]</span>
+<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a>treino, teste <span class="op">=</span> train_test_split(alugueis, test_size<span class="op">=</span><span class="fl">0.2</span>, random_state<span class="op">=</span><span class="dv">17</span>,</span>
+<span id="cb2-5"><a href="#cb2-5" aria-hidden="true" tabindex="-1"></a>                                 stratify<span class="op">=</span>alugueis[<span class="st">"cidade"</span>])</span>
+<span id="cb2-6"><a href="#cb2-6" aria-hidden="true" tabindex="-1"></a>X_treino, y_treino <span class="op">=</span> treino[preditores], np.log(treino[<span class="st">"aluguel"</span>])</span>
+<span id="cb2-7"><a href="#cb2-7" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-8"><a href="#cb2-8" aria-hidden="true" tabindex="-1"></a>preparo <span class="op">=</span> ColumnTransformer([</span>
+<span id="cb2-9"><a href="#cb2-9" aria-hidden="true" tabindex="-1"></a>    (<span class="st">"categoricas"</span>, OneHotEncoder(handle_unknown<span class="op">=</span><span class="st">"ignore"</span>, sparse_output<span class="op">=</span><span class="va">False</span>),</span>
+<span id="cb2-10"><a href="#cb2-10" aria-hidden="true" tabindex="-1"></a>     [<span class="st">"cidade"</span>, <span class="st">"aceita_animal"</span>, <span class="st">"mobiliado"</span>]),</span>
+<span id="cb2-11"><a href="#cb2-11" aria-hidden="true" tabindex="-1"></a>    (<span class="st">"assimetricas"</span>, Pipeline([</span>
+<span id="cb2-12"><a href="#cb2-12" aria-hidden="true" tabindex="-1"></a>        (<span class="st">"log"</span>, FunctionTransformer(np.log1p, feature_names_out<span class="op">=</span><span class="st">"one-to-one"</span>)),</span>
+<span id="cb2-13"><a href="#cb2-13" aria-hidden="true" tabindex="-1"></a>        (<span class="st">"escala"</span>, StandardScaler())]), [<span class="st">"area_m2"</span>, <span class="st">"condominio"</span>, <span class="st">"iptu"</span>]),</span>
+<span id="cb2-14"><a href="#cb2-14" aria-hidden="true" tabindex="-1"></a>    (<span class="st">"andar"</span>, Pipeline([</span>
+<span id="cb2-15"><a href="#cb2-15" aria-hidden="true" tabindex="-1"></a>        (<span class="st">"preenche"</span>, SimpleImputer(strategy<span class="op">=</span><span class="st">"constant"</span>, fill_value<span class="op">=</span><span class="dv">0</span>,</span>
+<span id="cb2-16"><a href="#cb2-16" aria-hidden="true" tabindex="-1"></a>                                   add_indicator<span class="op">=</span><span class="va">True</span>)),</span>
+<span id="cb2-17"><a href="#cb2-17" aria-hidden="true" tabindex="-1"></a>        (<span class="st">"escala"</span>, StandardScaler())]), [<span class="st">"andar"</span>]),</span>
+<span id="cb2-18"><a href="#cb2-18" aria-hidden="true" tabindex="-1"></a>    (<span class="st">"contagens"</span>, StandardScaler(), [<span class="st">"quartos"</span>, <span class="st">"banheiros"</span>, <span class="st">"vagas"</span>]),</span>
+<span id="cb2-19"><a href="#cb2-19" aria-hidden="true" tabindex="-1"></a>]).set_output(transform<span class="op">=</span><span class="st">"pandas"</span>)</span>
+<span id="cb2-20"><a href="#cb2-20" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">"X_treino:"</span>, X_treino.shape)</span></code></pre></div><button title="Copiar para a área de transferência" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>X_treino: (8267, 10)</code></pre>
+</div>
+</div>
+<section id="os-grupos" class="level2">
+<h2 class="anchored" data-anchor-id="os-grupos">Os grupos</h2>
+<p>A validação cruzada divide o treino em grupos, e cada grupo, na sua vez, fica de fora enquanto os outros ajustam o modelo, como na seção 10.3. Os grupos são sorteados: <code>shuffle=True</code> embaralha os anúncios antes de cortar, com a semente 17. Os mesmos dez grupos servem para os três modelos comparados a seguir.</p>
+<div id="grupos" class="cell" data-execution_count="4">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb4"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a>grupos <span class="op">=</span> KFold(<span class="dv">10</span>, shuffle<span class="op">=</span><span class="va">True</span>, random_state<span class="op">=</span><span class="dv">17</span>)</span>
+<span id="cb4-2"><a href="#cb4-2" aria-hidden="true" tabindex="-1"></a>tamanhos <span class="op">=</span> [<span class="bu">len</span>(validacao) <span class="cf">for</span> _, validacao <span class="kw">in</span> grupos.split(X_treino)]</span>
+<span id="cb4-3"><a href="#cb4-3" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">"grupos:"</span>, <span class="bu">len</span>(tamanhos))</span>
+<span id="cb4-4"><a href="#cb4-4" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">"menor grupo:"</span>, <span class="bu">min</span>(tamanhos))</span>
+<span id="cb4-5"><a href="#cb4-5" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">"maior grupo:"</span>, <span class="bu">max</span>(tamanhos))</span></code></pre></div><button title="Copiar para a área de transferência" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>grupos: 10
+menor grupo: 826
+maior grupo: 827</code></pre>
+</div>
+</div>
+<div class="funcao">
+<p><strong><code>KFold(n_splits, shuffle, random_state)</code></strong> — o esquema de divisão da validação cruzada em <code>n_splits</code> grupos. Com <code>shuffle=True</code>, as linhas são embaralhadas antes do corte, com a semente <code>random_state</code>; sem ele, o primeiro grupo seria as primeiras linhas da tabela.</p>
+<p><strong><code>grupos.split(X)</code></strong> — produz, para cada grupo, o par (posições de treino, posições de validação). Aqui só se mede o tamanho de cada grupo de validação.</p>
+</div>
+<p>Os 8.267 anúncios de treino não se dividem por 10 sem resto, e cada grupo fica com 826 ou 827 anúncios.</p>
+</section>
+<section id="em-que-escala-medir" class="level2">
+<h2 class="anchored" data-anchor-id="em-que-escala-medir">Em que escala medir</h2>
+<p>A resposta poderia ficar em reais, sem o logaritmo. A validação cruzada mostra o que acontece nesse caso. <code>cross_val_predict</code> devolve, para cada anúncio de treino, a previsão do modelo ajustado nos outros nove grupos, isto é, sem o grupo em que o anúncio estava. A regressão linear, com a resposta em reais:</p>
+<div id="reais-negativos" class="cell" data-execution_count="5">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb6"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb6-1"><a href="#cb6-1" aria-hidden="true" tabindex="-1"></a>linear_em_reais <span class="op">=</span> Pipeline([(<span class="st">"preparo"</span>, preparo), (<span class="st">"modelo"</span>, LinearRegression())])</span>
+<span id="cb6-2"><a href="#cb6-2" aria-hidden="true" tabindex="-1"></a>previsto <span class="op">=</span> cross_val_predict(linear_em_reais, X_treino, treino[<span class="st">"aluguel"</span>], cv<span class="op">=</span>grupos)</span>
+<span id="cb6-3"><a href="#cb6-3" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">"previsões:"</span>, numero_br(<span class="bu">len</span>(previsto), <span class="dv">0</span>))</span>
+<span id="cb6-4"><a href="#cb6-4" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">"negativas:"</span>, numero_br((previsto <span class="op">&lt;</span> <span class="dv">0</span>).<span class="bu">sum</span>(), <span class="dv">0</span>))</span>
+<span id="cb6-5"><a href="#cb6-5" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">"menor: R$"</span>, numero_br(previsto.<span class="bu">min</span>()))</span></code></pre></div><button title="Copiar para a área de transferência" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>previsões: 8.267
+negativas: 159
+menor: R$ −1.772,47</code></pre>
+</div>
+</div>
+<div class="funcao">
+<p><strong><code>cross_val_predict(estimador, X, y, cv)</code></strong> — ajusta o estimador uma vez por grupo de <code>cv</code> e devolve uma previsão para cada linha de <code>X</code>, feita pelo ajuste em que a linha estava na validação. Com um <code>Pipeline</code>, cada ajuste reajusta o preparo junto, só com os outros grupos.</p>
+</div>
+<p>São 159 previsões negativas em 8.267, o menor deles de R$ −1.772,47. De que anúncios eles vêm?</p>
+<div id="quem-e-negativo" class="cell" data-execution_count="6">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb8"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb8-1"><a href="#cb8-1" aria-hidden="true" tabindex="-1"></a>colunas <span class="op">=</span> [<span class="st">"area_m2"</span>, <span class="st">"condominio"</span>]</span>
+<span id="cb8-2"><a href="#cb8-2" aria-hidden="true" tabindex="-1"></a>negativas <span class="op">=</span> X_treino.loc[previsto <span class="op">&lt;</span> <span class="dv">0</span>, colunas].median()</span>
+<span id="cb8-3"><a href="#cb8-3" aria-hidden="true" tabindex="-1"></a>todas <span class="op">=</span> X_treino[colunas].median()</span>
+<span id="cb8-4"><a href="#cb8-4" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">"mediana: negativas / treino"</span>)</span>
+<span id="cb8-5"><a href="#cb8-5" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">"  área (m²):"</span>, numero_br(negativas[<span class="st">"area_m2"</span>], <span class="dv">0</span>), <span class="st">"/"</span>,</span>
+<span id="cb8-6"><a href="#cb8-6" aria-hidden="true" tabindex="-1"></a>      numero_br(todas[<span class="st">"area_m2"</span>], <span class="dv">0</span>))</span>
+<span id="cb8-7"><a href="#cb8-7" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">"  condomínio (R$):"</span>, numero_br(negativas[<span class="st">"condominio"</span>], <span class="dv">0</span>), <span class="st">"/"</span>,</span>
+<span id="cb8-8"><a href="#cb8-8" aria-hidden="true" tabindex="-1"></a>      numero_br(todas[<span class="st">"condominio"</span>], <span class="dv">0</span>))</span></code></pre></div><button title="Copiar para a área de transferência" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>mediana: negativas / treino
+  área (m²): 26 / 95
+  condomínio (R$): 140 / 568</code></pre>
+</div>
+</div>
+<p>As previsões negativas vêm de anúncios pequenos: área mediana de 26 m² contra 95 no treino inteiro, condomínio mediano de R$ 140 contra R$ 568. Uma reta em reais não tem piso, e nada impede que, num anúncio pequeno o bastante, a soma dos termos fique abaixo de zero. Por que a regressão linear sobre o logaritmo do aluguel não pode sugerir um preço negativo, qualquer que seja o anúncio?</p>
+<p>Na escala log, a previsão é <span class="math inline">\(\log \hat y\)</span>, e o preço sugerido é <span class="math inline">\(\hat y = e^{\log \hat y}\)</span>, positivo para qualquer valor do expoente. O erro também muda de natureza. A raiz do erro quadrático médio (RMSE, em inglês <em>root mean squared error</em>) na escala log é</p>
+<p><span class="math display">\[
+\mathrm{RMSE} = \sqrt{\frac{1}{n}\sum_{i=1}^{n}\left(\log y_i - \log \hat y_i\right)^2},
+\]</span></p>
+<p>em que <span class="math inline">\(\log\)</span> é o logaritmo natural, o <code>np.log</code>. Cada diferença <span class="math inline">\(\log y_i - \log \hat y_i\)</span> é <span class="math inline">\(\log(y_i / \hat y_i)\)</span>, o logaritmo da razão entre o aluguel e a previsão. Considere prever R$ 1.000 para um aluguel de R$ 1.500 e R$ 10.000 para um de R$ 15.000:</p>
+<div id="mesmo-fator" class="cell" data-execution_count="7">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb10"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb10-1"><a href="#cb10-1" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">"log(1.500 / 1.000):"</span>, numero_br(np.log(<span class="dv">1500</span> <span class="op">/</span> <span class="dv">1000</span>), <span class="dv">4</span>))</span>
+<span id="cb10-2"><a href="#cb10-2" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">"log(15.000 / 10.000):"</span>, numero_br(np.log(<span class="dv">15000</span> <span class="op">/</span> <span class="dv">10000</span>), <span class="dv">4</span>))</span></code></pre></div><button title="Copiar para a área de transferência" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>log(1.500 / 1.000): 0,4055
+log(15.000 / 10.000): 0,4055</code></pre>
+</div>
+</div>
+<p>Em reais, um erro é de R$ 500 e o outro de R$ 5.000; na escala log, os dois valem o mesmo, porque a previsão ficou abaixo do aluguel pelo mesmo fator, 1,5. Errar pelo mesmo fator conta o mesmo num aluguel barato e num caro, como a seção 17.2 mediu. É na escala log que os três candidatos são comparados: é nela que eles são ajustados, e nela o erro é relativo.</p>
+</section>
+<section id="três-candidatos" class="level2">
+<h2 class="anchored" data-anchor-id="três-candidatos">Três candidatos</h2>
+<p>Os três candidatos entram no mesmo <code>Pipeline</code>, depois do mesmo preparo, e mudam só no passo <code>modelo</code>:</p>
+<div id="candidatos" class="cell" data-execution_count="8">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb12"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb12-1"><a href="#cb12-1" aria-hidden="true" tabindex="-1"></a>candidatos <span class="op">=</span> {</span>
+<span id="cb12-2"><a href="#cb12-2" aria-hidden="true" tabindex="-1"></a>    <span class="st">"média"</span>: DummyRegressor(),</span>
+<span id="cb12-3"><a href="#cb12-3" aria-hidden="true" tabindex="-1"></a>    <span class="st">"linear"</span>: LinearRegression(),</span>
+<span id="cb12-4"><a href="#cb12-4" aria-hidden="true" tabindex="-1"></a>    <span class="st">"k-NN"</span>: KNeighborsRegressor(n_neighbors<span class="op">=</span><span class="dv">10</span>),</span>
+<span id="cb12-5"><a href="#cb12-5" aria-hidden="true" tabindex="-1"></a>}</span></code></pre></div><button title="Copiar para a área de transferência" class="code-copy-button"><i class="bi"></i></button></div>
+</div>
+<div class="funcao">
+<p><strong><code>DummyRegressor()</code></strong> — um “modelo” que ignora os preditores: no <code>fit</code>, guarda a média da resposta; no <code>predict</code>, devolve essa média para todo anúncio. Serve de referência: um modelo que não erra menos que ele não aprendeu nada dos preditores.</p>
+</div>
+<p>A média não usa o preparo, mas passar por ele não muda nada nela, e assim os três são tratados igualmente. Antes de rodar: quanto a média deve errar? Ela prevê o mesmo número para todo anúncio, e o RMSE de uma previsão constante igual à média é aproximadamente o desvio padrão da resposta.</p>
+<div id="desvio-y" class="cell" data-execution_count="9">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb13"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb13-1"><a href="#cb13-1" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">"desvio padrão de y_treino:"</span>, numero_br(y_treino.std(ddof<span class="op">=</span><span class="dv">0</span>), <span class="dv">4</span>))</span></code></pre></div><button title="Copiar para a área de transferência" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>desvio padrão de y_treino: 0,7902</code></pre>
+</div>
+</div>
+<div class="funcao">
+<p><strong><code>serie.std(ddof=0)</code></strong> — o desvio padrão dividindo por <span class="math inline">\(n\)</span>, e não por <span class="math inline">\(n - 1\)</span>, que é o padrão do <code>pandas</code>. Com <code>ddof=0</code>, é exatamente a raiz da média dos quadrados das distâncias à média.</p>
+</div>
+<p>O <code>cross_val_score</code> ajusta cada <code>Pipeline</code> nos dez pares de grupos e devolve um erro por grupo:</p>
+<div id="cell-validacao-cruzada" class="cell" data-execution_count="10">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb15"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb15-1"><a href="#cb15-1" aria-hidden="true" tabindex="-1"></a>rmse <span class="op">=</span> pd.DataFrame({</span>
+<span id="cb15-2"><a href="#cb15-2" aria-hidden="true" tabindex="-1"></a>    nome: <span class="op">-</span>cross_val_score(Pipeline([(<span class="st">"preparo"</span>, preparo), (<span class="st">"modelo"</span>, modelo)]),</span>
+<span id="cb15-3"><a href="#cb15-3" aria-hidden="true" tabindex="-1"></a>                           X_treino, y_treino, cv<span class="op">=</span>grupos,</span>
+<span id="cb15-4"><a href="#cb15-4" aria-hidden="true" tabindex="-1"></a>                           scoring<span class="op">=</span><span class="st">"neg_root_mean_squared_error"</span>)</span>
+<span id="cb15-5"><a href="#cb15-5" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> nome, modelo <span class="kw">in</span> candidatos.items()</span>
+<span id="cb15-6"><a href="#cb15-6" aria-hidden="true" tabindex="-1"></a>}, index<span class="op">=</span><span class="bu">range</span>(<span class="dv">1</span>, <span class="dv">11</span>))</span>
+<span id="cb15-7"><a href="#cb15-7" aria-hidden="true" tabindex="-1"></a>rmse.style.<span class="bu">format</span>(<span class="kw">lambda</span> v: numero_br(v, <span class="dv">4</span>))</span></code></pre></div><button title="Copiar para a área de transferência" class="code-copy-button"><i class="bi"></i></button></div>
+<div id="validacao-cruzada" class="cell-output cell-output-display" data-execution_count="10">
+<style type="text/css">
+</style>
+
+<table id="T_761d6" class="caption-top table table-sm table-striped small">
+<thead>
+<tr class="header">
+<th class="blank level0" data-quarto-table-cell-role="th">&nbsp;</th>
+<th id="T_761d6_level0_col0" class="col_heading level0 col0" data-quarto-table-cell-role="th">média</th>
+<th id="T_761d6_level0_col1" class="col_heading level0 col1" data-quarto-table-cell-role="th">linear</th>
+<th id="T_761d6_level0_col2" class="col_heading level0 col2" data-quarto-table-cell-role="th">k-NN</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<th id="T_761d6_level0_row0" class="row_heading level0 row0" data-quarto-table-cell-role="th">1</th>
+<td id="T_761d6_row0_col0" class="data row0 col0">0,7823</td>
+<td id="T_761d6_row0_col1" class="data row0 col1">0,4600</td>
+<td id="T_761d6_row0_col2" class="data row0 col2">0,4376</td>
+</tr>
+<tr class="even">
+<th id="T_761d6_level0_row1" class="row_heading level0 row1" data-quarto-table-cell-role="th">2</th>
+<td id="T_761d6_row1_col0" class="data row1 col0">0,7735</td>
+<td id="T_761d6_row1_col1" class="data row1 col1">0,4465</td>
+<td id="T_761d6_row1_col2" class="data row1 col2">0,4301</td>
+</tr>
+<tr class="odd">
+<th id="T_761d6_level0_row2" class="row_heading level0 row2" data-quarto-table-cell-role="th">3</th>
+<td id="T_761d6_row2_col0" class="data row2 col0">0,7977</td>
+<td id="T_761d6_row2_col1" class="data row2 col1">0,4619</td>
+<td id="T_761d6_row2_col2" class="data row2 col2">0,4300</td>
+</tr>
+<tr class="even">
+<th id="T_761d6_level0_row3" class="row_heading level0 row3" data-quarto-table-cell-role="th">4</th>
+<td id="T_761d6_row3_col0" class="data row3 col0">0,7846</td>
+<td id="T_761d6_row3_col1" class="data row3 col1">0,4277</td>
+<td id="T_761d6_row3_col2" class="data row3 col2">0,3990</td>
+</tr>
+<tr class="odd">
+<th id="T_761d6_level0_row4" class="row_heading level0 row4" data-quarto-table-cell-role="th">5</th>
+<td id="T_761d6_row4_col0" class="data row4 col0">0,7953</td>
+<td id="T_761d6_row4_col1" class="data row4 col1">0,4351</td>
+<td id="T_761d6_row4_col2" class="data row4 col2">0,4145</td>
+</tr>
+<tr class="even">
+<th id="T_761d6_level0_row5" class="row_heading level0 row5" data-quarto-table-cell-role="th">6</th>
+<td id="T_761d6_row5_col0" class="data row5 col0">0,7892</td>
+<td id="T_761d6_row5_col1" class="data row5 col1">0,4503</td>
+<td id="T_761d6_row5_col2" class="data row5 col2">0,4241</td>
+</tr>
+<tr class="odd">
+<th id="T_761d6_level0_row6" class="row_heading level0 row6" data-quarto-table-cell-role="th">7</th>
+<td id="T_761d6_row6_col0" class="data row6 col0">0,8165</td>
+<td id="T_761d6_row6_col1" class="data row6 col1">0,4406</td>
+<td id="T_761d6_row6_col2" class="data row6 col2">0,4363</td>
+</tr>
+<tr class="even">
+<th id="T_761d6_level0_row7" class="row_heading level0 row7" data-quarto-table-cell-role="th">8</th>
+<td id="T_761d6_row7_col0" class="data row7 col0">0,7992</td>
+<td id="T_761d6_row7_col1" class="data row7 col1">0,4345</td>
+<td id="T_761d6_row7_col2" class="data row7 col2">0,4056</td>
+</tr>
+<tr class="odd">
+<th id="T_761d6_level0_row8" class="row_heading level0 row8" data-quarto-table-cell-role="th">9</th>
+<td id="T_761d6_row8_col0" class="data row8 col0">0,7862</td>
+<td id="T_761d6_row8_col1" class="data row8 col1">0,4469</td>
+<td id="T_761d6_row8_col2" class="data row8 col2">0,4211</td>
+</tr>
+<tr class="even">
+<th id="T_761d6_level0_row9" class="row_heading level0 row9" data-quarto-table-cell-role="th">10</th>
+<td id="T_761d6_row9_col0" class="data row9 col0">0,7777</td>
+<td id="T_761d6_row9_col1" class="data row9 col1">0,4546</td>
+<td id="T_761d6_row9_col2" class="data row9 col2">0,4178</td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
+<div class="funcao">
+<p><strong><code>cross_val_score(estimador, X, y, cv, scoring)</code></strong> — para cada grupo de <code>cv</code>, ajusta o estimador nos outros e mede o erro no grupo; devolve um número por grupo. <code>scoring="neg_root_mean_squared_error"</code> pede o RMSE com o sinal trocado: o <code>scikit-learn</code> trata toda pontuação como “maior é melhor”, e o <code>-</code> na frente desfaz a troca.</p>
+</div>
+<p>Cada linha é um grupo de validação, e as três colunas foram medidas nos mesmos anúncios. As médias dos dez grupos, o desvio padrão entre eles e o fator correspondente, <span class="math inline">\(e^{\text{média}}\)</span>:</p>
+<div id="resumo" class="cell" data-execution_count="11">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb16"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb16-1"><a href="#cb16-1" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> nome <span class="kw">in</span> rmse:</span>
+<span id="cb16-2"><a href="#cb16-2" aria-hidden="true" tabindex="-1"></a>    media <span class="op">=</span> rmse[nome].mean()</span>
+<span id="cb16-3"><a href="#cb16-3" aria-hidden="true" tabindex="-1"></a>    <span class="bu">print</span>(nome)</span>
+<span id="cb16-4"><a href="#cb16-4" aria-hidden="true" tabindex="-1"></a>    <span class="bu">print</span>(<span class="st">"  média:"</span>, numero_br(media, <span class="dv">4</span>))</span>
+<span id="cb16-5"><a href="#cb16-5" aria-hidden="true" tabindex="-1"></a>    <span class="bu">print</span>(<span class="st">"  desvio entre grupos:"</span>, numero_br(rmse[nome].std(), <span class="dv">4</span>))</span>
+<span id="cb16-6"><a href="#cb16-6" aria-hidden="true" tabindex="-1"></a>    <span class="bu">print</span>(<span class="st">"  fator e^média:"</span>, numero_br(np.exp(media), <span class="dv">2</span>))</span></code></pre></div><button title="Copiar para a área de transferência" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>média
+  média: 0,7902
+  desvio entre grupos: 0,0125
+  fator e^média: 2,20
+linear
+  média: 0,4458
+  desvio entre grupos: 0,0113
+  fator e^média: 1,56
+k-NN
+  média: 0,4216
+  desvio entre grupos: 0,0127
+  fator e^média: 1,52</code></pre>
+</div>
+</div>
+<p>A média erra 0,7902, e o desvio padrão de <code>y_treino</code> também é 0,7902: os dois coincidem até a quarta casa, como esperado. A regressão linear erra 0,4458 e o <em>k</em>-NN, 0,4217, os dois bem abaixo da média, e o <em>k</em>-NN um pouco abaixo da linear.</p>
+<p>Para ler o erro em preços, desfaz-se o logaritmo natural com a exponencial: o fator do <em>k</em>-NN, <span class="math inline">\(e^{0{,}4217}\)</span>, é 1,52, e o da média é 2,20. Um fator de 1,52 é uma previsão 52% acima do aluguel ou, dividindo por 1,52, 34% abaixo dele (1 − 1/1,52).</p>
+<p>Esse fator é um erro típico, e não o erro de um anúncio comum: o RMSE eleva as diferenças ao quadrado antes de tirar a média, e os anúncios mais mal previstos o puxam para cima.</p>
+</section>
+<section id="uma-comparação-pareada" class="level2">
+<h2 class="anchored" data-anchor-id="uma-comparação-pareada">Uma comparação pareada</h2>
+<p>A diferença entre a linear e o <em>k</em>-NN, 0,0241 (0,4458 − 0,4217), é só cerca do dobro do desvio padrão entre os grupos de cada um, 0,0113 na linear e 0,0127 no <em>k</em>-NN, e os erros dos dois se sobrepõem:</p>
+<div id="sobreposicao" class="cell" data-execution_count="12">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb18"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb18-1"><a href="#cb18-1" aria-hidden="true" tabindex="-1"></a>pior_knn, melhor_linear <span class="op">=</span> rmse[<span class="st">"k-NN"</span>].<span class="bu">max</span>(), rmse[<span class="st">"linear"</span>].<span class="bu">min</span>()</span>
+<span id="cb18-2"><a href="#cb18-2" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">"pior grupo do k-NN:"</span>, numero_br(pior_knn, <span class="dv">4</span>))</span>
+<span id="cb18-3"><a href="#cb18-3" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">"melhor grupo da linear:"</span>, numero_br(melhor_linear, <span class="dv">4</span>))</span>
+<span id="cb18-4"><a href="#cb18-4" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">"se sobrepõem:"</span>, <span class="bu">bool</span>(pior_knn <span class="op">&gt;</span> melhor_linear))</span></code></pre></div><button title="Copiar para a área de transferência" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>pior grupo do k-NN: 0,4376
+melhor grupo da linear: 0,4277
+se sobrepõem: True</code></pre>
+</div>
+</div>
+<p>Olhando as duas colunas como dois montes de dez números, o erro do <em>k</em>-NN em alguns grupos é maior que o da linear em outros. Mas os dois modelos foram medidos nos <strong>mesmos</strong> grupos, e um grupo com anúncios difíceis é difícil para os dois. A figura abaixo liga, por uma linha cinza, os três erros de cada grupo. No código, <code>ax.plot</code> recebe a tabela <code>rmse[nomes].T</code>, que tem uma coluna por grupo, e desenha uma linha para cada coluna; <code>ax.set_xticks(posicoes, nomes)</code> põe o nome de cada modelo sob a sua posição no eixo horizontal:</p>
+<div id="cell-fig-pareada" class="cell" data-execution_count="13">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb20"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb20-1"><a href="#cb20-1" aria-hidden="true" tabindex="-1"></a>cores <span class="op">=</span> {<span class="st">"média"</span>: <span class="st">"0.45"</span>, <span class="st">"linear"</span>: <span class="st">"C0"</span>, <span class="st">"k-NN"</span>: <span class="st">"C1"</span>}</span>
+<span id="cb20-2"><a href="#cb20-2" aria-hidden="true" tabindex="-1"></a>em_br <span class="op">=</span> <span class="kw">lambda</span> v, pos: numero_br(v, <span class="dv">2</span>)</span>
+<span id="cb20-3"><a href="#cb20-3" aria-hidden="true" tabindex="-1"></a>fig, (ax_todos, ax_zoom) <span class="op">=</span> plt.subplots(<span class="dv">2</span>, <span class="dv">1</span>, figsize<span class="op">=</span>(<span class="fl">6.4</span>, <span class="fl">6.4</span>))</span>
+<span id="cb20-4"><a href="#cb20-4" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> ax, nomes <span class="kw">in</span> ((ax_todos, <span class="bu">list</span>(cores)), (ax_zoom, [<span class="st">"linear"</span>, <span class="st">"k-NN"</span>])):</span>
+<span id="cb20-5"><a href="#cb20-5" aria-hidden="true" tabindex="-1"></a>    posicoes <span class="op">=</span> <span class="bu">list</span>(<span class="bu">range</span>(<span class="bu">len</span>(nomes)))</span>
+<span id="cb20-6"><a href="#cb20-6" aria-hidden="true" tabindex="-1"></a>    ax.plot(posicoes, rmse[nomes].T, color<span class="op">=</span><span class="st">"0.45"</span>, linewidth<span class="op">=</span><span class="fl">0.8</span>, alpha<span class="op">=</span><span class="fl">0.5</span>)</span>
+<span id="cb20-7"><a href="#cb20-7" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> x, nome <span class="kw">in</span> <span class="bu">zip</span>(posicoes, nomes):</span>
+<span id="cb20-8"><a href="#cb20-8" aria-hidden="true" tabindex="-1"></a>        ax.scatter([x] <span class="op">*</span> <span class="bu">len</span>(rmse), rmse[nome], s<span class="op">=</span><span class="dv">36</span>, color<span class="op">=</span>cores[nome], zorder<span class="op">=</span><span class="dv">3</span>,</span>
+<span id="cb20-9"><a href="#cb20-9" aria-hidden="true" tabindex="-1"></a>                   label<span class="op">=</span><span class="st">"_nolegend_"</span>)</span>
+<span id="cb20-10"><a href="#cb20-10" aria-hidden="true" tabindex="-1"></a>        ax.hlines(rmse[nome].mean(), x <span class="op">-</span> <span class="fl">0.25</span>, x <span class="op">+</span> <span class="fl">0.25</span>, color<span class="op">=</span>cores[nome],</span>
+<span id="cb20-11"><a href="#cb20-11" aria-hidden="true" tabindex="-1"></a>                  linewidth<span class="op">=</span><span class="fl">2.5</span>, zorder<span class="op">=</span><span class="dv">2</span>)</span>
+<span id="cb20-12"><a href="#cb20-12" aria-hidden="true" tabindex="-1"></a>    ax.set_xticks(posicoes, nomes)</span>
+<span id="cb20-13"><a href="#cb20-13" aria-hidden="true" tabindex="-1"></a>    ax.set_xlim(<span class="op">-</span><span class="fl">0.5</span>, <span class="bu">len</span>(nomes) <span class="op">-</span> <span class="fl">0.5</span>)</span>
+<span id="cb20-14"><a href="#cb20-14" aria-hidden="true" tabindex="-1"></a>    ax.set_ylabel(<span class="st">"RMSE (escala log)"</span>)</span>
+<span id="cb20-15"><a href="#cb20-15" aria-hidden="true" tabindex="-1"></a>    ax.yaxis.set_major_formatter(em_br)</span>
+<span id="cb20-16"><a href="#cb20-16" aria-hidden="true" tabindex="-1"></a>ax_todos.set_ylim(<span class="dv">0</span>, <span class="fl">0.9</span>)</span>
+<span id="cb20-17"><a href="#cb20-17" aria-hidden="true" tabindex="-1"></a>ax_todos.set_title(<span class="st">"os três candidatos"</span>)</span>
+<span id="cb20-18"><a href="#cb20-18" aria-hidden="true" tabindex="-1"></a>ax_zoom.set_title(<span class="st">"linear e k-NN, eixo ampliado"</span>)</span>
+<span id="cb20-19"><a href="#cb20-19" aria-hidden="true" tabindex="-1"></a>plt.tight_layout()</span>
+<span id="cb20-20"><a href="#cb20-20" aria-hidden="true" tabindex="-1"></a>plt.show()</span></code></pre></div><button title="Copiar para a área de transferência" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="cell-output cell-output-display">
+<div id="fig-pareada" class="quarto-float quarto-figure quarto-figure-center anchored" alt="Dois painéis empilhados. No de cima, três colunas de dez pontos: a média, em cinza, perto de 0,8; a linear, em azul, e o k-NN, em laranja, os dois perto de 0,4 a 0,45; linhas cinza finas descem da média para a linear e seguem quase na horizontal até o k-NN. No de baixo, com o eixo ampliado, só a linear e o k-NN: as dez linhas cinza descem da esquerda para a direita, cada uma ligando um ponto azul a um ponto laranja mais baixo; os pontos de cada coluna se espalham de cima a baixo do eixo, e as duas colunas se sobrepõem na altura.">
+<figure class="quarto-float quarto-float-fig figure">
+<div aria-describedby="fig-pareada-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<img src="04-comparando-modelos-por-validacao-cruzada_files/figure-html/fig-pareada-output-1.png" alt="Dois painéis empilhados. No de cima, três colunas de dez pontos: a média, em cinza, perto de 0,8; a linear, em azul, e o k-NN, em laranja, os dois perto de 0,4 a 0,45; linhas cinza finas descem da média para a linear e seguem quase na horizontal até o k-NN. No de baixo, com o eixo ampliado, só a linear e o k-NN: as dez linhas cinza descem da esquerda para a direita, cada uma ligando um ponto azul a um ponto laranja mais baixo; os pontos de cada coluna se espalham de cima a baixo do eixo, e as duas colunas se sobrepõem na altura." width="883" height="882" class="figure-img">
+</div>
+<figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-fig" id="fig-pareada-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Figura&nbsp;1: RMSE na escala log dos três candidatos nos dez grupos da validação cruzada; a linha cinza liga os erros do mesmo grupo, e o traço horizontal marca a média dos dez. Em cima, os três modelos, com o eixo desde zero; embaixo, só a linear e o k-NN, com o eixo ampliado.
+</figcaption>
+</figure>
+</div>
+</div>
+</div>
+<div class="funcao">
+<p><strong><code>ax.hlines(y, inicio, fim, color, linewidth)</code></strong> — um traço horizontal na altura <code>y</code>, de <code>inicio</code> a <code>fim</code> no eixo horizontal.</p>
+</div>
+<p>No painel de cima, a queda da média para a linear é o ganho que os preditores trazem, e ela acontece em todos os grupos. No de baixo, cada linha desce da linear para o <em>k</em>-NN. A conta, grupo a grupo:</p>
+<div id="pareado" class="cell" data-execution_count="14">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb21"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb21-1"><a href="#cb21-1" aria-hidden="true" tabindex="-1"></a>ganho <span class="op">=</span> rmse[<span class="st">"linear"</span>] <span class="op">-</span> rmse[<span class="st">"k-NN"</span>]</span>
+<span id="cb21-2"><a href="#cb21-2" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">"linear abaixo da média nos 10:"</span>, <span class="bu">bool</span>((rmse[<span class="st">"linear"</span>] <span class="op">&lt;</span> rmse[<span class="st">"média"</span>]).<span class="bu">all</span>()))</span>
+<span id="cb21-3"><a href="#cb21-3" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">"k-NN abaixo da linear nos 10:"</span>, <span class="bu">bool</span>((ganho <span class="op">&gt;</span> <span class="dv">0</span>).<span class="bu">all</span>()))</span>
+<span id="cb21-4"><a href="#cb21-4" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">"ganho do k-NN, menor:"</span>, numero_br(ganho.<span class="bu">min</span>(), <span class="dv">4</span>))</span>
+<span id="cb21-5"><a href="#cb21-5" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">"ganho do k-NN, maior:"</span>, numero_br(ganho.<span class="bu">max</span>(), <span class="dv">4</span>))</span>
+<span id="cb21-6"><a href="#cb21-6" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">"desvio do ganho:"</span>, numero_br(ganho.std(), <span class="dv">4</span>))</span>
+<span id="cb21-7"><a href="#cb21-7" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">"correlação dos erros:"</span>, numero_br(rmse[<span class="st">"linear"</span>].corr(rmse[<span class="st">"k-NN"</span>]), <span class="dv">2</span>))</span></code></pre></div><button title="Copiar para a área de transferência" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>linear abaixo da média nos 10: True
+k-NN abaixo da linear nos 10: True
+ganho do k-NN, menor: 0,0043
+ganho do k-NN, maior: 0,0368
+desvio do ganho: 0,0091
+correlação dos erros: 0,72</code></pre>
+</div>
+</div>
+<div class="funcao">
+<p><strong><code>serie.corr(outra)</code></strong> — a correlação entre duas colunas, linha a linha; aqui, entre os erros da linear e do <em>k</em>-NN nos mesmos dez grupos.</p>
+</div>
+<p>O <em>k</em>-NN erra menos que a linear nos dez grupos. O ganho vai de 0,0043 a 0,0365, e o desvio padrão dele entre os grupos, 0,0090, é menor que o de cada modelo sozinho, 0,0113 na linear e 0,0127 no <em>k</em>-NN. Os erros dos dois sobem e descem juntos de um grupo para outro, com correlação de 0,72: parte do que varia é a dificuldade do grupo, que atinge os dois modelos e, na diferença, em boa parte se cancela. A evidência a favor do <em>k</em>-NN é uma diferença com o mesmo sinal nos dez grupos, e não só a das médias.</p>
+<p>Ela tem limites. Os dez ajustes usam quase os mesmos anúncios de treino, então os dez ganhos não são dez medições independentes. E o ganho é pequeno perto do que a linear ganha da média: 0,0241 (0,4458 − 0,4217) contra 0,3444 (0,7902 − 0,4458), e por isso a linha que liga os dois modelos é quase plana no painel de cima.</p>
+<p>E se o <em>k</em>-NN ganhasse em só quatro dos dez grupos? Aí a vantagem deixaria de convencer: a diferença entre os dois seria do tamanho da variação de um grupo de anúncios para outro, e outros anúncios poderiam inverter a ordem.</p>
+<p>Os dez grupos são um sorteio, e outra semente daria outros. Com um ganho que nunca troca de sinal nos dez grupos da semente 17, você esperaria que ele trocasse com outra semente? A mesma comparação, repetida com as sementes de 0 a 4:</p>
+<div id="outras-sementes" class="cell" data-execution_count="15">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb23"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb23-1"><a href="#cb23-1" aria-hidden="true" tabindex="-1"></a>vitorias, ganhos_medios <span class="op">=</span> [], []</span>
+<span id="cb23-2"><a href="#cb23-2" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> semente <span class="kw">in</span> <span class="bu">range</span>(<span class="dv">5</span>):</span>
+<span id="cb23-3"><a href="#cb23-3" aria-hidden="true" tabindex="-1"></a>    outros_grupos <span class="op">=</span> KFold(<span class="dv">10</span>, shuffle<span class="op">=</span><span class="va">True</span>, random_state<span class="op">=</span>semente)</span>
+<span id="cb23-4"><a href="#cb23-4" aria-hidden="true" tabindex="-1"></a>    erro <span class="op">=</span> {nome: <span class="op">-</span>cross_val_score(</span>
+<span id="cb23-5"><a href="#cb23-5" aria-hidden="true" tabindex="-1"></a>                Pipeline([(<span class="st">"preparo"</span>, preparo), (<span class="st">"modelo"</span>, candidatos[nome])]),</span>
+<span id="cb23-6"><a href="#cb23-6" aria-hidden="true" tabindex="-1"></a>                X_treino, y_treino, cv<span class="op">=</span>outros_grupos,</span>
+<span id="cb23-7"><a href="#cb23-7" aria-hidden="true" tabindex="-1"></a>                scoring<span class="op">=</span><span class="st">"neg_root_mean_squared_error"</span>)</span>
+<span id="cb23-8"><a href="#cb23-8" aria-hidden="true" tabindex="-1"></a>            <span class="cf">for</span> nome <span class="kw">in</span> [<span class="st">"linear"</span>, <span class="st">"k-NN"</span>]}</span>
+<span id="cb23-9"><a href="#cb23-9" aria-hidden="true" tabindex="-1"></a>    ganho_semente <span class="op">=</span> erro[<span class="st">"linear"</span>] <span class="op">-</span> erro[<span class="st">"k-NN"</span>]</span>
+<span id="cb23-10"><a href="#cb23-10" aria-hidden="true" tabindex="-1"></a>    vitorias.append(<span class="bu">int</span>((ganho_semente <span class="op">&gt;</span> <span class="dv">0</span>).<span class="bu">sum</span>()))</span>
+<span id="cb23-11"><a href="#cb23-11" aria-hidden="true" tabindex="-1"></a>    ganhos_medios.append(ganho_semente.mean())</span>
+<span id="cb23-12"><a href="#cb23-12" aria-hidden="true" tabindex="-1"></a>    <span class="bu">print</span>(<span class="ss">f"semente </span><span class="sc">{</span>semente<span class="sc">}</span><span class="ss">: k-NN vence em"</span>, vitorias[<span class="op">-</span><span class="dv">1</span>], <span class="st">"de 10"</span>)</span>
+<span id="cb23-13"><a href="#cb23-13" aria-hidden="true" tabindex="-1"></a>    <span class="bu">print</span>(<span class="st">"  ganho médio:"</span>, numero_br(ganhos_medios[<span class="op">-</span><span class="dv">1</span>], <span class="dv">4</span>))</span>
+<span id="cb23-14"><a href="#cb23-14" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">"vence nos 10 em todas:"</span>, <span class="bu">all</span>(v <span class="op">==</span> <span class="dv">10</span> <span class="cf">for</span> v <span class="kw">in</span> vitorias))</span>
+<span id="cb23-15"><a href="#cb23-15" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">"ganho médio, menor:"</span>, numero_br(<span class="bu">min</span>(ganhos_medios), <span class="dv">4</span>))</span>
+<span id="cb23-16"><a href="#cb23-16" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">"ganho médio, maior:"</span>, numero_br(<span class="bu">max</span>(ganhos_medios), <span class="dv">4</span>))</span></code></pre></div><button title="Copiar para a área de transferência" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>semente 0: k-NN vence em 10 de 10
+  ganho médio: 0,0246
+semente 1: k-NN vence em 10 de 10
+  ganho médio: 0,0243
+semente 2: k-NN vence em 10 de 10
+  ganho médio: 0,0258
+semente 3: k-NN vence em 10 de 10
+  ganho médio: 0,0250
+semente 4: k-NN vence em 10 de 10
+  ganho médio: 0,0255
+vence nos 10 em todas: True
+ganho médio, menor: 0,0243
+ganho médio, maior: 0,0258</code></pre>
+</div>
+</div>
+<p>Nas cinco sementes, o <em>k</em>-NN erra menos que a linear nos dez grupos, e o ganho médio fica entre 0,0243 e 0,0258, perto dos 0,0241 da semente 17. O <em>k</em>-NN fica à frente e segue como candidato, e o teste continua fechado.</p>
+<p>Nada na comparação depende de que modelos são esses. O passo <code>modelo</code> do <code>Pipeline</code> aceita qualquer regressor do <code>scikit-learn</code>, inclusive as árvores de decisão e as florestas dos capítulos 12 e 13, e o mesmo <code>cross_val_score</code>, com os mesmos grupos, os colocaria na tabela. Os dez vizinhos do <em>k</em>-NN foram fixados de antemão, e esse número também pode ser escolhido por validação cruzada.</p>
+
+
+</section>
+
+</main> <!-- /main -->
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+  document.querySelectorAll('.spoiler').forEach(function (spoiler) {
+    const hash    = spoiler.dataset.passwordHash || '';
+    const hint    = spoiler.dataset.hint || 'Conteúdo protegido por senha';
+    const content = spoiler.innerHTML;
+
+    spoiler.innerHTML = `
+      <div class="spoiler-lock">
+        <span class="spoiler-icon">&#128274;</span>
+        <p class="spoiler-hint">${hint}</p>
+        <div class="spoiler-input-group">
+          <input type="password" class="spoiler-input" placeholder="Digite a senha…" autocomplete="off">
+          <button class="spoiler-btn">Acessar</button>
+        </div>
+        <p class="spoiler-error">Senha incorreta.</p>
+      </div>
+      <div class="spoiler-content">${content}</div>
+    `;
+    spoiler.style.display = 'block';
+
+    const lockDiv    = spoiler.querySelector('.spoiler-lock');
+    const contentDiv = spoiler.querySelector('.spoiler-content');
+    const input      = spoiler.querySelector('.spoiler-input');
+    const btn        = spoiler.querySelector('.spoiler-btn');
+    const errorMsg   = spoiler.querySelector('.spoiler-error');
+
+    async function tryUnlock() {
+      const val    = input.value;
+      const buf    = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(val));
+      const hex    = Array.from(new Uint8Array(buf))
+                         .map(b => b.toString(16).padStart(2, '0')).join('');
+
+      if (hex === hash) {
+        lockDiv.style.display    = 'none';
+        contentDiv.style.display = 'block';
+      } else {
+        errorMsg.style.display = 'block';
+        input.value = '';
+        input.focus();
+        setTimeout(() => { errorMsg.style.display = 'none'; }, 2500);
+      }
+    }
+
+    btn.addEventListener('click', tryUnlock);
+    input.addEventListener('keydown', e => { if (e.key === 'Enter') tryUnlock(); });
+  });
+});
+</script>
+<script id="quarto-html-after-body" type="application/javascript">
+  window.document.addEventListener("DOMContentLoaded", function (event) {
+    // Ensure there is a toggle, if there isn't float one in the top right
+    if (window.document.querySelector('.quarto-color-scheme-toggle') === null) {
+      const a = window.document.createElement('a');
+      a.classList.add('top-right');
+      a.classList.add('quarto-color-scheme-toggle');
+      a.href = "";
+      a.onclick = function() { try { window.quartoToggleColorScheme(); } catch {} return false; };
+      const i = window.document.createElement("i");
+      i.classList.add('bi');
+      a.appendChild(i);
+      window.document.body.appendChild(a);
+    }
+    setColorSchemeToggle(hasAlternateSentinel())
+    const icon = "";
+    const anchorJS = new window.AnchorJS();
+    anchorJS.options = {
+      placement: 'right',
+      icon: icon
+    };
+    anchorJS.add('.anchored');
+    const isCodeAnnotation = (el) => {
+      for (const clz of el.classList) {
+        if (clz.startsWith('code-annotation-')) {                     
+          return true;
+        }
+      }
+      return false;
+    }
+    const onCopySuccess = function(e) {
+      // button target
+      const button = e.trigger;
+      // don't keep focus
+      button.blur();
+      // flash "checked"
+      button.classList.add('code-copy-button-checked');
+      var currentTitle = button.getAttribute("title");
+      button.setAttribute("title", "Copiada");
+      let tooltip;
+      if (window.bootstrap) {
+        button.setAttribute("data-bs-toggle", "tooltip");
+        button.setAttribute("data-bs-placement", "left");
+        button.setAttribute("data-bs-title", "Copiada");
+        tooltip = new bootstrap.Tooltip(button, 
+          { trigger: "manual", 
+            customClass: "code-copy-button-tooltip",
+            offset: [0, -8]});
+        tooltip.show();    
+      }
+      setTimeout(function() {
+        if (tooltip) {
+          tooltip.hide();
+          button.removeAttribute("data-bs-title");
+          button.removeAttribute("data-bs-toggle");
+          button.removeAttribute("data-bs-placement");
+        }
+        button.setAttribute("title", currentTitle);
+        button.classList.remove('code-copy-button-checked');
+      }, 1000);
+      // clear code selection
+      e.clearSelection();
+    }
+    const getTextToCopy = function(trigger) {
+      const outerScaffold = trigger.parentElement.cloneNode(true);
+      const codeEl = outerScaffold.querySelector('code');
+      for (const childEl of codeEl.children) {
+        if (isCodeAnnotation(childEl)) {
+          childEl.remove();
+        }
+      }
+      return codeEl.innerText;
+    }
+    const clipboard = new window.ClipboardJS('.code-copy-button:not([data-in-quarto-modal])', {
+      text: getTextToCopy
+    });
+    clipboard.on('success', onCopySuccess);
+    if (window.document.getElementById('quarto-embedded-source-code-modal')) {
+      const clipboardModal = new window.ClipboardJS('.code-copy-button[data-in-quarto-modal]', {
+        text: getTextToCopy,
+        container: window.document.getElementById('quarto-embedded-source-code-modal')
+      });
+      clipboardModal.on('success', onCopySuccess);
+    }
+      var localhostRegex = new RegExp(/^(?:http|https):\/\/localhost\:?[0-9]*\//);
+      var mailtoRegex = new RegExp(/^mailto:/);
+        var filterRegex = new RegExp("https:\/\/BragaD\.github\.io\/UnDF-Bases5-CienciaDeDados-202602");
+      var isInternal = (href) => {
+          return filterRegex.test(href) || localhostRegex.test(href) || mailtoRegex.test(href);
+      }
+      // Inspect non-navigation links and adorn them if external
+     var links = window.document.querySelectorAll('a[href]:not(.nav-link):not(.navbar-brand):not(.toc-action):not(.sidebar-link):not(.sidebar-item-toggle):not(.pagination-link):not(.no-external):not([aria-hidden]):not(.dropdown-item):not(.quarto-navigation-tool):not(.about-link)');
+      for (var i=0; i<links.length; i++) {
+        const link = links[i];
+        if (!isInternal(link.href)) {
+          // undo the damage that might have been done by quarto-nav.js in the case of
+          // links that we want to consider external
+          if (link.dataset.originalHref !== undefined) {
+            link.href = link.dataset.originalHref;
+          }
+            // target, if specified
+            link.setAttribute("target", "_blank");
+            if (link.getAttribute("rel") === null) {
+              link.setAttribute("rel", "noopener");
+            }
+            // default icon
+            link.classList.add("external");
+        }
+      }
+    function tippyHover(el, contentFn, onTriggerFn, onUntriggerFn) {
+      const config = {
+        allowHTML: true,
+        maxWidth: 500,
+        delay: 100,
+        arrow: false,
+        appendTo: function(el) {
+            return el.parentElement;
+        },
+        interactive: true,
+        interactiveBorder: 10,
+        theme: 'quarto',
+        placement: 'bottom-start',
+      };
+      if (contentFn) {
+        config.content = contentFn;
+      }
+      if (onTriggerFn) {
+        config.onTrigger = onTriggerFn;
+      }
+      if (onUntriggerFn) {
+        config.onUntrigger = onUntriggerFn;
+      }
+      window.tippy(el, config); 
+    }
+    const noterefs = window.document.querySelectorAll('a[role="doc-noteref"]');
+    for (var i=0; i<noterefs.length; i++) {
+      const ref = noterefs[i];
+      tippyHover(ref, function() {
+        // use id or data attribute instead here
+        let href = ref.getAttribute('data-footnote-href') || ref.getAttribute('href');
+        try { href = new URL(href).hash; } catch {}
+        const id = href.replace(/^#\/?/, "");
+        const note = window.document.getElementById(id);
+        if (note) {
+          return note.innerHTML;
+        } else {
+          return "";
+        }
+      });
+    }
+    const xrefs = window.document.querySelectorAll('a.quarto-xref');
+    const processXRef = (id, note) => {
+      // Strip column container classes
+      const stripColumnClz = (el) => {
+        el.classList.remove("page-full", "page-columns");
+        if (el.children) {
+          for (const child of el.children) {
+            stripColumnClz(child);
+          }
+        }
+      }
+      stripColumnClz(note)
+      if (id === null || id.startsWith('sec-')) {
+        // Special case sections, only their first couple elements
+        const container = document.createElement("div");
+        if (note.children && note.children.length > 2) {
+          container.appendChild(note.children[0].cloneNode(true));
+          for (let i = 1; i < note.children.length; i++) {
+            const child = note.children[i];
+            if (child.tagName === "P" && child.innerText === "") {
+              continue;
+            } else {
+              container.appendChild(child.cloneNode(true));
+              break;
+            }
+          }
+          if (window.Quarto?.typesetMath) {
+            window.Quarto.typesetMath(container);
+          }
+          return container.innerHTML
+        } else {
+          if (window.Quarto?.typesetMath) {
+            window.Quarto.typesetMath(note);
+          }
+          return note.innerHTML;
+        }
+      } else {
+        // Remove any anchor links if they are present
+        const anchorLink = note.querySelector('a.anchorjs-link');
+        if (anchorLink) {
+          anchorLink.remove();
+        }
+        if (window.Quarto?.typesetMath) {
+          window.Quarto.typesetMath(note);
+        }
+        if (note.classList.contains("callout")) {
+          return note.outerHTML;
+        } else {
+          return note.innerHTML;
+        }
+      }
+    }
+    for (var i=0; i<xrefs.length; i++) {
+      const xref = xrefs[i];
+      tippyHover(xref, undefined, function(instance) {
+        instance.disable();
+        let url = xref.getAttribute('href');
+        let hash = undefined; 
+        if (url.startsWith('#')) {
+          hash = url;
+        } else {
+          try { hash = new URL(url).hash; } catch {}
+        }
+        if (hash) {
+          const id = hash.replace(/^#\/?/, "");
+          const note = window.document.getElementById(id);
+          if (note !== null) {
+            try {
+              const html = processXRef(id, note.cloneNode(true));
+              instance.setContent(html);
+            } finally {
+              instance.enable();
+              instance.show();
+            }
+          } else {
+            // See if we can fetch this
+            fetch(url.split('#')[0])
+            .then(res => res.text())
+            .then(html => {
+              const parser = new DOMParser();
+              const htmlDoc = parser.parseFromString(html, "text/html");
+              const note = htmlDoc.getElementById(id);
+              if (note !== null) {
+                const html = processXRef(id, note);
+                instance.setContent(html);
+              } 
+            }).finally(() => {
+              instance.enable();
+              instance.show();
+            });
+          }
+        } else {
+          // See if we can fetch a full url (with no hash to target)
+          // This is a special case and we should probably do some content thinning / targeting
+          fetch(url)
+          .then(res => res.text())
+          .then(html => {
+            const parser = new DOMParser();
+            const htmlDoc = parser.parseFromString(html, "text/html");
+            const note = htmlDoc.querySelector('main.content');
+            if (note !== null) {
+              // This should only happen for chapter cross references
+              // (since there is no id in the URL)
+              // remove the first header
+              if (note.children.length > 0 && note.children[0].tagName === "HEADER") {
+                note.children[0].remove();
+              }
+              const html = processXRef(null, note);
+              instance.setContent(html);
+            } 
+          }).finally(() => {
+            instance.enable();
+            instance.show();
+          });
+        }
+      }, function(instance) {
+      });
+    }
+        let selectedAnnoteEl;
+        const selectorForAnnotation = ( cell, annotation) => {
+          let cellAttr = 'data-code-cell="' + cell + '"';
+          let lineAttr = 'data-code-annotation="' +  annotation + '"';
+          const selector = 'span[' + cellAttr + '][' + lineAttr + ']';
+          return selector;
+        }
+        const selectCodeLines = (annoteEl) => {
+          const doc = window.document;
+          const targetCell = annoteEl.getAttribute("data-target-cell");
+          const targetAnnotation = annoteEl.getAttribute("data-target-annotation");
+          const annoteSpan = window.document.querySelector(selectorForAnnotation(targetCell, targetAnnotation));
+          const lines = annoteSpan.getAttribute("data-code-lines").split(",");
+          const lineIds = lines.map((line) => {
+            return targetCell + "-" + line;
+          })
+          let top = null;
+          let height = null;
+          let parent = null;
+          if (lineIds.length > 0) {
+              //compute the position of the single el (top and bottom and make a div)
+              const el = window.document.getElementById(lineIds[0]);
+              top = el.offsetTop;
+              height = el.offsetHeight;
+              parent = el.parentElement.parentElement;
+            if (lineIds.length > 1) {
+              const lastEl = window.document.getElementById(lineIds[lineIds.length - 1]);
+              const bottom = lastEl.offsetTop + lastEl.offsetHeight;
+              height = bottom - top;
+            }
+            if (top !== null && height !== null && parent !== null) {
+              // cook up a div (if necessary) and position it 
+              let div = window.document.getElementById("code-annotation-line-highlight");
+              if (div === null) {
+                div = window.document.createElement("div");
+                div.setAttribute("id", "code-annotation-line-highlight");
+                div.style.position = 'absolute';
+                parent.appendChild(div);
+              }
+              div.style.top = top - 2 + "px";
+              div.style.height = height + 4 + "px";
+              div.style.left = 0;
+              let gutterDiv = window.document.getElementById("code-annotation-line-highlight-gutter");
+              if (gutterDiv === null) {
+                gutterDiv = window.document.createElement("div");
+                gutterDiv.setAttribute("id", "code-annotation-line-highlight-gutter");
+                gutterDiv.style.position = 'absolute';
+                const codeCell = window.document.getElementById(targetCell);
+                const gutter = codeCell.querySelector('.code-annotation-gutter');
+                gutter.appendChild(gutterDiv);
+              }
+              gutterDiv.style.top = top - 2 + "px";
+              gutterDiv.style.height = height + 4 + "px";
+            }
+            selectedAnnoteEl = annoteEl;
+          }
+        };
+        const unselectCodeLines = () => {
+          const elementsIds = ["code-annotation-line-highlight", "code-annotation-line-highlight-gutter"];
+          elementsIds.forEach((elId) => {
+            const div = window.document.getElementById(elId);
+            if (div) {
+              div.remove();
+            }
+          });
+          selectedAnnoteEl = undefined;
+        };
+          // Handle positioning of the toggle
+      window.addEventListener(
+        "resize",
+        throttle(() => {
+          elRect = undefined;
+          if (selectedAnnoteEl) {
+            selectCodeLines(selectedAnnoteEl);
+          }
+        }, 10)
+      );
+      function throttle(fn, ms) {
+      let throttle = false;
+      let timer;
+        return (...args) => {
+          if(!throttle) { // first call gets through
+              fn.apply(this, args);
+              throttle = true;
+          } else { // all the others get throttled
+              if(timer) clearTimeout(timer); // cancel #2
+              timer = setTimeout(() => {
+                fn.apply(this, args);
+                timer = throttle = false;
+              }, ms);
+          }
+        };
+      }
+        const annoteTargets = window.document.querySelectorAll('.code-annotation-anchor');
+        for (let i=0; i<annoteTargets.length; i++) {
+          const annoteTarget = annoteTargets[i];
+          const targetCell = annoteTarget.getAttribute("data-target-cell");
+          const targetAnnotation = annoteTarget.getAttribute("data-target-annotation");
+          const contentFn = () => {
+            const content = window.document.querySelector(selectorForAnnotation(targetCell, targetAnnotation));
+            if (content) {
+              const tipContent = content.cloneNode(true);
+              tipContent.classList.add("code-annotation-tip-content");
+              return tipContent.outerHTML;
+            }
+          }
+          const config = {
+            allowHTML: true,
+            content: contentFn,
+            onShow: (instance) => {
+              selectCodeLines(instance.reference);
+              instance.reference.classList.add('code-annotation-active');
+              window.tippy.hideAll();
+            },
+            onHide: (instance) => {
+              unselectCodeLines();
+              instance.reference.classList.remove('code-annotation-active');
+            },
+            maxWidth: 300,
+            delay: [50, 0],
+            duration: [200, 0],
+            offset: [5, 10],
+            arrow: true,
+            appendTo: function(el) {
+              return el.parentElement.parentElement.parentElement;
+            },
+            interactive: true,
+            interactiveBorder: 10,
+            theme: 'quarto',
+            placement: 'right',
+            popperOptions: {
+              modifiers: [
+              {
+                name: 'flip',
+                options: {
+                  flipVariations: false, // true by default
+                  allowedAutoPlacements: ['right'],
+                  fallbackPlacements: ['right', 'top', 'top-start', 'top-end', 'bottom', 'bottom-start', 'bottom-end', 'left'],
+                },
+              },
+              {
+                name: 'preventOverflow',
+                options: {
+                  mainAxis: false,
+                  altAxis: false
+                }
+              }
+              ]        
+            }      
+          };
+          window.tippy(annoteTarget, config); 
+        }
+    const findCites = (el) => {
+      const parentEl = el.parentElement;
+      if (parentEl) {
+        const cites = parentEl.dataset.cites;
+        if (cites) {
+          return {
+            el,
+            cites: cites.split(' ')
+          };
+        } else {
+          return findCites(el.parentElement)
+        }
+      } else {
+        return undefined;
+      }
+    };
+    var bibliorefs = window.document.querySelectorAll('a[role="doc-biblioref"]');
+    for (var i=0; i<bibliorefs.length; i++) {
+      const ref = bibliorefs[i];
+      const citeInfo = findCites(ref);
+      if (citeInfo) {
+        tippyHover(citeInfo.el, function() {
+          var popup = window.document.createElement('div');
+          citeInfo.cites.forEach(function(cite) {
+            var citeDiv = window.document.createElement('div');
+            citeDiv.classList.add('hanging-indent');
+            citeDiv.classList.add('csl-entry');
+            var biblioDiv = window.document.getElementById('ref-' + cite);
+            if (biblioDiv) {
+              citeDiv.innerHTML = biblioDiv.innerHTML;
+            }
+            popup.appendChild(citeDiv);
+          });
+          return popup.innerHTML;
+        });
+      }
+    }
+  });
+  </script>
+<nav class="page-navigation">
+  <div class="nav-page nav-page-previous">
+      <a href="../../content/cap17/03-pre-processamento-como-parte-do-modelo.html" class="pagination-link" aria-label="Pré-processamento como Parte do Modelo: ColumnTransformer e Pipeline">
+        <i class="bi bi-arrow-left-short"></i> <span class="nav-page-text"><span class="chapter-title">Pré-processamento como Parte do Modelo: ColumnTransformer e Pipeline</span></span>
+      </a>          
+  </div>
+  <div class="nav-page nav-page-next">
+      <a href="../../content/cap17/05-ajuste-de-hiperparametros-com-gridsearchcv.html" class="pagination-link" aria-label="Ajuste de Hiperparâmetros com GridSearchCV">
+        <span class="nav-page-text"><span class="chapter-title">Ajuste de Hiperparâmetros com GridSearchCV</span></span> <i class="bi bi-arrow-right-short"></i>
+      </a>
+  </div>
+</nav>
+</div> <!-- /content -->
+<footer class="footer">
+  <div class="nav-footer">
+    <div class="nav-footer-left">
+<p>UnDF — Ciência da Computação — Ciência de Dados — 2026.2</p>
+</div>   
+    <div class="nav-footer-center">
+      &nbsp;
+    <div class="toc-actions d-sm-block d-md-none"><ul><li><a href="https://github.com/BragaD/UnDF-Bases5-CienciaDeDados-202602/issues/new" class="toc-action"><i class="bi bi-github"></i>Criar uma issue</a></li></ul></div></div>
+    <div class="nav-footer-right">
+      <ul class="footer-items list-unstyled">
+    <li class="nav-item compact">
+    <a class="nav-link" href="https://github.com/BragaD/UnDF-Bases5-CienciaDeDados-202602">
+      <i class="bi bi-github" role="img">
+</i> 
+    </a>
+  </li>  
+</ul>
+    </div>
+  </div>
+</footer>
+
+
+
+
+</body></html>
