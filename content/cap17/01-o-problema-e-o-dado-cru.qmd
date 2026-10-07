@@ -1,0 +1,370 @@
+# O Problema e o Dado Cru
+
+Um anúncio novo chega a uma plataforma de aluguel. O dono informa a cidade, a área, quantos quartos, banheiros e vagas o imóvel tem, o andar, se aceita animal, se vem mobiliado, o condomínio e o IPTU. Falta o preço. Quanto ele deveria pedir por mês?
+
+```{python}
+#| label: setup
+#| include: false
+import matplotlib.pyplot as plt
+import numpy as np
+import pandas as pd
+
+plt.style.use("estilo-figuras.mplstyle")
+pd.set_option("display.max_columns", None)
+```
+
+## A pergunta
+
+A unidade é **um anúncio**: cada linha da tabela é um imóvel oferecido para alugar. A resposta é **`aluguel`**, o valor mensal pedido, em reais. E os preditores só podem ser o que se sabe **no momento do anúncio**, antes de o preço existir. Além de `aluguel`, o arquivo traz estas colunas: `cidade`, `area_m2`, `quartos`, `banheiros`, `vagas`, `andar`, `aceita_animal`, `mobiliado`, `condominio`, `iptu`, `seguro_incendio` e `total`.
+
+Pense antes de ler adiante: alguma delas só pode ter sido preenchida por alguém que já sabia o aluguel?
+
+Duas: `seguro_incendio` e `total`. O total é uma soma que tem o aluguel como parcela, e o valor do seguro-incêndio, tudo indica, é calculado sobre o do aluguel. A seção 6.6 conferiu a soma de `total`, e a seção 17.2 mede quanto do aluguel há no seguro. Um modelo que as recebesse estaria lendo a resposta dentro da pergunta, e no anúncio novo, que ainda não tem preço, elas nem existiriam. Sobram as outras:
+
+- `cidade`, `area_m2`, `quartos`, `banheiros`, `vagas` e `andar`, que descrevem o imóvel;
+- `aceita_animal` e `mobiliado`, que descrevem a oferta;
+- `condominio` e `iptu`, que vêm de fora do contrato: o condomínio, do rateio das despesas do prédio, e o IPTU, da prefeitura.
+
+## O arquivo como ele vem
+
+```{python}
+#| label: leitura-crua
+cru = pd.read_csv("dados/alugueis.csv")
+cru.shape
+```
+
+```{python}
+#| label: primeiras-linhas
+cru.head(3).T
+```
+
+::: {.funcao}
+**`pd.read_csv(caminho)`** — lê um arquivo CSV e devolve um `DataFrame`, com o tipo de cada coluna deduzido dos caracteres do arquivo.
+
+**`df.shape`** — atributo: o par (linhas, colunas).
+
+**`df.head(n)`** — as `n` primeiras linhas.
+
+**`df.T`** — atributo: a tabela transposta, com as linhas no lugar das colunas. Aqui, cada coluna do arquivo vira uma linha, e a tabela cabe na página.
+:::
+
+São 10.692 anúncios e 13 colunas. Na tabela transposta, cada anúncio é uma coluna, e nos três primeiros `andar` traz números como qualquer outra coluna de contagem. O tipo com que o `pandas` leu cada coluna diz outra coisa:
+
+```{python}
+#| label: tipos
+cru.dtypes
+```
+
+```{python}
+#| label: tipos-contagem
+cru.dtypes.value_counts()
+```
+
+::: {.funcao}
+**`df.dtypes`** — atributo: o tipo de cada coluna.
+
+**`serie.value_counts()`** — quantas vezes cada valor distinto aparece na `Series`, do mais frequente ao menos frequente. Aqui, quantas colunas há de cada tipo.
+:::
+
+Nove colunas chegaram como número (`int64`) e quatro como texto (`object`). Das quatro, três são texto de fato: `cidade`, `aceita_animal` e `mobiliado`. A quarta é `andar`, que deveria ser número. Contar os valores da coluna mostra por quê:
+
+```{python}
+#| label: andar-cru
+cru["andar"].value_counts().head()
+```
+
+::: {.funcao}
+**`df["coluna"]`** — a coluna com esse nome, como uma `Series`: os valores com o rótulo de cada linha.
+:::
+
+O valor mais frequente de `andar` não é um número: é um traço, `"-"`, em 2.461 linhas. Basta um valor que não é número para a coluna inteira virar texto. Lendo de novo com o traço declarado como nulo:
+
+```{python}
+#| label: leitura-com-nulo
+alugueis = pd.read_csv("dados/alugueis.csv", na_values=["-"])
+alugueis.isna().sum()[lambda s: s > 0]
+```
+
+::: {.funcao}
+**`pd.read_csv(caminho, na_values=marcadores)`** — `na_values` é uma lista de textos lidos como nulo, além dos que o `pandas` já reconhece. Aqui, `["-"]`.
+
+**`df.isna().sum()`** — `isna()` marca com `True` cada célula nula, e `.sum()` conta os `True` coluna a coluna. O `[lambda s: s > 0]` filtra e deixa só as colunas com algum nulo.
+:::
+
+`andar` é a única coluna com nulo, e são os mesmos 2.461 traços. A seção 6.4 juntou indícios de que o traço marca uma casa, que não tem andar: nas linhas sem andar, o condomínio é quase sempre zero e a área mediana é maior. São indícios fortes, não prova, e a tabela tem linhas que não se encaixam neles:
+
+```{python}
+#| label: sem-andar-com-condominio
+sem_andar = alugueis["andar"].isna()
+com_condominio = alugueis["condominio"] > 0
+print("sem andar e com condomínio:", (sem_andar & com_condominio).sum())
+```
+
+::: {.funcao}
+**`serie > valor`** (e `==`, `<`) — compara cada elemento com `valor` e devolve uma `Series` de `True`/`False`, uma por linha. Uma `Series` assim é uma **máscara**.
+
+**`serie_a & serie_b`** — `True` só nas linhas em que as duas `Series` de `True`/`False` são `True`. Somado, conta essas linhas.
+:::
+
+São 385 dos 2.461 anúncios sem andar com algum condomínio: uma casa em condomínio fechado, ou um apartamento cujo andar não foi informado. O arquivo não tem uma coluna que decida entre as duas leituras. O que fazer com esse nulo é decisão de preparo, e ela precisa servir aos dois casos.
+
+## Linhas repetidas
+
+```{python}
+#| label: duplicadas
+int(alugueis.duplicated().sum())
+```
+
+::: {.funcao}
+**`df.duplicated()`** — `True` em cada linha idêntica, em todas as colunas, a uma linha que apareceu antes dela. Somado, conta as repetições.
+:::
+
+São 358 linhas que repetem outra linha inteira, coluna por coluna. O arquivo não tem uma coluna que identifique o anúncio, então não há como saber se cada repetição é o mesmo anúncio publicado de novo ou dois imóveis iguais até o último real; a seção 6.4 mostrou três anúncios de Belo Horizonte nessa situação. Tirar ou manter as repetições muda o que o modelo aprende e, pior, muda quanto ele parece acertar: uma cópia no treino e outra no teste deixam o modelo ser julgado num anúncio que ele já viu, assunto da seção 17.2.
+
+## Valores extremos
+
+O resumo de `area_m2`, `condominio`, `iptu` e `andar` sai de um método só. Antes, uma função curta, `numero_br`, que só troca a pontuação de um número para o padrão brasileiro: o Python escreve `1,117,000.00`, com vírgula no milhar e ponto na decimal, e ela troca uma pela outra, sem mudar o valor. O argumento `casas` diz quantas casas decimais ficam.
+
+```{python}
+#| label: numero-br
+numero_br = lambda valor, casas=2: (
+    f"{valor:,.{casas}f}".replace(",", "_").replace(".", ",").replace("_", ".")
+    .replace("-", "−")
+)
+print(numero_br(1117000, 0))
+```
+
+```{python}
+#| label: extremos
+resumo = alugueis[["area_m2", "condominio", "iptu", "andar"]].describe()
+resumo.style.set_uuid("resumo").format(lambda v: numero_br(v, 1)).format(
+    lambda v: numero_br(v, 0), subset=pd.IndexSlice[["count"], :]
+)
+```
+
+::: {.funcao}
+**`df[["a", "b"]]`** — com uma lista de nomes dentro dos colchetes, uma tabela só com essas colunas.
+
+**`df.describe()`** — por coluna numérica: contagem de não nulos (`count`), média, desvio padrão, mínimo, os quartis `25%`, `50%` (a mediana) e `75%`, e o máximo.
+
+**`df.style.format(funcao, subset)`** — escreve cada célula com `funcao`, sem mudar o número guardado; com `subset`, só no recorte indicado. Aqui, `pd.IndexSlice[["count"], :]` recorta a linha `count` em todas as colunas, escrita sem casa decimal. **`.set_uuid(nome)`** fixa o identificador que o HTML da tabela usa.
+:::
+
+A mediana de `area_m2` é 90 m² e o máximo é 46.335 m². A de `condominio` é R$ 560, e o máximo, R$ 1.117.000. O IPTU vai de uma mediana de R$ 125 a um máximo de R$ 313.700, e `andar`, de uma mediana de 5 a um máximo de 301. A contagem de `andar` é menor que a das outras porque os 2.461 nulos ficam de fora.
+
+Um máximo sozinho não diz se ele é um ponto isolado ou o topo de uma cauda que sobe devagar. Os três maiores valores de cada coluna, e o maior dividido pelo segundo, respondem isso:
+
+```{python}
+#| label: tres-maiores
+colunas = ["area_m2", "condominio", "iptu", "andar"]
+linhas = []
+for coluna in colunas:
+    primeiro, segundo, terceiro = alugueis[coluna].nlargest(3)
+    linhas.append([primeiro, segundo, terceiro, primeiro / segundo,
+                   primeiro / alugueis[coluna].median()])
+extremos = pd.DataFrame(linhas, index=colunas,
+                        columns=["maior", "2º", "3º", "÷ 2º", "÷ mediana"])
+extremos.style.set_uuid("extremos").format(lambda v: numero_br(v, 0)).format(
+    lambda v: numero_br(v, 1), subset=["÷ 2º"]
+).set_table_styles(
+    [{"selector": "th, td", "props": "padding: 0.15em 0.3em; font-size: 0.8em"}]
+)
+```
+
+::: {.funcao}
+**`serie.nlargest(n)`** — os `n` maiores valores da coluna, do maior para o menor. Com `n = 3`, os três se desempacotam em `primeiro, segundo, terceiro`.
+
+**`serie.median()`** — a mediana da coluna, ignorando os nulos.
+
+**`pd.DataFrame(linhas, index, columns)`** — monta uma tabela a partir de uma lista de linhas; `index` dá o nome de cada linha e `columns`, o de cada coluna.
+
+**`.set_table_styles(regras)`** — acrescenta regras de CSS à tabela, aqui uma letra menor para ela caber numa tela estreita. Os dois `.format` em sequência valem cada um no seu recorte: o segundo reescreve só a coluna `÷ 2º`.
+:::
+
+A coluna `÷ 2º` é o maior dividido pelo segundo, e `÷ mediana`, o maior dividido pela mediana. Cada coluna tem o seu tipo de extremo. Em `iptu`, o maior valor é 11,2 vezes o segundo: um ponto isolado. Em `andar`, 301 é 5,9 vezes o segundo, 51, e um prédio de 301 andares parece erro de digitação. Em `area_m2` não há um só gigante, e sim três, de 46.335, 24.606 e 12.732 m², e o maior dá 515 vezes a mediana.
+
+Em `condominio`, o maior valor aparece duas vezes, e a razão entre o primeiro e o segundo é 1,0. As duas linhas do topo são o mesmo anúncio?
+
+```{python}
+#| label: topo-condominio
+no_topo = alugueis["condominio"] == alugueis["condominio"].max()
+print("linhas no topo:", no_topo.sum())
+print("repetidas entre elas:", alugueis[no_topo].duplicated().sum())
+```
+
+::: {.funcao}
+**`serie.max()`** e **`serie.min()`** — o maior e o menor valor da coluna.
+
+**`df[mascara]`** — só as linhas em que `mascara` é `True`.
+:::
+
+Sim: uma das duas linhas repete a outra em todas as colunas, e é uma das 358 repetidas. Sem a linha repetida, o segundo maior condomínio passa a ser o de R$ 220.000, e o maior vale 5,1 vezes o segundo (1.117.000 ÷ 220.000). A repetição disfarçava um ponto isolado.
+
+Nenhum desses extremos sai da tabela. Só pelo arquivo, não há como confirmar qual valor é erro, e tirar os que parecem errados muda a população de anúncios que o modelo vai atender: o anúncio novo pode trazer o mesmo erro de digitação. Para área, condomínio e IPTU, o que reduz o peso dos extremos é mudar a escala da coluna, e a figura adiante mostra o que isso faz. Antes, o outro lado dessas colunas, o mínimo:
+
+```{python}
+#| label: zeros
+zero_condominio = alugueis["condominio"] == 0
+print("condomínio zero:", numero_br(zero_condominio.sum(), 0))
+print("IPTU zero:", numero_br((alugueis["iptu"] == 0).sum(), 0))
+print("com andar e condomínio zero:", (zero_condominio & ~sem_andar).sum())
+```
+
+::: {.funcao}
+**`~serie`** — troca `True` por `False` e vice-versa. Aqui, `~sem_andar` marca as linhas que têm andar.
+:::
+
+São 2.373 anúncios com condomínio zero e 1.596 com IPTU zero. Parte desses zeros é plausível, como a casa sem condomínio, mas 297 anúncios têm andar informado (o que sugere um apartamento) e condomínio zero. Um zero pode ser o anunciante que deixou o campo em branco, a mesma dúvida do traço em `andar`. E o zero pesa na escolha da escala, porque o logaritmo de zero não existe.
+
+## O que um eixo linear esconde
+
+Um histograma de `area_m2` com o eixo em metros quadrados precisa ir de 11 a 46.335 para caber tudo. O que sobra, então, para os anúncios comuns? Antes de ver a figura, tente adivinhar quantas das 50 barras terão algum anúncio.
+
+```{python}
+#| label: fig-area-linear-log
+#| fig-cap: "Área dos 10.692 anúncios, em dois histogramas de 50 barras. Em cima, eixo horizontal linear, de 11 a 46.335 m². Embaixo, eixo horizontal em escala logarítmica, com as barras igualmente largas nessa escala: a distribuição aparece. Nos dois painéis, cada triângulo cinza marca um dos três imóveis acima de 10 mil m², cujas barras são baixas demais para se ver."
+#| fig-alt: "Dois histogramas azuis empilhados da área dos imóveis. No de cima, com eixo linear de zero a cerca de 46 mil metros quadrados, há uma única barra alta junto ao zero, com mais de dez mil anúncios, e o resto do eixo parece vazio. No de baixo, com eixo logarítmico a partir de 10 metros quadrados, as barras formam um morro, com o pico entre 69 e 82 metros quadrados, que desce para a direita até barras quase sem altura. Nos dois painéis, três triângulos cinza junto à base marcam os três imóveis acima de 10 mil metros quadrados: em cima, espalhados pelo eixo vazio; embaixo, isolados na ponta direita, longe do morro."
+fig, (ax_linear, ax_log) = plt.subplots(2, 1, figsize=(6.4, 6.4))
+gigantes = alugueis.loc[alugueis["area_m2"] > 10_000, "area_m2"]
+em_br = lambda v, pos: numero_br(v, 0)
+
+ax_linear.hist(alugueis["area_m2"], bins=50,
+               color="C0", edgecolor="white", linewidth=0.3)
+ax_linear.set_xlim(0, alugueis["area_m2"].max() * 1.02)
+ax_linear.set_title("eixo linear")
+ax_linear.set_xlabel("área (m²)")
+
+menor, maior = alugueis["area_m2"].min(), alugueis["area_m2"].max()
+bordas_log = np.geomspace(menor, maior, 51)
+ax_log.hist(alugueis["area_m2"], bins=bordas_log,
+            color="C0", edgecolor="white", linewidth=0.3)
+ax_log.set_xscale("log")
+ax_log.set_xlim(10, maior * 1.5)
+ax_log.set_title("eixo logarítmico")
+ax_log.set_xlabel("área (m², escala log)")
+
+for ax in (ax_linear, ax_log):
+    topo = ax.get_ylim()[1]
+    ax.scatter(gigantes, np.full(len(gigantes), 0.06 * topo), marker="v",
+               s=40, color="0.45", zorder=3, label="_nolegend_")
+    ax.xaxis.set_major_formatter(em_br)
+    ax.yaxis.set_major_formatter(em_br)
+    ax.set_ylabel("anúncios")
+
+plt.tight_layout()
+plt.show()
+```
+
+::: {.funcao}
+**`plt.subplots(2, 1, figsize)`** — uma figura com duas linhas e uma coluna de painéis, um em cima do outro; devolve a figura e os dois eixos. `figsize` é (largura, altura) em polegadas.
+
+**`df.loc[linhas, coluna]`** — seleciona pelas linhas em que a condição é `True` e pelo nome da coluna.
+
+**`ax.hist(x, bins, color, edgecolor, linewidth)`** — histograma de `x`. Com um inteiro, `bins` é o número de barras de mesma largura; com um array, são as bordas das barras. `color` é a cor das barras (`"C0"`, o azul do ciclo), `edgecolor` e `linewidth`, a cor e a espessura do contorno.
+
+**`np.geomspace(inicio, fim, n)`** — `n` números de `inicio` a `fim` em progressão geométrica: a razão entre vizinhos é constante, e as barras ficam da mesma largura num eixo logarítmico.
+
+**`ax.set_xscale("log")`** — põe o eixo horizontal em escala logarítmica, em que cada multiplicação por 10 ocupa o mesmo espaço.
+
+**`ax.set_xlim(inicio, fim)`** e **`ax.get_ylim()`** — fixam o intervalo do eixo horizontal e leem o do vertical.
+
+**`ax.set_title(texto)`**, **`ax.set_xlabel(texto)`** e **`ax.set_ylabel(texto)`** — o título do painel e os rótulos dos eixos.
+
+**`ax.scatter(x, y, marker, s, color, zorder, label)`** — um ponto em cada par (`x`, `y`); `marker="v"` desenha um triângulo e `s` é o tamanho. `color="0.45"` é um cinza, `zorder=3` desenha os triângulos por cima das barras e `label="_nolegend_"` os deixa fora de qualquer legenda. Aqui, `y` é um array de `np.full(n, valor)`, `n` cópias do mesmo número, para os três triângulos ficarem na mesma altura.
+
+**`ax.xaxis.set_major_formatter(funcao)`** — escreve os rótulos do eixo com `funcao(valor, posicao)`; aqui, `numero_br`, com ponto de milhar.
+
+**`plt.tight_layout()`** e **`plt.show()`** — ajustam os espaços entre os painéis para os rótulos não se sobreporem, e exibem a figura.
+:::
+
+As barras se contam com a mesma conta que o histograma faz antes de desenhar:
+
+```{python}
+#| label: primeira-barra
+contagens, bordas = np.histogram(alugueis["area_m2"], bins=50)
+print("primeira barra (m²):", numero_br(bordas[0], 0), "a", numero_br(bordas[1], 0))
+print("anúncios nela:", numero_br(contagens[0], 0), "de", numero_br(len(alugueis), 0))
+print(f"fração: {numero_br(100 * contagens[0] / len(alugueis), 1)}%")
+print("barras com anúncio:", (contagens > 0).sum(), "de 50")
+print("acima de 10 mil m²:", (alugueis["area_m2"] > 10_000).sum())
+print("quarto maior (m²):", numero_br(alugueis["area_m2"].nlargest(4).iloc[3], 0))
+
+contagens_log, _ = np.histogram(alugueis["area_m2"], bins=bordas_log)
+pico = contagens_log.argmax()
+print("pico no eixo log (m²):", numero_br(bordas_log[pico], 0), "a",
+      numero_br(bordas_log[pico + 1], 0))
+print("anúncios no pico:", numero_br(contagens_log[pico], 0))
+```
+
+::: {.funcao}
+**`np.histogram(x, bins)`** — a conta que `ax.hist` faz antes de desenhar, sem desenhar: devolve a contagem de cada barra e as bordas delas.
+
+**`serie.iloc[i]`** — o valor na posição `i`, contada a partir de 0. Aqui, `.nlargest(4).iloc[3]` é o quarto maior.
+
+**`array.argmax()`** — a posição do maior valor do array.
+:::
+
+No eixo linear, cada barra tem 926 m² de largura (937 − 11), e a primeira, de 11 a 937 m², leva 10.669 dos 10.692 anúncios (99,8%). Só 6 das 50 barras têm algum anúncio, e as outras cinco são quase invisíveis ao lado da primeira. O eixo de cima tem o comprimento que o maior dos imóveis marcados pelos triângulos pede, e todo o resto se espreme na primeira barra. No eixo logarítmico, a mesma coluna vira um morro, com a barra mais alta entre 69 e 82 m² (1.133 anúncios), e os três imóveis acima de 10 mil m² continuam lá, isolados na ponta: abaixo deles, o maior imóvel tem 2.000 m², e eles não apagam o resto da distribuição.
+
+A leitura vale para o modelo tanto quanto para o gráfico. O *k*-NN da seção 7.3 escolhe os vizinhos de um anúncio pela distância euclidiana: eleva ao quadrado a diferença em cada coluna, soma os quadrados e tira a raiz. Compare o imóvel de 46.335 m² com um imóvel mediano, coluna a coluna:
+
+```{python}
+#| label: gigante-contra-mediano
+contagens_imovel = ["area_m2", "quartos", "banheiros", "vagas"]
+gigante = alugueis.loc[alugueis["area_m2"].idxmax(), contagens_imovel].astype(float)
+mediano = alugueis[contagens_imovel].median()
+diferenca = (gigante - mediano).abs()
+print("área ÷ quartos:", numero_br(diferenca["area_m2"] / diferenca["quartos"], 1))
+comparacao = pd.DataFrame(
+    {"gigante": gigante, "mediano": mediano, "diferença": diferenca}
+).T
+comparacao.style.set_uuid("gigante").format(lambda v: numero_br(v, 0)).set_table_styles(
+    [{"selector": "th, td", "props": "padding: 0.15em 0.3em; font-size: 0.8em"}]
+)
+```
+
+::: {.funcao}
+**`serie.idxmax()`** — o rótulo da linha em que está o maior valor.
+
+**`df.median()`** — a mediana de cada coluna. **`serie.abs()`** — o valor absoluto de cada elemento.
+
+**`serie.astype(float)`** — converte os valores para número de ponto flutuante.
+
+**`pd.DataFrame(dicionario)`** — com um dicionário, cada chave vira o nome de uma coluna e cada `Series`, os valores dela. O `.T` põe as três `Series` como linhas.
+:::
+
+A diferença de área, 46.245 m², é 23.122,5 vezes a diferença de quartos, 2; os 6 banheiros e as 4 vagas de diferença também somem ao lado dela, e elevar ao quadrado aumenta ainda mais o peso da área. Os dois imóveis diferem em tudo, mas a distância só enxerga a área. Nenhuma linha precisa sair da tabela para isso mudar; o que muda é a escala. A conta abaixo mede a fatia da área na soma dos quadrados das diferenças, em três escalas: a do arquivo; cada coluna padronizada como na seção 7.3 (a média subtraída não muda a diferença entre dois imóveis, então basta dividir pelo desvio padrão); e a área em escala logarítmica antes de padronizar.
+
+```{python}
+#| label: peso-da-area
+imoveis = alugueis[contagens_imovel].astype(float)
+area_em_log = imoveis.assign(area_m2=np.log1p(imoveis["area_m2"]))
+linha_gigante = alugueis["area_m2"].idxmax()
+
+def fatia_da_area(tabela, padronizar):
+    dif = tabela.loc[linha_gigante] - tabela.median()
+    if padronizar:
+        dif = dif / tabela.std()
+    quadrados = dif ** 2
+    return 100 * quadrados["area_m2"] / quadrados.sum()
+
+print(f"sem escala: {numero_br(fatia_da_area(imoveis, False), 1)}%")
+print(f"padronizada: {numero_br(fatia_da_area(imoveis, True), 1)}%")
+print(f"área em log, padronizada: {numero_br(fatia_da_area(area_em_log, True), 1)}%")
+```
+
+::: {.funcao}
+**`df.assign(coluna=valores)`** — uma cópia da tabela com a coluna trocada (ou criada) por `valores`; a original não muda.
+
+**`np.log1p(x)`** — o logaritmo de `1 + x`, que existe também quando `x` é zero.
+
+**`df.std()`** — o desvio padrão de cada coluna.
+:::
+
+Padronizar quase não mexe: a área fica com 99,6% da soma. Com a área em escala logarítmica antes de padronizar, a fatia cai para 69,1%. A área continua sendo o maior termo, mas perde o monopólio da distância, e as outras colunas passam a pesar na escolha dos vizinhos.
+
+## O que fica para as próximas seções
+
+Quanto o dono do anúncio novo deveria pedir? Antes de um modelo responder, três decisões de preparo continuam abertas: o que fazer com as linhas repetidas, que a seção 17.2 decide, e, na 17.3, como preencher o nulo de `andar` e como mudar a escala de `area_m2`, `condominio` e `iptu`. A 17.2 também mede quanto de `aluguel` há em `seguro_incendio`, que, com `total`, já ficou fora dos preditores.
+
+Falta olhar a distribuição de `aluguel`, e ela espera a seção 17.2, que antes separa uma parte dos anúncios para o teste: examinar a resposta na tabela inteira deixaria os anúncios de teste influírem nas decisões que depois eles vão julgar. Esta seção olhou os preditores na tabela inteira, e isso é aceitável por dois motivos. Nenhuma decisão tomada aqui usa `aluguel`: declarar o traço como nulo e tirar dos preditores as colunas que carregam a resposta são regras fixas, que valem igual para qualquer anúncio. E o que o preparo precisar estimar a partir dos dados, como o valor que preenche um nulo, a seção 17.3 ajusta só nos anúncios de treino.

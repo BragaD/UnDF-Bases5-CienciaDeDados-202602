@@ -1,0 +1,50 @@
+# Máquinas de Vetores de Suporte
+
+::: {.callout-note}
+Este capítulo corresponde ao capítulo 9 de @james2023.
+:::
+
+📓 [**Abrir o notebook deste capítulo no Colab ↗**](https://colab.research.google.com/github/BragaD/UnDF-Bases5-CienciaDeDados-202602/blob/main/notebooks/cap16-maquinas-de-vetores-de-suporte.ipynb) — só o código, pronto para rodar.
+
+> A máquina implementa, em conceito, a seguinte ideia: os vetores de entrada são levados, de forma não linear, a um espaço de características de dimensão muito alta. Nesse espaço, constrói-se uma superfície de decisão linear.
+>
+> — Corinna Cortes e Vladimir Vapnik, em tradução livre [-@cortes1995, p. 273]
+
+Um hiperplano divide o espaço em dois lados, e um classificador pode dar uma classe a cada lado. Quando duas classes podem ser separadas, muitos hiperplanos as separam, e a seção 16.1 mede cada um pela margem, a distância dele ao ponto de treino mais próximo, e escolhe o de maior margem. Nos 40 pontos simulados, o hiperplano de margem máxima tem margem 0,37 e se apoia em três pontos, os vetores de suporte: empurrar para longe qualquer um dos outros 37 não muda a solução. A mesma dependência deixa a fronteira frágil. Um ponto novo entre as duas nuvens gira o hiperplano 21,6 graus e leva a margem de 0,37 a 0,12. E, com as nuvens misturadas, nenhuma das 720 direções testadas separa as classes.
+
+O classificador de vetores de suporte, da seção 16.2, aceita pontos dentro da margem e do lado errado do hiperplano: cada ponto tem uma folga $\varepsilon_i$, e a soma das folgas tem um teto, o orçamento $C$. O argumento `C` do `SVC` vai no sentido oposto ao do orçamento. Quando ele cresce de 0,01 a 10, a margem estreita de 3,14 para 0,72, os vetores de suporte caem de 40 para 21 e a soma das folgas, de 29,87 para 18,46. A inversão se explica reescrevendo o mesmo problema como perda mais penalidade, em que $\lambda = 1/(2\,\texttt{C})$: um `C` grande é um $\lambda$ pequeno, que é um orçamento pequeno. A perda dessa forma, a dobradiça, é zero para todo ponto além da margem, e por isso só os vetores de suporte decidem o hiperplano. O `C` se escolhe por validação cruzada, e com 40 pontos a escolha não é firme: 20 sementes do embaralhamento escolhem 6 valores diferentes, e o erro de teste de todos os valores da grade fica entre 0,23 e 0,26.
+
+Uma fronteira reta não serve quando uma classe fica entre duas nuvens da outra: na seção 16.3, o classificador de vetores de suporte prevê a mesma classe para todos os pontos de teste e erra 0,25. A solução depende dos pontos só por produtos internos, e trocar o produto interno por um kernel $K(x_i, x_{i'})$ dá a máquina de vetores de suporte, que ajusta um hiperplano num espaço com mais colunas sem montá-las; no plano original, a fronteira sai curva. No kernel radial, $\gamma$ regula quanto a fronteira segue os pontos de treino: de $\gamma = 0{,}01$ a $\gamma = 100$, o erro de treino vai de 0,25 a zero, e o de teste desce até 0,1054, em $\gamma = 0{,}1$, e volta a subir até 0,2364. A validação cruzada escolhe `C` e $\gamma$ juntos, e o ajuste escolhido erra 0,1054 no teste, contra 0,0942 da regra de Bayes nos mesmos pontos.
+
+Nos pacientes de `Heart`, o $\gamma = 0{,}1$ tem, entre os cinco modelos comparados, a maior área sob a curva ROC no treino, 0,990, e a menor no teste, 0,895. O kernel radial mede distâncias, e a escala dos preditores entra na conta: sem padronizar, o `SVC` radial com o $\gamma$ padrão erra 32 dos 90 pacientes de teste, contra 16 com o `StandardScaler`.
+
+Com mais de duas classes, a seção 16.4 junta classificadores de duas. O um contra um ajusta um classificador por par de classes e decide por votos; o um contra todos ajusta um por classe e decide pelo maior escore. Em três nuvens simuladas, as duas abordagens discordam em 247 dos 9.000 pontos de teste e erram 0,1141 e 0,1114. O `SVC` usa sempre o um contra um; o `LinearSVC`, por padrão, o um contra todos. Na tabela `Khan`, com 2.308 genes medidos em 63 amostras de treino de quatro tipos de tumor, o `SVC` linear ajusta 6 pares, não erra nenhuma amostra de treino e erra 2 das 20 de teste. Com tantas colunas a mais que amostras, cada par se separa por um hiperplano, e de 0,01 a 100 o `C` não muda os erros.
+
+Ao final deste capítulo, você será capaz de:
+
+- Classificar um ponto pelo lado de um hiperplano, definir a margem e os vetores de suporte e ajustar o classificador de margem máxima com `SVC(kernel="linear", C=np.inf)`
+- Ler as folgas $\varepsilon_i$ e o orçamento $C$ do classificador de vetores de suporte, converter o `C` do `scikit-learn` no $\lambda$ da forma de perda mais penalidade, $\lambda = 1/(2\,\texttt{C})$, e dizer para que lado a margem vai quando ele cresce
+- Explicar por que só os vetores de suporte decidem o hiperplano, comparar a perda dobradiça com a da regressão logística e distinguir o `SVC` com `kernel="linear"` do `LinearSVC`
+- Escrever $f(x)$ com um kernel, calcular à mão os kernels polinomial e radial, escolher `C` e $\gamma$ com o `GridSearchCV`, padronizar os preditores num `Pipeline` e comparar classificadores pela curva ROC do `decision_function`
+- Descrever o um contra um e o um contra todos, contar os classificadores de cada um, ler as formas de `coef_` e de `decision_function` com mais de duas classes e avaliar o papel do `C` quando há muito mais colunas que observações
+
+## Seções
+
+| Seção | Tópico |
+|---|---|
+| [16.1](01-hiperplanos-e-o-classificador-de-margem-maxima.qmd) | Hiperplanos e o Classificador de Margem Máxima |
+| [16.2](02-o-classificador-de-vetores-de-suporte.qmd) | O Classificador de Vetores de Suporte |
+| [16.3](03-kernels.qmd) | Kernels |
+| [16.4](04-mais-de-duas-classes.qmd) | Mais de Duas Classes |
+
+## Leituras adicionais
+
+- O capítulo 9 de @james2023, com os exercícios 7, sobre o conjunto `Auto`, e 8, sobre o conjunto `OJ`. O PDF gratuito e os dados estão no [site oficial do livro](https://www.statlearning.com).
+- O capítulo 12 de @hastie2009, "Support Vector Machines and Flexible Discriminants", num tratamento mais técnico do classificador de vetores de suporte e dos kernels.
+- O capítulo 5 de @geron2022, "Support Vector Machines", com os classificadores lineares e com kernel no `scikit-learn`.
+- @boser1992, o artigo do algoritmo de treino dos classificadores de margem ótima.
+- @cortes1995, o artigo que estende a margem máxima a dados de treino que não se separam.
+- @chang2011, sobre a LIBSVM, a biblioteca que o `SVC` do `scikit-learn` usa.
+- @fan2008, sobre a LIBLINEAR, a biblioteca que o `LinearSVC` usa.
+- @khan2001, o estudo de onde vêm as 83 amostras de tumores da tabela `Khan`.
+- [O guia de máquinas de vetores de suporte do scikit-learn](https://scikit-learn.org/stable/modules/svm.html), com o `SVC`, o `LinearSVC`, os kernels e as dicas de escala.

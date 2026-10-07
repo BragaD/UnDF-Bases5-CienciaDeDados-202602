@@ -1,0 +1,448 @@
+# Seleção de Subconjuntos
+
+::: {.callout-note}
+Esta seção corresponde às seções 6.1.1 e 6.1.2 de @james2023.
+:::
+
+`Credit` traz a dívida no cartão de cada cliente, `saldo`, e várias colunas que podem ajudar a prevê-la. Uma regressão por mínimos quadrados com todas elas não descarta nenhuma: o ajuste praticamente nunca estima um coeficiente exatamente igual a zero. Isso tem dois custos. Um modelo com colunas que não têm relação com a resposta é mais difícil de ler; e, quando o número de preditores $p$ (as colunas candidatas) se aproxima do número de observações $n$, os coeficientes passam a variar muito de uma amostra para outra e o erro de teste sobe, como a seção 11.7 vai mostrar. Como escolher quais preditores entram?
+
+```{python}
+#| label: setup
+#| include: false
+import itertools
+import math
+
+import matplotlib.pyplot as plt
+import numpy as np
+import pandas as pd
+from sklearn.feature_selection import SequentialFeatureSelector
+from sklearn.linear_model import LinearRegression
+
+plt.style.use("estilo-figuras.mplstyle")
+```
+
+A resposta mais direta é ficar com algumas colunas e ajustar mínimos quadrados só com elas, o que se chama **seleção de subconjuntos**.
+
+## Todos os modelos
+
+```{python}
+#| label: leitura-credit
+credit = pd.read_csv("dados/Credit.csv")
+X = pd.get_dummies(credit.drop(columns="saldo"), drop_first=True, dtype=float)
+y = credit["saldo"]
+
+X.shape, X.columns.tolist()
+```
+
+::: {.funcao}
+**`pd.get_dummies(df, drop_first, dtype)`**: troca cada coluna categórica de `df` por uma indicadora por categoria. `drop_first=True` descarta a da primeira categoria em ordem alfabética, que vira a base, e `dtype=float` grava as indicadoras como 0 e 1 em vez de `False` e `True`.
+
+**`df.columns.tolist()`**: devolve os nomes das colunas como uma lista comum do Python.
+:::
+
+São 400 clientes e $p = 11$ colunas candidatas. `saldo` é a dívida média no cartão, em dólares. Entre as numéricas, `renda` está em milhares de dólares, `limite` é o limite de crédito do cliente, em dólares, `pontuacao` é a nota de crédito dele, `cartoes` é o número de cartões, e `idade` e `escolaridade` estão em anos (esta, anos de estudo). As quatro colunas categóricas viram indicadoras, como na seção 8.4: `imovel_proprio`, `estudante` e `casado` ganham uma cada, com `não` como base, e `regiao`, que tem três categorias, ganha duas, com `Leste` como base.
+
+O primeiro jeito de escolher é não escolher nada de antemão: ajustar um modelo para cada combinação possível de colunas e comparar todos.
+
+::: {.conceito}
+A **melhor seleção de subconjuntos** (em inglês, *best subset selection*), ou **busca completa**, ajusta uma regressão por mínimos quadrados para cada combinação dos $p$ preditores, em três passos:
+
+1. $\mathcal{M}_0$ é o **modelo nulo**, sem preditor nenhum: ele prevê a média de $y$ para todas as observações.
+2. Para cada tamanho $k = 1, 2, \dots, p$, ajuste os $\binom{p}{k}$ modelos com exatamente $k$ preditores e chame de $\mathcal{M}_k$ o que tem o menor RSS (ou, o que dá no mesmo, o maior $R^2$).
+3. Escolha um só entre $\mathcal{M}_0, \mathcal{M}_1, \dots, \mathcal{M}_p$ por um critério que estime o erro de teste.
+:::
+
+$\binom{p}{k}$ é o número de maneiras de escolher $k$ colunas entre $p$; com $p = 11$ e $k = 2$, por exemplo, são $11 \cdot 10 / 2 = 55$ pares. Somando todos os tamanhos, de nenhuma coluna a todas, são $2^p$ modelos: cada coluna entra ou não entra.
+
+```{python}
+#| label: todos-os-modelos
+def rss(preditores):
+    Xk = X[list(preditores)]
+    previsao = LinearRegression().fit(Xk, y).predict(Xk)
+    return float(((y - previsao) ** 2).sum())
+
+
+colunas = X.columns.tolist()
+p = len(colunas)
+tss = float(((y - y.mean()) ** 2).sum())
+
+linhas = [{"k": 0, "preditores": (), "rss": tss}]
+for k in range(1, p + 1):
+    for preditores in itertools.combinations(colunas, k):
+        linhas.append({"k": k, "preditores": preditores, "rss": rss(preditores)})
+
+modelos = pd.DataFrame(linhas)
+modelos["r2"] = 1 - modelos["rss"] / tss
+
+len(modelos), 2**p
+```
+
+::: {.funcao}
+**`itertools.combinations(itens, k)`**: devolve, uma a uma, todas as combinações de `k` elementos de `itens`, sem repetir elemento e sem considerar a ordem. Com as 11 colunas e `k=2`, são os 55 pares.
+
+**`pd.DataFrame(linhas)`**: monta uma tabela a partir de uma lista de dicionários, uma linha por dicionário e uma coluna por chave.
+
+**`LinearRegression().fit(X, y).predict(X)`**: ajusta a regressão por mínimos quadrados com as colunas de `X` e devolve as previsões $\hat y$ para as mesmas linhas, de onde a função `rss` tira o RSS do modelo.
+:::
+
+O modelo nulo prevê $\bar y$ para todos, então o RSS dele é a soma dos quadrados de $y_i - \bar y$: o TSS da seção 8.2. Por isso o $R^2 = 1 - \mathrm{RSS}/\mathrm{TSS}$ de cada modelo sai direto do RSS. Fora o modelo nulo, que entra pelo TSS sem ajuste nenhum, os outros 2.047 modelos saem de um laço: para cada tamanho, cada combinação de colunas ajusta um `LinearRegression`.
+
+O passo 2 fica com o melhor de cada tamanho:
+
+```{python}
+#| label: melhor-de-cada-tamanho
+melhores = modelos.loc[modelos.groupby("k")["rss"].idxmin()].set_index("k")
+nomes = melhores["preditores"].map(lambda t: ", ".join(sorted(t)) or "(nenhum)")
+tabela_melhores = pd.DataFrame({"R²": melhores["r2"].round(4), "preditores": nomes})
+tabela_melhores.head(6)
+```
+
+::: {.funcao}
+**`df.groupby("k")["rss"].idxmin()`**: separa as linhas pelo valor de `k` e, em cada grupo, devolve o rótulo da linha de menor `rss`. Usados em `.loc`, esses rótulos recuperam as linhas inteiras, uma por tamanho. **`df.set_index("k")`** faz da coluna `k` o índice da tabela.
+
+**`serie.map(funcao)`**: aplica `funcao` a cada elemento da série. Aqui, cada tupla de nomes de colunas vira um texto só, em ordem alfabética, e a tupla vazia do modelo nulo vira `(nenhum)`.
+:::
+
+A tabela mostra os seis primeiros $\mathcal{M}_k$, do modelo nulo ao de cinco preditores. O melhor modelo com uma coluna usa `pontuacao`; o de duas acrescenta `renda`, e o de três, `estudante_sim`. A figura mostra os 2.048 modelos de uma vez, com os $\mathcal{M}_k$ ligados por uma linha.
+
+```{python}
+#| label: fig-todos-os-modelos
+#| fig-cap: 'RSS (em cima) e $R^2$ (embaixo) de cada um dos 2.048 modelos de mínimos quadrados que usam um subconjunto das 11 colunas de `Credit`, contra o número de preditores. A linha laranja liga o melhor modelo de cada tamanho, os $\mathcal{M}_k$ do passo 2.'
+#| fig-alt: "Dois painéis empilhados com o número de preditores, de 0 a 11, no eixo horizontal comum. Em cima, o RSS de cada modelo como pontos azuis empilhados sobre cada tamanho; embaixo, o R². Os pontos azuis de cada tamanho formam faixas horizontais separadas por vãos, visíveis de 1 a 9 preditores; no R², um vão largo separa as faixas abaixo de 0,3 das faixas acima de 0,7, e no RSS o mesmo vão aparece invertido, com as faixas de RSS alto em cima. Uma linha laranja liga o menor RSS e o maior R² de cada tamanho: ela cai (ou sobe, no R²) depressa até três preditores e fica quase plana dali em diante."
+fig, (ax_rss, ax_r2) = plt.subplots(2, 1, figsize=(6.4, 6.4), sharex=True)
+paineis = [
+    (ax_rss, modelos["rss"] / 1e6, melhores["rss"] / 1e6,
+     "RSS (milhões de dólares²)"),
+    (ax_r2, modelos["r2"], melhores["r2"], "$R^2$"),
+]
+for ax, todos, fronteira, rotulo in paineis:
+    ax.scatter(modelos["k"], todos, s=10, color="C0", alpha=0.7, linewidths=0,
+               label="cada modelo")
+    ax.plot(melhores.index, fronteira, color="C1", marker="o", markersize=4,
+            label="melhor de cada tamanho")
+    ax.set_ylabel(rotulo)
+    ax.set_ylim(bottom=0)
+ax_r2.set_ylim(-0.04, 1.02)
+ax_r2.set_xticks(range(0, p + 1))
+ax_r2.set_xlim(-0.5, p + 0.5)
+ax_r2.set_xlabel("número de preditores")
+ax_rss.legend(loc="center right", bbox_to_anchor=(1, 0.42))
+fig.tight_layout()
+plt.show()
+```
+
+::: {.funcao}
+**`plt.subplots(2, 1, sharex=True)`**: dois painéis empilhados que dividem o mesmo eixo horizontal. **`ax.scatter(..., s, alpha, linewidths)`**: `s` é a área de cada ponto, `alpha` a opacidade (pontos sobrepostos escurecem) e `linewidths=0` tira a borda dos pontos. **`ax.legend(loc, bbox_to_anchor)`**: `bbox_to_anchor=(1, 0.42)` é o ponto do painel, em frações da largura e da altura, onde se prende o canto da legenda indicado por `loc`. **`ax.set_ylabel(texto)`** e **`ax.set_xlabel(texto)`** escrevem o rótulo de cada eixo; **`ax.set_ylim(inferior, superior)`** e **`ax.set_xlim(inferior, superior)`** fixam o intervalo mostrado; **`ax.set_xticks(posicoes)`** põe as marcas do eixo horizontal só nas posições dadas, aqui um número inteiro de preditores por marca.
+:::
+
+A figura mostra duas coisas. A linha laranja cai depressa até três preditores e quase achata dali em diante: passar do melhor modelo de três colunas para os melhores de quatro ou mais quase não melhora o ajuste. E a nuvem azul se espalha na vertical: com o mesmo número de colunas, há modelos muito melhores que outros, e é essa escolha dentro de cada tamanho que o passo 2 resolve. Os números abaixo medem as duas observações.
+
+```{python}
+#| label: rss-so-cai
+r2_melhor = melhores["r2"]
+r2_com_uma = modelos.loc[modelos["k"] == 1, "r2"]
+{
+    "RSS do melhor nunca sobe": bool((melhores["rss"].diff().dropna() <= 0).all()),
+    "ganho de R², 0 a 3 colunas": round(float(r2_melhor[3] - r2_melhor[0]), 4),
+    "ganho de R², 3 a 11 colunas": round(float(r2_melhor[p] - r2_melhor[3]), 4),
+    "R², 1 coluna: pior, melhor": (round(float(r2_com_uma.min()), 4),
+                                   round(float(r2_com_uma.max()), 4)),
+}
+```
+
+::: {.funcao}
+**`serie.diff()`**: a diferença entre cada elemento e o anterior; o primeiro fica sem anterior e vira `NaN`, que **`.dropna()`** descarta. Todas as diferenças menores ou iguais a zero querem dizer que a série nunca sobe.
+:::
+
+O `True` confirma que a linha laranja do RSS não sobe em nenhum passo. Não poderia ser diferente: entre os modelos com $k + 1$ colunas está $\mathcal{M}_k$ mais uma coluna qualquer, e esse modelo pode, no pior caso, dar coeficiente zero à coluna nova e repetir o ajuste de $\mathcal{M}_k$. O RSS desse modelo é, portanto, no máximo o de $\mathcal{M}_k$, e o RSS de $\mathcal{M}_{k+1}$, o menor entre todos os modelos com $k + 1$ colunas, também é.
+
+O ganho, porém, se concentra no começo: o $R^2$ do melhor modelo sobe 0,9499 do modelo nulo até três preditores, e só mais 0,0052 de três preditores até as 11 colunas. Já a nuvem azul, com uma coluna só, vai de um $R^2$ de 0,0 no pior modelo (zero até a quarta casa decimal) a 0,7458 no melhor, com `pontuacao`.
+
+A nuvem azul também não se espalha por igual: forma faixas, separadas por vãos. O vão mais largo, no painel do $R^2$, separa as faixas abaixo de 0,3 das faixas acima de 0,7; no painel do RSS é o mesmo vão, com os lados trocados, porque RSS alto é $R^2$ baixo. O que decide de que lado do vão cai um modelo é conter ou não ao menos uma das colunas `limite` e `pontuacao`:
+
+```{python}
+#| label: faixas
+tem_uma = modelos["preditores"].map(lambda t: "limite" in t or "pontuacao" in t)
+r2_sem, r2_com = modelos.loc[~tem_uma, "r2"], modelos.loc[tem_uma, "r2"]
+{
+    "R² máximo sem as duas": round(float(r2_sem.max()), 4),
+    "R² mínimo com ao menos uma": round(float(r2_com.min()), 4),
+    "faixas separadas": bool(r2_sem.max() < r2_com.min()),
+    "tamanhos com as duas faixas": sorted(
+        set(modelos.loc[~tem_uma, "k"]) & set(modelos.loc[tem_uma, "k"])
+    ),
+}
+```
+
+Nenhum modelo sem `limite` e sem `pontuacao` passa de um $R^2$ de 0,2945, e nenhum com ao menos uma delas fica abaixo de 0,7425. Os vãos menores, de cada lado do largo, têm outra coluna por trás, `renda`:
+
+```{python}
+#| label: faixas-renda
+tem_renda = modelos["preditores"].map(lambda t: "renda" in t)
+modelos.groupby(
+    [tem_uma.rename("limite ou pontuacao"), tem_renda.rename("renda")]
+)["r2"].agg(["min", "max"]).round(4)
+```
+
+::: {.funcao}
+**`df.groupby([serie1, serie2])`**: agrupa as linhas pelas combinações de valores de duas séries do mesmo tamanho que a tabela, aqui dois booleanos; **`serie.rename(nome)`** dá a cada uma o nome que aparece no índice. **`.agg(["min", "max"])`** calcula as duas estatísticas em cada grupo, uma coluna por estatística.
+:::
+
+Dos dois lados do vão largo, `renda` separa duas faixas que não se tocam: sem `limite` e sem `pontuacao`, o maior $R^2$ sem `renda` é 0,0774 e o menor com ela, 0,2150; com ao menos uma das duas, 0,8267 sem `renda` e 0,8711 com ela. As colunas `limite` e `pontuacao` vão voltar adiante, quando os métodos discordarem.
+
+O RSS e o $R^2$ de treino servem no passo 2, que compara modelos **do mesmo tamanho**: entre dois modelos com três colunas, o de menor RSS ajusta melhor o treino com a mesma liberdade. No passo 3 não servem, porque escolheriam sempre $\mathcal{M}_p$, aqui $\mathcal{M}_{11}$, o modelo com todas as colunas. O que se quer é o menor erro de **teste**, e o RSS de treino do melhor modelo é justamente o número que nunca sobe quando o modelo ganha flexibilidade, como o MSE de treino da seção 7.6, enquanto o de teste desenhava um U. O passo 3 pede outra régua: o erro de um conjunto de validação ou da validação cruzada (capítulo 10), ou critérios como $C_p$, AIC e BIC (seção 11.2).
+
+Com validação cruzada, o passo 2 também entra na conta. Cada rodada separa um dos grupos para validação, e os $\mathcal{M}_k$ daquela rodada são escolhidos de novo só com as linhas de treino dela; com cinco grupos, saem cinco listas $\mathcal{M}_0, \dots, \mathcal{M}_p$, uma por rodada. Escolher as colunas uma vez só, com todas as linhas, deixaria as linhas de validação influenciarem a escolha: o vazamento da seção 10.6.
+
+## O custo de olhar tudo
+
+Cada coluna nova dobra o número de modelos. Com 11 colunas foram 2.048 modelos; a conta muda de figura quando $p$ cresce.
+
+```{python}
+#| label: custo-da-busca
+def milhar(v):
+    return f"{v:,}".replace(",", ".")
+
+
+tamanhos = [10, 20, 40]
+custo = pd.DataFrame(
+    {"busca completa": [milhar(2**q) for q in tamanhos]},
+    index=pd.Index(tamanhos, name="p"),
+)
+custo
+```
+
+::: {.funcao}
+**`pd.Index(valores, name)`**: um índice de tabela com os `valores` dados e um nome, que aparece no cabeçalho, acima dos rótulos das linhas. Aqui, `p`.
+:::
+
+Com $p = 20$, a busca completa passa de um milhão de ajustes; com $p = 40$, de um trilhão. Quantas vezes isso é a busca que `Credit` acabou de pedir?
+
+```{python}
+#| label: razao-40-contra-11
+milhar(2**40 // 2**p)
+```
+
+São $2^{40}/2^{11} = 2^{29}$: 536.870.912 vezes os 2.048 modelos ajustados acima, o que torna a busca impraticável.
+
+O custo não é só de tempo. Quanto maior o espaço de busca, maior a chance de encontrar, entre tantos modelos, algum que se ajuste bem ao treino por acaso, sem que as colunas escolhidas tenham relação com a resposta fora dele. Uma busca enorme pode sobreajustar a própria escolha de colunas.
+
+## Um preditor por vez
+
+A **seleção passo a passo para frente** (em inglês, *forward stepwise selection*) troca a busca completa por uma sequência de decisões pequenas. Começa no modelo nulo e, a cada passo, acrescenta a coluna que mais reduz o RSS, sem nunca tirar uma coluna que já entrou.
+
+::: {.conceito}
+**Seleção passo a passo para frente:**
+
+1. $\mathcal{M}_0$ é o modelo nulo.
+2. Para $k = 0, 1, \dots, p - 1$: entre os $p - k$ modelos que acrescentam **uma** coluna às de $\mathcal{M}_k$, chame de $\mathcal{M}_{k+1}$ o de menor RSS.
+3. Escolha um só entre $\mathcal{M}_0, \dots, \mathcal{M}_p$ por um critério que estime o erro de teste.
+:::
+
+O passo 2 ajusta $p$ modelos na primeira rodada, $p - 1$ na segunda, e assim por diante, até 1 na última. Somando o modelo nulo, são $1 + p(p+1)/2$ modelos considerados, contra os $2^p$ da busca completa:
+
+```{python}
+#| label: custo-comparado
+custo["para frente"] = [milhar(1 + q * (q + 1) // 2) for q in tamanhos]
+custo
+```
+
+Com $p = 40$, os mais de um trilhão de modelos da busca completa viram 821. O laço abaixo faz a seleção para frente em `Credit`, reaproveitando a função `rss`, para expor a ordem em que as colunas entram: `passo_a_passo` guarda, para cada $k$, as colunas de $\mathcal{M}_k$ e o RSS dele, e é dessa ordem que sai a comparação com a busca completa. No dia a dia, quem faz a seleção é o `SequentialFeatureSelector` do `scikit-learn`, que aparece adiante.
+
+```{python}
+#| label: passo-a-passo
+escolhidas = []
+passo_a_passo = {0: ((), tss)}
+for k in range(1, p + 1):
+    candidatas = [c for c in colunas if c not in escolhidas]
+    rss_melhor, melhor = min((rss(escolhidas + [c]), c) for c in candidatas)
+    escolhidas.append(melhor)
+    passo_a_passo[k] = (tuple(escolhidas), rss_melhor)
+
+escolhidas
+```
+
+A lista é a ordem de entrada, uma coluna por passo, e o $\mathcal{M}_k$ da seleção para frente é formado pelas $k$ primeiras. A economia tem preço? O melhor modelo de quatro colunas precisa conter o melhor de três? A tabela compara o que o passo a passo escolhe com os $\mathcal{M}_k$ da busca completa:
+
+```{python}
+#| label: para-frente-contra-busca-completa
+comparacao = pd.DataFrame(
+    {
+        "igual à busca": [
+            set(passo_a_passo[k][0]) == set(melhores.loc[k, "preditores"])
+            for k in range(1, 5)
+        ],
+        "para frente": [", ".join(sorted(passo_a_passo[k][0])) for k in range(1, 5)],
+    },
+    index=pd.Index(range(1, 5), name="k"),
+)
+comparacao
+```
+
+Os dois métodos concordam nos três primeiros tamanhos: `pontuacao`, depois `renda`, depois `estudante_sim`. No quarto, não: a busca completa (tabela dos $\mathcal{M}_k$, acima) encontra um modelo sem `pontuacao`, com `cartoes`, `estudante_sim`, `limite` e `renda`. A busca completa escolhe o melhor de cada tamanho sem se importar com os tamanhos anteriores; o passo a passo só pode acrescentar, e o que entrou fica. Por isso não tinha como chegar àquele modelo: `pontuacao` entrou no primeiro passo e não sai mais, então o modelo de quatro colunas dele é obrigado a contê-la.
+
+Quanto o passo a passo perde por não poder trocar `pontuacao` por `limite`?
+
+```{python}
+#| label: quanto-perde
+correlacao = float(X["limite"].corr(X["pontuacao"]))
+{
+    "correlação entre limite e pontuacao": round(correlacao, 3),
+    "R² com 4 colunas, busca completa": round(float(melhores.loc[4, "r2"]), 4),
+    "R² com 4 colunas, para frente": round(1 - passo_a_passo[4][1] / tss, 4),
+}
+```
+
+::: {.funcao}
+**`serie.corr(outra)`**: a correlação entre duas séries, de −1 a 1.
+:::
+
+`limite` e `pontuacao` correlacionam a 0,997, como na seção 8.6: uma quase repete a outra, e as duas podem ocupar o lugar uma da outra num modelo. Por isso a perda é pequena: o $R^2$ de treino do modelo de quatro colunas é 0,9536 na busca completa e 0,9522 no passo a passo. O passo a passo não **garante** o melhor modelo de cada tamanho; ele custa muito menos, e aqui chegou perto.
+
+## Para trás, com o `scikit-learn`
+
+A seleção pode andar no sentido contrário, partindo de todas as colunas.
+
+::: {.conceito}
+**Seleção passo a passo para trás** (em inglês, *backward stepwise selection*):
+
+1. $\mathcal{M}_p$ é o modelo com as $p$ colunas.
+2. Para $k = p, p - 1, \dots, 1$: entre os $k$ modelos que tiram **uma** coluna de $\mathcal{M}_k$, chame de $\mathcal{M}_{k-1}$ o de menor RSS. O que saiu não volta.
+3. Escolha um só entre $\mathcal{M}_0, \dots, \mathcal{M}_p$ por um critério que estime o erro de teste.
+:::
+
+A conta é a mesma da seleção para frente: $1 + p(p+1)/2$ modelos considerados.
+
+O `scikit-learn` faz as duas direções com `SequentialFeatureSelector`. Por padrão, ele compara as colunas candidatas pelo $R^2$ médio de uma validação cruzada em cinco grupos, uma régua do tipo do passo 3, aplicada à escolha de cada coluna. Aqui o objetivo é outro: reproduzir o passo 2, que compara pelo RSS de treino. Para isso, basta entregar a ele uma divisão só, com as 400 linhas no treino e na validação: o erro que ele mede passa a ser o MSE de treino, $\mathrm{RSS}/n$, e o menor MSE é o menor RSS. Medir o erro nas mesmas linhas do ajuste não é o uso normal da ferramenta; serve aqui para comparar com o laço.
+
+```{python}
+#| label: sequential-feature-selector
+todas_as_linhas = np.arange(len(y))
+
+
+def selecao(direcao, k):
+    seletor = SequentialFeatureSelector(
+        LinearRegression(),
+        n_features_to_select=k,
+        direction=direcao,
+        scoring="neg_mean_squared_error",
+        cv=[(todas_as_linhas, todas_as_linhas)],
+    ).fit(X, y)
+    return tuple(seletor.get_feature_names_out())
+
+
+para_frente_sklearn = {k: selecao("forward", k) for k in range(1, 5)}
+para_tras = {k: selecao("backward", k) for k in range(1, 5)}
+all(set(para_frente_sklearn[k]) == set(passo_a_passo[k][0]) for k in range(1, 5))
+```
+
+::: {.funcao}
+**`SequentialFeatureSelector(estimador, n_features_to_select, direction, scoring, cv)`**: seleciona colunas uma a uma, acrescentando (`direction="forward"`) ou tirando (`"backward"`), até chegar a `n_features_to_select` colunas. Em cada passo, acrescenta ou tira a coluna com que o modelo alcança a melhor pontuação `scoring`, medida nas divisões de `cv`. **`seletor.get_feature_names_out()`** devolve os nomes das colunas escolhidas.
+
+- `scoring="neg_mean_squared_error"`: o MSE com o sinal trocado. O `scikit-learn` sempre procura a **maior** pontuação, então um erro, que se quer pequeno, entra negativo.
+- `cv`: além de um número de grupos, aceita uma lista de pares `(índices de treino, índices de validação)`, uma divisão por par. Aqui, um par só, com `np.arange(len(y))`, os índices de 0 a 399, dos dois lados.
+:::
+
+O `True` diz que a versão para frente do `SequentialFeatureSelector` escolhe, em cada um dos quatro primeiros tamanhos, as mesmas colunas do laço. A tabela abaixo põe os três métodos lado a lado, com o $R^2$ de treino de cada modelo e se ele coincide com o da busca completa:
+
+```{python}
+#| label: tres-metodos
+caminhos = {
+    "busca completa": {k: melhores.loc[k, "preditores"] for k in range(1, 5)},
+    "para frente": {k: passo_a_passo[k][0] for k in range(1, 5)},
+    "para trás": para_tras,
+}
+tres_metodos = pd.DataFrame([
+    {
+        "k": k,
+        "método": metodo,
+        "R²": round(1 - rss(caminho[k]) / tss, 4),
+        "igual à busca": set(caminho[k]) == set(melhores.loc[k, "preditores"]),
+        "preditores": ", ".join(sorted(caminho[k])),
+    }
+    for k in range(1, 5)
+    for metodo, caminho in caminhos.items()
+]).set_index(["k", "método"])
+tres_metodos
+```
+
+Com uma coluna, a seleção para trás fica com `limite`, e não com `pontuacao`: o $R^2$ desse modelo é 0,7425, contra 0,7458 do melhor modelo de uma coluna. Com duas e com três colunas é a mesma troca: a seleção para trás tem `limite` onde a busca completa tem `pontuacao`. Com quatro, a seleção para trás chega ao mesmo modelo da busca completa, com o mesmo $R^2$ de 0,9536. O passo a passo para frente não chega a esse modelo.
+
+Ao passar de $\mathcal{M}_5$ para $\mathcal{M}_4$, a seleção para trás descarta `pontuacao`. O chunk abaixo mede o que custaria tirar cada uma das duas nesse momento:
+
+```{python}
+#| label: custo-de-tirar
+cinco = selecao("backward", 5)
+r2_cinco = 1 - rss(cinco) / tss
+
+
+def perda_sem(coluna):
+    return round(r2_cinco - (1 - rss([c for c in cinco if c != coluna]) / tss), 4)
+
+
+{
+    "M_5 para trás": ", ".join(sorted(cinco)),
+    "perda de R² sem pontuacao": perda_sem("pontuacao"),
+    "perda de R² sem limite": perda_sem("limite"),
+    "M_4 é M_5 sem pontuacao": set(para_tras[4]) == set(cinco) - {"pontuacao"},
+}
+```
+
+Com as cinco colunas, tirar `pontuacao` baixa o $R^2$ em 0,0006, e tirar `limite`, em 0,0042: as duas quase se repetem. O `True` da última linha confirma que $\mathcal{M}_4$ é $\mathcal{M}_5$ sem `pontuacao`; como o passo 2 tira a coluna cuja saída deixa o menor RSS, entre as cinco é ela a que menos falta faz. Ela sai, e daí em diante `limite` ocupa o lugar dela em todos os modelos menores. Resta comparar os dois caminhos passo a passo, tamanho a tamanho:
+
+```{python}
+#| label: frente-contra-tras
+r2 = tres_metodos["R²"]
+{k: bool(r2[(k, "para frente")] > r2[(k, "para trás")]) for k in range(1, 5)}
+```
+
+Para frente fica acima nos tamanhos 1 a 3, para trás no tamanho 4, e nenhum dos dois ganha em todos. Os três métodos dão modelos parecidos, mas não iguais.
+
+Sem `cv` nem `scoring`, o seletor volta à régua padrão, a validação cruzada em cinco grupos:
+
+```{python}
+#| label: seletor-uso-normal
+normal = SequentialFeatureSelector(LinearRegression(), n_features_to_select=4).fit(X, y)
+escolhidas_normal = set(normal.get_feature_names_out())
+sorted(escolhidas_normal), escolhidas_normal == set(passo_a_passo[4][0])
+```
+
+Com quatro colunas, ele fica com `estudante_sim`, `limite`, `pontuacao` e `renda`, as mesmas da seleção para frente pelo RSS de treino. Com outra régua, as escolhas poderiam divergir. A validação cruzada interna só decide qual coluna entra em cada passo, e o seletor vê as 400 linhas ao escolher as colunas: o erro de validação de um modelo montado com elas ainda pede o cuidado da seção 10.6.
+
+## Quando há mais colunas que observações
+
+Numa base com $n = 30$ clientes e $p = 40$ colunas, quais dos três métodos ainda podem ser usados, e até que tamanho de modelo?
+
+A seleção para trás nem começa: o primeiro modelo dela usa as 40 colunas, e mínimos quadrados só têm solução única quando $n > p$. Uma reta tem dois coeficientes e passa exatamente por quaisquer dois pontos com $x$ diferentes; do mesmo jeito, com tantos coeficientes quanto observações o ajuste acerta todos os pontos, o RSS de treino vai a zero e não diz nada sobre dado novo, e com mais coeficientes que observações há infinitos ajustes perfeitos, sem como escolher entre eles. As outras duas começam do modelo nulo e esbarram no mesmo limite mais adiante: com 30 observações, um modelo com intercepto tem solução única até 29 colunas, $n - 1$, e as duas param em $\mathcal{M}_{29}$. Esse último modelo tem 30 coeficientes, contando o intercepto, para 30 observações: é ele mesmo um ajuste perfeito, com RSS de treino zero. A lista vai até ele só para ficar completa; quem decide onde parar, bem antes, é o passo 3. Até lá, porém, o custo das duas é muito diferente:
+
+```{python}
+#| label: busca-ate-29
+{
+    "busca completa até M_29": milhar(sum(math.comb(40, k) for k in range(30))),
+    "para frente até M_29": milhar(1 + sum(40 - k for k in range(29))),
+}
+```
+
+::: {.funcao}
+**`math.comb(n, k)`**: o número de combinações de `k` elementos entre `n`, $\binom{n}{k}$.
+:::
+
+Mesmo parada em 29 colunas, a busca completa teria de ajustar mais de um trilhão de modelos, e a seleção para frente, 755. As duas condições se somam: com mais colunas que observações, a seleção para trás não começa; com $p$ grande, como 40, a busca completa é inviável pelo custo. Por isso, aqui, só a seleção para frente serve, e só até $\mathcal{M}_{29}$. Há ainda versões **híbridas**, que acrescentam colunas como a versão para frente mas, a cada passo, podem tirar uma que deixou de ajudar, na tentativa de chegar mais perto da busca completa sem pagar o custo dela.
+
+Os três métodos terminam no mesmo lugar: uma lista $\mathcal{M}_0, \mathcal{M}_1, \dots, \mathcal{M}_p$, um modelo por tamanho. A mesma construção vale para a regressão logística do capítulo 9, trocando o RSS por outra medida de ajuste. O que muda entre eles é o número de modelos considerados, a exigência sobre $n$ e a garantia de achar o melhor modelo de cada tamanho:
+
+```{python}
+#| label: resumo-dos-metodos
+pd.DataFrame(
+    {
+        "modelos": ["2^p", "1 + p(p+1)/2", "1 + p(p+1)/2"],
+        f"com p = {p}": [milhar(2**p), milhar(1 + p * (p + 1) // 2),
+                         milhar(1 + p * (p + 1) // 2)],
+        "exige n > p": ["não", "não", "sim"],
+        "garante o melhor": ["sim", "não", "não"],
+    },
+    index=pd.Index(["busca completa", "para frente", "para trás"], name="método"),
+)
+```
+
+Com poucas colunas, como as 11 de `Credit`, a busca completa cabe no orçamento e é a única com garantia; com muitas, fica o passo a passo, para trás quando $n > p$ e para frente em qualquer caso. Em `Credit`, a lista já indica onde olhar: quase todo o ganho de $R^2$ de treino chega até três preditores. Verificar se o erro de teste confirma isso é o passo 3, assunto da seção 11.2.

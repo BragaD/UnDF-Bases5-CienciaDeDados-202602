@@ -112,6 +112,8 @@ Onze aulas de conteúdo, doze capítulos novos. A aula de gradiente descendente 
 | 6.3.2 | Partial least squares | PCR cobre a ideia de redução de dimensão |
 | 8.2.4 | BART | não há implementação no `scikit-learn` |
 | 10.3, 10.5 | Redes convolucionais e recorrentes | exigem `torch`; são a matéria da disciplina de Deep Learning |
+| 12.3, 12.5.2 | Completamento de matriz | o `scikit-learn` não tem o Algoritmo 12.1, e a tese veta implementá-lo à mão; o `IterativeImputer` é outro método. Entra só nas Leituras adicionais do cap. 15 (emenda de 2026-09-30) |
+| 9.7, exercício 8 | O conjunto `OJ` | só o exercício o usa; o capítulo 16 trabalha com os simulados, o `Heart` e o `Khan` (emenda de 2026-10-02) |
 | 3.1.2, 3.1.3 (parte) | Erro-padrão, *t* e valor-p dos coeficientes | a disciplina não faz inferência |
 
 ## Os capítulos, seção a seção
@@ -218,6 +220,11 @@ O autor fechou quatro pontos ao definir o capítulo:
 
 **O recorte é declarado ao leitor como conteúdo**, não como decisão editorial: rede densa é o que se faz com `scikit-learn`; convolucional e recorrente pedem um framework de tensores, e é aí que a disciplina de Deep Learning começa.
 
+**Emenda (2026-09-30, plano `2026-09-29-islp-cap14.md`).**
+
+- **A 10.8 (interpolação e dupla descida) foi avaliada e fica fora das seções.** Sem splines (ISLP 7, fora por INV-3), três construções foram medidas: dobras ReLU sorteadas com `LinearRegression`, dobras nos quantis e `RBFSampler`. Nenhuma dá uma curva que se repita entre sementes. A da semente 14 é limpa, mas na mediana de 100 sorteios a interpolação quase nunca acontece em d = n. A 10.8 entra só nas Leituras adicionais do `index.qmd`. A 10.4 (classificação de documentos) usa embeddings e RNN e também fica fora.
+- **Dado novo: uma amostra fixa do MNIST**, com as **primeiras** 6.000 imagens de treino e as primeiras 2.000 de teste (`dados/mnist_treino.csv.gz`, `dados/mnist_teste.csv.gz`). Ela serve as 14.2, 14.3 e 14.5. O conjunto completo (60.000) custaria dezenas de segundos por ajuste no container. Com a amostra, a diferença da Tabela 10.1 continua nítida: LDA 400, logística 232 e rede 127 erros em 2.000. O `load_digits` (8×8) apagava essa diferença.
+
 ### 15 — Aprendizado não supervisionado (6 seções, ISLP 12)
 
 1. O desafio do não supervisionado — 12.1
@@ -227,12 +234,27 @@ O autor fechou quatro pontos ao definir o capítulo:
 5. Clustering hierárquico — 12.4.2
 6. Questões práticas em clustering — 12.4.3
 
+**Emenda (2026-09-30, plano `2026-09-30-islp-cap15.md`).**
+
+- **A 12.3 (completamento de matriz) fica fora**, e o lab 12.5.2 com ela: ver a tabela "O que fica de fora". Os dois entram só nas Leituras adicionais do `index.qmd`, sem comentário na prosa.
+- **A 12.2.5 entra na 15.3**, num parágrafo com remissão à PCR da 11.6; o callout da 15.3 cita 12.2.3, 12.2.4 e 12.2.5.
+- **A 15.6 cita também o lab 12.5.4**, porque reproduz a comparação entre *k*-means e hierárquico e o agrupamento sobre os primeiros escores do `NCI60`.
+- **Dois conjuntos novos:** `dados/USArrests.csv` (50 × 5, do pacote `datasets` do R via Rdatasets, colunas e estados traduzidos) e `dados/NCI60.csv.gz` (64 × 6.831, do *wheel* `ISLP` 0.4.1, `tipo` traduzido). O `scipy.cluster.hierarchy` fica liberado só na 15.5.
+
 ### 16 — Máquinas de vetores de suporte (4 seções, ISLP 9)
 
 1. Hiperplanos e o classificador de margem máxima — 9.1
 2. O classificador de vetores de suporte — 9.2
 3. Kernels — 9.3
 4. Mais de duas classes — 9.4
+
+**Emenda (2026-10-02, plano `2026-09-30-islp-cap16.md`).**
+
+- **A 9.5 (relação com a regressão logística) entra na 16.2**, não numa quinta seção: a forma perda + penalidade (9.25) é a que o `SVC` resolve, com λ = 1/(2`C`), e é ela que explica por que o `C` do `scikit-learn` vai no sentido oposto ao do orçamento $C$ de (9.15). Os totais (92 seções, 109 `.qmd`) não mudam.
+- **Os labs 9.6.x entram nos callouts:** a 16.2 cita 9.2, 9.5 e 9.6.1; a 16.3, 9.3, 9.6.2 e 9.6.3; a 16.4, 9.4, 9.6.4 e 9.6.5.
+- **Um conjunto novo:** `dados/Khan.csv.gz` (83 × 2.310, do *wheel* `ISLP`, com `conjunto` e `tumor` traduzidos), na 16.4. O `Heart.csv` já existia. **O `OJ` não entra:** só o exercício 8 do ISLP 9 o usa (ver a tabela "O que fica de fora").
+- **A regressão por vetores de suporte (SVR)** fica em uma frase no fim da 16.2, sem código.
+- **A página de `apoio/` bônus do capítulo 16** ("Margem, `C` e kernel") não foi escrita.
 
 ### 17 — Um problema do começo ao fim (6 seções, sem ISLP)
 

@@ -135,45 +135,51 @@ def test_nenhuma_secao_inventa_numero_de_secao_do_grus():
     assert not ofensores, "número de seção inventado em: " + ", ".join(sorted(ofensores))
 
 
-def test_dez_capitulos():
-    """Dez, e não dezessete.
+def test_dezessete_capitulos():
+    """Dezessete, todos os da ementa.
 
     Os capítulos 6 a 17 saíram do livro em 2026-09-10, com o abandono da
-    abordagem do Grus, e estão em `arquivo/grus/`. Os capítulos 7, 8, 9 e 10
-    entraram depois, já na fundação ISLP. Este teste falha tanto se um
+    abordagem do Grus, e estão em `arquivo/grus/`. Os capítulos 7 a 11
+    entraram depois, já na fundação ISLP; o 17 entrou em 2026-09-29, fora
+    de ordem, porque tem prazo (o HPE de 14/10), e o 12 entrou no mesmo dia,
+    depois do 17; o 13 entrou em seguida, o 14 depois dele, e o 15 depois do
+    14, em 2026-09-30; o 16 depois do 15, em 2026-09-30. Este teste falha tanto se um
     capítulo do Grus voltar por engano quanto se um capítulo novo entrar em
     `content/` sem passar pelo `LIVRO` de `scripts/gerar-stubs.py`.
     """
     dirs = sorted(d.name for d in CONTENT.iterdir() if d.is_dir())
-    assert dirs == [f"cap{n:02d}" for n in range(1, 11)]
+    assert dirs == [f"cap{n:02d}" for n in [*range(1, 18)]]
 
 
 def test_cada_capitulo_tem_index():
-    for n in range(1, 11):
+    for n in [*range(1, 18)]:
         assert (CONTENT / f"cap{n:02d}" / "index.qmd").is_file(), f"falta cap{n:02d}/index.qmd"
 
 
-def test_livro_completo_53_secoes_63_arquivos():
+def test_livro_completo_92_secoes_109_arquivos():
     """Nenhum outro teste deste arquivo detecta uma seção inteira sumindo.
 
     `test_todo_qmd_esta_registrado_no_quarto_yml` e
     `test_todo_href_do_quarto_yml_existe_no_disco` são checagens de diferença
     simétrica: apagar um `.qmd` E as duas linhas correspondentes do
-    `_quarto.yml` no mesmo commit passa nos dois. `test_dez_capitulos`
+    `_quarto.yml` no mesmo commit passa nos dois. `test_dezessete_capitulos`
     só conta diretórios; `test_cada_capitulo_tem_index` só confere o
     `index.qmd`. A fonte da verdade sobre o que o livro DEVE conter é o
     `LIVRO` de `scripts/gerar-stubs.py`, então este teste confere, capítulo
     por capítulo, que cada arquivo esperado existe em disco E aparece no
-    `_quarto.yml`, e fecha nos totais (10 capítulos, 53 seções, 63 arquivos).
+    `_quarto.yml`, e fecha nos totais (17 capítulos, 92 seções, 109 arquivos).
     Como fim de linha, também pega um arquivo de seção com nome digitado
     errado (por exemplo com um `_` no início, que `qmds_no_disco()` ignora de
     propósito): o nome exato esperado não existiria em nenhum dos dois lados.
 
     Os totais eram 17 / 87 / 104 até 2026-09-10, quando os capítulos 6 a 17
-    saíram do livro — ver a spec da ruptura com o Grus.
+    saíram do livro — ver a spec da ruptura com o Grus. O capítulo 17
+    entrou em 2026-09-29, antes do 12, por causa do prazo do HPE; o 12
+    entrou no mesmo dia, logo depois; o 13 e o 14, em seguida; o 15, em
+    2026-09-30, depois do 14; o 16, no mesmo dia, depois do 15.
     """
     livro = carregar_livro()
-    assert len(livro) == 10, f"esperava 10 capítulos no LIVRO, achei {len(livro)}"
+    assert len(livro) == 17, f"esperava 17 capítulos no LIVRO, achei {len(livro)}"
 
     hrefs = hrefs_registrados()
     total_arquivos = 0
@@ -195,8 +201,8 @@ def test_livro_completo_53_secoes_63_arquivos():
             total_arquivos += 1
             total_secoes += 1
 
-    assert total_secoes == 53, f"esperava 53 seções, achei {total_secoes}"
-    assert total_arquivos == 63, f"esperava 63 arquivos, achei {total_arquivos}"
+    assert total_secoes == 92, f"esperava 92 seções, achei {total_secoes}"
+    assert total_arquivos == 109, f"esperava 109 arquivos, achei {total_arquivos}"
 
 
 def test_nenhum_chunk_comeca_com_linha_indentada():
@@ -365,8 +371,7 @@ SECOES_SEM_FIGURA: dict[str, str] = {
 # `scipy` deixa de ser proibido em pontos específicos, registrados aqui um a
 # um: a seção 7.6 usa smoothing splines (make_smoothing_spline) para as
 # figuras 2.9 a 2.12 do ISLP, que o scikit-learn não sabe ajustar; e a seção
-# 15.5, quando existir, vai liberar scipy.cluster.hierarchy para o
-# dendrograma — desenhar a árvore É a lição daquela seção, e o
+# 15.5 libera scipy.cluster.hierarchy para o dendrograma — desenhar a árvore É a lição daquela seção, e o
 # AgglomerativeClustering do scikit-learn agrupa sem desenhar.
 BIBLIOTECA_LIBERADA: dict[str, tuple[str, str]] = {
     "cap07/06-qualidade-do-ajuste-e-vies-variancia.qmd": (
@@ -374,6 +379,14 @@ BIBLIOTECA_LIBERADA: dict[str, tuple[str, str]] = {
         "smoothing spline da figura 2.9 do ISLP (make_smoothing_spline); o "
         "scikit-learn não tem equivalente, e a fidelidade ao capítulo 2 do "
         "ISLP tem precedência sobre a preferência pelo scikit-learn",
+    ),
+    "cap15/05-clustering-hierarquico.qmd": (
+        "scipy",
+        "scipy.cluster.hierarchy (linkage, dendrogram, fcluster, cophenet) "
+        "para desenhar e cortar o dendrograma do ISLP 12.4.2 e as ligações "
+        "centroide e por correlação; o AgglomerativeClustering do "
+        "scikit-learn agrupa mas não desenha a árvore, e desenhar a árvore "
+        "é a lição da seção",
     ),
 }
 
@@ -492,18 +505,17 @@ def test_toda_excecao_de_figura_e_de_biblioteca_tem_motivo_e_arquivo_real():
 
 
 # Capítulos que citam o livro-texto. O 6 não tem correspondência no ISLP (é o
-# capítulo de dados, escrito para esta disciplina) e o 17, quando existir, é
+# capítulo de dados, escrito para esta disciplina) e o 17 é
 # síntese, sem seção equivalente — os dois são exceção registrada, não
 # esquecimento.
 CAPITULOS_QUE_CITAM_O_ISLP = [f"cap{n:02d}" for n in range(7, 17)]
 
-# O capítulo 17 ainda não existe neste ponto da reescrita (ela avança um
-# capítulo por vez, e hoje só há 1 a 7 em `content/`) — sua exceção entra
-# aqui só quando `content/cap17/` nascer, porque
-# `test_toda_excecao_de_correspondencia_tem_motivo_e_capitulo_real` recusa,
-# de propósito, um capítulo que ainda não é real.
 SEM_CORRESPONDENCIA_NO_ISLP = {
     "cap06": "capítulo de dados escrito para esta disciplina; não há seção equivalente no ISLP",
+    "cap17": (
+        "síntese de ponta a ponta escrita para esta disciplina, sobre dado "
+        "próprio; não há capítulo equivalente no ISLP"
+    ),
 }
 
 # Seções sem correspondência no ISLP dentro de capítulos que o seguem. Cada
@@ -608,6 +620,37 @@ NOMES_ANTIGOS_DE_COLUNA = [
     # "student" e "income" (cabeçalhos originais de Default) ficam de fora:
     # "Student" já está na lista desde o Credit, e "Income" desde o Income1 —
     # não há motivo para duplicar a entrada por causa da caixa do cabeçalho.
+    "Salary",
+    "AtBat",
+    "HmRun",
+    "RBI",
+    "CAtBat",
+    "CHits",
+    "CHmRun",
+    "CRuns",
+    "CRBI",
+    "CWalks",
+    "PutOuts",
+    "NewLeague",
+    # "Years", "Hits", "Runs", "Walks", "Errors", "Assists", "League" e
+    # "Division" (cabeçalhos originais de Hitters) ficam de fora: são palavras
+    # inglesas comuns, que podem aparecer entre crases em outro contexto
+    # (um `Errors` de exceção, um termo de beisebol citado como tal), e o
+    # custo do falso positivo supera o do guarda.
+    "ChestPain",
+    "RestBP",
+    "Chol",
+    "Fbs",
+    "RestECG",
+    "MaxHR",
+    "ExAng",
+    "Oldpeak",
+    "Thal",
+    "AHD",
+    # "Age", "Sex", "Slope" e "Ca" (cabeçalhos originais de Heart) ficam de
+    # fora: "Age" já foi excluído desde o Credit pelo mesmo motivo, e os
+    # outros três são genéricos ("Ca" é também o símbolo do cálcio) — o
+    # custo do falso positivo supera o do guarda.
 ]
 
 

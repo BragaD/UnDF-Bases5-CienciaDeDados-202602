@@ -1,0 +1,285 @@
+# Comparando Modelos por Validação Cruzada
+
+Três candidatos disputam a sugestão de preço: prever para todo anúncio o mesmo número, a média; a regressão linear; e o *k*-NN com dez vizinhos. Qual deles erra menos num anúncio que ainda não chegou? O teste guardado responderia, mas ele só pode ser aberto uma vez, para o modelo já escolhido. A escolha precisa sair do treino.
+
+```{python}
+#| label: setup
+#| include: false
+import matplotlib.pyplot as plt
+import numpy as np
+import pandas as pd
+from sklearn.compose import ColumnTransformer
+from sklearn.dummy import DummyRegressor
+from sklearn.impute import SimpleImputer
+from sklearn.linear_model import LinearRegression
+from sklearn.model_selection import (KFold, cross_val_predict, cross_val_score,
+                                     train_test_split)
+from sklearn.neighbors import KNeighborsRegressor
+from sklearn.pipeline import Pipeline
+from sklearn.preprocessing import FunctionTransformer, OneHotEncoder, StandardScaler
+
+plt.style.use("estilo-figuras.mplstyle")
+pd.set_option("display.max_columns", None)
+```
+
+A função `numero_br` escreve os números com a pontuação brasileira:
+
+```{python}
+#| label: numero-br
+numero_br = lambda valor, casas=2: (
+    f"{valor:,.{casas}f}".replace(",", "_").replace(".", ",").replace("_", ".")
+    .replace("-", "−")
+)
+```
+
+O ponto de partida é a tabela sem linhas repetidas, a divisão estratificada por cidade, os dez preditores e o logaritmo do aluguel como resposta. O `preparo` é o da seção 17.3: as colunas categóricas viram colunas de 0 e 1; área, condomínio e IPTU passam por `np.log1p` e são padronizados; o andar ausente vira 0, com uma coluna que marca onde ele faltava; e as contagens são padronizadas.
+
+```{python}
+#| label: estado
+alugueis = pd.read_csv("dados/alugueis.csv", na_values=["-"]).drop_duplicates()
+preditores = ["cidade", "area_m2", "quartos", "banheiros", "vagas", "andar",
+              "aceita_animal", "mobiliado", "condominio", "iptu"]
+treino, teste = train_test_split(alugueis, test_size=0.2, random_state=17,
+                                 stratify=alugueis["cidade"])
+X_treino, y_treino = treino[preditores], np.log(treino["aluguel"])
+
+preparo = ColumnTransformer([
+    ("categoricas", OneHotEncoder(handle_unknown="ignore", sparse_output=False),
+     ["cidade", "aceita_animal", "mobiliado"]),
+    ("assimetricas", Pipeline([
+        ("log", FunctionTransformer(np.log1p, feature_names_out="one-to-one")),
+        ("escala", StandardScaler())]), ["area_m2", "condominio", "iptu"]),
+    ("andar", Pipeline([
+        ("preenche", SimpleImputer(strategy="constant", fill_value=0,
+                                   add_indicator=True)),
+        ("escala", StandardScaler())]), ["andar"]),
+    ("contagens", StandardScaler(), ["quartos", "banheiros", "vagas"]),
+]).set_output(transform="pandas")
+print("X_treino:", X_treino.shape)
+```
+
+## Os grupos
+
+A validação cruzada divide o treino em grupos, e cada grupo, na sua vez, fica de fora enquanto os outros ajustam o modelo, como na seção 10.3. Os grupos são sorteados: `shuffle=True` embaralha os anúncios antes de cortar, com a semente 17. Os mesmos dez grupos servem para os três modelos comparados a seguir.
+
+```{python}
+#| label: grupos
+grupos = KFold(10, shuffle=True, random_state=17)
+tamanhos = [len(validacao) for _, validacao in grupos.split(X_treino)]
+print("grupos:", len(tamanhos))
+print("menor grupo:", min(tamanhos))
+print("maior grupo:", max(tamanhos))
+```
+
+::: {.funcao}
+**`KFold(n_splits, shuffle, random_state)`** — o esquema de divisão da validação cruzada em `n_splits` grupos. Com `shuffle=True`, as linhas são embaralhadas antes do corte, com a semente `random_state`; sem ele, o primeiro grupo seria as primeiras linhas da tabela.
+
+**`grupos.split(X)`** — produz, para cada grupo, o par (posições de treino, posições de validação). Aqui só se mede o tamanho de cada grupo de validação.
+:::
+
+Os 8.267 anúncios de treino não se dividem por 10 sem resto, e cada grupo fica com 826 ou 827 anúncios.
+
+## Em que escala medir
+
+A resposta poderia ficar em reais, sem o logaritmo. A validação cruzada mostra o que acontece nesse caso. `cross_val_predict` devolve, para cada anúncio de treino, a previsão do modelo ajustado nos outros nove grupos, isto é, sem o grupo em que o anúncio estava. A regressão linear, com a resposta em reais:
+
+```{python}
+#| label: reais-negativos
+linear_em_reais = Pipeline([("preparo", preparo), ("modelo", LinearRegression())])
+previsto = cross_val_predict(linear_em_reais, X_treino, treino["aluguel"], cv=grupos)
+print("previsões:", numero_br(len(previsto), 0))
+print("negativas:", numero_br((previsto < 0).sum(), 0))
+print("menor: R$", numero_br(previsto.min()))
+```
+
+::: {.funcao}
+**`cross_val_predict(estimador, X, y, cv)`** — ajusta o estimador uma vez por grupo de `cv` e devolve uma previsão para cada linha de `X`, feita pelo ajuste em que a linha estava na validação. Com um `Pipeline`, cada ajuste reajusta o preparo junto, só com os outros grupos.
+:::
+
+São 159 previsões negativas em 8.267, o menor deles de R$ −1.772,47. De que anúncios eles vêm?
+
+```{python}
+#| label: quem-e-negativo
+colunas = ["area_m2", "condominio"]
+negativas = X_treino.loc[previsto < 0, colunas].median()
+todas = X_treino[colunas].median()
+print("mediana: negativas / treino")
+print("  área (m²):", numero_br(negativas["area_m2"], 0), "/",
+      numero_br(todas["area_m2"], 0))
+print("  condomínio (R$):", numero_br(negativas["condominio"], 0), "/",
+      numero_br(todas["condominio"], 0))
+```
+
+As previsões negativas vêm de anúncios pequenos: área mediana de 26 m² contra 95 no treino inteiro, condomínio mediano de R$ 140 contra R$ 568. Uma reta em reais não tem piso, e nada impede que, num anúncio pequeno o bastante, a soma dos termos fique abaixo de zero. Por que a regressão linear sobre o logaritmo do aluguel não pode sugerir um preço negativo, qualquer que seja o anúncio?
+
+Na escala log, a previsão é $\log \hat y$, e o preço sugerido é $\hat y = e^{\log \hat y}$, positivo para qualquer valor do expoente. O erro também muda de natureza. A raiz do erro quadrático médio (RMSE, em inglês *root mean squared error*) na escala log é
+
+$$
+\mathrm{RMSE} = \sqrt{\frac{1}{n}\sum_{i=1}^{n}\left(\log y_i - \log \hat y_i\right)^2},
+$$
+
+em que $\log$ é o logaritmo natural, o `np.log`. Cada diferença $\log y_i - \log \hat y_i$ é $\log(y_i / \hat y_i)$, o logaritmo da razão entre o aluguel e a previsão. Considere prever R$ 1.000 para um aluguel de R$ 1.500 e R$ 10.000 para um de R$ 15.000:
+
+```{python}
+#| label: mesmo-fator
+print("log(1.500 / 1.000):", numero_br(np.log(1500 / 1000), 4))
+print("log(15.000 / 10.000):", numero_br(np.log(15000 / 10000), 4))
+```
+
+Em reais, um erro é de R$ 500 e o outro de R$ 5.000; na escala log, os dois valem o mesmo, porque a previsão ficou abaixo do aluguel pelo mesmo fator, 1,5. Errar pelo mesmo fator conta o mesmo num aluguel barato e num caro, como a seção 17.2 mediu. É na escala log que os três candidatos são comparados: é nela que eles são ajustados, e nela o erro é relativo.
+
+## Três candidatos
+
+Os três candidatos entram no mesmo `Pipeline`, depois do mesmo preparo, e mudam só no passo `modelo`:
+
+```{python}
+#| label: candidatos
+candidatos = {
+    "média": DummyRegressor(),
+    "linear": LinearRegression(),
+    "k-NN": KNeighborsRegressor(n_neighbors=10),
+}
+```
+
+::: {.funcao}
+**`DummyRegressor()`** — um "modelo" que ignora os preditores: no `fit`, guarda a média da resposta; no `predict`, devolve essa média para todo anúncio. Serve de referência: um modelo que não erra menos que ele não aprendeu nada dos preditores.
+:::
+
+A média não usa o preparo, mas passar por ele não muda nada nela, e assim os três são tratados igualmente. Antes de rodar: quanto a média deve errar? Ela prevê o mesmo número para todo anúncio, e o RMSE de uma previsão constante igual à média é aproximadamente o desvio padrão da resposta.
+
+```{python}
+#| label: desvio-y
+print("desvio padrão de y_treino:", numero_br(y_treino.std(ddof=0), 4))
+```
+
+::: {.funcao}
+**`serie.std(ddof=0)`** — o desvio padrão dividindo por $n$, e não por $n - 1$, que é o padrão do `pandas`. Com `ddof=0`, é exatamente a raiz da média dos quadrados das distâncias à média.
+:::
+
+O `cross_val_score` ajusta cada `Pipeline` nos dez pares de grupos e devolve um erro por grupo:
+
+```{python}
+#| label: validacao-cruzada
+rmse = pd.DataFrame({
+    nome: -cross_val_score(Pipeline([("preparo", preparo), ("modelo", modelo)]),
+                           X_treino, y_treino, cv=grupos,
+                           scoring="neg_root_mean_squared_error")
+    for nome, modelo in candidatos.items()
+}, index=range(1, 11))
+rmse.style.format(lambda v: numero_br(v, 4))
+```
+
+::: {.funcao}
+**`cross_val_score(estimador, X, y, cv, scoring)`** — para cada grupo de `cv`, ajusta o estimador nos outros e mede o erro no grupo; devolve um número por grupo. `scoring="neg_root_mean_squared_error"` pede o RMSE com o sinal trocado: o `scikit-learn` trata toda pontuação como "maior é melhor", e o `-` na frente desfaz a troca.
+:::
+
+Cada linha é um grupo de validação, e as três colunas foram medidas nos mesmos anúncios. As médias dos dez grupos, o desvio padrão entre eles e o fator correspondente, $e^{\text{média}}$:
+
+```{python}
+#| label: resumo
+for nome in rmse:
+    media = rmse[nome].mean()
+    print(nome)
+    print("  média:", numero_br(media, 4))
+    print("  desvio entre grupos:", numero_br(rmse[nome].std(), 4))
+    print("  fator e^média:", numero_br(np.exp(media), 2))
+```
+
+A média erra 0,7902, e o desvio padrão de `y_treino` também é 0,7902: os dois coincidem até a quarta casa, como esperado. A regressão linear erra 0,4458 e o *k*-NN, 0,4217, os dois bem abaixo da média, e o *k*-NN um pouco abaixo da linear.
+
+Para ler o erro em preços, desfaz-se o logaritmo natural com a exponencial: o fator do *k*-NN, $e^{0{,}4217}$, é 1,52, e o da média é 2,20. Um fator de 1,52 é uma previsão 52% acima do aluguel ou, dividindo por 1,52, 34% abaixo dele (1 − 1/1,52).
+
+Esse fator é um erro típico, e não o erro de um anúncio comum: o RMSE eleva as diferenças ao quadrado antes de tirar a média, e os anúncios mais mal previstos o puxam para cima.
+
+## Uma comparação pareada
+
+A diferença entre a linear e o *k*-NN, 0,0241 (0,4458 − 0,4217), é só cerca do dobro do desvio padrão entre os grupos de cada um, 0,0113 na linear e 0,0127 no *k*-NN, e os erros dos dois se sobrepõem:
+
+```{python}
+#| label: sobreposicao
+pior_knn, melhor_linear = rmse["k-NN"].max(), rmse["linear"].min()
+print("pior grupo do k-NN:", numero_br(pior_knn, 4))
+print("melhor grupo da linear:", numero_br(melhor_linear, 4))
+print("se sobrepõem:", bool(pior_knn > melhor_linear))
+```
+
+Olhando as duas colunas como dois montes de dez números, o erro do *k*-NN em alguns grupos é maior que o da linear em outros. Mas os dois modelos foram medidos nos **mesmos** grupos, e um grupo com anúncios difíceis é difícil para os dois. A figura abaixo liga, por uma linha cinza, os três erros de cada grupo. No código, `ax.plot` recebe a tabela `rmse[nomes].T`, que tem uma coluna por grupo, e desenha uma linha para cada coluna; `ax.set_xticks(posicoes, nomes)` põe o nome de cada modelo sob a sua posição no eixo horizontal:
+
+```{python}
+#| label: fig-pareada
+#| fig-cap: "RMSE na escala log dos três candidatos nos dez grupos da validação cruzada; a linha cinza liga os erros do mesmo grupo, e o traço horizontal marca a média dos dez. Em cima, os três modelos, com o eixo desde zero; embaixo, só a linear e o k-NN, com o eixo ampliado."
+#| fig-alt: "Dois painéis empilhados. No de cima, três colunas de dez pontos: a média, em cinza, perto de 0,8; a linear, em azul, e o k-NN, em laranja, os dois perto de 0,4 a 0,45; linhas cinza finas descem da média para a linear e seguem quase na horizontal até o k-NN. No de baixo, com o eixo ampliado, só a linear e o k-NN: as dez linhas cinza descem da esquerda para a direita, cada uma ligando um ponto azul a um ponto laranja mais baixo; os pontos de cada coluna se espalham de cima a baixo do eixo, e as duas colunas se sobrepõem na altura."
+cores = {"média": "0.45", "linear": "C0", "k-NN": "C1"}
+em_br = lambda v, pos: numero_br(v, 2)
+fig, (ax_todos, ax_zoom) = plt.subplots(2, 1, figsize=(6.4, 6.4))
+for ax, nomes in ((ax_todos, list(cores)), (ax_zoom, ["linear", "k-NN"])):
+    posicoes = list(range(len(nomes)))
+    ax.plot(posicoes, rmse[nomes].T, color="0.45", linewidth=0.8, alpha=0.5)
+    for x, nome in zip(posicoes, nomes):
+        ax.scatter([x] * len(rmse), rmse[nome], s=36, color=cores[nome], zorder=3,
+                   label="_nolegend_")
+        ax.hlines(rmse[nome].mean(), x - 0.25, x + 0.25, color=cores[nome],
+                  linewidth=2.5, zorder=2)
+    ax.set_xticks(posicoes, nomes)
+    ax.set_xlim(-0.5, len(nomes) - 0.5)
+    ax.set_ylabel("RMSE (escala log)")
+    ax.yaxis.set_major_formatter(em_br)
+ax_todos.set_ylim(0, 0.9)
+ax_todos.set_title("os três candidatos")
+ax_zoom.set_title("linear e k-NN, eixo ampliado")
+plt.tight_layout()
+plt.show()
+```
+
+::: {.funcao}
+**`ax.hlines(y, inicio, fim, color, linewidth)`** — um traço horizontal na altura `y`, de `inicio` a `fim` no eixo horizontal.
+:::
+
+No painel de cima, a queda da média para a linear é o ganho que os preditores trazem, e ela acontece em todos os grupos. No de baixo, cada linha desce da linear para o *k*-NN. A conta, grupo a grupo:
+
+```{python}
+#| label: pareado
+ganho = rmse["linear"] - rmse["k-NN"]
+print("linear abaixo da média nos 10:", bool((rmse["linear"] < rmse["média"]).all()))
+print("k-NN abaixo da linear nos 10:", bool((ganho > 0).all()))
+print("ganho do k-NN, menor:", numero_br(ganho.min(), 4))
+print("ganho do k-NN, maior:", numero_br(ganho.max(), 4))
+print("desvio do ganho:", numero_br(ganho.std(), 4))
+print("correlação dos erros:", numero_br(rmse["linear"].corr(rmse["k-NN"]), 2))
+```
+
+::: {.funcao}
+**`serie.corr(outra)`** — a correlação entre duas colunas, linha a linha; aqui, entre os erros da linear e do *k*-NN nos mesmos dez grupos.
+:::
+
+O *k*-NN erra menos que a linear nos dez grupos. O ganho vai de 0,0043 a 0,0365, e o desvio padrão dele entre os grupos, 0,0090, é menor que o de cada modelo sozinho, 0,0113 na linear e 0,0127 no *k*-NN. Os erros dos dois sobem e descem juntos de um grupo para outro, com correlação de 0,72: parte do que varia é a dificuldade do grupo, que atinge os dois modelos e, na diferença, em boa parte se cancela. A evidência a favor do *k*-NN é uma diferença com o mesmo sinal nos dez grupos, e não só a das médias.
+
+Ela tem limites. Os dez ajustes usam quase os mesmos anúncios de treino, então os dez ganhos não são dez medições independentes. E o ganho é pequeno perto do que a linear ganha da média: 0,0241 (0,4458 − 0,4217) contra 0,3444 (0,7902 − 0,4458), e por isso a linha que liga os dois modelos é quase plana no painel de cima.
+
+E se o *k*-NN ganhasse em só quatro dos dez grupos? Aí a vantagem deixaria de convencer: a diferença entre os dois seria do tamanho da variação de um grupo de anúncios para outro, e outros anúncios poderiam inverter a ordem.
+
+Os dez grupos são um sorteio, e outra semente daria outros. Com um ganho que nunca troca de sinal nos dez grupos da semente 17, você esperaria que ele trocasse com outra semente? A mesma comparação, repetida com as sementes de 0 a 4:
+
+```{python}
+#| label: outras-sementes
+vitorias, ganhos_medios = [], []
+for semente in range(5):
+    outros_grupos = KFold(10, shuffle=True, random_state=semente)
+    erro = {nome: -cross_val_score(
+                Pipeline([("preparo", preparo), ("modelo", candidatos[nome])]),
+                X_treino, y_treino, cv=outros_grupos,
+                scoring="neg_root_mean_squared_error")
+            for nome in ["linear", "k-NN"]}
+    ganho_semente = erro["linear"] - erro["k-NN"]
+    vitorias.append(int((ganho_semente > 0).sum()))
+    ganhos_medios.append(ganho_semente.mean())
+    print(f"semente {semente}: k-NN vence em", vitorias[-1], "de 10")
+    print("  ganho médio:", numero_br(ganhos_medios[-1], 4))
+print("vence nos 10 em todas:", all(v == 10 for v in vitorias))
+print("ganho médio, menor:", numero_br(min(ganhos_medios), 4))
+print("ganho médio, maior:", numero_br(max(ganhos_medios), 4))
+```
+
+Nas cinco sementes, o *k*-NN erra menos que a linear nos dez grupos, e o ganho médio fica entre 0,0243 e 0,0258, perto dos 0,0241 da semente 17. O *k*-NN fica à frente e segue como candidato, e o teste continua fechado.
+
+Nada na comparação depende de que modelos são esses. O passo `modelo` do `Pipeline` aceita qualquer regressor do `scikit-learn`, inclusive as árvores de decisão e as florestas dos capítulos 12 e 13, e o mesmo `cross_val_score`, com os mesmos grupos, os colocaria na tabela. Os dez vizinhos do *k*-NN foram fixados de antemão, e esse número também pode ser escolhido por validação cruzada.

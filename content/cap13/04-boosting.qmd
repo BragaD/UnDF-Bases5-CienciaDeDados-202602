@@ -1,0 +1,362 @@
+# Boosting
+
+::: {.callout-note}
+Esta seção corresponde à seção 8.2.3 de @james2023.
+:::
+
+No bagging e na floresta aleatória, cada árvore é ajustada à sua amostra bootstrap sem saber o que as outras fizeram, e as árvores só se encontram na média do fim. Um jogador cujo salário todas as árvores erram para cima continua errado para cima na média. E se as árvores fossem ajustadas uma depois da outra, e cada árvore nova olhasse só para o que as anteriores ainda erram, corrigindo um pouco?
+
+```{python}
+#| label: setup
+#| include: false
+import matplotlib.pyplot as plt
+import numpy as np
+import pandas as pd
+from sklearn.ensemble import GradientBoostingRegressor
+from sklearn.metrics import mean_squared_error
+from sklearn.model_selection import KFold, train_test_split
+
+plt.style.use("estilo-figuras.mplstyle")
+```
+
+A função `numero_br` escreve os números com a pontuação brasileira:
+
+```{python}
+#| label: numero-br
+numero_br = lambda valor, casas=2: (
+    f"{valor:,.{casas}f}".replace(",", "_").replace(".", ",").replace("_", ".")
+    .replace("-", "−")
+)
+```
+
+## Aprender devagar
+
+Os dados são os jogadores de `Hitters` com salário registrado, com o logaritmo do salário como resposta, as colunas de texto trocadas por indicadoras e os mesmos 132 jogadores de treino da seção 13.1:
+
+```{python}
+#| label: dados
+hitters = pd.read_csv("dados/Hitters.csv").dropna()
+y = np.log(hitters["salario"])
+X = pd.get_dummies(hitters.drop(columns="salario"),
+                   drop_first=True, dtype=float)
+treino_X, teste_X, treino_y, teste_y = train_test_split(
+    X, y, train_size=132, random_state=12)
+print("treino:", len(treino_X), "  teste:", len(teste_X))
+```
+
+Uma árvore grande ajustada de uma vez ao log do salário tenta acertar tudo numa só passada e, como a seção 12.2 mostrou, acompanha o ruído do treino. O boosting faz o contrário: começa de um modelo que prevê zero para todo mundo e o melhora aos poucos. A cada passo, calcula o resíduo de cada jogador, o quanto o modelo atual ainda erra, ajusta uma árvore pequena a esses resíduos e soma ao modelo só uma fração dela.
+
+::: {.conceito}
+O ***boosting*** de árvores de regressão ajusta $B$ árvores em sequência, cada uma aos resíduos deixados pelas anteriores. Com $d$, o número de divisões de cada árvore, e $\lambda$, um número positivo pequeno:
+
+1. Comece com $\hat f(x) = 0$ e com os resíduos $r_i = y_i$ para todo $i$ do treino.
+2. Para $b = 1, 2, \dots, B$:
+   a. ajuste uma árvore $\hat f^b$ com $d$ divisões, isto é, $d + 1$ folhas, tendo $r$, e não $y$, como resposta;
+   b. some ao modelo a árvore encolhida por $\lambda$,
+   $$\hat f(x) \leftarrow \hat f(x) + \lambda \hat f^b(x);$$
+   c. atualize os resíduos,
+   $$r_i \leftarrow r_i - \lambda \hat f^b(x_i).$$
+3. O modelo final é a soma das árvores encolhidas,
+$$
+\hat f(x) = \sum_{b=1}^{B} \lambda \hat f^b(x).
+$$
+
+O parâmetro $\lambda$ é a ***taxa de aprendizado*** (*shrinkage*, ou *learning rate*): quanto de cada árvore entra no modelo.
+:::
+
+Não há amostra bootstrap: toda árvore vê os 132 jogadores, com uma resposta diferente a cada passo.
+
+No `scikit-learn`, o algoritmo é o `GradientBoostingRegressor`. Com `init="zero"`, ele começa de $\hat f(x) = 0$, como no passo 1. O chunk ajusta $B = 1.000$ árvores de uma divisão só, $d = 1$, com $\lambda = 0{,}01$, mostra a primeira delas e calcula a média do log do salário de cada lado do corte dela:
+
+```{python}
+#| label: primeira-arvore
+boost = GradientBoostingRegressor(n_estimators=1000, learning_rate=0.01,
+                                  max_leaf_nodes=2, max_depth=None,
+                                  init="zero", random_state=13)
+boost.fit(treino_X, treino_y)
+primeira = boost.estimators_[0, 0]
+coluna = X.columns[primeira.tree_.feature[0]]
+corte = primeira.tree_.threshold[0]
+print("raiz:", coluna)
+print("corte:", numero_br(corte, 0))
+folhas = primeira.tree_.value[1:, 0, 0]
+print("folhas:", numero_br(folhas[0]), "e", numero_br(folhas[1]))
+abaixo = treino_X[coluna] <= corte
+print("médias de cada lado:", numero_br(treino_y[abaixo].mean()),
+      "e", numero_br(treino_y[~abaixo].mean()))
+print("média do log do salário:", numero_br(treino_y.mean()))
+```
+
+::: {.funcao}
+**`GradientBoostingRegressor(...)`** — o boosting de árvores de regressão. Os parâmetros usados aqui:
+
+- `n_estimators`: o número de árvores, $B$.
+- `learning_rate`: a taxa $\lambda$.
+- `max_leaf_nodes`: o número máximo de folhas de cada árvore; `max_leaf_nodes=2` dá árvores de uma divisão, $d = 1$.
+- `max_depth`: a profundidade máxima de cada árvore, que vale junto com `max_leaf_nodes`. O padrão, 3, limita cada árvore a 8 folhas; com `None`, só `max_leaf_nodes` limita, qualquer que seja $d$.
+- `init`: com `"zero"`, o modelo começa de $\hat f(x) = 0$; sem ele, começa da média de $y$ no treino.
+- `random_state`: fixa os desempates.
+
+**`modelo.estimators_[b, 0]`** — a árvore de número `b`, contada a partir de 0; `estimators_` é uma tabela de árvores com uma linha por passo e uma coluna só, na regressão. **`arvore.tree_.threshold[0]`** — o valor de corte da raiz. **`arvore.tree_.value[1:, 0, 0]`** — a previsão das folhas de uma árvore de uma divisão: os nós 1 e 2, depois da raiz, que é o nó 0.
+:::
+
+A primeira árvore divide os jogadores pelo número de vezes ao bastão na carreira. Como o modelo começa de zero, os resíduos do primeiro passo são o próprio log do salário, e as folhas são a média do log do salário de cada lado do corte: as duas linhas impressas coincidem, 5,11 e 6,46. Com $\lambda = 0{,}01$, só um centésimo disso entra no modelo: depois do primeiro passo, $\hat f(x)$ vale 0,01 × 5,11 ≈ 0,05 para os jogadores de um lado e 0,01 × 6,46 ≈ 0,06 para os do outro, longe da média de 5,91.
+
+Cada passo tira do resíduo de cada jogador um centésimo da previsão da árvore. Antes de rodar o próximo chunk, um palpite: partindo de zero, depois de quantas árvores a previsão média no treino chega perto de 5,91, a média do log do salário? Dez? Cem? Mil? O chunk imprime a previsão média e o MSE de treino depois de 1, 10, 100 e 1.000 árvores:
+
+```{python}
+#| label: residuos
+previsoes = list(boost.staged_predict(treino_X))
+print("no treino, depois de B árvores:")
+for b in [1, 10, 100, 1000]:
+    print(f"  B = {numero_br(b, 0)}:"
+          f" média {numero_br(previsoes[b - 1].mean())},"
+          f" MSE {numero_br(boost.train_score_[b - 1])}")
+medias = np.array([previsto.mean() for previsto in previsoes])
+chega = (medias.round(2) >= round(treino_y.mean(), 2)).argmax() + 1
+print("média chega a", numero_br(treino_y.mean()),
+      "em B =", numero_br(chega, 0))
+```
+
+::: {.funcao}
+**`modelo.staged_predict(X)`** — as previsões do modelo depois de cada árvore, uma de cada vez: primeiro com a árvore 1, depois com as árvores 1 e 2, e assim por diante até $B$. Um ajuste só dá a curva inteira contra $B$. **`modelo.train_score_`** — no regressor, o MSE de treino depois de cada árvore.
+:::
+
+Dez árvores levam a previsão média a 0,57, e cem, a 3,75. A última linha procura a primeira árvore depois da qual a média, arredondada, chega a 5,91: é a de número 696. O MSE de treino é a média dos quadrados dos resíduos, e cai junto, de 34,97 depois da primeira árvore para 0,09 depois da milésima.
+
+O modelo final é a soma das árvores encolhidas. O chunk confere isso nos jogadores de teste, somando as previsões das mil árvores multiplicadas por 0,01, e ajusta o mesmo boosting começando da média, o `init` padrão:
+
+```{python}
+#| label: algoritmo-8-2
+arvores = boost.estimators_[:, 0]
+soma = sum(0.01 * arvore.predict(teste_X.to_numpy()) for arvore in arvores)
+print("soma = predict:", np.allclose(soma, boost.predict(teste_X)))
+print("raízes das três primeiras:")
+for arvore in arvores[:3]:
+    print("  ", X.columns[arvore.tree_.feature[0]])
+da_media = GradientBoostingRegressor(n_estimators=1000, learning_rate=0.01,
+                                     max_leaf_nodes=2, max_depth=None,
+                                     random_state=13)
+da_media.fit(treino_X, treino_y)
+erro_zero = mean_squared_error(teste_y, boost.predict(teste_X))
+erro_media = mean_squared_error(teste_y, da_media.predict(teste_X))
+print("MSE de teste, de zero:", numero_br(erro_zero, 4))
+print("MSE de teste, da média:", numero_br(erro_media, 4))
+```
+
+::: {.funcao}
+**`np.allclose(a, b)`** — `True` se os dois arrays são iguais posição a posição, a menos do arredondamento de ponto flutuante.
+:::
+
+O `sum` soma os arrays de previsões posição a posição, um jogador de cada vez, e a soma das mil árvores encolhidas é a previsão do modelo, como no passo 3. As três primeiras árvores cortam pela mesma coluna: depois de poucos passos de um centésimo, os resíduos ainda se parecem com o próprio log do salário, e o melhor corte continua o mesmo. Começar da média poupa o caminho de zero até o nível dos salários. Com $\lambda = 0{,}01$ e mil árvores, esse caminho já foi percorrido, e os dois erros de teste impressos coincidem nas quatro casas.
+
+## Três parâmetros: B, λ e d
+
+O boosting tem três parâmetros: o número de árvores $B$, a taxa $\lambda$ e o número de divisões $d$ de cada árvore. Com $\lambda$ pequeno, cada árvore muda pouco o modelo, e são precisas mais árvores para chegar ao mesmo lugar. Mais árvores sempre melhoram?
+
+Daqui em diante, os modelos partem da média do log do salário no treino, o padrão do `scikit-learn`. Com $\lambda$ pequeno, o ponto de partida pesa, e o chunk mede isso no fim. Para ver o efeito de $B$ e de $\lambda$ juntos, o chunk ajusta, com árvores de uma divisão, 3.000 árvores para cada $\lambda$ em 0,001, 0,01 e 0,1, e mede o MSE de teste depois de cada árvore; no fim, ajusta de novo o $\lambda = 0{,}001$ partindo de zero:
+
+```{python}
+#| label: lambda-e-B
+curvas = {}
+modelos = {}
+for taxa in [0.001, 0.01, 0.1]:
+    modelo = GradientBoostingRegressor(n_estimators=3000, learning_rate=taxa,
+                                       max_leaf_nodes=2, max_depth=None,
+                                       random_state=13)
+    modelo.fit(treino_X, treino_y)
+    curvas[taxa] = np.array([mean_squared_error(teste_y, previsto)
+                             for previsto in modelo.staged_predict(teste_X)])
+    modelos[taxa] = modelo
+for taxa, curva in curvas.items():
+    print(f"λ = {numero_br(taxa, 3).rstrip('0')}:")
+    print(f"  em B = 1: {numero_br(curva[0], 4)}")
+    print(f"  menor {numero_br(curva.min(), 4)}"
+          f" em B = {numero_br(np.argmin(curva) + 1, 0)}")
+    print(f"  em B = 3.000: {numero_br(curva[-1], 4)}")
+treino_001 = modelos[0.01].train_score_
+print("λ = 0,01, treino em 3.000:", numero_br(treino_001[-1], 4))
+print("treino nunca sobe, nos três:",
+      all(np.all(np.diff(m.train_score_) <= 0) for m in modelos.values()))
+de_zero = GradientBoostingRegressor(n_estimators=3000, learning_rate=0.001,
+                                    max_leaf_nodes=2, max_depth=None,
+                                    init="zero", random_state=13)
+de_zero.fit(treino_X, treino_y)
+menor_zero = min(mean_squared_error(teste_y, previsto)
+                 for previsto in de_zero.staged_predict(teste_X))
+print("λ = 0,001 de zero, menor:", numero_br(menor_zero, 4))
+```
+
+::: {.funcao}
+**`np.argmin(v)`** — a posição do menor valor de `v`, contada a partir de 0; somando 1, o número de árvores. **`np.diff(v)`** — as diferenças entre valores vizinhos de `v`; `np.diff(v) <= 0` em todas as posições quer dizer que `v` nunca sobe. **`np.all(m)`** — `True` se todos os valores de `m` são `True`.
+:::
+
+```{python}
+#| label: fig-lambda
+#| fig-cap: "MSE de teste do boosting de árvores de uma divisão no `Hitters`, partindo da média, contra o número de árvores $B$, em escala logarítmica, para três taxas de aprendizado: $\\lambda = 0{,}001$ (azul), $0{,}01$ (laranja) e $0{,}1$ (verde). O x marca o menor erro de teste de cada curva. Em cinza tracejado, o MSE de treino com $\\lambda = 0{,}01$. O MSE é medido no log do salário."
+#| fig-alt: "Gráfico de linhas com o número de árvores, de 1 a 3.000 em escala logarítmica, no eixo horizontal, e o MSE, de 0 a 0,9, no vertical. As três curvas de teste começam entre 0,75 e 0,84. A verde, λ = 0,1, desce primeiro, tem o mínimo perto de 0,29 com cerca de 50 árvores e depois sobe até perto de 0,38. A laranja, λ = 0,01, desce mais tarde, tem o mínimo perto de 0,29 com cerca de 600 árvores e sobe até cerca de 0,31. A azul, λ = 0,001, desce mais devagar e chega perto de 0,30 na última árvore. A cinza tracejada, o treino com λ = 0,01, só desce e termina perto de 0,05, bem abaixo das curvas de teste."
+estagios = np.arange(1, 3001)
+fig, ax = plt.subplots(figsize=(3.8, 3.4))
+for taxa, cor in [(0.001, "C0"), (0.01, "C1"), (0.1, "C2")]:
+    ax.plot(estagios, curvas[taxa], color=cor,
+            label=f"λ = {numero_br(taxa, 3).rstrip('0')}")
+    melhor = np.argmin(curvas[taxa])
+    ax.plot(estagios[melhor], curvas[taxa][melhor], marker="x",
+            color=cor, markersize=8, label="_nolegend_")
+ax.plot(estagios, treino_001, color="0.45", linestyle="--",
+        label="treino, λ = 0,01")
+ax.set_xscale("log")
+ax.set_xticks([1, 10, 100, 1000], ["1", "10", "100", "1.000"])
+ax.set_xlim(0.8, 4000)
+ax.set_ylim(0, 0.9)
+ax.yaxis.set_major_formatter(lambda v, _: f"{v:.1f}".replace(".", ","))
+ax.set_xlabel("número de árvores B")
+ax.set_ylabel("MSE (log do salário)")
+ax.legend(loc="lower center", bbox_to_anchor=(0.5, 1.0), ncol=2)
+plt.tight_layout()
+plt.show()
+```
+
+Com $\lambda = 0{,}1$, o menor erro de teste chega em $B = 51$; com $\lambda = 0{,}01$, em $B = 635$; com $\lambda = 0{,}001$, o menor erro está na última das 3.000 árvores. Quanto menor $\lambda$, mais árvores foram precisas até o menor erro, nos três valores de $\lambda$ testados. Os dois menores erros, 0,2856 com $\lambda = 0{,}1$ e 0,2851 com $\lambda = 0{,}01$, diferem em 0,0005; com $\lambda = 0{,}001$, 3.000 árvores não chegaram lá, e o menor erro ficou em 0,3027. Partindo de zero, o menor erro de teste do mesmo $\lambda = 0{,}001$ é 0,3931, contra 0,3027 partindo da média: é o caso em que o ponto de partida pesa.
+
+Na figura, a curva verde desce primeiro e sobe primeiro; a laranja faz o mesmo movimento mais à direita, e a azul ainda está descendo quando as 3.000 árvores acabam. Um $\lambda$ menor desloca a curva para a direita no eixo de $B$.
+
+Depois do mínimo, o erro de teste sobe. Com $\lambda = 0{,}01$, ele vai de 0,2851 em $B = 635$ a 0,3126 em $B = 3.000$; com $\lambda = 0{,}1$, de 0,2856 a 0,3832. O erro de treino, enquanto isso, nunca sobe nos três modelos, e com $\lambda = 0{,}01$ termina em 0,0502.
+
+O erro de teste subindo é compatível com correções que, depois do mínimo, acompanham o que é particular desses 132 jogadores. No boosting, um $B$ grande demais pode sobreajustar, ao contrário do bagging, em que uma árvore a mais só entra numa média.
+
+Se o menor erro quase não muda entre $\lambda = 0{,}1$ e $\lambda = 0{,}01$, o que o $\lambda$ menor compra? O chunk marca, para cada $\lambda$, os valores de $B$ com erro de teste a até 5% do menor erro da curva, o vale da curva, e imprime quantos são, o primeiro e o último, a razão entre o último e o primeiro e se a última das 3.000 árvores está no vale:
+
+```{python}
+#| label: largura-do-vale
+folga = 1.05
+for taxa, curva in curvas.items():
+    vale = np.flatnonzero(curva <= folga * curva.min()) + 1
+    print(f"λ = {numero_br(taxa, 3).rstrip('0')}:"
+          f" {numero_br(len(vale), 0)} valores de B")
+    print(f"  de {numero_br(vale[0], 0)} a {numero_br(vale[-1], 0)},"
+          f" razão {numero_br(vale[-1] / vale[0], 1)}")
+    print("  último B no vale:", vale[-1] == 3000)
+```
+
+::: {.funcao}
+**`np.flatnonzero(m)`** — as posições em que o array booleano `m` vale `True`, em ordem crescente, contadas a partir de 0; somando 1, os números de árvores.
+:::
+
+Com $\lambda = 0{,}1$, 157 valores de $B$ ficam a até 5% do menor erro, de 30 a 187; com $\lambda = 0{,}01$, 1.473, de 315 a 1.787. Contado em árvores, o vale laranja é muito mais largo, mas cada árvore laranja entra no modelo com um décimo do peso de uma verde, e o mesmo trecho do caminho ocupa mais árvores. Medido em proporção, o vale quase não muda: o último $B$ do vale é 6,2 vezes o primeiro com $\lambda = 0{,}1$ e 5,7 vezes com $\lambda = 0{,}01$. Com $\lambda = 0{,}001$, a última das 3.000 árvores ainda está no vale, e ele não fechou.
+
+Nestes dados, o $\lambda$ menor baixou o menor erro só em 0,0005 e não alargou o vale em proporção. Ele anda com um passo mais fino, de um centésimo por árvore, e cobra isso em árvores: o menor erro de teste veio com 635 árvores com $\lambda = 0{,}01$, contra 51 com $\lambda = 0{,}1$, e 635 ÷ 51 ≈ 12,5.
+
+O terceiro parâmetro, $d$, é o tamanho de cada árvore. Uma árvore de uma divisão, $d = 1$, é um ***toco*** (*stump*). Cada toco usa uma coluna só, e uma soma de tocos é uma soma de funções de uma coluna cada: o modelo é ***aditivo***, sem interação entre as colunas.
+
+Com $d = 2$, uma árvore pode dividir por uma coluna e depois, num dos lados, por outra, e o efeito da segunda passa a depender do valor da primeira. Como $d$ divisões usam no máximo $d$ colunas, $d$ controla a ordem das interações que o modelo pode capturar, e é chamado de ***profundidade de interação***. O chunk ajusta, com $\lambda = 0{,}01$ e 3.000 árvores, o boosting com $d = 2$ e $d = 4$, compara com os tocos já ajustados e mostra as duas divisões da primeira árvore de $d = 2$:
+
+```{python}
+#| label: profundidade
+por_d = {1: modelos[0.01]}
+for d in [2, 4]:
+    por_d[d] = GradientBoostingRegressor(n_estimators=3000,
+                                         learning_rate=0.01,
+                                         max_leaf_nodes=d + 1,
+                                         max_depth=None,
+                                         random_state=13)
+    por_d[d].fit(treino_X, treino_y)
+for d, modelo in por_d.items():
+    curva = [mean_squared_error(teste_y, previsto)
+             for previsto in modelo.staged_predict(teste_X)]
+    folhas = {int(arvore.get_n_leaves()) for arvore in modelo.estimators_[:, 0]}
+    print(f"d = {d}: folhas por árvore {folhas}")
+    print(f"  menor teste {numero_br(min(curva), 4)}"
+          f" em B = {numero_br(np.argmin(curva) + 1, 0)}")
+    print(f"  treino em 3.000: {numero_br(modelo.train_score_[-1], 4)}")
+raizes = {X.columns[arvore.tree_.feature[0]]
+          for arvore in por_d[1].estimators_[:, 0]}
+print("colunas usadas pelos tocos:", len(raizes), "de", X.shape[1])
+arvore_d2 = por_d[2].estimators_[0, 0].tree_
+esquerda = arvore_d2.children_left[0]
+lado = "≤" if arvore_d2.feature[esquerda] >= 0 else ">"
+segundo = esquerda if lado == "≤" else arvore_d2.children_right[0]
+print("1.ª árvore, d = 2, raiz:")
+print("  ", X.columns[arvore_d2.feature[0]], "≤",
+      numero_br(arvore_d2.threshold[0], 0))
+print("lado", lado, "da raiz:")
+print("  ", X.columns[arvore_d2.feature[segundo]], "≤",
+      numero_br(arvore_d2.threshold[segundo], 1))
+```
+
+::: {.funcao}
+**`arvore.tree_.children_left`**, **`arvore.tree_.children_right`** — para cada nó, o número do nó filho com os jogadores que ficam abaixo ou no corte (esquerda) e acima dele (direita). **`arvore.tree_.feature`** vale um número negativo numa folha, e por isso `feature[no] >= 0` quer dizer que o nó divide.
+:::
+
+Com `max_leaf_nodes=d + 1` e `max_depth=None`, toda árvore tem $d + 1$ folhas: 2, 3 e 5. Os 3.000 tocos, juntos, usam 18 das 19 colunas, mas cada toco usa só uma. Na primeira árvore de $d = 2$, os jogadores com até 1.452 vezes ao bastão na carreira são divididos de novo por `impulsionadas_carreira`, e os de mais de 1.452 não: o efeito de `impulsionadas_carreira` nessa árvore existe só de um lado do primeiro corte. É uma interação entre as duas colunas, que nenhuma soma de tocos representa.
+
+Os menores erros de teste ficam em 0,2851 com $d = 1$, 0,2775 com $d = 2$ e 0,2861 com $d = 4$; entre $d = 1$ e $d = 2$, a distância é de 0,2851 − 0,2775 = 0,0076, medida em 131 jogadores de uma divisão só, e não basta para dizer que as interações ajudam.
+
+O que muda claramente é o treino: depois de 3.000 árvores, o MSE de treino cai de 0,0502 com tocos para 0,0067 com $d = 2$ e 0,0002 com $d = 4$. Árvores maiores decoram o treino mais depressa, e o valor de $d$, como o de $B$ e o de $\lambda$, é para escolher com dados de fora do ajuste.
+
+## Escolher B por validação cruzada
+
+O $B$ de menor erro de teste, 635 com $\lambda = 0{,}01$ e tocos, foi escolhido olhando os jogadores de teste, e por isso o erro de teste nesse $B$, 0,2851, é otimista como estimativa do erro em jogadores novos. O $B$ se escolhe no treino, por validação cruzada. Um ajuste de 3.000 árvores por grupo basta: o `staged_predict` dá o erro do grupo de validação depois de cada árvore. O chunk usa 5 grupos, com $\lambda = 0{,}01$ e tocos, e tira a média das cinco curvas:
+
+```{python}
+#| label: B-por-cv
+grupos = KFold(n_splits=5, shuffle=True, random_state=13)
+curva_cv = np.zeros(3000)
+for dentro, fora in grupos.split(treino_X):
+    modelo = GradientBoostingRegressor(n_estimators=3000, learning_rate=0.01,
+                                       max_leaf_nodes=2, max_depth=None,
+                                       random_state=13)
+    modelo.fit(treino_X.iloc[dentro], treino_y.iloc[dentro])
+    curva_cv += np.array([
+        mean_squared_error(treino_y.iloc[fora], previsto)
+        for previsto in modelo.staged_predict(treino_X.iloc[fora])]) / 5
+B_cv = np.argmin(curva_cv) + 1
+teste_001 = curvas[0.01]
+B_teste = np.argmin(teste_001) + 1
+print("B escolhido pela CV:", numero_br(B_cv, 0))
+print("MSE de CV nesse B:", numero_br(curva_cv[B_cv - 1], 4))
+print(f"MSE de CV em B = {numero_br(B_teste, 0)}:",
+      numero_br(curva_cv[B_teste - 1], 4))
+print("teste nesse B:", numero_br(teste_001[B_cv - 1], 4))
+print("menor teste:", numero_br(teste_001.min(), 4),
+      "em", numero_br(B_teste, 0))
+entre = curva_cv[min(B_cv, B_teste) - 1:max(B_cv, B_teste)]
+print("CV entre os dois B:", numero_br(entre.min(), 4),
+      "a", numero_br(entre.max(), 4))
+print("CV abaixo do teste em todo B:", np.all(curva_cv < teste_001))
+print("em B = 1: CV", numero_br(curva_cv[0], 4),
+      "teste", numero_br(teste_001[0], 4))
+```
+
+::: {.funcao}
+**`grupos.split(X)`** — as posições das linhas de cada divisão da validação cruzada: a cada volta do laço, `dentro` tem as posições do ajuste e `fora`, as do grupo de validação.
+:::
+
+```{python}
+#| label: fig-cv
+#| fig-cap: "MSE de validação cruzada de 5 grupos no treino (azul) e MSE de teste (laranja) do boosting de tocos com $\\lambda = 0{,}01$, contra o número de árvores $B$, em escala logarítmica. O x azul marca o $B$ escolhido pela validação cruzada; o x laranja, o $B$ de menor erro de teste. O MSE é medido no log do salário."
+#| fig-alt: "Gráfico de linhas com o número de árvores, de 1 a 3.000 em escala logarítmica, no eixo horizontal, e o MSE, de 0 a 0,9, no vertical. As duas curvas descem juntas até algumas centenas de árvores. A de teste, laranja, tem o mínimo perto de 0,29 com cerca de 600 árvores e sobe devagar até perto de 0,31. A de validação cruzada, azul, fica abaixo da de teste em todo o eixo: começa perto de 0,74, e a partir de algumas centenas de árvores fica quase plana, perto de 0,20, até o fim, com o mínimo perto de 1.300."
+fig, ax = plt.subplots(figsize=(3.8, 3.4))
+ax.plot(estagios, curva_cv, color="C0", label="validação cruzada")
+ax.plot(estagios, teste_001, color="C1", label="teste")
+ax.plot(B_cv, curva_cv[B_cv - 1], marker="x", color="C0",
+        markersize=8, label="_nolegend_")
+ax.plot(B_teste, teste_001[B_teste - 1], marker="x", color="C1",
+        markersize=8, label="_nolegend_")
+ax.set_xscale("log")
+ax.set_xticks([1, 10, 100, 1000], ["1", "10", "100", "1.000"])
+ax.set_xlim(0.8, 4000)
+ax.set_ylim(0, 0.9)
+ax.yaxis.set_major_formatter(lambda v, _: f"{v:.1f}".replace(".", ","))
+ax.set_xlabel("número de árvores B")
+ax.set_ylabel("MSE (log do salário)")
+ax.legend(loc="lower center", bbox_to_anchor=(0.5, 1.0), ncol=2)
+plt.tight_layout()
+plt.show()
+```
+
+A validação cruzada escolhe $B = 1.307$. Nesse $B$, o erro nos 131 jogadores de teste é 0,2919, acima do menor erro de teste, 0,2851 em $B = 635$, por 0,2919 − 0,2851 = 0,0068. A CV escolhe com os 132 jogadores de treino, e o $B$ que acerta melhor esses 131 jogadores de teste só é conhecido depois de olhar para eles. Entre os dois valores de $B$, a curva de CV vai de 0,1957 a 0,2000: em $B = 635$ ela vale 0,1998, e em $B = 1.307$, 0,1957, uma diferença de 0,1998 − 0,1957 = 0,0041.
+
+O MSE de CV no $B$ escolhido, 0,1957, fica bem abaixo do erro de teste nesse $B$, 0,2919: são 0,2919 − 0,1957 = 0,0962, e quase toda essa distância vem da divisão. A curva de CV fica abaixo da de teste em todo $B$, inclusive em $B = 1$, antes de qualquer escolha: 0,7414 contra 0,8305. Em $B = 635$, um valor que a CV não escolheu, ela vale 0,1998, e o teste, 0,2851, uma distância de 0,2851 − 0,1998 = 0,0853. Com uma divisão só, os 131 jogadores de teste podem ser mais difíceis de prever que os 132 de treino: a seção 13.3 viu, nessa mesma divisão, o erro OOB também abaixo do de teste. O otimismo de ficar com o menor de 3.000 erros estimados com os mesmos 132 jogadores, que a seção 12.2 viu na poda, existe, mas pesa pouco aqui: ficar com o mínimo baixou a CV em 0,0041 em relação a $B = 635$.
+
+Em classificação, o boosting segue a mesma ideia, cada árvore corrigindo o que as anteriores ainda erram, com uma conta mais complicada para o resíduo; no `scikit-learn`, é o `GradientBoostingClassifier`, que volta na seção 13.6.

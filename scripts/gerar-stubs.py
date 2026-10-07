@@ -39,7 +39,10 @@ apelido = _carregar_apelido()
 # (nosso_num, titulo_capitulo, islp_cap, [(arquivo, titulo_secao, islp_secao), ...])
 #
 # `islp_cap` e `islp_secao` são o capítulo e a seção correspondentes em
-# @james2023, ou None quando não há correspondência. O ISLP **numera** as
+# @james2023, ou None quando não há correspondência. `islp_cap` é um `int`
+# quando o nosso capítulo cobre um capítulo inteiro do ISLP, ou uma `str`
+# ("8.1") quando cobre só uma seção dele — o capítulo 8 do ISLP vira os
+# nossos 12 (8.1) e 13 (8.2); `stub_index` ajusta a frase a partir do tipo. O ISLP **numera** as
 # seções — 3.3.1, 8.2.2, 12.4.1 estão no sumário —, então o callout de
 # abertura cita o número. Os capítulos 1 a 5 são de outra abordagem e não
 # citam o ISLP; o 6 e o 17 não têm correspondência nele.
@@ -123,6 +126,59 @@ LIVRO = [
         ("05-validacao-cruzada-em-classificacao", "Validação Cruzada em Classificação", "5.1.5"),
         ("06-vazamento", "Vazamento: o Pré-processamento Dentro da Validação", None),
     ]),
+    (11, "Seleção de Modelos e Regularização", 6, [
+        ("01-selecao-de-subconjuntos", "Seleção de Subconjuntos", ("6.1.1", "6.1.2")),
+        ("02-escolhendo-o-modelo", "Escolhendo o Modelo: Cp, AIC, BIC e Validação", "6.1.3"),
+        ("03-regressao-ridge", "Regressão Ridge", "6.2.1"),
+        ("04-o-lasso", "O Lasso", "6.2.2"),
+        ("05-escolhendo-o-parametro-de-regularizacao", "Escolhendo o Parâmetro de Regularização", "6.2.3"),
+        ("06-regressao-por-componentes-principais", "Regressão por Componentes Principais", "6.3.1"),
+        ("07-o-que-muda-em-alta-dimensao", "O que Muda em Alta Dimensão", "6.4"),
+    ]),
+    (12, "Árvores de Decisão", "8.1", [
+        ("01-arvores-de-regressao", "Árvores de Regressão", "8.1.1"),
+        ("02-podando-a-arvore", "Podando a Árvore", "8.1.1"),
+        ("03-arvores-de-classificacao", "Árvores de Classificação", "8.1.2"),
+        ("04-arvores-contra-modelos-lineares", "Árvores contra Modelos Lineares", "8.1.3"),
+        ("05-vantagens-e-desvantagens", "Vantagens e Desvantagens das Árvores", "8.1.4"),
+    ]),
+    (13, "Bagging, Florestas e Boosting", "8.2", [
+        ("01-bagging", "Bagging", "8.2.1"),
+        ("02-erro-out-of-bag", "Erro Out-of-Bag", "8.2.1"),
+        ("03-florestas-aleatorias", "Florestas Aleatórias", "8.2.2"),
+        ("04-boosting", "Boosting", "8.2.3"),
+        ("05-importancia-de-variaveis", "Importância de Variáveis", "8.2.1"),
+        ("06-resumo-dos-metodos-de-ensemble", "Resumo dos Métodos de Ensemble", "8.2.5"),
+    ]),
+    (14, "Redes Neurais", 10, [
+        ("01-uma-rede-de-camada-unica", "Uma Rede de Camada Única", "10.1"),
+        ("02-redes-multicamada", "Redes Multicamada", "10.2"),
+        ("03-ajustando-uma-rede", "Ajustando uma Rede: Retropropagação, Gradiente Estocástico e Regularização", "10.7"),
+        ("04-mlpclassifier-e-mlpregressor-na-pratica", "MLPClassifier e MLPRegressor na Prática", ("10.7.4", "10.9.1")),
+        ("05-quando-usar-deep-learning", "Quando Usar Deep Learning", "10.6"),
+    ]),
+    (15, "Aprendizado Não Supervisionado", 12, [
+        ("01-o-desafio-do-nao-supervisionado", "O Desafio do Não Supervisionado", "12.1"),
+        ("02-componentes-principais", "Componentes Principais", ("12.2.1", "12.2.2")),
+        ("03-proporcao-da-variancia-explicada", "Proporção da Variância Explicada", ("12.2.3", "12.2.4", "12.2.5")),
+        ("04-k-means", "k-Means", "12.4.1"),
+        ("05-clustering-hierarquico", "Clustering Hierárquico", "12.4.2"),
+        ("06-questoes-praticas-em-clustering", "Questões Práticas em Clustering", ("12.4.3", "12.5.4")),
+    ]),
+    (16, "Máquinas de Vetores de Suporte", 9, [
+        ("01-hiperplanos-e-o-classificador-de-margem-maxima", "Hiperplanos e o Classificador de Margem Máxima", "9.1"),
+        ("02-o-classificador-de-vetores-de-suporte", "O Classificador de Vetores de Suporte", ("9.2", "9.5", "9.6.1")),
+        ("03-kernels", "Kernels", ("9.3", "9.6.2", "9.6.3")),
+        ("04-mais-de-duas-classes", "Mais de Duas Classes", ("9.4", "9.6.4", "9.6.5")),
+    ]),
+    (17, "Um Problema do Começo ao Fim", None, [
+        ("01-o-problema-e-o-dado-cru", "O Problema e o Dado Cru", None),
+        ("02-separar-antes-de-olhar", "Separar antes de Olhar: Treino, Teste e Vazamento", None),
+        ("03-pre-processamento-como-parte-do-modelo", "Pré-processamento como Parte do Modelo: ColumnTransformer e Pipeline", None),
+        ("04-comparando-modelos-por-validacao-cruzada", "Comparando Modelos por Validação Cruzada", None),
+        ("05-ajuste-de-hiperparametros-com-gridsearchcv", "Ajuste de Hiperparâmetros com GridSearchCV", None),
+        ("06-reportar", "Reportar: a Métrica Certa, e o que o Resultado Não Diz", None),
+    ]),
 ]
 
 
@@ -158,12 +214,16 @@ O conteúdo desta seção ainda será escrito.
 """
 
 
-def stub_index(nosso: int, titulo: str, islp_cap: int | None, secoes) -> str:
+def stub_index(nosso: int, titulo: str, islp_cap: int | str | None, secoes) -> str:
     linhas = [f"# {titulo}", ""]
     if islp_cap is not None:
+        if isinstance(islp_cap, str):
+            frase = f"Este capítulo corresponde à seção {islp_cap} de @james2023."
+        else:
+            frase = f"Este capítulo corresponde ao capítulo {islp_cap} de @james2023."
         linhas += [
             "::: {.callout-note}",
-            f"Este capítulo corresponde ao capítulo {islp_cap} de @james2023.",
+            frase,
             ":::",
             "",
         ]

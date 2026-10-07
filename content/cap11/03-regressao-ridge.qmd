@@ -1,0 +1,497 @@
+# Regressão Ridge
+
+::: {.callout-note}
+Esta seção corresponde à seção 6.2.1 de @james2023.
+:::
+
+A seleção de subconjuntos decide coluna a coluna: cada uma entra no modelo inteira ou fica de fora. Existe um meio-termo. O modelo fica com as 11 colunas de `Credit`, mas o ajuste paga um preço por coeficientes grandes, e isso puxa todos na direção de zero. Um modelo assim ajusta o treino pior que os mínimos quadrados, de propósito. O que se ganha com isso?
+
+```{python}
+#| label: setup
+#| include: false
+import matplotlib.pyplot as plt
+import numpy as np
+import pandas as pd
+from matplotlib.lines import Line2D
+from sklearn.linear_model import LinearRegression, Ridge
+from sklearn.pipeline import make_pipeline
+from sklearn.preprocessing import StandardScaler
+
+plt.style.use("estilo-figuras.mplstyle")
+
+credit = pd.read_csv("dados/Credit.csv")
+X = pd.get_dummies(credit.drop(columns="saldo"), drop_first=True, dtype=float)
+y = credit["saldo"]
+```
+
+## Mínimos quadrados com uma penalidade
+
+Os mínimos quadrados escolhem $\beta_0, \beta_1, \dots, \beta_p$ para deixar o RSS o menor possível:
+
+$$
+\mathrm{RSS} = \sum_{i=1}^{n}\Big(y_i - \beta_0 - \sum_{j=1}^{p}\beta_j x_{ij}\Big)^2.
+$$
+
+A regressão ridge soma ao RSS um termo que cresce com o tamanho dos coeficientes.
+
+::: {.conceito}
+Os coeficientes da **regressão ridge**, $\hat\beta^R$, são os valores que minimizam
+
+$$
+\mathrm{RSS} + \lambda\sum_{j=1}^{p}\beta_j^2,
+$$
+
+em que $\lambda \ge 0$ é um **parâmetro de ajuste**, escolhido à parte. O segundo termo, $\lambda\sum_j\beta_j^2$, é a **penalidade de encolhimento**: ele é pequeno quando $\beta_1, \dots, \beta_p$ estão perto de zero, e por isso puxa as estimativas para zero. O intercepto $\beta_0$ fica fora da penalidade.
+:::
+
+Os dois termos brigam. O RSS quer os coeficientes que melhor ajustam o treino; a penalidade quer coeficientes pequenos, e $\lambda$ decide quanto pesa cada lado. Com $\lambda = 0$, a penalidade some e a ridge devolve os mínimos quadrados. Quando $\lambda$ cresce sem limite, só coeficientes cada vez mais perto de zero compensam, e o modelo tende ao modelo nulo, que prevê a média de $y$ para todos os clientes. No meio, cada valor de $\lambda$ dá um conjunto de coeficientes diferente, $\hat\beta^R_\lambda$.
+
+O intercepto fica de fora porque ele não mede a relação de coluna nenhuma com a resposta: é só o valor previsto quando todas as colunas valem zero.
+
+A tabela abaixo traz os coeficientes da ridge em `Credit` com três valores de $\lambda$; a coluna $\lambda = 0$ traz os mínimos quadrados:
+
+```{python}
+#| label: tres-lambdas
+modelos = {"0": LinearRegression().fit(X, y)}
+for lam in [1_000, 100_000]:
+    modelos[f"{lam:,}".replace(",", ".")] = Ridge(alpha=lam).fit(X, y)
+coeficientes = pd.DataFrame(
+    {nome: modelo.coef_ for nome, modelo in modelos.items()}, index=X.columns
+)
+coeficientes.columns.name = "λ"
+coeficientes.style.set_uuid("coef").format(decimal=",", thousands=".", precision=3)
+```
+
+::: {.funcao}
+- **`Ridge(alpha)`**: a regressão ridge. O `alpha` do `scikit-learn` é o $\lambda$ da fórmula: `Ridge(alpha=lam)` minimiza $\mathrm{RSS} + \lambda\sum_j\beta_j^2$, sem penalizar o intercepto.
+- **`modelo.coef_`**: depois do `fit`, os coeficientes estimados $\hat\beta_1, \dots, \hat\beta_p$, na ordem das colunas de `X`.
+- **`df.columns.name`**: o nome do conjunto de colunas, que a tabela mostra no canto do cabeçalho; **`serie.index.name`** faz o mesmo com as linhas.
+- **`df.style.format(decimal, thousands, precision)`**: mostra a tabela com o separador decimal, o de milhar e o número de casas dados, sem mudar os números guardados. O **`.set_uuid(nome)`** antes dele fixa o identificador que a tabela recebe no HTML, que de outro modo é sorteado a cada execução.
+:::
+
+Com $\lambda$ crescendo, os coeficientes mudam em ritmos muito diferentes. O de `estudante_sim` cai de 425,747 nos mínimos quadrados para 14,538 com $\lambda = 1.000$. O de `renda` quase não se mexe nesse trecho: vai de −7,803 a −7,558. Ser estudante pesa menos no `saldo` que a renda, ou há outro motivo?
+
+O preço aparece no treino. O chunk abaixo calcula o RSS de treino dos mesmos três ajustes e imprime também o formato de `X`, $n \times p$:
+
+```{python}
+#| label: rss-treino
+rss = pd.Series(
+    {nome: ((y - modelo.predict(X)) ** 2).sum() for nome, modelo in modelos.items()}
+)
+print("linhas e colunas de X:", X.shape)
+print("o RSS de treino só sobe com λ:", bool(np.all(np.diff(rss) > 0)))
+rss.index.name = "λ"
+pd.DataFrame({"RSS de treino": rss}).style.set_uuid("rss").set_table_attributes(
+    'style="width: auto"'
+).format(thousands=".", precision=0)
+```
+
+::: {.funcao}
+- **`np.diff(arr)`**: a diferença entre cada elemento e o anterior; **`np.all(mascara)`**: `True` se todos forem `True`.
+- **`.set_table_attributes(atributos)`**: acrescenta atributos HTML à tabela; aqui, `width: auto` a deixa só da largura do conteúdo.
+:::
+
+São 400 clientes e 11 colunas. O RSS de treino sobe a cada $\lambda$ da tabela, de 3.786.730 nos mínimos quadrados para 11.847.402 com $\lambda = 100.000$: nenhum outro conjunto de coeficientes tem RSS de treino menor que o dos mínimos quadrados, e a ridge abre mão disso.
+
+## A escala importa
+
+Os coeficientes da primeira tabela estão em unidades diferentes. O de `renda` é a variação de `saldo` para mil dólares a mais de renda, com as outras colunas fixas; o de `limite`, para um dólar a mais de limite; o de `estudante_sim`, para a diferença entre ser e não ser estudante, uma coluna que só vale 0 ou 1. A penalidade soma os quadrados desses números como se fossem comparáveis. Uma coluna que varia pouco na sua unidade precisa de um coeficiente grande para fazer efeito, e esse coeficiente grande é o que a penalidade mais cobra.
+
+Nos mínimos quadrados, a unidade não muda o ajuste: medir $X_j$ numa unidade $c$ vezes maior divide os valores da coluna por $c$ e multiplica $\hat\beta_j$ por $c$, e o produto $X_j\hat\beta_j$ e, com ele, as previsões ficam iguais. Na ridge, não.
+
+A saída é **padronizar** as colunas antes da ridge. Cada coluna é centrada e dividida pelo seu desvio padrão:
+
+$$
+\tilde x_{ij} = \frac{x_{ij} - \bar x_j}{\sqrt{\frac{1}{n}\sum_{i=1}^{n}(x_{ij} - \bar x_j)^2}},
+$$
+
+e todas passam a ter desvio padrão 1. Numa coluna padronizada, o coeficiente é o **efeito de um desvio padrão**: a variação de `saldo` quando a coluna sobe um desvio padrão. Numa coluna crua, o mesmo efeito é o coeficiente vezes o desvio padrão da coluna.
+
+O teste é medir `renda` em milhões de dólares em vez de milhares, dividindo a coluna por 1.000, e comparar três ajustes, cada um feito nas duas unidades:
+
+1. os mínimos quadrados;
+2. a ridge com $\lambda = 100$ nas colunas cruas;
+3. a ridge com $\lambda = 100$ nas colunas padronizadas.
+
+```{python}
+#| label: escala
+X_milhoes = X.assign(renda=X["renda"] / 1000)
+j = X.columns.get_loc("renda")  # a posição de renda nas colunas de X
+dp_milhares = X["renda"].std(ddof=0)
+dp_milhoes = X_milhoes["renda"].std(ddof=0)
+
+mq_milhares = LinearRegression().fit(X, y)
+mq_milhoes = LinearRegression().fit(X_milhoes, y)
+crua_milhares = Ridge(alpha=100).fit(X, y)
+crua_milhoes = Ridge(alpha=100).fit(X_milhoes, y)
+padr_milhares = make_pipeline(StandardScaler(), Ridge(alpha=100)).fit(X, y)
+padr_milhoes = make_pipeline(StandardScaler(), Ridge(alpha=100)).fit(X_milhoes, y)
+```
+
+::: {.funcao}
+- **`df.assign(coluna=valores)`**: uma cópia de `df` com a coluna trocada (ou acrescentada); `X` fica como estava.
+- **`X.columns.get_loc(nome)`**: a posição da coluna `nome` em `X`, a mesma do coeficiente dela em `coef_`.
+- **`serie.std(ddof=0)`**: o desvio padrão com $n$ no denominador, o da fórmula acima.
+:::
+
+::: {.funcao}
+- **`StandardScaler()`**: subtrai de cada coluna a sua média e divide pelo seu desvio padrão (com $n$ no denominador), deixando-a com média 0 e desvio padrão 1.
+- **`make_pipeline(StandardScaler(), Ridge(alpha=100))`**: encadeia a padronização e a ridge num objeto só. `fit` padroniza cada coluna com as médias e os desvios das linhas que recebe e ajusta a ridge sobre o resultado; `predict` repete a mesma padronização antes de prever.
+- **`modelo[-1]`**: o último passo do `Pipeline`, a ridge, de onde sai o `coef_` na escala padronizada.
+:::
+
+A tabela tem uma linha por ajuste. As duas primeiras colunas são o efeito de um desvio padrão de `renda`, com a coluna em milhares e em milhões; a terceira é a maior diferença, sobre os 400 clientes, entre a previsão feita com a coluna em milhares e a feita com ela em milhões.
+
+```{python}
+#| label: escala-tabela
+escala = pd.DataFrame(
+    {
+        "em milhares": [
+            mq_milhares.coef_[j] * dp_milhares,
+            crua_milhares.coef_[j] * dp_milhares,
+            padr_milhares[-1].coef_[j],
+        ],
+        "em milhões": [
+            mq_milhoes.coef_[j] * dp_milhoes,
+            crua_milhoes.coef_[j] * dp_milhoes,
+            padr_milhoes[-1].coef_[j],
+        ],
+        "diferença máxima": [
+            np.abs(mq_milhares.predict(X) - mq_milhoes.predict(X_milhoes)).max(),
+            np.abs(crua_milhares.predict(X) - crua_milhoes.predict(X_milhoes)).max(),
+            np.abs(padr_milhares.predict(X) - padr_milhoes.predict(X_milhoes)).max(),
+        ],
+    },
+    index=["mínimos quadrados", "ridge crua", "ridge padronizada"],
+)
+dp_estudante = X["estudante_sim"].std(ddof=0)
+print("desvio padrão de estudante_sim:", f"{dp_estudante:.3f}".replace(".", ","))
+escala.style.set_uuid("escala").format(decimal=",", thousands=".", precision=2)
+```
+
+::: {.funcao}
+**`np.abs(arr)`**: o valor absoluto de cada elemento; **`arr.max()`**: o maior elemento.
+:::
+
+Com as colunas cruas, a ridge com $\lambda = 100$ dá a `renda` um efeito de −268,38 dólares por desvio padrão quando ela está em milhares, e de −0,48 quando está em milhões: a penalidade praticamente zerou a coluna só porque a unidade mudou. As previsões dos dois ajustes chegam a diferir em 578,45 dólares para o mesmo cliente.
+
+Nos mínimos quadrados e na ridge padronizada, a unidade não muda nada: o efeito é o mesmo nas duas colunas, e a maior diferença nas previsões aparece como 0,00, menos de meio centavo. O efeito na ridge padronizada é outro número, −94,60 contra os −274,67 dos mínimos quadrados, cerca de um terço (94,60 ÷ 274,67 ≈ 0,34): padronizadas, todas as colunas pagam a penalidade na mesma moeda, e $\lambda = 100$ já puxa bastante o coeficiente de `renda` para zero.
+
+O coeficiente de `estudante_sim` encolheu depressa porque era um número grande, e era grande em boa parte por causa da unidade: numa coluna que só vale 0 ou 1, um desvio padrão é menos de uma unidade, e o coeficiente por unidade sai grande. A velocidade do encolhimento não diz que ser estudante pesa menos no `saldo` que a renda.
+
+::: {.callout-warning}
+## Ridge só depois de padronizar
+
+Nas colunas cruas, o quanto a ridge encolhe cada coeficiente depende da unidade em que a coluna foi medida. A ridge se aplica **depois** de padronizar as colunas, inclusive as indicadoras, e toda ridge daqui em diante é um `make_pipeline(StandardScaler(), Ridge(alpha=lam))`.
+:::
+
+Padronizar uma indicadora tem um custo de leitura. O coeficiente de `estudante_sim` deixa de ser a diferença entre estudante e não estudante e passa a ser o efeito de um desvio padrão da coluna; para voltar à diferença entre os dois grupos, divide-se o coeficiente pelo desvio padrão da indicadora.
+
+Nas colunas padronizadas, que têm média zero, o intercepto da ridge é a média de `saldo`:
+
+```{python}
+#| label: intercepto
+ridge_padronizada = make_pipeline(StandardScaler(), Ridge(alpha=100)).fit(X, y)
+intercepto = ridge_padronizada[-1].intercept_
+print("intercepto com λ = 100:", f"{intercepto:.3f}".replace(".", ","))
+print("média de saldo:", f"{y.mean():.3f}".replace(".", ","))
+
+iguais = []
+for lam in np.logspace(-2, 5, 8):  # 0,01, 0,1, 1, ..., 100.000
+    modelo = make_pipeline(StandardScaler(), Ridge(alpha=lam)).fit(X, y)
+    iguais.append(np.isclose(modelo[-1].intercept_, y.mean()))
+print("intercepto = média nos 8 valores de λ:", bool(np.all(iguais)))
+```
+
+::: {.funcao}
+- **`modelo.intercept_`**: o intercepto $\hat\beta_0$ estimado.
+- **`np.logspace(a, b, n)`**: `n` números igualmente espaçados em escala logarítmica, de $10^a$ a $10^b$; aqui, 8 valores de $\lambda$, de 0,01 a 100.000, cada um dez vezes o anterior.
+- **`np.isclose(a, b)`**: `True` se os dois valores coincidem a menos de uma tolerância pequena, que absorve o arredondamento de ponto flutuante.
+:::
+
+Os dois valores são 520,015, e o intercepto repete a média de `saldo` nos oito valores de $\lambda$ que o chunk testa, de 0,01 a 100.000. Com as colunas centradas, a previsão de um cliente com todas as colunas na média é o `saldo` médio, e $\lambda$ não entra nessa conta, porque o intercepto fica fora da penalidade.
+
+## O caminho dos coeficientes em `Credit`
+
+A ridge dá um conjunto de coeficientes para cada $\lambda$. Ajustar uma grade de valores de $\lambda$ mostra o caminho que cada coeficiente percorre, dos mínimos quadrados até perto de zero. Para resumir o quanto o vetor inteiro encolheu, usa-se a **norma $\ell_2$** (lê-se "ele dois"), a distância do vetor de coeficientes até o zero:
+
+$$
+\lVert\beta\rVert_2 = \sqrt{\sum_{j=1}^{p}\beta_j^2}.
+$$
+
+A razão $\lVert\hat\beta^R_\lambda\rVert_2/\lVert\hat\beta\rVert_2$, com $\hat\beta$ os coeficientes dos mínimos quadrados nas colunas padronizadas, vale 1 quando a ridge devolve os mínimos quadrados e 0 quando todos os coeficientes são zero.
+
+```{python}
+#| label: caminho-ridge
+lams = np.logspace(-2, 5, 100)
+caminho = pd.DataFrame(
+    [make_pipeline(StandardScaler(), Ridge(alpha=lam)).fit(X, y)[-1].coef_
+     for lam in lams],
+    index=lams, columns=X.columns,
+)
+mq_padr = make_pipeline(StandardScaler(), LinearRegression()).fit(X, y)
+coef_mq = mq_padr[-1].coef_
+razao = np.linalg.norm(caminho, axis=1) / np.linalg.norm(coef_mq)
+{
+    "razão só cai": bool(np.all(np.diff(razao) < 0)),
+    "razão no menor e no maior λ": (round(float(razao[0]), 3),
+                                    round(float(razao[-1]), 3)),
+    "nenhum coeficiente é zero no maior λ": bool((caminho.iloc[-1] != 0).all()),
+}
+```
+
+::: {.funcao}
+**`np.linalg.norm(matriz, axis=1)`**: a norma $\ell_2$ de cada linha da matriz, um número por $\lambda$; sem `axis`, a norma do vetor inteiro.
+:::
+
+A razão cai a cada passo da grade, de 0,999 no menor $\lambda$ a 0,004 no maior, e mesmo aí nenhum dos 11 coeficientes é exatamente zero. Nas colunas padronizadas, os coeficientes dos mínimos quadrados são comparáveis entre si:
+
+```{python}
+#| label: coeficientes-mq
+mq_padronizado = pd.Series(coef_mq, index=X.columns)
+tamanho = mq_padronizado.abs()
+print("as quatro maiores em valor absoluto:")
+print(", ".join(sorted(tamanho.nlargest(4).index)))
+print("a maior:", tamanho.idxmax())
+mq_padronizado.round(1).sort_values()
+```
+
+::: {.funcao}
+- **`serie.nlargest(k)`**: os `k` maiores valores da série, com os rótulos.
+- **`serie.sort_values()`**: a série em ordem crescente de valor.
+:::
+
+Em valor absoluto, os quatro maiores coeficientes são os de `estudante_sim` (127,7), `pontuacao` (175,6), `renda` (−274,7) e `limite` (440,1), o maior de todos; os das outras sete colunas ficam entre −10,6 e 24,3. Na figura, as quatro ganham cor, e as sete vão em cinza.
+
+Isso fecha a pergunta sobre estudante e renda. Dividido pelo desvio padrão de `estudante_sim`, 0,300, o 127,7 volta à escala da indicadora: 127,7 ÷ 0,300 ≈ 425,7, o 425,747 dos mínimos quadrados da primeira tabela, a diferença de `saldo` entre estudante e não estudante. Medidos na mesma moeda, um desvio padrão de cada coluna, o efeito de `renda` (−274,7) é maior em valor absoluto que o de `estudante_sim` (127,7). É nessa moeda que a comparação se faz; a velocidade com que cada coeficiente cru encolhe não responde à pergunta.
+
+Antes de olhar: se o vetor inteiro encolhe a cada passo, cada coeficiente, sozinho, também só anda na direção de zero?
+
+```{python}
+#| label: fig-caminho-ridge
+#| fig-cap: 'Coeficientes da ridge em `Credit`, com as 11 colunas padronizadas. Em cima, contra $\lambda$ em escala logarítmica; embaixo, contra $\lVert\hat\beta^R_\lambda\rVert_2/\lVert\hat\beta\rVert_2$, o tamanho do vetor de coeficientes como fração do dos mínimos quadrados. Os dois painéis contam o mesmo caminho em sentidos opostos: $\lambda$ pequeno, à esquerda em cima, corresponde à razão perto de 1, à direita embaixo.'
+#| fig-alt: "Dois painéis empilhados com os mesmos onze coeficientes, de cerca de −275 a 440 no eixo vertical. No de cima, contra lambda de 0,01 a 100.000 em escala log: à esquerda, limite perto de 440, pontuacao perto de 175, estudante_sim perto de 128 e renda perto de −275; todos se aproximam de zero à direita. A curva de pontuacao sobe até perto de 280 antes de cair, e a de renda sobe de −275 até passar de zero. As sete colunas restantes, em cinza, ficam perto de zero o tempo todo. No de baixo, as mesmas curvas contra a razão das normas, de 0 a 1, espelhadas: zero à esquerda, os mínimos quadrados à direita."
+destaque = {"renda": "C0", "limite": "C1", "pontuacao": "C2", "estudante_sim": "C3"}
+fig, (ax_lam, ax_razao) = plt.subplots(2, 1, figsize=(6.4, 5.4))
+for coluna in X.columns:
+    em_destaque = coluna in destaque
+    estilo = {
+        "color": destaque.get(coluna, "0.45"),
+        "linewidth": 2 if em_destaque else 1,
+        "zorder": 3 if em_destaque else 1,
+    }
+    ax_lam.plot(lams, caminho[coluna], **estilo)
+    ax_razao.plot(razao, caminho[coluna], **estilo)
+ax_lam.set_xscale("log")
+ax_lam.set_xlim(lams.min(), lams.max())
+ax_lam.set_xlabel("λ")
+ax_razao.set_xlim(0, 1)
+ax_razao.xaxis.set_major_formatter(lambda valor, _: f"{valor:.1f}".replace(".", ","))
+ax_razao.set_xlabel(
+    r"$\|\hat{\beta}^{R}_{\lambda}\|_2 \;/\; \|\hat{\beta}\|_2$"
+)
+for ax in (ax_lam, ax_razao):
+    ax.axhline(0, color="0.45", linewidth=0.8)
+    ax.set_ylim(-320, 480)
+    ax.set_ylabel("coeficiente padronizado")
+entradas = [Line2D([], [], color=cor, linewidth=2) for cor in destaque.values()]
+entradas.append(Line2D([], [], color="0.45", linewidth=1))
+fig.legend(entradas, [*destaque, "outras sete"], loc="lower center", ncols=3,
+           frameon=False)
+fig.tight_layout(rect=(0, 0.1, 1, 1))
+plt.show()
+```
+
+::: {.funcao}
+- **`ax.set_xscale("log")`**: põe o eixo horizontal em escala logarítmica, em que cada marca vale dez vezes a anterior.
+- **`Line2D([], [], color, linewidth)`**: um traço sem dados, que serve só de amostra na legenda.
+- **`fig.legend(amostras, rotulos, loc, ncols, frameon)`**: uma legenda só para a figura inteira, fora dos painéis, com `ncols` colunas e sem moldura.
+- **`fig.tight_layout(rect)`**: arruma os painéis dentro do retângulo `rect`, em frações da figura; a faixa de baixo fica livre para a legenda.
+:::
+
+No agregado, tudo encolhe: a razão das normas só cai. Coluna a coluna, não. O chunk abaixo lista quais das quatro curvas coloridas sobem em algum trecho e onde `pontuacao` e `renda` chegam ao máximo:
+
+```{python}
+#| label: nao-monotono
+pontuacao, renda = caminho["pontuacao"], caminho["renda"]
+i_pont = X.columns.get_loc("pontuacao")
+lam_positivo = renda[renda > 0].index.min()
+depois_de_100 = caminho.loc[caminho.index >= 100]
+distancia = (depois_de_100["limite"] - depois_de_100["pontuacao"]).abs()
+{
+    "sobem em algum trecho": [
+        c for c in destaque if bool((np.diff(caminho[c]) > 0).any())
+    ],
+    "pontuacao, mín. quadrados": round(float(coef_mq[i_pont]), 1),
+    "pontuacao, máximo": round(float(pontuacao.max()), 1),
+    "pontuacao, λ do máximo": round(float(pontuacao.idxmax()), 1),
+    "renda > 0 a partir de λ": round(float(lam_positivo), 1),
+    "renda > 0 daí em diante": bool(
+        (renda[renda.index >= lam_positivo] > 0).all()
+    ),
+    "renda, máximo": round(float(renda.max()), 1),
+    "|limite − pontuacao| < 2, λ ≥ 100": bool(distancia.max() < 2),
+}
+```
+
+Só `renda` e `pontuacao` sobem em algum trecho; `limite` e `estudante_sim` só descem. O coeficiente de `pontuacao` **sobe** de 175,6 nos mínimos quadrados até 281,8, com $\lambda$ perto de 7,9, antes de começar a cair. O de `renda` troca de sinal: começa em −274,7, é positivo em toda a grade a partir de $\lambda = 394{,}4$ e passa por um máximo de 23,4.
+
+```{python}
+#| label: correlacoes
+coef_100 = ridge_padronizada[-1].coef_
+{
+    "corr(limite, pontuacao)": round(float(X["limite"].corr(X["pontuacao"])), 3),
+    "corr(renda, limite)": round(float(X["renda"].corr(X["limite"])), 3),
+    "corr(renda, saldo)": round(float(X["renda"].corr(y)), 3),
+    "λ = 100: limite, pontuacao": (
+        round(float(coef_100[X.columns.get_loc("limite")]), 1),
+        round(float(coef_100[i_pont]), 1),
+    ),
+}
+```
+
+As duas curvas dependem de `limite`, o maior coeficiente e o que a penalidade mais cobra. `pontuacao` quase repete `limite`, com correlação de 0,997: quando a penalidade encolhe `limite`, parte do papel dele passa para `pontuacao`. Com $\lambda = 100$, os dois coeficientes já são quase iguais, 211,4 e 209,6, e em todos os $\lambda$ da grade acima de 100 ficam a menos de 2 um do outro: a ridge divide o peso entre as duas colunas, e na figura dos caminhos a curva verde cobre a laranja.
+
+O −274,7 de `renda` compara clientes com os mesmos valores nas outras colunas, `limite` inclusive, e `renda` anda junto com `limite`, com correlação de 0,792. Sozinha, `renda` anda junto com `saldo`, com correlação de 0,464. Com `limite` encolhido, o coeficiente de `renda` passa a carregar parte do que `limite` deixou de explicar, e a troca de sinal é coerente com essa relação positiva.
+
+## Por que encolher ajuda
+
+Se a ridge ajusta o treino pior que os mínimos quadrados, por que ela preveria melhor? O erro de previsão esperado num ponto $x_0$, a média sobre os conjuntos de treino possíveis, se decompõe em três parcelas (seção 7.6):
+
+$$
+\begin{aligned}
+\mathrm{E}\left[\left(y_0 - \hat f(x_0)\right)^2\right] &= \mathrm{Var}\left(\hat f(x_0)\right) \\
+&\quad + \left[\mathrm{Bias}\left(\hat f(x_0)\right)\right]^2 \\
+&\quad + \mathrm{Var}(\varepsilon).
+\end{aligned}
+$$
+
+A variância é o quanto $\hat f(x_0)$ muda de um conjunto de treino para outro; o viés é a distância entre a média dessas previsões e $f(x_0)$; $\mathrm{Var}(\varepsilon)$ é o ruído, que nenhum modelo remove. A média dessa soma sobre os pontos de teste é o **MSE de teste esperado**. A ridge troca uma parcela pela outra. Quanto maior $\lambda$, menos o ajuste se mexe de uma amostra de treino para outra, o que reduz a variância, e mais os coeficientes, em conjunto, ficam perto de zero em vez de perto dos verdadeiros, o que aumenta o viés.
+
+Em `Credit`, onde a $f$ verdadeira é desconhecida, é a validação cruzada, na seção 11.5, que estima se a ridge baixa o erro de teste. Para medir as duas parcelas, é preciso conhecer a $f$ verdadeira, e isso só uma simulação dá. O simulador tem $n = 50$ observações e $p = 45$ preditores, sorteados da normal com média 0 e desvio 1. A resposta é $f(x) = \sum_j \beta_j x_j$ mais ruído, com os 45 coeficientes também sorteados da normal: todos os 45 preditores importam. O ruído tem desvio $\sigma = 2$, e $\mathrm{Var}(\varepsilon) = \sigma^2 = 4$.
+
+A matriz de treino é sorteada uma vez só e fica fixa; o que muda de uma réplica para outra é o ruído somado a $f$. Cada uma das 200 réplicas é um conjunto de treino possível, e o modelo é ajustado em cada uma e prevê 2.000 pontos de teste.
+
+```{python}
+#| label: simulador
+rng = np.random.default_rng(11)
+n_sim, p_sim, sigma = 50, 45, 2.0
+X_sim = rng.normal(size=(n_sim, p_sim))            # matriz de treino, fixa
+X_teste = rng.normal(size=(2000, p_sim))           # pontos de teste
+beta_denso = rng.normal(0, 1, p_sim)               # todos os 45 preditores importam
+ruidos = rng.normal(0, sigma, size=(200, n_sim))   # 200 réplicas do ruído
+
+f_treino = X_sim @ beta_denso
+f_teste = X_teste @ beta_denso
+X_sim.shape, ruidos.shape
+```
+
+::: {.funcao}
+- **`np.random.default_rng(semente)`**: um gerador de números aleatórios do `numpy`, com a semente dada.
+- **`rng.normal(media, desvio, size)`**: sorteios da normal com a média e o desvio dados (0 e 1, se omitidos), no formato `size`.
+- **`A @ b`**: o produto de matriz por vetor; cada linha de `X_sim` vezes `beta_denso`, somado, dá $f$ naquela observação.
+:::
+
+Em cada ponto de teste, o **viés²** é o quadrado da distância entre a média das 200 previsões e $f$; a **variância** é o quanto as 200 previsões se espalham em torno da média delas. Tira-se a média de cada uma sobre os 2.000 pontos, e o MSE de teste esperado é a soma das duas mais $\sigma^2$. Ele não é medido em respostas de teste sorteadas: sai da conta, com a $f$ verdadeira.
+
+A função `decomposicao` faz essa conta para qualquer modelo. Ela recebe uma **receita de ajuste**: uma função que, dada uma resposta de treino, ajusta o modelo em `X_sim` e devolve as previsões nos pontos de teste. `ridge_sim(lam)` monta a receita da ridge para um $\lambda$. São 31 valores de $\lambda$ mais os mínimos quadrados, cada um ajustado nas 200 réplicas: $32 \times 200 = 6.400$ ajustes, fora o modelo nulo, que em cada réplica só tira a média da resposta.
+
+```{python}
+#| label: vies-variancia-ridge
+def decomposicao(ajusta_e_preve):
+    """Viés², variância e MSE de teste esperado sobre as 200 réplicas do ruído."""
+    previsoes = np.array([ajusta_e_preve(f_treino + ruido) for ruido in ruidos])
+    vies2 = float(((previsoes.mean(axis=0) - f_teste) ** 2).mean())
+    variancia = float(previsoes.var(axis=0).mean())
+    return {"viés²": vies2, "variância": variancia,
+            "MSE esperado": vies2 + variancia + sigma**2}
+
+
+def ridge_sim(lam):
+    """A receita de ajuste da ridge com esse λ."""
+    modelo = make_pipeline(StandardScaler(), Ridge(alpha=lam))
+    return lambda y_sim: modelo.fit(X_sim, y_sim).predict(X_teste)
+
+
+def mq_sim(y_sim):
+    return LinearRegression().fit(X_sim, y_sim).predict(X_teste)
+
+
+def nulo_sim(y_sim):
+    return np.full(len(X_teste), y_sim.mean())
+
+
+lams_sim = np.logspace(-2, 4, 31)
+curvas = pd.DataFrame([decomposicao(ridge_sim(lam)) for lam in lams_sim],
+                      index=lams_sim)
+mq, nulo = decomposicao(mq_sim), decomposicao(nulo_sim)
+lam_min = float(curvas["MSE esperado"].idxmin())
+resumo = pd.DataFrame(
+    {"mínimos quadrados": mq, "ridge no melhor λ": curvas.loc[lam_min],
+     "modelo nulo": nulo}
+).T
+print("melhor λ da grade:", f"{lam_min:.2f}".replace(".", ","))
+resumo.style.set_uuid("resumo").format(decimal=",", thousands=".", precision=2)
+```
+
+::: {.funcao}
+- **`previsoes.mean(axis=0)`** e **`previsoes.var(axis=0)`**: a média e a variância de cada coluna do array, isto é, de cada ponto de teste sobre as 200 réplicas (uma réplica por linha).
+- **`np.array(lista)`**: transforma a lista das 200 previsões num array de 200 linhas, uma por réplica.
+- **`lambda y_sim: ...`**: uma função sem nome, de um argumento, escrita numa linha só. A palavra `lambda` do Python não tem relação com o $\lambda$ da ridge.
+:::
+
+Os mínimos quadrados não têm viés aqui, porque a $f$ verdadeira é linear; o viés² de 0,12 da tabela é resto de uma simulação com 200 réplicas. A variância, sim, é de 49,38: com 45 coeficientes para 50 observações, o ajuste acompanha o ruído de cada réplica. O MSE de teste esperado deles, 53,50, fica acima até do modelo nulo, 48,67, que ignora os 45 preditores.
+
+A ridge com $\lambda = 3{,}98$, o melhor da grade, aceita um viés² de 5,34 para baixar a variância a 5,18, e o MSE de teste esperado cai a 14,52. A figura mostra a troca ao longo de toda a grade.
+
+```{python}
+#| label: fig-vies-variancia-ridge
+#| fig-cap: 'Viés², variância e MSE de teste esperado das previsões da ridge no simulador ($n = 50$, $p = 45$, todos os preditores importam), contra $\lambda$ em escala logarítmica, com médias sobre 200 réplicas do ruído. A linha tracejada cinza é $\sigma^2 = 4$, o piso irredutível do MSE de teste esperado. O "x" marca o $\lambda$ de menor MSE de teste esperado.'
+#| fig-alt: "Três curvas contra lambda de 0,01 a 10.000 em escala log. A variância, verde, começa perto de 47 à esquerda e cai até 0,08 no maior lambda. O viés ao quadrado, azul, começa perto de zero e sobe até cerca de 44 à direita. O MSE de teste esperado, roxo, começa perto de 51, desce até um mínimo de cerca de 14,5 perto de lambda 4, marcado com um x, e volta a subir até perto de 48. Uma linha cinza tracejada horizontal em 4 fica abaixo da curva do MSE de teste esperado em toda a grade; o viés ao quadrado passa abaixo dela à esquerda, e a variância, à direita."
+fig, ax = plt.subplots(figsize=(6.4, 4.0))
+ax.plot(lams_sim, curvas["viés²"], color="C0", linewidth=2, label="viés²")
+ax.plot(lams_sim, curvas["variância"], color="C2", linewidth=2, label="variância")
+ax.plot(lams_sim, curvas["MSE esperado"], color="C3", linewidth=2,
+        label="MSE de teste esperado")
+ax.axhline(sigma**2, color="0.45", linestyle="--", linewidth=1.5,
+           label="piso, σ² = 4")
+ax.plot(lam_min, curvas.loc[lam_min, "MSE esperado"], "x", color="C3",
+        markersize=11, markeredgewidth=2.5, label="_nolegend_")
+ax.set_xscale("log")
+ax.set_xlim(lams_sim.min(), lams_sim.max())
+ax.set_ylim(0, 60)
+ax.set_xlabel("λ")
+ax.set_ylabel("erro quadrático médio")
+ax.legend(loc="upper center", ncols=2)
+fig.tight_layout()
+plt.show()
+```
+
+Da esquerda para a direita, a variância cai, e o viés², depois de um trecho perto de zero com o mesmo resto de simulação dos mínimos quadrados, sobe. O chunk abaixo confere a forma das três curvas e mede as duas pontas:
+
+```{python}
+#| label: pontas
+mse = curvas["MSE esperado"]
+vies2 = curvas["viés²"]
+{
+    "variância só cai": bool(np.all(np.diff(curvas["variância"]) < 0)),
+    "maior viés² com λ ≤ 0,1": round(float(vies2[vies2.index < 0.11].max()), 2),
+    "viés² só sobe de λ = 0,1 em diante": bool(
+        np.all(np.diff(vies2[vies2.index > 0.09]) > 0)
+    ),
+    "MSE desce até o mínimo e sobe depois": bool(
+        np.all(np.diff(mse.loc[:lam_min]) < 0)
+        and np.all(np.diff(mse.loc[lam_min:]) > 0)
+    ),
+    "mínimos quadrados acima do nulo": mq["MSE esperado"] > nulo["MSE esperado"],
+    "MSE no menor λ da grade": round(float(mse.iloc[0]), 2),
+    "MSE no maior λ da grade": round(float(mse.iloc[-1]), 2),
+    "variância no maior λ da grade": round(float(curvas["variância"].iloc[-1]), 2),
+}
+```
+
+A variância cai a cada passo da grade. O viés² não passa de 0,11 enquanto $\lambda \le 0{,}1$, oscilação do tamanho do resto de simulação, e a partir de $\lambda = 0{,}1$ só sobe. O MSE de teste esperado desce a cada passo até o mínimo e sobe a cada passo depois dele. Na ponta esquerda, com $\lambda = 0{,}01$, o MSE de teste esperado é de 51,44, ainda longe do mínimo e pouco abaixo dos 53,50 dos mínimos quadrados; na direita, com $\lambda = 10.000$, a variância é de 0,08 e o MSE, 48,15, está perto do modelo nulo. O mínimo de 14,52 fica num $\lambda$ intermediário, longe das duas pontas.
+
+O `True` de "mínimos quadrados acima do nulo" confirma que os mínimos quadrados, nesse cenário, preveem pior que o modelo que ignora os preditores. É um caso em que a ridge ajuda muito: com $p$ perto de $n$, os mínimos quadrados são muito sensíveis à amostra. Com $p > n$, os mínimos quadrados nem têm uma solução única, porque há mais incógnitas, os coeficientes, que equações, as observações; a ridge continua a ter uma para cada $\lambda > 0$.
+
+Puxar os coeficientes para zero troca um pouco de viés por muito menos variância, e, quando os mínimos quadrados variam muito de uma amostra para outra, a troca baixa o erro de teste. A ridge não exclui nenhuma coluna: mesmo no maior $\lambda$ do caminho de `Credit`, nenhum dos 11 coeficientes é zero, e quando o objetivo é escolher quais colunas ficam, ela não faz esse trabalho. Em compensação, sai barata. A busca completa ajusta $2^p$ modelos; a ridge ajusta um modelo por valor de $\lambda$, e o caminho de `Credit`, com 100 valores de $\lambda$, custou 100 ajustes. O que falta é escolher o $\lambda$ sem conhecer a $f$ verdadeira, com validação cruzada, na seção 11.5.

@@ -1,0 +1,658 @@
+# Mais de Duas Classes
+
+::: {.callout-note}
+Esta seção corresponde às seções 9.4, 9.6.4 e 9.6.5 de @james2023.
+:::
+
+Um hiperplano divide o espaço em dois lados, e o classificador de vetores de suporte dá uma classe a cada lado. Uma amostra de tecido de um tumor infantil, porém, pode vir de quatro tipos diferentes, e dois lados não bastam. Como juntar vários classificadores de duas classes numa resposta só? E o que fazer quando eles discordam?
+
+```{python}
+#| label: setup
+#| include: false
+import matplotlib.pyplot as plt
+
+plt.style.use("estilo-figuras.mplstyle")
+```
+
+Os números impressos seguem a vírgula decimal da prosa:
+
+```{python}
+#| label: numero-br
+numero_br = lambda v, casas=2: (
+    f"{v:,.{casas}f}"
+    .replace(",", "_")
+    .replace(".", ",")
+    .replace("_", ".")
+    .replace("-", "−")
+)
+```
+
+## Um contra um
+
+A primeira resposta põe as classes para disputar duas a duas.
+
+::: {.conceito}
+Com $K$ classes, há $\binom{K}{2} = K(K-1)/2$ pares de classes. A abordagem **um contra um** (*one versus one*) ajusta um classificador de duas classes para cada par, só com as observações daquelas duas classes. Um ponto novo passa pelos $\binom{K}{2}$ classificadores, cada um dá o seu voto a uma das duas classes do seu par, e a previsão é a classe com mais votos.
+:::
+
+Com 3 classes, são 3 classificadores; com 4, são 6.
+
+Os dados são três nuvens de pontos no plano, nos vértices de um triângulo: a classe 0 embaixo à esquerda, a classe 1 embaixo à direita e a classe 2 em cima, misturadas no meio, onde as três se encontram. Os pontos de treino são 50 de cada classe, sorteados de normais com desvio padrão 1 nas duas coordenadas, em torno de três centros: $(0; 0)$ para a classe 0, $(3; 0)$ para a classe 1 e $(1{,}5; 2{,}6)$ para a classe 2. Depois deles, o mesmo gerador sorteia 3.000 pontos de teste por classe:
+
+```{python}
+#| label: simulado
+import numpy as np
+
+rng = np.random.default_rng(16)
+centros = np.array(
+    [[0, 0], [3, 0], [1.5, 2.6]])
+
+def tres(n):
+    classe = np.repeat(
+        [0, 1, 2], n)
+    ruido = rng.normal(
+        size=(3 * n, 2))
+    pts = centros[classe] + ruido
+    return pts, classe
+
+X, y = tres(50)
+X_teste, y_teste = tres(3_000)
+print("treino:", np.bincount(y))
+print("teste:",
+    np.bincount(y_teste))
+```
+
+::: {.funcao}
+- **`centros[classe]`** — uma linha de `centros` para cada elemento de `classe`: o centro da classe de cada ponto, somado ao ruído na linha seguinte.
+- **`np.bincount(y)`** — quantas vezes aparece cada inteiro de 0 até o maior valor de `y`: aqui, quantos pontos há em cada classe.
+:::
+
+Os pares, na ordem em que o `SVC` guarda os classificadores:
+
+```{python}
+#| label: pares
+from itertools import combinations
+
+pares = list(combinations(
+    range(3), 2))
+print(pares)
+```
+
+::: {.funcao}
+- **`combinations(range(3), 2)`**, do módulo `itertools` — todos os pares de elementos de `range(3)`, sem repetir e sem importar a ordem; `list` os reúne numa lista.
+:::
+
+O `SVC` já ajusta um classificador por par quando `y` tem mais de duas classes. Com `decision_function_shape="ovo"` (o nome vem de *one versus one*), o `decision_function` devolve uma coluna por par, na ordem de `pares`, e o sinal de cada coluna diz qual classe do par leva o voto:
+
+```{python}
+#| label: um-contra-um
+from sklearn.svm import SVC
+
+ovo = SVC(kernel="linear", C=1,
+    decision_function_shape="ovo")
+ovo.fit(X, y)
+d = ovo.decision_function(
+    X_teste)
+print("d:", d.shape)
+```
+
+::: {.funcao}
+- **`SVC(..., decision_function_shape="ovo")`** — o `decision_function` devolve uma coluna por par de classes. O padrão, `"ovr"`, devolve uma coluna por classe; o ajuste é o mesmo nos dois casos.
+:::
+
+As regiões de cada classe e as retas dos três classificadores de pares:
+
+```{python}
+#| label: fig-um-contra-um
+#| fig-cap: "O um contra um nos 150 pontos de treino, com `C` = 1: os círculos azuis são a classe 0, os triângulos laranja, a classe 1, e os quadrados verdes, a classe 2. O fundo tem a cor da classe prevista. As três retas cinza tracejadas são as fronteiras $f(x) = 0$ dos classificadores dos pares $(0, 1)$, $(0, 2)$ e $(1, 2)$."
+#| fig-alt: "Gráfico de dispersão com eixos X1 e X2 de −3,5 a 6,5. Círculos azuis em torno de (0; 0), embaixo à esquerda; triângulos laranja em torno de (3; 0), embaixo à direita; quadrados verdes em torno de (1,5; 2,6), em cima. O fundo se divide em três regiões coloridas, azul, laranja e verde, que se encontram perto do centro do triângulo formado pelas três nuvens. Três retas cinza tracejadas atravessam o gráfico inteiro e se cruzam nessa região central; cada região colorida é limitada por pedaços de duas delas. A legenda fica embaixo."
+import matplotlib.pyplot as plt
+
+g = np.linspace(-3.5, 6.5, 301)
+g1, g2 = np.meshgrid(g, g)
+forma = g1.shape
+malha = np.column_stack(
+    [g1.ravel(), g2.ravel()])
+cores = ["C0", "C1", "C2"]
+marcas = ["o", "^", "s"]
+
+def pontos(ax):
+    for c in range(3):
+        p = X[y == c]
+        ax.scatter(
+            p[:, 0], p[:, 1],
+            color=cores[c], s=14,
+            marker=marcas[c],
+            label=f"classe {c}")
+    ax.set_aspect("equal")
+    ax.set_xlim(-3.5, 6.5)
+    ax.set_ylim(-3.5, 6.5)
+    marcas_eixo = [-2, 0, 2, 4, 6]
+    ax.set_xticks(marcas_eixo)
+    ax.set_yticks(marcas_eixo)
+    ax.set_xlabel("$X_1$")
+    ax.set_ylabel("$X_2$")
+
+def regioes(ax, classe):
+    z = classe.reshape(forma)
+    faixas = [-0.5, 0.5, 1.5, 2.5]
+    ax.contourf(g1, g2, z,
+        levels=faixas,
+        colors=cores, alpha=0.2)
+
+fig, ax = plt.subplots(
+    figsize=(3.8, 4.3),
+    layout="constrained")
+regioes(ax, ovo.predict(malha))
+d_m = ovo.decision_function(malha)
+for k in range(3):
+    zk = d_m[:, k].reshape(forma)
+    ax.contour(g1, g2, zk,
+        levels=[0], colors="0.45",
+        linewidths=1,
+        linestyles="--")
+pontos(ax)
+fig.legend(ncols=3,
+    loc="outside lower center")
+plt.show()
+```
+
+Cada reta separa as duas classes do seu par, mas só vale como fronteira onde essas duas classes disputam o ponto. A reta do par $(0, 1)$, por exemplo, sobe entre a nuvem azul e a laranja; acima do centro, ela atravessa a região verde, onde a classe 2 já ganhou os seus dois pares e a disputa entre 0 e 1 não muda a previsão.
+
+::: {.callout-warning}
+## O sinal no um contra um
+
+Com duas classes, $f(x)$ positivo quer dizer `classes_[1]`. Nas colunas do `"ovo"`, é o contrário: o valor positivo dá o voto à **primeira** classe do par.
+:::
+
+O $f(x)$ do classificador do par $(0, 1)$, ajustado à parte só com as classes 0 e 1, é o oposto da primeira coluna:
+
+```{python}
+#| label: sinal
+par = y < 2
+so_01 = SVC(kernel="linear", C=1)
+so_01.fit(X[par], y[par])
+print("classes_:", so_01.classes_)
+f_01 = so_01.decision_function(
+    X_teste)
+print("d[:, 0] = −f_01:",
+    np.allclose(d[:, 0], -f_01))
+```
+
+A função `vota` só conta votos, e pode ser lida como uma caixa-preta: para cada par $(a, b)$, o voto vai para $a$ onde a coluna é positiva, e para $b$ onde não é.
+
+```{python}
+#| label: votos
+def vota(d, K):
+    votos = np.zeros(
+        (len(d), K), dtype=int)
+    pares_k = combinations(
+        range(K), 2)
+    for k, (a, b) in enumerate(
+            pares_k):
+        a_ganha = d[:, k] > 0
+        votos[a_ganha, a] += 1
+        votos[~a_ganha, b] += 1
+    return votos
+
+votos = vota(d, 3)
+```
+
+::: {.funcao}
+- **`np.zeros((n, K), dtype=int)`** — uma matriz de `n` linhas e `K` colunas, cheia de zeros inteiros: uma linha por ponto, uma coluna por classe.
+- **`votos[a_ganha, a] += 1`** — nas linhas em que `a_ganha` é `True`, soma 1 na coluna da classe `a`. O `~` troca `True` por `False` e vice-versa: `~a_ganha` marca as linhas em que o voto vai para `b`.
+:::
+
+Cada linha de `votos` tem os votos das classes 0, 1 e 2. Os votos do ponto de teste mais perto de cada centro, e do mais perto do meio do triângulo, a média dos três centros:
+
+```{python}
+#| label: votos-exemplos
+meio = centros.mean(axis=0)
+alvos = np.vstack([centros, meio])
+nomes = ["centro 0", "centro 1",
+    "centro 2", "meio"]
+for nome, c in zip(nomes, alvos):
+    dist = np.linalg.norm(
+        X_teste - c, axis=1)
+    i = dist.argmin()
+    print(f"{nome}: classe",
+        y_teste[i], "votos",
+        votos[i])
+```
+
+Com `axis=1`, a norma é calculada linha a linha, e `argmin` dá a posição do menor valor, o ponto mais perto.
+
+Perto de cada centro, a classe do centro ganha os seus dois pares, e o terceiro classificador, que não a envolve, dá o voto que sobra a outra classe. O ponto do meio é da classe 2, mas a classe 0 ganha os dois pares de que participa: perto de onde as nuvens se encontram, os classificadores podem levar o voto para uma classe que não é a do ponto.
+
+Com 3 classes, os 3 votos de um ponto se dividem em 2, 1 e 0, ou num empate de 1 a 1 a 1. A classe mais votada é sempre a previsão do `SVC`?
+
+```{python}
+#| label: votos-predict
+prev = ovo.predict(X_teste)
+mais = votos.argmax(axis=1)
+print("mais votada = predict:",
+    np.all(mais == prev))
+empate = votos.max(axis=1) == 1
+print("empates 1 a 1 a 1:",
+    empate.sum())
+e_ovo = (prev != y_teste).mean()
+print("erro de teste:",
+    numero_br(e_ovo, 4))
+```
+
+Nos 9.000 pontos de teste, a classe mais votada é a previsão do `SVC`, e nenhum tem empate. A taxa de erro de teste é 0,1141.
+
+Um empate só acontece onde cada classe ganha um par, perto de onde as três retas quase se encontram. A malha da figura não tem nenhum nó empatado; uma malha bem mais fina, com passo de 0,001 em volta do meio do triângulo, encontra alguns:
+
+```{python}
+#| label: empate
+v_m = vota(d_m, 3)
+print("empates na malha:",
+    (v_m.max(axis=1) == 1).sum())
+prev_m = ovo.predict(malha)
+nos = np.arange(len(v_m))
+print("2 votos em todo nó:",
+    np.all(v_m[nos, prev_m] == 2))
+z = np.linspace(-0.5, 0.5, 1001)
+z1, z2 = np.meshgrid(
+    z + meio[0], z + meio[1])
+fina = np.column_stack(
+    [z1.ravel(), z2.ravel()])
+d_f = ovo.decision_function(fina)
+v_f = vota(d_f, 3)
+emp_f = v_f.max(axis=1) == 1
+print("nós da malha fina:",
+    numero_br(len(fina), 0))
+print("empates:", emp_f.sum())
+p_emp = ovo.predict(fina[emp_f])
+print("predict nos empates:",
+    np.unique(p_emp))
+```
+
+Em todos os nós da malha da figura, a classe prevista tem 2 votos: ganha os dois pares de que participa. O `v_m[nos, prev_m]` pega, em cada nó, os votos da classe prevista. Na malha fina, são 305 empates em 1.002.001 nós, e nos 305 o `predict` fica com a classe 0, a primeira das classes empatadas na ordem de `classes_`.
+
+O `SVC` aceita `break_ties=True`, que só funciona com o padrão `"ovr"` e desempata pela coluna de maior valor do `decision_function`.
+
+## Um contra todos
+
+A outra resposta põe cada classe contra todas as outras juntas.
+
+::: {.conceito}
+A abordagem **um contra todos** (*one versus all*, também chamada de um contra o resto) ajusta $K$ classificadores. O $k$-ésimo trata a classe $k$ como $+1$ e todas as outras juntas como $-1$, e dá a cada ponto $x^*$ um escore
+
+$$
+f_k(x^*) = \beta_{0k} + \sum_{j=1}^{p} \beta_{jk} x^*_j.
+$$
+
+A previsão é a classe de maior escore.
+:::
+
+Com $f_k(x^*)$ positivo, $x^*$ fica do lado da classe $k$ na fronteira do $k$-ésimo classificador; com negativo, do lado das outras. Quanto maior o $f_k(x^*)$, mais esse classificador aposta na classe $k$.
+
+O `OneVsRestClassifier` monta os $K$ classificadores a partir de um `SVC` de duas classes. Quantos pontos de teste têm exatamente um $f_k$ positivo?
+
+```{python}
+#| label: um-contra-todos
+from sklearn.multiclass import (
+    OneVsRestClassifier)
+
+ovr = OneVsRestClassifier(
+    SVC(kernel="linear", C=1))
+ovr.fit(X, y)
+print("classificadores:",
+    len(ovr.estimators_))
+F = ovr.decision_function(X_teste)
+print("F:", F.shape)
+positivos = (F > 0).sum(axis=1)
+print("nenhum f_k > 0:",
+    (positivos == 0).sum())
+print("um só:",
+    (positivos == 1).sum())
+print("dois:",
+    (positivos == 2).sum())
+print("três:",
+    (positivos == 3).sum())
+p_ovr = ovr.predict(X_teste)
+maior = F.argmax(axis=1)
+print("maior escore = predict:",
+    np.all(maior == p_ovr))
+```
+
+::: {.funcao}
+- **`OneVsRestClassifier(estimador)`**, de `sklearn.multiclass` — ajusta uma cópia do estimador para cada classe, com essa classe contra todas as outras. **`ovr.estimators_`** — a lista dos classificadores ajustados, um por classe.
+- **`ovr.decision_function(X)`** — o escore $f_k$ de cada classificador, uma coluna por classe; o `predict` dá a classe da coluna de maior escore.
+:::
+
+Dos 9.000 pontos de teste, 7.550 têm um só $f_k$ positivo. Nos outros, a regra pelo sinal não decide: 855 não têm nenhum escore positivo, e nenhum classificador reclama o ponto para a sua classe; 595 têm dois, e dois classificadores reclamam o mesmo ponto. Nenhum tem os três escores positivos. O maior escore resolve os dois casos.
+
+Antes de ver a figura: em que parte do plano devem ficar os pontos sem nenhum escore positivo? E os pontos com mais de um?
+
+```{python}
+#| label: fig-um-contra-todos
+#| fig-cap: "O um contra todos nos mesmos pontos, com `C` = 1. O fundo tem a cor da classe de maior escore. As retas tracejadas são as fronteiras $f_k(x) = 0$ de cada classificador, na cor da sua classe: de cada reta, a classe $k$ fica do lado da sua nuvem. Na zona cinza, no meio, nenhum dos três escores é positivo; nas faixas hachuradas, mais de um é."
+#| fig-alt: "Gráfico de dispersão com eixos X1 e X2 de −3,5 a 6,5, com os mesmos círculos azuis, triângulos laranja e quadrados verdes da figura anterior, sobre um fundo dividido em três regiões, azul embaixo à esquerda, laranja embaixo à direita e verde em cima. Três retas tracejadas atravessam o gráfico: a azul desce do alto à esquerda até a borda de baixo, perto de X1 = 3, com a nuvem azul à esquerda; a laranja sobe da borda de baixo, perto de X1 = 0, até o alto à direita, com a nuvem laranja à direita; a verde é quase horizontal, perto de X2 = 1,5, com a nuvem verde acima. Entre as três fica um pequeno triângulo cinza, contornado, no centro do gráfico, onde as três nuvens se encontram. De cada vértice do triângulo sai uma faixa hachurada em diagonal até a borda do gráfico, entre duas nuvens: uma para o alto à esquerda, entre a azul e a verde, uma para o alto à direita, entre a laranja e a verde, e uma para baixo, entre a azul e a laranja. A legenda fica embaixo."
+F_m = ovr.decision_function(malha)
+n_pos = (F_m > 0).sum(axis=1)
+z_pos = n_pos.reshape(forma)
+fig, ax = plt.subplots(
+    figsize=(3.8, 4.3),
+    layout="constrained")
+regioes(ax, ovr.predict(malha))
+ax.contourf(g1, g2, z_pos,
+    levels=[-0.5, 0.5],
+    colors=["0.6"], alpha=0.7)
+ax.contour(g1, g2, z_pos,
+    levels=[0.5], colors="0.45",
+    linewidths=0.8)
+plt.rcParams.update(
+    {"hatch.color": "0.45"})
+ax.contourf(g1, g2, z_pos,
+    levels=[1.5, 3.5],
+    colors="none",
+    hatches=["////"])
+for k in range(3):
+    zk = F_m[:, k].reshape(forma)
+    ax.contour(g1, g2, zk,
+        levels=[0],
+        colors=cores[k],
+        linewidths=1.5,
+        linestyles="--")
+pontos(ax)
+fig.legend(ncols=3,
+    loc="outside lower center")
+plt.show()
+```
+
+::: {.funcao}
+- **`(F_m > 0).sum(axis=1)`** — em cada nó da malha, quantos dos três escores são positivos. Com `levels=[-0.5, 0.5]`, o `contourf` pinta só os nós em que essa conta é 0; com `levels=[1.5, 3.5]`, os nós em que ela é 2 ou 3.
+- **`hatches=["////"]`**, no `contourf` — hachuras diagonais na faixa; a cor delas vem de `"hatch.color"`, em `plt.rcParams`.
+:::
+
+A zona cinza fica no meio, onde as três nuvens se encontram: ali, os três classificadores põem o ponto do lado de "todas as outras classes", e nenhum escore é positivo. As faixas hachuradas saem dos vértices da zona cinza para as bordas, cada uma entre duas nuvens: ali, mais de um classificador põe o ponto do lado da sua classe. Quantas previsões mudam de uma abordagem para a outra, e quantas dessas caem nos pontos em que o sinal não decide?
+
+```{python}
+#| label: compara
+e_ovr = (p_ovr != y_teste).mean()
+print("erro, um contra um:",
+    numero_br(e_ovo, 4))
+print("erro, um contra todos:",
+    numero_br(e_ovr, 4))
+difere = prev != p_ovr
+print("previsões diferentes:",
+    difere.sum())
+ambiguo = positivos != 1
+print("  sem um só f_k > 0:",
+    (difere & ambiguo).sum())
+```
+
+As duas abordagens discordam em 247 dos 9.000 pontos de teste, e 231 deles são pontos sem exatamente um escore positivo. As taxas de erro de teste ficam em 0,1141 e 0,1114, uma diferença de $0{,}1141 - 0{,}1114 = 0{,}0027$, cerca de 24 dos 9.000 pontos. É um único sorteio, com fronteiras lineares nos dois casos, e nenhuma das duas abordagens erra bem mais que a outra.
+
+## O que o `SVC` guarda
+
+Com o padrão, `decision_function_shape="ovr"`, o `decision_function` do `SVC` devolve uma coluna por classe. Seria esse o um contra todos? Não: o `SVC` ajusta sempre um classificador por par, e o `"ovr"` monta cada coluna a partir dos votos do um contra um, sem ajustar nenhum classificador um contra todos.
+
+```{python}
+#| label: svc-padrao
+padrao = SVC(kernel="linear", C=1)
+padrao.fit(X, y)
+print("coef_:",
+    padrao.coef_.shape)
+d_pad = padrao.decision_function(
+    X_teste)
+print("colunas, 'ovr':",
+    d_pad.shape[1])
+dif = np.abs(d_pad - votos)
+print("|ovr − votos| < 1/3:",
+    np.all(dif < 1 / 3))
+p_pad = padrao.predict(X_teste)
+print("previsões = ovo:",
+    np.all(p_pad == prev))
+```
+
+O `coef_` tem uma linha por par, com os $\beta_1$ e $\beta_2$ de cada classificador: 3 linhas e 2 colunas. Cada coluna do `"ovr"` é, a menos de 1/3, o número de votos da classe, e as previsões são as mesmas do um contra um.
+
+A diferença para os votos é um ajuste tirado dos valores de $f(x)$ dos pares, sempre menor que 1/3 de voto. Como os votos são inteiros, esse ajuste não muda qual classe tem mais votos; só decide num empate, e é ele que o `break_ties=True` usa. Com $K = 3$, as duas formas têm 3 colunas, porque há tantos pares quanto classes; os dados com 4 classes, a seguir, separam as duas.
+
+## Quatro tipos de tumor
+
+A tabela `Khan` tem a expressão de milhares de genes, medida em amostras de quatro tipos de tumor infantil: linfoma de Burkitt (LB), sarcoma de Ewing (SE), neuroblastoma (NB) e rabdomiossarcoma (RMS). A coluna `conjunto` guarda a divisão entre treino e teste feita pelos autores do estudo, e a coluna `tumor`, o tipo. O código troca os nomes dos tumores pelas siglas:
+
+```{python}
+#| label: khan
+import pandas as pd
+
+khan = pd.read_csv(
+    "dados/Khan.csv.gz")
+conj = khan["conjunto"]
+treino = conj == "treino"
+genes = khan.filter(like="gene_")
+siglas = {
+    "linfoma de Burkitt": "LB",
+    "sarcoma de Ewing": "SE",
+    "neuroblastoma": "NB",
+    "rabdomiossarcoma": "RMS"}
+tumor = khan["tumor"].map(siglas)
+X_tr = genes[treino]
+X_te = genes[~treino]
+y_tr = tumor[treino]
+y_te = tumor[~treino]
+print("treino:", X_tr.shape)
+print("teste:", X_te.shape)
+dp = X_tr.std()
+print("desvio dos genes:",
+    numero_br(dp.min()), "a",
+    numero_br(dp.max()))
+pd.crosstab(tumor, conj)
+```
+
+::: {.funcao}
+- **`khan.filter(like="gene_")`** — as colunas cujo nome contém `"gene_"`: os 2.308 genes, sem `conjunto` e sem `tumor`.
+- **`khan["tumor"].map(siglas)`** — troca cada valor da coluna pelo valor correspondente no dicionário `siglas`.
+- **`genes[~treino]`** — as linhas em que `treino` é `False`.
+- **`X_tr.std()`** — o desvio padrão de cada coluna.
+- **`pd.crosstab(a, b)`** — conta quantas linhas há em cada combinação de um valor de `a`, nas linhas da tabela, com um valor de `b`, nas colunas.
+:::
+
+São 63 amostras de treino e 20 de teste, $63 + 20 = 83$ ao todo, e 2.308 colunas: $p$ é muito maior que $n$. Com mais colunas que amostras, um ajuste linear já tem flexibilidade de sobra, como os mínimos quadrados da [seção 11.7](../cap11/07-o-que-muda-em-alta-dimensao.qmd), e o kernel de partida é o linear.
+
+Os genes entram sem padronizar: são todos medidas de expressão, e padronizar daria a cada gene o mesmo peso, inclusive aos que variam pouco. No treino, o desvio padrão dos genes vai de 0,27 a 1,92. Os tumores são quatro, e o `SVC` ajusta os 6 pares:
+
+```{python}
+#| label: khan-svc
+svc_k = SVC(kernel="linear", C=10)
+svc_k.fit(X_tr, y_tr)
+print("classes_:", svc_k.classes_)
+p_tr = svc_k.predict(X_tr)
+p_te = svc_k.predict(X_te)
+print("erros de treino:",
+    (p_tr != y_tr).sum())
+print("erros de teste:",
+    (p_te != y_te).sum())
+pd.crosstab(y_te.to_numpy(), p_te,
+    rownames=["real"],
+    colnames=["prevista"])
+```
+
+::: {.funcao}
+- **`pd.crosstab(..., rownames, colnames)`** — `rownames` e `colnames` dão o nome das linhas e das colunas da tabela. Com **`y_te.to_numpy()`**, sem o rótulo das linhas, como o `p_te`, o `crosstab` junta os dois pela posição.
+:::
+
+O ajuste não erra nenhuma das 63 amostras de treino. Nas 20 de teste, erra 2: as duas são neuroblastomas previstos como sarcoma de Ewing. Padronizar os genes, ou trocar o kernel pelo radial, mudaria essa conta?
+
+```{python}
+#| label: khan-alternativas
+from sklearn.pipeline import (
+    make_pipeline)
+from sklearn.preprocessing \
+    import StandardScaler
+
+svc_p = SVC(kernel="linear", C=10)
+padron = make_pipeline(
+    StandardScaler(), svc_p)
+radial = SVC(kernel="rbf", C=10)
+candidatos = {
+    "padronizado": padron,
+    "radial": radial}
+for nome, m in candidatos.items():
+    m.fit(X_tr, y_tr)
+    p_m = m.predict(X_te)
+    rotulo = f"erros, {nome}:"
+    print(rotulo,
+        (p_m != y_te).sum(), "de",
+        len(y_te))
+```
+
+Com o mesmo `C` = 10, o kernel linear sobre os genes padronizados também erra 2 das 20 amostras de teste, e o radial, com o `gamma` padrão e os genes sem padronizar, erra 3. Com 20 amostras, uma de diferença não ordena os três ajustes.
+
+Com 4 classes, as formas do `coef_` e do `decision_function` mostram o que o `SVC` ajustou:
+
+```{python}
+#| label: khan-formas
+print("coef_:", svc_k.coef_.shape)
+d_ovr = svc_k.decision_function(
+    X_te)
+print("'ovr':", d_ovr.shape)
+svc_o = SVC(kernel="linear", C=10,
+    decision_function_shape="ovo")
+svc_o.fit(X_tr, y_tr)
+d_ovo = svc_o.decision_function(
+    X_te)
+print("'ovo':", d_ovo.shape)
+v4 = vota(d_ovo, 4)
+i_v = v4.argmax(axis=1)
+mais_v = svc_o.classes_[i_v]
+print("mais votada = predict:",
+    np.all(mais_v == p_te))
+print("votos do vencedor:",
+    np.unique(v4.max(axis=1)))
+```
+
+O `coef_` tem 6 linhas, uma por par, cada uma com os 2.308 coeficientes de um hiperplano. O `decision_function` tem 6 colunas com `"ovo"` e 4 com `"ovr"`, uma por tumor. Nas 20 amostras de teste, a classe prevista ganha os 3 confrontos de que participa, o máximo possível com 4 classes.
+
+## Quando $p$ é muito maior que $n$
+
+Com 2.308 colunas e 63 amostras, que papel sobra para o `C`? No `SVC`, cada vetor de suporte tem um peso $|\alpha_i|$, o valor absoluto do $\alpha_i$ da [seção 16.3](../cap16/03-kernels.qmd), em cada par de que participa. Com $K$ classes, cada vetor de suporte entra nos $K - 1$ pares da sua classe e tem um peso em cada um: o `dual_coef_` tem $K - 1 = 3$ linhas e uma coluna por vetor de suporte. Cada um desses pesos fica entre 0 e o `C`. Um peso zero diz que o ponto não é vetor de suporte daquele par. Um peso entre 0 e o `C`, sem chegar a nenhum dos dois, vem de um ponto sobre a margem daquele par; só um ponto sobre a margem ou do lado errado dela pode chegar ao peso `C`. A tabela conta, para cada `C`, os erros de treino e de teste e os pesos no limite:
+
+```{python}
+#| label: khan-c
+def ajusta(c):
+    m = SVC(kernel="linear", C=c)
+    m.fit(X_tr, y_tr)
+    alfa = np.abs(m.dual_coef_)
+    p_tr = m.predict(X_tr)
+    p_te = m.predict(X_te)
+    er_tr = p_tr != y_tr
+    er_te = p_te != y_te
+    lim = np.isclose(alfa, c)
+    n_lim = lim.sum()
+    return m, {"C": c,
+        "treino": er_tr.sum(),
+        "teste": er_te.sum(),
+        "pesos no limite": n_lim}
+
+grade = [0.0001, 0.001, 0.01,
+    0.1, 1, 10, 100]
+ajustes = [ajusta(c)
+    for c in grade]
+tab_c = pd.DataFrame(
+    [t for _, t in ajustes])
+tab_c.style.format(
+    {"C": "{:g}"},
+    decimal=",").hide()
+```
+
+De 0,01 a 100, o `C` não muda nada: nenhum peso chega ao limite, e os erros são os mesmos. Só os `C` muito pequenos mexem no ajuste. Com `C` = 0,001, 8 pesos batem no limite, e o ajuste ainda não erra nenhuma amostra de treino; com `C` = 0,0001, são 112 pesos, e o ajuste erra 38 das 63 de treino e 14 das 20 de teste. São pesos, não amostras: cada vetor de suporte tem 3, um por par (alguns iguais a zero).
+
+Por que nada muda acima de 0,01? A resposta está no tamanho dos pesos:
+
+```{python}
+#| label: khan-pesos
+modelos = dict(zip(grade,
+    [m for m, _ in ajustes]))
+alfa_10 = np.abs(
+    modelos[10].dual_coef_)
+print("dual_coef_, C = 10:",
+    alfa_10.shape)
+print("maior |α|, C = 10:",
+    numero_br(alfa_10.max(), 3))
+ref = modelos[10].coef_
+iguais = [np.allclose(
+        modelos[c].coef_, ref)
+    for c in grade[2:]]
+print("coef_ igual, C ≥ 0,01:",
+    all(iguais))
+a_4 = np.abs(
+    modelos[0.0001].dual_coef_)
+lim_4 = np.isclose(a_4, 0.0001)
+print("C = 0,0001, vetores:",
+    lim_4.shape[1])
+print("  com peso no limite:",
+    lim_4.any(axis=0).sum())
+```
+
+Com `C` = 10, o maior peso é 0,002, abaixo de 0,01. De 0,01 em diante, o limite `C` não alcança nenhum peso, e a solução não muda: os coeficientes são os mesmos de `C` = 0,01 a 100. O `dual_coef_` tem 3 linhas e 54 colunas. Com `C` = 0,0001, os 112 pesos no limite ficam em 59 dos 62 vetores de suporte; `any(axis=0)` marca, em cada coluna, se algum dos 3 pesos chegou ao limite.
+
+Sem nenhum peso no limite, algum ponto de treino viola a margem? Em cada par, $y_i = 1$ para a primeira classe e $-1$ para a segunda, como no sinal das colunas do `"ovo"`:
+
+```{python}
+#| label: khan-margem
+d_tr = svc_o.decision_function(
+    X_tr)
+cl = svc_o.classes_
+y_np = y_tr.to_numpy()
+yf_min = []
+pares_4 = combinations(
+    range(4), 2)
+for k, (a, b) in enumerate(
+        pares_4):
+    f = d_tr[:, k]
+    yf_a = f[y_np == cl[a]]
+    yf_b = -f[y_np == cl[b]]
+    yf = np.r_[yf_a, yf_b]
+    yf_min.append(yf.min())
+print("y·f ≥ 1 − 0,001 nos 6:",
+    min(yf_min) >= 1 - 1e-3)
+```
+
+Em cada um dos 6 pares, todo ponto de treino tem $y_i f(x_i)$ de pelo menos 1, com folga de 0,001 (a tolerância do ajuste): está sobre a margem ou além dela, e nenhum a viola. O classificador de cada par é o de margem máxima da [seção 16.1](../cap16/01-hiperplanos-e-o-classificador-de-margem-maxima.qmd). Separar as classes de treino, aqui, diz pouco sobre o método: com 2.308 colunas e 63 amostras, os 6 pares deste conjunto se separam por um hiperplano.
+
+Na tabela, o `C` = 0,001 erra uma amostra de teste a menos que os valores de 0,01 a 100. São 20 amostras, e escolher o `C` por esse número seria escolher pelo teste.
+
+## Votos ou escores
+
+E o um contra todos, nos tumores? O `LinearSVC` da [seção 16.2](../cap16/02-o-classificador-de-vetores-de-suporte.qmd) usa essa abordagem por padrão, e o `OneVsRestClassifier` a monta com o `SVC`:
+
+```{python}
+#| label: khan-um-contra-todos
+from sklearn.svm import LinearSVC
+
+lin = LinearSVC(C=10,
+    random_state=16)
+lin.fit(X_tr, y_tr)
+print("coef_ do LinearSVC:",
+    lin.coef_.shape)
+p_lin = lin.predict(X_te)
+print("erros, LinearSVC:",
+    (p_lin != y_te).sum())
+ovr_k = OneVsRestClassifier(
+    SVC(kernel="linear", C=10))
+ovr_k.fit(X_tr, y_tr)
+p_ok = ovr_k.predict(X_te)
+print("erros, OneVsRest:",
+    (p_ok != y_te).sum())
+print("diferentes do SVC:",
+    (p_ok != p_te).sum())
+```
+
+O `coef_` do `LinearSVC` tem 4 linhas, uma por tumor, e não 6. Os dois ajustes um contra todos acertam as 20 amostras de teste, e as duas previsões que diferem das do `SVC` são os dois neuroblastomas que ele errou. São 20 amostras, numa só divisão entre treino e teste: não dá para dizer qual abordagem é melhor para esses tumores.
+
+Lado a lado, as duas abordagens:
+
+| | um contra um | um contra todos |
+|---|---|---|
+| ajustes | $K(K-1)/2$ | $K$ |
+| dados de cada um | as duas classes do par | todas as observações |
+| decide por | mais votos | maior escore |
+| empate | votos iguais (fica a primeira classe) | zero ou vários escores positivos (decide o maior) |
+
+Com 4 tumores, são 6 classificadores contra 4. O número de pares cresce com o quadrado de $K$, e o de classificadores um contra todos, só com $K$. Com $K$ grande, o um contra um faz muitos ajustes pequenos, cada um só com as observações de duas classes, e o um contra todos faz $K$ ajustes, cada um com todas as observações. O `SVC` usa o um contra um, e o `LinearSVC`, o um contra todos. O um contra um cabe quando cada ajuste fica caro com muitas observações, porque cada classificador vê só duas classes; o um contra todos cabe quando $K$ é grande e o número de pares pesa mais que o tamanho de cada ajuste.

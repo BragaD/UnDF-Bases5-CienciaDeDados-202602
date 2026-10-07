@@ -1,0 +1,452 @@
+# Pré-processamento como Parte do Modelo: ColumnTransformer e Pipeline
+
+Uma regressão linear ou um *k*-NN só recebem números. A cidade chega por extenso, `andar` chega vazio em parte dos anúncios, e a área, em metros quadrados, está numa escala muito diferente da de uma contagem de quartos. Alguém precisa converter tudo isso em números comparáveis, e algumas conversões usam números aprendidos do dado: uma média, um desvio, a lista das cidades. Aprendidos de quais anúncios? E como garantir que um anúncio que chegar amanhã passe exatamente pela mesma conversão?
+
+```{python}
+#| label: setup
+#| include: false
+import textwrap
+import warnings
+
+import matplotlib.pyplot as plt
+import numpy as np
+import pandas as pd
+from matplotlib.ticker import MaxNLocator
+from sklearn.base import clone
+from sklearn.compose import ColumnTransformer
+from sklearn.impute import SimpleImputer
+from sklearn.linear_model import LinearRegression
+from sklearn.model_selection import train_test_split
+from sklearn.pipeline import Pipeline
+from sklearn.preprocessing import FunctionTransformer, OneHotEncoder, StandardScaler
+
+plt.style.use("estilo-figuras.mplstyle")
+pd.set_option("display.max_columns", None)
+```
+
+A função `numero_br` escreve os números com a pontuação brasileira. O ponto de partida é a tabela sem linhas repetidas, a divisão estratificada por cidade, os dez preditores e o logaritmo do aluguel como resposta.
+
+```{python}
+#| label: numero-br
+numero_br = lambda valor, casas=2: (
+    f"{valor:,.{casas}f}".replace(",", "_").replace(".", ",").replace("_", ".")
+    .replace("-", "−")
+)
+```
+
+```{python}
+#| label: estado
+alugueis = pd.read_csv("dados/alugueis.csv", na_values=["-"]).drop_duplicates()
+preditores = ["cidade", "area_m2", "quartos", "banheiros", "vagas", "andar",
+              "aceita_animal", "mobiliado", "condominio", "iptu"]
+treino, teste = train_test_split(alugueis, test_size=0.2, random_state=17,
+                                 stratify=alugueis["cidade"])
+X_treino, y_treino = treino[preditores], np.log(treino["aluguel"])
+print("X_treino:", X_treino.shape)
+print("andar nulo no treino:", numero_br(X_treino["andar"].isna().sum(), 0))
+print("colunas com nulo:", list(X_treino.columns[X_treino.isna().any()]))
+```
+
+::: {.funcao}
+**`df.isna().any()`** — para cada coluna, `True` se ela tem ao menos um nulo. Usado como filtro de `df.columns`, deixa só os nomes dessas colunas.
+:::
+
+Daqui em diante, tudo o que aprende algum número do dado aprende só de `X_treino`. O `teste` continua guardado.
+
+## Uma transformação por tipo de coluna
+
+Os dez preditores não pedem todos a mesma conversão. Três são texto, três são valores em metros quadrados ou em reais com cauda longa, um tem nulo e três são contagens. Cada grupo ganha a sua transformação.
+
+**As categóricas.** `cidade` tem cinco valores, e `aceita_animal` e `mobiliado`, dois cada (`"sim"` e `"não"`). Dar um número a cada cidade (1 para Belo Horizonte, 2 para Campinas, e assim por diante) inventaria uma ordem e uma distância que não existem: Campinas não fica "entre" Belo Horizonte e Porto Alegre. A codificação ***one-hot*** (em tradução livre, "um aceso") cria uma coluna por valor, com 1 na coluna da cidade do anúncio e 0 nas demais:
+
+```{python}
+#| label: one-hot-cidade
+codificador = OneHotEncoder(sparse_output=False).set_output(transform="pandas")
+cidades = codificador.fit_transform(X_treino[["cidade"]])
+cidades.head(3).T.astype(int)
+```
+
+::: {.funcao}
+**`OneHotEncoder(sparse_output)`** — a codificação one-hot: uma coluna de 0 e 1 para cada valor da coluna original. Com `sparse_output=False`, o resultado é uma tabela comum, e não o formato compacto que guarda só as posições dos 1.
+
+**`.set_output(transform="pandas")`** — faz o transformador devolver um `DataFrame`, com o nome de cada coluna, em vez de um array sem nomes.
+
+**`transformador.fit_transform(X)`** — `fit` aprende de `X` o que a transformação precisa (aqui, a lista das cidades), e `transform` aplica a transformação a `X`; `fit_transform` faz os dois de uma vez.
+:::
+
+As cinco colunas saíram do `fit`, que guardou as cidades que apareceram no treino. Os três anúncios da tabela têm um 1 e quatro 0, e o treino inteiro também:
+
+```{python}
+#| label: um-por-anuncio
+print("um único 1 por anúncio:", bool((cidades.sum(axis=1) == 1).all()))
+```
+
+::: {.funcao}
+**`df.sum(axis=1)`** — soma cada linha, atravessando as colunas; sem `axis=1`, a soma é de cada coluna.
+:::
+
+**As assimétricas**, as três de cauda longa. `area_m2`, `condominio` e `iptu` têm a cauda longa que a seção 17.1 mostrou, e lá, entre o imóvel gigante e um mediano, a área em escala logarítmica perdeu o monopólio da distância. O logaritmo de zero não existe, e zero não é raro em duas delas:
+
+```{python}
+#| label: zeros-treino
+print("condomínio zero:", numero_br((X_treino["condominio"] == 0).sum(), 0))
+print("IPTU zero:", numero_br((X_treino["iptu"] == 0).sum(), 0))
+```
+
+Por isso a transformação é `np.log1p`, o logaritmo natural de 1 + x, que leva o zero ao zero.
+
+Depois dela vem a padronização: subtrair a média e dividir pelo desvio padrão, com a média e o desvio calculados no treino. Ela põe as colunas numa escala comum, a do desvio padrão. Sozinha, não basta. Para o par do imóvel gigante, a seção 17.1 mediu que padronizar quase não mexia no peso da área na distância, e que o logaritmo antes da padronização tirava dela o monopólio. Para os anúncios comuns, o efeito da cauda longa é outro: os poucos valores enormes inflam o desvio padrão, e, divididos por ele, os valores comuns ficam espremidos perto da média. O logaritmo encurta a cauda antes da padronização, e por isso as duas etapas ficam juntas, encadeadas num `Pipeline`:
+
+```{python}
+#| label: assimetricas
+assimetricas = Pipeline([
+    ("log", FunctionTransformer(np.log1p, feature_names_out="one-to-one")),
+    ("escala", StandardScaler()),
+])
+```
+
+::: {.funcao}
+**`FunctionTransformer(funcao, feature_names_out)`** — transforma cada coluna com uma função fixa, aqui `np.log1p`. O `fit` não aprende nada. `feature_names_out="one-to-one"` avisa que cada coluna de saída corresponde a uma de entrada, com o mesmo nome.
+
+**`StandardScaler()`** — a padronização: no `fit`, guarda a média e o desvio padrão de cada coluna; no `transform`, subtrai a média e divide pelo desvio.
+
+**`Pipeline(etapas)`** — encadeia etapas, cada uma um par `(nome, objeto)`: a saída de uma é a entrada da seguinte. No `fit`, cada etapa aprende a partir da saída da anterior.
+:::
+
+**O `andar`.** Pelos indícios da seção 6.4, o nulo de `andar` marca uma casa, mas a seção 17.1 contou anúncios sem andar e com condomínio, que tanto podem ser casas em condomínio fechado quanto apartamentos sem o andar informado. Preencher só com 0, como na seção 6.4, põe esses anúncios num andar que o arquivo não tem:
+
+```{python}
+#| label: menor-andar
+print("menor andar no treino:", numero_br(X_treino["andar"].min(), 0))
+```
+
+Com o 0 logo abaixo do 1º andar, o *k*-NN põe a casa entre os vizinhos dos apartamentos do 1º andar, e a regressão linear prende o nível da casa à tendência do andar, prolongada até o 0. Um indicador desfaz os dois vínculos: o nulo vira 0, e uma coluna nova diz se o andar estava vazio. O modelo pode dar aos anúncios sem andar um nível próprio, sem que se precise decidir qual é casa. Dois anúncios com andar e dois sem, como estão no arquivo:
+
+```{python}
+#| label: andar-amostra
+preenche = SimpleImputer(strategy="constant", fill_value=0, add_indicator=True)
+preenche.set_output(transform="pandas").fit(X_treino[["andar"]])
+amostra = X_treino[["andar"]].groupby(X_treino["andar"].isna()).head(2)
+amostra
+```
+
+E os mesmos quatro depois do preenchimento:
+
+```{python}
+#| label: andar-indicador
+preenche.transform(amostra).astype(int)
+```
+
+::: {.funcao}
+**`SimpleImputer(strategy, fill_value, add_indicator)`** — preenche nulos. Com `strategy="constant"`, preenche com `fill_value`, aqui 0; outras estratégias usam a média ou a mediana aprendidas no `fit`. Com `add_indicator=True`, acrescenta a coluna `missingindicator_andar`, com 1 onde o valor estava nulo.
+
+**`df.groupby(chave).head(n)`** — as `n` primeiras linhas de cada grupo. Aqui a chave é `isna()`, e vêm dois anúncios com andar e dois sem.
+:::
+
+Depois do preenchimento, as duas colunas passam pela padronização, como as demais numéricas:
+
+```{python}
+#| label: andar-pipeline
+andar = Pipeline([
+    ("preenche", SimpleImputer(strategy="constant", fill_value=0, add_indicator=True)),
+    ("escala", StandardScaler()),
+])
+```
+
+**As contagens.** `quartos`, `banheiros` e `vagas` passam só pela padronização, pelo mesmo motivo das outras numéricas.
+
+O `ColumnTransformer` junta as quatro transformações, cada uma com a sua lista de colunas, e cola os resultados lado a lado:
+
+```{python}
+#| label: preparo
+preparo = ColumnTransformer([
+    ("categoricas", OneHotEncoder(handle_unknown="ignore", sparse_output=False),
+     ["cidade", "aceita_animal", "mobiliado"]),
+    ("assimetricas", assimetricas, ["area_m2", "condominio", "iptu"]),
+    ("andar", andar, ["andar"]),
+    ("contagens", StandardScaler(), ["quartos", "banheiros", "vagas"]),
+]).set_output(transform="pandas")
+```
+
+::: {.funcao}
+**`ColumnTransformer(transformacoes)`** — aplica cada transformação só às colunas dela. Cada item é um trio `(nome, transformador, colunas)`, e a saída junta as colunas produzidas, na ordem da lista. Coluna que não está em nenhuma lista fica de fora. O argumento `handle_unknown="ignore"` do `OneHotEncoder` é o assunto da subseção "Categoria nova", adiante.
+:::
+
+As colunas de 0 e 1 das categóricas ficam sem padronização. Elas já variam numa faixa de largura 1, comparável à de um desvio padrão, e nenhuma delas tem cauda que estique a escala.
+
+## O que o preparo aprende
+
+::: {.conceito}
+**Tudo o que o preparo aprende, aprende no treino.** O `fit` do preparo guarda a lista de categorias de cada coluna de texto e a média e o desvio de cada coluna padronizada, calculados nos anúncios de treino. Depois disso, qualquer tabela passa pelo `transform` com esses números guardados, seja o treino, seja um anúncio novo: nada é recalculado com as linhas que chegam. O teste precisa se comportar como um anúncio que ainda não chegou, e uma média calculada com o teste junto já traria para o modelo informação dele.
+:::
+
+Com as peças montadas, o `fit_transform` ajusta o preparo no treino e devolve a tabela convertida. Antes de rodar: quantas colunas ela deve ter? Some as colunas de cada transformação.
+
+```{python}
+#| label: transformado
+convertido = preparo.fit_transform(X_treino)
+print("antes:", X_treino.shape)
+print("depois:", convertido.shape)
+for nome in preparo.get_feature_names_out():
+    print(nome)
+```
+
+::: {.funcao}
+**`preparo.get_feature_names_out()`** — os nomes das colunas de saída, cada um com o nome da transformação que o produziu antes de `__`.
+:::
+
+São 17 colunas: cinco de cidade, duas de `aceita_animal` e duas de `mobiliado`, as três assimétricas, `andar` e o indicador, e as três contagens. Os números que o `fit` guardou ficam dentro do preparo, e podem ser lidos:
+
+```{python}
+#| label: o-que-o-fit-guardou
+aprendido = preparo.named_transformers_
+print("cidades vistas no treino:")
+for cidade in aprendido["categoricas"].categories_[0]:
+    print("  " + cidade)
+
+escala = aprendido["assimetricas"]["escala"]
+print("média e desvio depois do log1p:")
+for nome, media, desvio in zip(escala.feature_names_in_, escala.mean_, escala.scale_):
+    print(f"  {nome}: {numero_br(media)} e {numero_br(desvio)}")
+```
+
+::: {.funcao}
+**`preparo.named_transformers_`** — as transformações já ajustadas, pelo nome dado a cada uma. Num `Pipeline`, `pipeline["nome"]` devolve a etapa com esse nome.
+
+**`codificador.categories_`** — no `OneHotEncoder` ajustado, a lista das categorias de cada coluna, na ordem das colunas de saída.
+
+**`escala.mean_`**, **`escala.scale_`** e **`escala.feature_names_in_`** — no `StandardScaler` ajustado, a média e o desvio padrão de cada coluna e os nomes das colunas, na mesma ordem.
+:::
+
+A média de `area_m2` depois do `log1p` é 4,66. Esse número vale para qualquer anúncio que passar pelo preparo, inclusive um que não esteja no treino, como a última subseção confere. O primeiro anúncio de treino, antes e depois:
+
+```{python}
+#| label: primeiro-anuncio-cru
+X_treino.iloc[0]
+```
+
+```{python}
+#| label: primeiro-anuncio
+(
+    convertido.iloc[0].to_frame("depois").style.set_uuid("primeiro")
+    .format(lambda v: numero_br(v, 2))
+    .set_table_styles([{"selector": "th, td", "props": "padding: 0.15em 0.3em"}])
+)
+```
+
+::: {.funcao}
+**`df.iloc[i]`** — a linha na posição `i` da tabela, contada a partir de 0, como uma `Series` indexada pelos nomes das colunas.
+
+**`serie.to_frame(nome)`** — transforma a `Series` numa tabela de uma coluna, com esse nome.
+:::
+
+Este anúncio fica no 1º andar, e o indicador de `andar`, que era 0 para ele, virou −0,55: a padronização também passou pelo indicador. Ele continua com dois valores só, um para os anúncios com andar e outro para os sem, agora em outra escala.
+
+A figura mostra o que o preparo fez com as três colunas assimétricas. Antes de olhar: os maiores valores do treino, como a área de 46.335 m², continuam na tabela depois do preparo?
+
+```{python}
+#| label: fig-antes-depois
+#| fig-cap: "As três colunas assimétricas nos 8.267 anúncios de treino. À esquerda, como vêm no arquivo, em 40 barras; à direita, depois do log1p e da padronização, em desvios padrão, com barras de 0,25 e o mesmo eixo x nos três painéis da direita. O triângulo cinza marca o maior valor de cada coluna."
+#| fig-alt: "Seis histogramas azuis em três linhas e duas colunas. Na coluna da esquerda, área, condomínio e IPTU como vêm no arquivo: em cada um, quase todos os anúncios se juntam numa única barra junto ao zero, o resto do eixo parece vazio, e um triângulo cinza na ponta direita marca o maior valor. Na coluna da direita, as mesmas colunas depois do preparo, em desvios padrão, num eixo comum com marcas de −4 a 8: a área vira um morro, e o triângulo do maior imóvel fica isolado à direita, perto de 8; o condomínio e o IPTU viram um morro com uma barra alta e separada à esquerda, a dos anúncios com valor zero, e o triângulo do maior valor fica pouco à direita do morro."
+colunas_assimetricas = [("area_m2", "área (m²)"),
+                        ("condominio", "condomínio (R$)"),
+                        ("iptu", "IPTU (R$)")]
+em_br = lambda v, pos: numero_br(v, 0)
+bordas_depois = np.linspace(-4.5, 8.5, 53)
+fig, eixos = plt.subplots(3, 2, figsize=(6.4, 7.2))
+for (coluna, rotulo), (ax_antes, ax_depois) in zip(colunas_assimetricas, eixos):
+    antes = X_treino[coluna]
+    depois = convertido[f"assimetricas__{coluna}"]
+    ax_antes.hist(antes, bins=40, color="C0", edgecolor="white", linewidth=0.3)
+    ax_antes.set_xlim(0, antes.max() * 1.05)
+    ax_antes.xaxis.set_major_locator(MaxNLocator(3))
+    ax_antes.xaxis.set_major_formatter(em_br)
+    ax_antes.set_xlabel(rotulo)
+    ax_antes.set_ylabel("anúncios")
+    ax_depois.hist(depois, bins=bordas_depois, color="C0",
+                   edgecolor="white", linewidth=0.3)
+    ax_depois.set_xlim(-4.5, 8.5)
+    ax_depois.set_xticks([-4, -2, 0, 2, 4, 6, 8])
+    ax_depois.xaxis.set_major_formatter(em_br)
+    ax_depois.set_xlabel(rotulo.split(" (")[0] + " (desvios padrão)")
+    for ax, valores in ((ax_antes, antes), (ax_depois, depois)):
+        topo = ax.get_ylim()[1]
+        ax.scatter(valores.max(), 0.06 * topo, marker="v", s=40, color="0.45",
+                   zorder=3, label="_nolegend_")
+        ax.yaxis.set_major_formatter(em_br)
+eixos[0, 0].set_title("no arquivo")
+eixos[0, 1].set_title("depois do preparo")
+plt.tight_layout()
+plt.show()
+```
+
+::: {.funcao}
+**`np.linspace(inicio, fim, n)`** — `n` números igualmente espaçados de `inicio` a `fim`. Aqui, as bordas das barras da coluna da direita, as mesmas nos três painéis.
+
+**`ax.set_xticks(lista)`** — fixa as posições das marcas do eixo horizontal; aqui, de −4 a 8, de 2 em 2.
+
+**`ax.xaxis.set_major_locator(MaxNLocator(n))`** — limita o eixo a cerca de `n` marcas, para os rótulos longos em reais não se encostarem. `MaxNLocator` vem de `matplotlib.ticker`.
+:::
+
+Os números por trás de cada painel:
+
+```{python}
+#| label: antes-depois-numeros
+print("mesmas linhas:", len(convertido) == len(X_treino))
+for coluna, _ in colunas_assimetricas:
+    contagens, _ = np.histogram(X_treino[coluna], bins=40)
+    fracao = 100 * contagens[0] / len(X_treino)
+    depois = convertido[f"assimetricas__{coluna}"]
+    maximo = X_treino[coluna].idxmax()
+    print(coluna)
+    print("  máximo:", numero_br(X_treino[coluna].max(), 0))
+    print(f"  1ª barra: {numero_br(fracao, 1)}%")
+    print("  depois:", numero_br(depois.min()), "a", numero_br(depois.max()))
+    print("  máximo, depois:", numero_br(depois[maximo]))
+    zeros = X_treino[coluna] == 0
+    if zeros.any():
+        print("  zero, depois:", numero_br(depois[zeros].iloc[0]))
+```
+
+À esquerda, a primeira barra de cada coluna leva quase todos os anúncios: 99,9% na área, 99,2% no condomínio e 99,9% no IPTU. O maior valor de cada coluna (46.335 m² de área, R$ 220.000 de condomínio e R$ 313.700 de IPTU) estica o eixo, e o resto se espreme junto ao zero.
+
+À direita, nenhum extremo saiu, e o maior valor de cada coluna é a ponta direita dela. A área vai de −2,77 a 7,73 e forma um morro, com o imóvel de 46.335 m² isolado no 7,73. O condomínio vai de −1,78 a 2,44, e o IPTU, de −2,02 a 3,74. Nos dois, a ponta esquerda é a dos anúncios com valor zero, que o `log1p` leva ao zero e a padronização leva a −1,78 e a −2,02: é a barra separada à esquerda do morro.
+
+## Categoria nova
+
+O treino tem cinco cidades. O que acontece se chegar um anúncio de Brasília? O codificador do começo da seção, ajustado com o padrão do `OneHotEncoder`, recusa:
+
+```{python}
+#| label: brasilia-erro
+brasilia = pd.DataFrame({"cidade": ["Brasília"]})
+try:
+    codificador.transform(brasilia)
+except ValueError as erro:
+    print(textwrap.fill(str(erro)[:120], width=36))
+```
+
+::: {.funcao}
+**`textwrap.fill(texto, width)`** — quebra o texto em linhas de até `width` caracteres, do módulo `textwrap` da biblioteca padrão. Aqui, só para a mensagem caber na página.
+:::
+
+A mensagem diz que há uma categoria desconhecida, `Brasília`, na coluna 0. O padrão é `handle_unknown="error"`, e é seguro: um anúncio de uma cidade para a qual o modelo não aprendeu nada não recebe previsão sem que alguém perceba. O preparo usa `handle_unknown="ignore"`, que deixa o anúncio passar com as cinco colunas de cidade em zero:
+
+```{python}
+#| label: brasilia-ignore
+ignora = OneHotEncoder(handle_unknown="ignore", sparse_output=False)
+ignora.set_output(transform="pandas").fit(X_treino[["cidade"]])
+ignora.transform(brasilia).T.astype(int)
+```
+
+Com as cinco colunas em zero, o anúncio de Brasília passa pelo preparo e recebe uma previsão, mas o treino não tem um anúncio de lá, e a subseção seguinte mostra o que esse número é na regressão linear. O custo do `"ignore"` é o silêncio: qualquer nome fora da lista das cinco, inclusive um erro de digitação, passa da mesma forma, sem aviso. Qual dos dois comportamentos você escolheria para uma plataforma que publica a sugestão de preço sem revisão humana?
+
+## O Pipeline: preparo e modelo como um objeto só
+
+O preparo e o modelo podem ficar num mesmo `Pipeline`. O `fit` do conjunto ajusta o preparo no treino, converte o treino e ajusta o modelo na tabela convertida; o `predict` converte a tabela que chega com os números guardados e passa o resultado ao modelo. A regressão linear múltipla da seção 8.3 ocupa o passo `modelo`:
+
+```{python}
+#| label: pipeline
+modelo = Pipeline([("preparo", preparo), ("modelo", LinearRegression())])
+modelo = modelo.fit(X_treino, y_treino)
+print("o preparo é o mesmo objeto:", modelo["preparo"] is preparo)
+```
+
+::: {.funcao}
+**`LinearRegression()`** — a regressão linear por mínimos quadrados; o `fit` estima o intercepto e um coeficiente por coluna.
+:::
+
+Um anúncio inventado: uma casa em São Paulo, sem andar, com 120 m², três quartos, dois banheiros, duas vagas, que aceita animal, não mobiliada, sem condomínio e com R$ 150 de IPTU. O anúncio é uma tabela de uma linha com as mesmas colunas de `X_treino`:
+
+```{python}
+#| label: anuncio-novo
+anuncio = pd.DataFrame({
+    "cidade": ["São Paulo"], "area_m2": [120], "quartos": [3], "banheiros": [2],
+    "vagas": [2], "andar": [np.nan], "aceita_animal": ["sim"],
+    "mobiliado": ["não"], "condominio": [0], "iptu": [150],
+})
+log_previsto = modelo.predict(anuncio)[0]
+print("previsão em log:", numero_br(log_previsto, 4))
+print("em reais: R$", numero_br(np.exp(log_previsto), 0))
+```
+
+::: {.funcao}
+**`modelo.predict(X)`** — uma previsão para cada linha de `X`, depois de passar `X` pelo preparo. Aqui, o logaritmo do aluguel; como `X` tem uma linha só, o `[0]` tira o único número do array.
+
+**`np.exp(x)`** — a exponencial, o inverso de `np.log`: `np.exp(np.log(x))` devolve `x`. Aqui, leva a previsão de volta a reais.
+:::
+
+O modelo prevê o logaritmo do aluguel, 7,9988, e `np.exp` leva o número de volta a reais: R$ 2.977 por mês é a sugestão para a casa inventada.
+
+O `predict` converteu o anúncio com a média e o desvio do treino, e não com números do próprio anúncio: numa tabela de uma linha, a média de cada coluna é o próprio valor do anúncio, e padronizar com ela levaria toda coluna padronizada a zero, qualquer que fosse o anúncio. A conta pode ser refeita com os números que o `fit` guardou, a média 4,66 de `area_m2` depois do `log1p` e o desvio correspondente:
+
+```{python}
+#| label: conferencia
+convertido_anuncio = modelo["preparo"].transform(anuncio).iloc[0]
+escala = modelo["preparo"].named_transformers_["assimetricas"]["escala"]
+media, desvio = escala.mean_[0], escala.scale_[0]
+pelo_preparo = convertido_anuncio["assimetricas__area_m2"]
+a_mao = (np.log1p(120) - media) / desvio
+print("área, pelo preparo:", numero_br(pelo_preparo, 4))
+print("área, à mão:", numero_br(a_mao, 4))
+print("iguais:", np.isclose(pelo_preparo, a_mao))
+print("andar:", numero_br(convertido_anuncio["andar__andar"]))
+print("indicador:", numero_br(convertido_anuncio["andar__missingindicator_andar"]))
+```
+
+::: {.funcao}
+**`np.isclose(a, b)`** — `True` quando `a` e `b` são iguais a menos do arredondamento do ponto flutuante.
+:::
+
+O `modelo["preparo"]` é o mesmo objeto `preparo`, como o booleano logo depois do `fit` confirmou. Ele foi reajustado dentro do `fit` do `Pipeline`, com os mesmos anúncios de treino. A casa inventada recebeu o andar 0 e o indicador de andar vazio, os dois já na escala do treino: −0,82 e 1,82. O indicador, que era −0,55 no anúncio do 1º andar, é positivo nela.
+
+E a mesma casa em Brasília? Ela passa pelo preparo com as cinco colunas de cidade em zero, e o modelo devolve um número. Para comparar, a média das previsões para a casa em cada uma das cinco cidades do treino:
+
+```{python}
+#| label: brasilia-previsao
+cidades_vistas = modelo["preparo"].named_transformers_["categoricas"].categories_[0]
+em_cada = [modelo.predict(anuncio.assign(cidade=c))[0] for c in cidades_vistas]
+em_brasilia = modelo.predict(anuncio.assign(cidade="Brasília"))[0]
+print("Brasília:", numero_br(em_brasilia, 4))
+print("média das cinco:", numero_br(np.mean(em_cada), 4))
+```
+
+::: {.funcao}
+**`np.mean(valores)`** — a média de uma lista de números.
+:::
+
+A casa em Brasília recebe 7,7496, a média das cinco cidades. O número não vem de nada que o treino ensinou sobre Brasília, e sim de como o ajuste repartiu o efeito da cidade entre o intercepto e as cinco colunas. Outra codificação mostra isso: com `drop="first"`, cada categórica perde a coluna da primeira categoria, e Belo Horizonte passa a ser a cidade sem coluna. As previsões para as cidades conhecidas não mudam:
+
+```{python}
+#| label: outra-codificacao
+outra = clone(modelo).set_params(preparo__categoricas__drop="first")
+outra = outra.fit(X_treino, y_treino)
+iguais = np.allclose(outra.predict(X_treino), modelo.predict(X_treino))
+print("mesmas previsões no treino:", iguais)
+print("São Paulo:", numero_br(outra.predict(anuncio)[0], 4))
+belo_horizonte = anuncio.assign(cidade="Belo Horizonte")
+em_bh = outra.predict(belo_horizonte)[0]
+print("Belo Horizonte:", numero_br(em_bh, 4))
+with warnings.catch_warnings():
+    # o scikit-learn avisa que "Brasília" é categoria desconhecida,
+    # codificada com todas as colunas em zero: é o que se quer ver aqui
+    warnings.simplefilter("ignore", UserWarning)
+    em_brasilia_outra = outra.predict(anuncio.assign(cidade="Brasília"))[0]
+print("Brasília:", numero_br(em_brasilia_outra, 4))
+print("igual a Belo Horizonte:", em_brasilia_outra == em_bh)
+```
+
+::: {.funcao}
+**`clone(modelo)`** — uma cópia do modelo com os mesmos parâmetros, ainda sem ajuste. Vem de `sklearn.base`.
+
+**`modelo.set_params(etapa__parametro=valor)`** — troca um parâmetro; o `__` desce pelas etapas pelo nome. Aqui, o `drop` do `OneHotEncoder` da transformação `categoricas`, dentro do `preparo`.
+
+**`np.allclose(a, b)`** — `True` quando todos os pares de valores são iguais a menos do arredondamento.
+
+**`warnings.catch_warnings()`** — num bloco `with`, isola os filtros de aviso: o que se muda dentro dele vale só ali. **`warnings.simplefilter("ignore", UserWarning)`** cala os avisos desse tipo; os dois vêm do módulo `warnings` da biblioteca padrão.
+:::
+
+A casa em São Paulo continua em 7,9988. Nessa codificação, um anúncio de Brasília tem as quatro colunas de cidade em zero, exatamente como um de Belo Horizonte, e recebe os mesmos 7,6944 de Belo Horizonte, e não os 7,7496 de antes.
+
+Os dois ajustes são igualmente bons nas cinco cidades conhecidas, com as mesmas previsões para todo anúncio de treino; o que os separa é só a codificação, e nada no dado escolhe entre elas. Por isso a previsão para uma cidade que o treino não viu não é confiável, qualquer que seja o número. É esse o custo do `"ignore"` visto de dentro do modelo: ele só é aceitável se alguém revisar as categorias que chegam, para que uma cidade nova seja notada antes de a previsão ser publicada.
+
+Com o preparo dentro do `Pipeline`, não há como ajustar a escala numa tabela e o modelo em outra por descuido: um `fit` ajusta os dois, com as mesmas linhas. A validação cruzada da seção 10.6 reajusta essa estrutura inteira em cada grupo, e o `StandardScaler` aprende só das linhas de treino do grupo: é assim que o vazamento de pré-processamento fica de fora.

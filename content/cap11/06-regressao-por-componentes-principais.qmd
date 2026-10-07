@@ -1,0 +1,643 @@
+# Regressão por Componentes Principais
+
+::: {.callout-note}
+Esta seção corresponde às seções 6.3 e 6.3.1 de @james2023.
+:::
+
+Em `Credit`, `limite` e `pontuacao` quase se repetem, com correlação de 0,997 (seção 8.6), e `renda` anda junto com `limite`, com correlação de 0,792. Colunas que variam juntas repetem parte da mesma informação, e os mínimos quadrados gastam um coeficiente com cada uma. A seleção de subconjuntos escolhe algumas colunas; a ridge e o lasso encolhem os coeficientes, e o lasso leva alguns a zero. Há um terceiro caminho: trocar as colunas originais por poucas **combinações** delas e ajustar os mínimos quadrados sobre as combinações. Quando isso funciona, e quando não funciona?
+
+```{python}
+#| label: setup
+#| include: false
+import matplotlib.pyplot as plt
+import numpy as np
+import pandas as pd
+from matplotlib.lines import Line2D
+from sklearn.decomposition import PCA
+from sklearn.linear_model import Lasso, LinearRegression, Ridge
+from sklearn.model_selection import GridSearchCV, KFold, cross_val_score
+from sklearn.pipeline import make_pipeline
+from sklearn.preprocessing import StandardScaler
+
+plt.style.use("estilo-figuras.mplstyle")
+
+credit = pd.read_csv("dados/Credit.csv")
+X = pd.get_dummies(credit.drop(columns="saldo"), drop_first=True, dtype=float)
+y = credit["saldo"]
+
+numero_br = lambda valor, casas=2: (
+    f"{valor:,.{casas}f}".replace(",", "_").replace(".", ",").replace("_", ".")
+    .replace("-", "−")
+)
+virgula = lambda casas: (
+    lambda valor, _: f"{valor:.{casas}f}".replace(".", ",").replace("-", "−")
+)
+```
+
+## Combinações lineares das colunas
+
+Em `Credit`, uma coluna nova pode ser a média de `limite` e `pontuacao`, as duas padronizadas: para cada cliente, metade de um valor mais metade do outro. Como as duas quase se repetem, essa média guarda quase tudo o que elas dizem, numa coluna só. Ela é uma **combinação linear** das colunas: uma soma das colunas originais, cada uma multiplicada por um peso, aqui $1/2$ e $1/2$. A média serve como uma coluna só?
+
+```{python}
+#| label: media-de-duas
+padronizadas = StandardScaler().fit_transform(X[["limite", "pontuacao"]])
+media = padronizadas.mean(axis=1)    # metade de cada, cliente a cliente
+for nome, coluna in [("limite", padronizadas[:, 0]),
+                     ("pontuacao", padronizadas[:, 1]),
+                     ("média", media)]:
+    print(f"corr({nome}, saldo):",
+          numero_br(np.corrcoef(coluna, y)[0, 1], 3))
+```
+
+::: {.funcao}
+- **`StandardScaler().fit_transform(df)`**: ajusta o padronizador às colunas de `df` e já devolve as colunas padronizadas, numa chamada só, como um array.
+- **`np.corrcoef(a, b)`**: a matriz de correlações entre `a` e `b`, de $2 \times 2$; o elemento `[0, 1]` é a correlação entre os dois.
+:::
+
+Com `saldo`, a média tem correlação de 0,863, contra 0,862 de `limite` e 0,864 de `pontuacao`: a coluna nova guarda a relação das duas com a resposta.
+
+Em geral, com os preditores $X_1, \dots, X_p$, a combinação de número $m$ se chama $Z_m$, e o peso de $X_j$ nela se chama $\phi_{jm}$:
+
+$$
+Z_m = \sum_{j=1}^{p}\phi_{jm}X_j.
+$$
+
+São $M$ combinações, $m = 1, \dots, M$, com $M \le p$; para reduzir a dimensão, $M < p$. No exemplo, $M = 1$, os pesos de `limite` e `pontuacao` valem $1/2$, e os das outras colunas, zero.
+
+Escolhidos os pesos, o modelo é a regressão linear de $Y$ sobre as $M$ colunas novas, ajustada por mínimos quadrados. O valor de $Z_m$ na observação $i$ é $z_{im}$, o intercepto é $\theta_0$, e $\theta_m$ é o coeficiente de $Z_m$:
+
+$$
+y_i = \theta_0 + \sum_{m=1}^{M}\theta_m z_{im} + \varepsilon_i,
+$$
+
+para $i = 1, \dots, n$. Em vez de $p + 1$ coeficientes, $\beta_0, \beta_1, \dots, \beta_p$, o ajuste estima $M + 1$, $\theta_0, \theta_1, \dots, \theta_M$. É a **redução de dimensão**: o problema passa de $p$ dimensões para $M$.
+
+O modelo é linear nas colunas $Z_m$. Continua linear nas colunas originais $X_j$? Substituindo $z_{im}$ pela soma que define $Z_m$ e juntando os termos de cada coluna,
+
+$$
+\begin{aligned}
+\sum_{m=1}^{M}\theta_m z_{im}
+&= \sum_{m=1}^{M}\theta_m\sum_{j=1}^{p}\phi_{jm}x_{ij} \\
+&= \sum_{j=1}^{p}\beta_j x_{ij},
+\end{aligned}
+$$
+
+com
+
+$$
+\beta_j = \sum_{m=1}^{M}\theta_m\phi_{jm}.
+$$
+
+No exemplo da média, com $M = 1$ e pesos $1/2$ em `limite` e `pontuacao`, a soma tem um termo só: $\beta_{\text{limite}} = \beta_{\text{pontuacao}} = \theta_1/2$, e o $\beta_j$ das outras colunas é zero. Qualquer que seja o $\theta_1$ ajustado, as duas colunas ficam com o mesmo coeficiente.
+
+Cada $\beta_j$ ainda existe, mas não é livre: os $p$ coeficientes saem de só $M$ números, os $\theta_m$. Essa amarra introduz viés quando a melhor combinação de coeficientes não tem essa forma. Em troca, com $M$ bem menor que $p$, há menos coeficientes a estimar com os mesmos $n$ pontos, e a variância do ajuste cai. Com $M = p$ e combinações linearmente independentes, isto é, nenhuma delas uma soma com pesos das outras, a amarra some e o ajuste é o dos mínimos quadrados.
+
+Falta dizer de onde vêm os pesos $\phi_{jm}$. Um jeito de escolhê-los é pelas **componentes principais**.
+
+## A direção de maior variância
+
+Com duas colunas, dá para ver de onde vêm os pesos. As duas aqui são `renda` e `limite`, padronizadas como na seção 11.3. Cada cliente é um ponto no plano. Uma combinação $Z_1 = \phi_{11}\,\text{renda} + \phi_{21}\,\text{limite}$, com $\phi_{11}^2 + \phi_{21}^2 = 1$, dá a cada ponto a sua posição ao longo de uma reta que passa pela origem: o pé do segmento perpendicular que vai do ponto até a reta. Sem a condição $\phi_{11}^2 + \phi_{21}^2 = 1$, a variância dessas posições cresceria sem limite só com pesos maiores. Com ela, cada reta dá um espalhamento diferente, e uma delas espalha mais que todas as outras.
+
+Os pesos $\phi_{j1}$ dessa reta se chamam **cargas**, e a posição $z_{i1}$ de cada ponto ao longo dela, o **escore** do ponto. Antes de rodar a célula: com `renda` e `limite` subindo juntas, para onde você espera que aponte a reta de maior espalhamento?
+
+```{python}
+#| label: duas-colunas
+duas = StandardScaler().fit_transform(X[["renda", "limite"]])
+pca2 = PCA().fit(duas)
+escores2 = pca2.transform(duas)
+cargas = np.abs(pca2.components_)
+print("corr(renda, limite):",
+      numero_br(X["renda"].corr(X["limite"]), 3))
+print("corr(limite, pontuacao):",
+      numero_br(X["limite"].corr(X["pontuacao"]), 3))
+print("|cargas| da 1.ª:", numero_br(cargas[0, 0], 3),
+      numero_br(cargas[0, 1], 3))
+print("|cargas| da 2.ª:", numero_br(cargas[1, 0], 3),
+      numero_br(cargas[1, 1], 3))
+print("mesmo sinal na 1.ª:",
+      bool(np.sign(pca2.components_[0, 0])
+           == np.sign(pca2.components_[0, 1])))
+print("sinais opostos na 2.ª:",
+      bool(np.sign(pca2.components_[1, 0])
+           != np.sign(pca2.components_[1, 1])))
+print("variância explicada:",
+      *[numero_br(v, 3) for v in pca2.explained_variance_ratio_])
+print("variância dos escores:",
+      *[numero_br(v, 3) for v in escores2.var(axis=0)])
+print("corr(z1, z2) ≈ 0:",
+      bool(np.isclose(np.corrcoef(escores2.T)[0, 1], 0)))
+```
+
+::: {.funcao}
+- **`PCA(n_components)`**: a análise de componentes principais (PCA, tema do capítulo 15); sem `n_components`, calcula todas as componentes, uma por coluna. A `PCA` só centra as colunas; quem divide pelo desvio padrão é o `StandardScaler`.
+- **`pca.components_`**: as cargas, uma linha por componente. **`pca.explained_variance_ratio_`**: a fração da variância total que cada componente carrega. **`pca.transform(X)`**: os escores, uma coluna por componente.
+- **`np.sign(x)`**: 1, −1 ou 0, conforme o sinal de `x`. **`np.corrcoef(A.T)`**: com uma matriz só, as correlações entre as colunas de `A`.
+:::
+
+```{python}
+#| label: fig-direcao-principal
+#| fig-cap: 'As 400 observações de `Credit` em `renda` e `limite`, as duas padronizadas. Em cima, a linha sólida laranja é a direção da primeira componente principal, e a tracejada cinza, a da segunda. Embaixo, os mesmos pontos com os escores das duas componentes nos eixos: a nuvem de cima girada até a primeira direção ficar na horizontal, e a linha laranja e a tracejada de baixo são as mesmas duas direções, giradas junto. Os dois pontos roxos são os mesmos clientes nos dois painéis; o segmento de cada um vai até a direção da primeira componente. Em cada painel, os dois eixos têm a mesma escala.'
+#| fig-alt: "Dois painéis. No de cima, uma nuvem de 400 pontos azuis alongada ao longo da diagonal que sobe para a direita, com renda padronizada no eixo horizontal e limite padronizado no vertical. Uma reta laranja sólida passa pela origem ao longo dessa diagonal, e uma reta cinza tracejada passa pela origem na diagonal perpendicular. Dois pontos roxos, um acima e outro abaixo da reta laranja, têm cada um um segmento roxo perpendicular até ela. No de baixo, os mesmos pontos com o escore da primeira componente no eixo horizontal e o da segunda no vertical: a nuvem ficou deitada, espalhada na horizontal e estreita na vertical, com a linha laranja na horizontal e a tracejada na vertical, as duas no zero. Os dois pontos roxos aparecem com segmentos verticais até a linha laranja, um acima dela e outro abaixo."
+# o sinal de cada componente é arbitrário; para o painel de baixo ser o de
+# cima girado, o 2.º escore usa o sinal da 1.ª direção girada de 90 graus
+girada = np.array([-pca2.components_[0, 1], pca2.components_[0, 0]])
+giro = escores2 * [1, np.sign(pca2.components_[1] @ girada)]
+destacados = [giro[:, 1].argmax(), giro[:, 1].argmin()]
+fig, (ax_orig, ax_giro) = plt.subplots(
+    2, 1, figsize=(4.8, 5.6), layout="constrained",
+    gridspec_kw={"height_ratios": [3, 2]},
+)
+ax_orig.scatter(duas[:, 0], duas[:, 1], s=12, alpha=0.6,
+                color="C0", linewidths=0)
+for k, estilo in [(0, {"color": "C1", "linewidth": 2}),
+                  (1, {"color": "0.45", "linewidth": 1.5,
+                       "linestyle": "--"})]:
+    direcao = pca2.components_[k]
+    ax_orig.axline((0, 0), direcao, **estilo)
+ax_giro.scatter(giro[:, 0], giro[:, 1], s=12, alpha=0.6,
+                color="C0", linewidths=0)
+ax_giro.axhline(0, color="C1", linewidth=2)
+ax_giro.axvline(0, color="0.45", linewidth=1.5, linestyle="--")
+for i in destacados:
+    z1, z2 = giro[i]
+    pe = z1 * pca2.components_[0]      # o ponto projetado na direção
+    ax_orig.plot([duas[i, 0], pe[0]], [duas[i, 1], pe[1]],
+                 color="C3", linewidth=1.5, zorder=3)
+    ax_orig.scatter(*duas[i], s=45, color="C3", zorder=4)
+    ax_giro.plot([z1, z1], [z2, 0], color="C3", linewidth=1.5, zorder=3)
+    ax_giro.scatter(z1, z2, s=45, color="C3", zorder=4)
+ax_orig.set_xlabel("renda (padronizada)")
+ax_orig.set_ylabel("limite (padronizado)")
+ax_giro.set_xlabel("escore da 1.ª componente, $z_{i1}$")
+ax_giro.set_ylabel("escore da 2.ª componente")
+for ax in (ax_orig, ax_giro):
+    ax.set_aspect("equal")
+    ax.xaxis.set_major_formatter(virgula(0))
+    ax.yaxis.set_major_formatter(virgula(0))
+ax_orig.set_xlim(-2.5, 6)
+ax_orig.set_ylim(-2.5, 4.5)
+ax_giro.set_xlim(giro[:, 0].min() - 0.5, giro[:, 0].max() + 0.5)
+ax_giro.set_ylim(-1.5, 1.5)
+plt.show()
+```
+
+::: {.funcao}
+- **`ax.axline(ponto, direcao)`**: a reta que passa por `ponto` na `direcao` dada, de ponta a ponta do painel; trocar o sinal da direção desenha a mesma reta.
+- **`gridspec_kw={"height_ratios": [3, 2]}`**, em `plt.subplots`: as alturas relativas dos painéis. **`arr.argmax()`** e **`arr.argmin()`**: a posição do maior e do menor valor.
+:::
+
+A reta laranja de cima segue o comprimento da nuvem. Em cada ponto roxo, o pé do segmento marca a posição do cliente ao longo dessa reta, e é essa posição que vira a coordenada horizontal embaixo; o comprimento do segmento, positivo de um lado da reta e negativo do outro, vira a coordenada vertical.
+
+::: {.conceito}
+A **primeira componente principal** de um conjunto de colunas é a combinação $Z_1 = \sum_j\phi_{j1}X_j$, com $\sum_j\phi_{j1}^2 = 1$, de maior variância: a direção ao longo da qual os pontos mais se espalham. Os pesos $\phi_{j1}$ são as **cargas** da componente, e o valor $z_{i1}$ de cada observação é o **escore** dela.
+
+A segunda componente é a combinação de maior variância entre as que não têm correlação com a primeira, e cada componente seguinte é a de maior variância entre as que não têm correlação com as anteriores, até $p$ componentes.
+:::
+
+As duas cargas da primeira componente têm o mesmo tamanho, 0,707, e o mesmo sinal: o escore $z_{i1}$ é, a menos da escala e do sinal, a média de `renda` e `limite` padronizadas do cliente $i$. Numa ponta da escala do escore ficam os clientes com renda e limite acima da média; na outra, os com os dois abaixo. Com as duas colunas juntas, a primeira componente carrega 0,896 da variância total, e a segunda, 0,104.
+
+Com duas colunas, não ter correlação com a primeira componente equivale a ter a direção perpendicular à dela, a tracejada. As cargas da segunda têm também o tamanho 0,707, com sinais opostos: o escore $z_{i2}$ mede o quanto `renda` e `limite` do cliente se afastam uma da outra. Os escores da segunda ficam bem mais perto de zero que os da primeira: com correlação de 0,792 entre renda e limite, a segunda componente carrega só 0,104 da variância.
+
+Com duas colunas padronizadas, as cargas saem 0,707 $= 1/\sqrt{2}$ para qualquer correlação diferente de zero entre elas; a correlação decide só a divisão da variância. As variâncias dos escores, 1,792 e 0,208, são $1 + 0{,}792$ e $1 - 0{,}792$, e 1,792 ÷ 2 = 0,896 é a fração da primeira.
+
+## A regressão sobre as componentes
+
+Em `renda` e `limite`, a primeira componente sozinha carrega 0,896 da variância. Quando as primeiras componentes de $X$ concentram quase toda a variância, dá para trocar as $p$ colunas por elas e ajustar a regressão só sobre as $M$ primeiras.
+
+::: {.conceito}
+A **regressão por componentes principais** (PCR, do inglês *principal components regression*) usa os escores das $M$ primeiras componentes principais de $X$ como as colunas $Z_1, \dots, Z_M$ da regressão acima e ajusta $Y$ sobre elas por mínimos quadrados. As colunas de $X$ são padronizadas antes, como na ridge; sem isso, a coluna de maior variância na sua unidade dominaria as primeiras componentes.
+
+As componentes são calculadas só com $X$: a resposta não entra na escolha das direções. A PCR aposta que as direções em que $X$ mais varia são também as que importam para prever $Y$.
+:::
+
+A aposta pode falhar. Nada obriga a resposta a depender das direções em que $X$ mais varia; uma direção de pouca variância pode ser justamente a que prevê $Y$.
+
+No `scikit-learn`, a PCR é um `Pipeline` de três passos: `StandardScaler`, `PCA(n_components=M)` e `LinearRegression`. O número de componentes $M$ faz o papel do $\lambda$ da ridge, no sentido inverso: com $M$ pequeno, o modelo é rígido e tem viés; com $M = p$, é o ajuste dos mínimos quadrados.
+
+Vale o mesmo simulador das seções 11.3 a 11.5, agora medindo o viés² e a variância da PCR para cada $M$: $n = 50$ observações, $p = 45$ preditores sorteados de forma independente, a mesma matriz de treino em todas as réplicas e 200 réplicas do ruído, de desvio $\sigma = 2$. Os dois cenários diferem só nos coeficientes verdadeiros:
+
+| Cenário | Coeficientes verdadeiros |
+|---|---|
+| **denso** | os 45 sorteados da normal padrão |
+| **esparso** | $\beta_1 = 3$ e $\beta_2 = -3$; os outros 43 são zero |
+
+O viés² e a variância são estimados com as 200 réplicas e 2.000 pontos de teste, como na seção 11.3, e o MSE de teste é a soma dos dois mais $\sigma^2 = 4$.
+
+```{python}
+#| label: simulador
+rng = np.random.default_rng(11)
+n_sim, p_sim, sigma = 50, 45, 2.0
+X_sim = rng.normal(size=(n_sim, p_sim))      # matriz de treino, fixa
+X_teste = rng.normal(size=(2000, p_sim))     # 2.000 pontos novos
+beta_denso = rng.normal(0, 1, p_sim)         # os 45 importam
+ruidos = rng.normal(0, sigma, size=(200, n_sim))   # 200 réplicas
+beta_esparso = np.zeros(p_sim)
+beta_esparso[[0, 1]] = [3, -3]               # só dois importam
+cenarios = {"denso": beta_denso, "esparso": beta_esparso}
+
+
+def decompoe(beta, modelo, treino=X_sim, teste=X_teste):
+    """Viés², variância e MSE de teste sobre as 200 réplicas."""
+    f_treino, f_teste = treino @ beta, teste @ beta
+    previsoes = np.array([
+        modelo.fit(treino, f_treino + ruido).predict(teste)
+        for ruido in ruidos
+    ])
+    vies2 = float(((previsoes.mean(axis=0) - f_teste) ** 2).mean())
+    variancia = float(previsoes.var(axis=0).mean())
+    return {"viés²": vies2, "variância": variancia,
+            "MSE de teste": vies2 + variancia + sigma**2}
+
+
+def pcr(M):
+    """A PCR com M componentes, nas colunas padronizadas."""
+    return make_pipeline(
+        StandardScaler(),
+        PCA(n_components=M, svd_solver="covariance_eigh"),
+        LinearRegression(),
+    )
+```
+
+::: {.funcao}
+**`PCA(..., svd_solver="covariance_eigh")`**: calcula as componentes pela matriz de covariâncias das colunas, uma matriz de $p \times p$. Dá as mesmas direções que o cálculo padrão, a menos do sinal, com uma conta menor, o que pesa em milhares de ajustes.
+:::
+
+A grade vai de $M = 1$ a $M = 45$, de dois em dois: em cada cenário, 23 valores de $M$ × 200 réplicas = 4.600 ajustes. A célula demora a terminar, e o tempo depende da máquina: espere a saída aparecer. Antes de rodar a célula: onde você espera o menor MSE de teste, com $M = 1$, com $M = 45$ ou no meio?
+
+```{python}
+#| label: pcr-simulado
+Ms = range(1, p_sim + 1, 2)
+print("valores de M na grade:", len(Ms))
+curvas = {
+    nome: pd.DataFrame([decompoe(beta, pcr(M)) for M in Ms], index=Ms)
+    for nome, beta in cenarios.items()
+}
+for nome, curva in curvas.items():
+    mse = curva["MSE de teste"]
+    print(f"{nome}: menor MSE {numero_br(mse.min())}"
+          f" em M = {mse.idxmin()}")
+    print("  MSE em M = 45:", numero_br(mse.loc[45]))
+    print("  viés², M = 1 e 45:",
+          numero_br(curva.loc[1, "viés²"]),
+          numero_br(curva.loc[45, "viés²"]))
+    print("  variância, M = 1 e 45:",
+          numero_br(curva.loc[1, "variância"]),
+          numero_br(curva.loc[45, "variância"]))
+    print("  variância só sobe:",
+          bool((curva["variância"].diff().dropna() > 0).all()))
+print("variância igual nos dois:",
+      bool(np.allclose(curvas["denso"]["variância"],
+                       curvas["esparso"]["variância"])))
+mq = make_pipeline(StandardScaler(), LinearRegression())
+print("M = 45 = mín. quadrados:",
+      all(np.isclose(decompoe(beta, mq)["MSE de teste"],
+                     curvas[nome].loc[45, "MSE de teste"])
+          for nome, beta in cenarios.items()))
+```
+
+```{python}
+#| label: fig-pcr-simulado
+#| fig-cap: 'Viés², variância e MSE de teste da PCR no simulador ($n = 50$, $p = 45$), contra o número de componentes $M$, de 1 a 45, de dois em dois. Em cima, o cenário denso; embaixo, o esparso. A linha tracejada cinza é o piso $\sigma^2 = 4$. Em $M = 45$, a PCR é o ajuste dos mínimos quadrados.'
+#| fig-alt: "Dois painéis empilhados com M de 1 a 45 no eixo horizontal e o erro quadrático médio no vertical, de 0 a 60. Em cada um, a variância, verde, começa em 0,10 e sobe até 49,38 em M igual a 45; o viés ao quadrado, azul, começa alto e termina em 0,12 em M igual a 45; o MSE de teste, roxo, desce com oscilações até o menor valor e dispara no fim. No de cima, o denso, o viés ao quadrado começa em 44,02 e o menor MSE de teste é 18,50, em M igual a 41. No de baixo, o esparso, o viés ao quadrado começa em 15,93 e o menor MSE de teste é 12,21, em M igual a 29. Nos dois, o MSE de teste termina em 53,50 em M igual a 45, e a linha tracejada em 4 fica abaixo de toda a curva roxa."
+fig, eixos = plt.subplots(2, 1, figsize=(4.8, 5.8), sharex=True,
+                          layout="constrained")
+cores = {"viés²": "C0", "variância": "C2", "MSE de teste": "C3"}
+for ax, (nome, curva) in zip(eixos, curvas.items()):
+    for coluna, cor in cores.items():
+        ax.plot(curva.index, curva[coluna], color=cor, linewidth=2)
+    ax.axhline(sigma**2, color="0.45", linestyle="--", linewidth=1.2)
+    ax.set_ylim(0, 60)
+    ax.set_ylabel("erro quadrático médio")
+    ax.set_title(nome, loc="left")
+eixos[-1].set_xlim(0, 46)
+eixos[-1].set_xlabel("número de componentes, M")
+entradas = [Line2D([], [], color=c, linewidth=2) for c in cores.values()]
+entradas.append(Line2D([], [], color="0.45", linestyle="--"))
+fig.legend(entradas, [*cores, "piso, σ² = 4"],
+           loc="outside lower center", ncols=2, frameon=False,
+           fontsize="small")
+plt.show()
+```
+
+Lida da direita para a esquerda, a figura repete a troca entre viés e variância que a ridge mostrou. Com $M = 45$, as 45 componentes refazem as 45 colunas, e o MSE de teste, 53,50 nos dois cenários, é o dos mínimos quadrados. A variância sobe a cada passo da grade, de 0,10 em $M = 1$ a 49,38 em $M = 45$, e é a mesma nos dois cenários: a variância das previsões depende da matriz de treino, das componentes usadas e do ruído, não dos coeficientes verdadeiros. O viés² é o que as poucas componentes custam: 44,02 no denso e 15,93 no esparso, em $M = 1$, contra 0,12 nos dois, em $M = 45$; com poucas componentes, o modelo não alcança a $f$ verdadeira.
+
+O menor MSE de teste da grade fica em $M = 41$ no denso, 18,50, e em $M = 29$ no esparso, 12,21. Nos dois, a PCR com esse $M$ fica muito abaixo dos 53,50 dos mínimos quadrados. Mas precisa de muitas componentes: no denso, 41 das 45. Esse $M$ é uma escolha de oráculo: ele sai de 2.000 pontos novos com a $f$ verdadeira conhecida, o que nenhum dado real oferece. Serve para comparar métodos julgados pelo mesmo critério; num dado real, quem escolhe $M$ é a validação cruzada, como em `Credit`, adiante.
+
+## A PCR contra a ridge e o lasso
+
+Nesses mesmos dados, a ridge e o lasso fazem melhor? Cada um entra com as grades de $\lambda$ da seção 11.4 e é julgado pelo menor MSE de teste da sua grade, o mesmo critério de oráculo da PCR. Esta célula também demora.
+
+```{python}
+#| label: pcr-contra-encolhimento
+def ridge(lam):
+    return make_pipeline(StandardScaler(), Ridge(alpha=lam))
+
+
+def lasso(lam):
+    return make_pipeline(
+        StandardScaler(),
+        # alpha = λ/(2n), como na seção 11.4
+        Lasso(alpha=lam / (2 * n_sim), max_iter=100_000, tol=1e-8),
+    )
+
+
+grades = {"ridge": (ridge, np.logspace(-2, 4, 31)),
+          "lasso": (lasso, np.logspace(-1, 3, 31))}
+tabela = pd.DataFrame({
+    nome: {
+        "mínimos quadrados": curvas[nome].loc[45, "MSE de teste"],
+        "PCR": curvas[nome]["MSE de teste"].min(),
+        **{metodo: min(decompoe(beta, faz(lam))["MSE de teste"]
+                       for lam in lams)
+           for metodo, (faz, lams) in grades.items()},
+    }
+    for nome, beta in cenarios.items()
+})
+for nome in tabela.columns:
+    print(f"MSE crescente, {nome}:")
+    print(", ".join(tabela[nome].sort_values().index))
+tabela.style.set_uuid("pcr-contra").format(numero_br)
+```
+
+A PCR fica atrás do melhor método nos dois cenários. No denso, a ridge chega a 14,52, contra 18,50 da PCR, e a PCR ganha do lasso, que chega a 19,29. No esparso, o lasso chega a 4,96, contra 12,21, e a PCR fica atrás também da ridge, que chega a 10,67.
+
+Por que tantas componentes? A PCR aposta que a $f$ verdadeira mora nas primeiras direções de $X$. Nos dados do simulador, os 45 preditores foram sorteados de forma independente. Duas frações, medidas nas 50 linhas de treino para cada $M$, mostram onde a $f$ mora. A primeira é a fração da variância de $X$ que as $M$ primeiras componentes carregam. A segunda é a fração da variância da $f$ verdadeira que uma regressão sobre essas componentes alcança, o $R^2$ dessa regressão.
+
+```{python}
+#| label: onde-mora-f
+pca_sim = make_pipeline(
+    StandardScaler(), PCA(svd_solver="covariance_eigh")
+).fit(X_sim)
+escores = pca_sim.transform(X_sim)
+fracoes = pd.DataFrame(
+    {"variância de X": pca_sim[-1].explained_variance_ratio_.cumsum()},
+    index=range(1, p_sim + 1),
+)
+fracoes.index.name = "M"
+for nome, beta in cenarios.items():
+    f = X_sim @ beta                      # a f verdadeira, sem ruído
+    fracoes[f"f, {nome}"] = [
+        LinearRegression().fit(escores[:, :M], f)
+        .score(escores[:, :M], f)
+        for M in fracoes.index
+    ]
+print("variância de X na 1.ª:",
+      numero_br(fracoes.iloc[0, 0], 3))
+fracoes.loc[[5, 15, 25, 35]].style.set_uuid("onde-mora-f").format(
+    lambda v: numero_br(v, 3))
+```
+
+::: {.funcao}
+- **`arr.cumsum()`**: a soma acumulada, posição a posição; a linha $M$ da tabela soma as frações das $M$ primeiras componentes.
+- **`escores[:, :M]`**: todas as linhas e as $M$ primeiras colunas, os escores das $M$ primeiras componentes.
+- **`modelo.score(X, y)`**: numa regressão, o $R^2$ das previsões de `modelo` em `X` contra `y` (seção 8.2).
+:::
+
+Nenhuma direção concentra muito da variância de $X$: a primeira componente carrega só 0,081, e as cinco primeiras, 0,338. A $f$ verdadeira acompanha essa divisão: com $M = 5$, a regressão sobre as componentes alcança 0,405 da variância de $f$ no denso e 0,295 no esparso, frações da mesma ordem da de $X$. Com $M = 25$, mais da metade das componentes, a regressão alcança 0,934 da $f$ no denso e 0,917 no esparso; o resto está espalhado pelas outras 20, e buscá-lo traz a variância de volta.
+
+No esparso, a $f$ depende de duas colunas originais, $3X_1 - 3X_2$, e essa direção se espalha por muitas componentes. A PCR não seleciona colunas: cada componente é uma combinação das 45, e o modelo não tem como ficar só com $X_1$ e $X_2$, como o lasso pode ficar, ao zerar coeficientes.
+
+## Quando a PCR funciona
+
+A aposta da PCR dá certo quando as colunas de $X$ variam juntas porque vêm de poucas fontes comuns, e a $f$ depende de $X$ por essas mesmas fontes. Para ver isso, as 45 colunas do simulador passam a ser geradas de outro jeito: cada linha sorteia três **fatores** escondidos, e cada coluna é uma mistura dos três, com pesos de mistura sorteados uma vez para todas as linhas, mais um ruído de desvio 0,5. Os coeficientes verdadeiros somam os pesos de mistura dos três fatores, multiplicados por 2, −1 e 1, para a $f$ depender de todos eles.
+
+O ruído da resposta e as 200 réplicas continuam os mesmos; os 2.000 pontos de teste são novos, sorteados do mesmo jeito que as linhas de treino. A grade de $M$ agora vai de um em um, de 1 a 45, e a célula também demora. Quantas componentes a PCR vai usar?
+
+```{python}
+#| label: poucos-fatores
+rng_fatores = np.random.default_rng(12)
+pesos_fatores = rng_fatores.normal(size=(3, p_sim))   # 3 fatores × 45 colunas
+
+
+def com_fatores(linhas):
+    """Linhas de X geradas por 3 fatores escondidos, mais um ruído pequeno."""
+    fatores = rng_fatores.normal(size=(linhas, 3))
+    return (fatores @ pesos_fatores
+            + 0.5 * rng_fatores.normal(size=(linhas, p_sim)))
+
+
+X_fatores, X_fatores_teste = com_fatores(n_sim), com_fatores(2000)
+# a f combina os três fatores com pesos fixos 2, −1 e 1;
+# o / 10 só reduz a escala da f
+beta_fatores = pesos_fatores.T @ np.array([2, -1, 1]) / 10
+dados_fatores = {"treino": X_fatores, "teste": X_fatores_teste}
+Ms_todos = range(1, p_sim + 1)          # a grade inteira, de 1 em 1
+mse_fatores = pd.Series({
+    M: decompoe(beta_fatores, pcr(M), **dados_fatores)["MSE de teste"]
+    for M in Ms_todos
+})
+mse_ridge_fatores = min(
+    decompoe(beta_fatores, ridge(lam), **dados_fatores)["MSE de teste"]
+    for lam in grades["ridge"][1]
+)
+pca_fatores = make_pipeline(StandardScaler(), PCA()).fit(X_fatores)
+escores_fatores = pca_fatores.transform(X_fatores)
+f_fatores = X_fatores @ beta_fatores     # a f verdadeira no treino
+r2_f = [LinearRegression().fit(escores_fatores[:, :M], f_fatores)
+        .score(escores_fatores[:, :M], f_fatores) for M in (1, 2, 3)]
+print("variância das 3 primeiras:", numero_br(
+    pca_fatores[-1].explained_variance_ratio_[:3].sum(), 3))
+print("R² da f com M = 1, 2 e 3:")
+print(" ", *[numero_br(r2, 3) for r2 in r2_f])
+print("PCR, M de menor MSE:", mse_fatores.idxmin())
+print("PCR, menor MSE:", numero_br(mse_fatores.min()))
+print("PCR, M = 1:", numero_br(mse_fatores.loc[1]))
+print("mínimos quadrados:", numero_br(mse_fatores.loc[45]))
+print("ridge, menor MSE:", numero_br(mse_ridge_fatores))
+print("PCR abaixo da ridge:", bool(mse_fatores.min() < mse_ridge_fatores))
+```
+
+::: {.funcao}
+**`decompoe(beta, modelo, **dados_fatores)`**: o `**` desempacota o dicionário em argumentos nomeados, aqui `treino=X_fatores` e `teste=X_fatores_teste`; sem eles, `decompoe` usa as matrizes do simulador.
+:::
+
+```{python}
+#| label: fig-pcr-fatores
+#| fig-cap: 'MSE de teste da PCR no caso dos três fatores escondidos, contra o número de componentes $M$, de 1 a 45, de um em um. O ponto laranja marca o menor valor da grade, 4,79, em $M = 3$; a linha tracejada cinza é o piso $\sigma^2 = 4$. Em $M = 45$, a PCR é o ajuste dos mínimos quadrados, com 79,98.'
+#| fig-alt: "Um painel com M de 1 a 45 no eixo horizontal e o MSE de teste no vertical. A curva azul começa em 62,04 em M igual a 1, cai até 4,79 em M igual a 3, marcado por um ponto laranja, fica acima da linha tracejada cinza do piso 4, sobe devagar pela grade e dispara nas últimas componentes, até 79,98 em M igual a 45."
+fig, ax = plt.subplots(figsize=(4.8, 3.4), layout="constrained")
+ax.plot(mse_fatores.index, mse_fatores, color="C0", linewidth=2)
+ax.axhline(sigma**2, color="0.45", linestyle="--", linewidth=1.2)
+M_min = mse_fatores.idxmin()
+ax.plot(M_min, mse_fatores.min(), "o", color="C1", markersize=8, zorder=3)
+ax.annotate(f"M = {M_min}: {numero_br(mse_fatores.min())}",
+            (M_min, mse_fatores.min()), xytext=(12, 28),
+            textcoords="offset points", fontsize="small",
+            arrowprops={"arrowstyle": "-", "color": "0.45"})
+ax.text(44, sigma**2 - 1, "piso, σ² = 4", ha="right", va="top",
+        fontsize="small", color="0.45")
+ax.set_xlim(0, 46)
+ax.set_ylim(0, 85)
+ax.set_xlabel("número de componentes, M")
+ax.set_ylabel("MSE de teste")
+ax.yaxis.set_major_formatter(virgula(0))
+plt.show()
+```
+
+As três primeiras componentes carregam 0,864 da variância de $X$, e a $f$ precisa das três: a regressão sobre a primeira alcança 0,633 da variância da $f$; sobre as duas primeiras, 0,801; sobre as três, 0,998. Na grade inteira, a PCR chega ao menor MSE de teste com $M = 3$, uma componente por fator: 4,79, perto do piso $\sigma^2 = 4$, contra 62,04 com $M = 1$ e 79,98 dos mínimos quadrados, com $M = 45$. Aqui a PCR fica abaixo até da ridge, que chega a 5,02. Quando as colunas vêm de poucos fatores e a $f$ depende deles, poucas componentes guardam o que serve para prever, e o resto das direções só traz variância.
+
+## PCR em `Credit`
+
+`Credit` tem 400 clientes, e a resposta é `saldo`, a dívida no cartão. Os preditores são 11 colunas: seis numéricas (`renda`, `limite`, `pontuacao`, `cartoes`, `idade`, `escolaridade`) e cinco indicadoras, `imovel_proprio_sim`, `estudante_sim` e `casado_sim`, mais duas para `regiao`, `regiao_Oeste` e `regiao_Sul`, com `Leste` como base.
+
+A PCR é ajustada com $M$ de 1 a 11 componentes e avaliada pelo erro de validação cruzada dos 10 grupos das seções 11.2 e 11.5, com a mesma semente, num `GridSearchCV` como o da seção 11.5, agora com a grade em `pca__n_components`. Como o `StandardScaler` e a `PCA` estão dentro do `Pipeline`, a padronização e as direções são refeitas em cada grupo só com as linhas de treino, e as linhas de validação não entram na escolha das componentes, o que evita o vazamento da seção 10.6. Para comparar, entra o erro dos mínimos quadrados nos mesmos grupos. Quantas componentes a validação cruzada vai escolher?
+
+```{python}
+#| label: pcr-credit
+grupos = KFold(10, shuffle=True, random_state=11)
+Ms_credit = range(1, X.shape[1] + 1)
+busca = GridSearchCV(
+    make_pipeline(StandardScaler(), PCA(), LinearRegression()),
+    {"pca__n_components": list(Ms_credit)},
+    cv=grupos, scoring="neg_mean_squared_error",
+).fit(X, y)
+cv_pcr = pd.Series(-busca.cv_results_["mean_test_score"],
+                   index=Ms_credit)
+cv_mq = -cross_val_score(LinearRegression(), X, y, cv=grupos,
+                         scoring="neg_mean_squared_error").mean()
+quedas = -cv_pcr.diff()        # quanto o erro cai de M − 1 para M
+print("preditores:", X.shape[1], "| clientes:", X.shape[0])
+print("M de menor erro:", cv_pcr.idxmin())
+print("igual aos mín. quadrados:",
+      bool(np.isclose(cv_pcr.min(), cv_mq)))
+print("menor erro com M ≤ 9:", numero_br(cv_pcr.loc[:9].min()))
+print("  em M =", cv_pcr.loc[:9].idxmin())
+print("maior queda: de M =", quedas.idxmax() - 1,
+      "a", quedas.idxmax())
+for M in [1, 2, 7, 8, 9, 10, 11]:
+    print(f"M = {M:>2}: erro {numero_br(cv_pcr[M])}")
+```
+
+O menor erro de validação cruzada está em $M = 11$, com todas as componentes, e é igual ao dos mínimos quadrados. Antes disso, o erro tem um trecho de queda e um patamar. Em $M = 2$, ele sobe um pouco, de 89.212,37 para 89.695,30, antes de cair; de $M = 1$ a $M = 7$, cai no total para 69.645,09, cerca de 22% a menos ((89.212,37 − 69.645,09) ÷ 89.212,37); em $M = 8$ e $M = 9$, fica em torno desse nível, com 69.736,74 e 70.670,76. De $M = 9$ para $M = 10$, ele cai para 10.130,53, a maior queda da curva, e em $M = 11$ ainda desce 22,00 (10.130,53 − 10.108,53). Em `Credit`, a PCR não reduz a dimensão: o melhor modelo usa as 11 componentes.
+
+O que muda de $M = 9$ para $M = 10$ aparece nos coeficientes. De cada ajuste com os 400 clientes saem os $\beta_j = \sum_m\theta_m\phi_{jm}$, reconstruídos a partir dos $\theta_m$ e das cargas: são os coeficientes nas colunas padronizadas, comparáveis aos da ridge.
+
+```{python}
+#| label: pcr-coeficientes
+modelos = {M: make_pipeline(StandardScaler(), PCA(n_components=M),
+                            LinearRegression()).fit(X, y)
+           for M in Ms_credit}
+# β_j = soma de θ_m φ_jm: cargas transpostas vezes os θ
+coef_pcr = pd.DataFrame({
+    M: modelo[1].components_.T @ modelo[-1].coef_
+    for M, modelo in modelos.items()
+}, index=X.columns).T
+coef_pcr.index.name = "M"
+destaque = {"renda": "C0", "limite": "C1",
+            "pontuacao": "C2", "estudante_sim": "C3"}
+outras = coef_pcr.drop(columns=list(destaque))
+print("algum β_j igual a zero:", bool(np.isclose(coef_pcr, 0).any()))
+print("outras sete, de", numero_br(outras.min().min(), 1),
+      "a", numero_br(outras.max().max(), 1))
+diferenca = (coef_pcr.loc[7:9, "renda"]
+             - coef_pcr.loc[7:9, "estudante_sim"]).abs().max()
+print("renda × estudante_sim, M = 7 a 9:")
+print("  maior diferença:", numero_br(diferenca, 1))
+coef_pcr.loc[[1, 9, 10, 11], list(destaque)].style.set_uuid(
+    "coef-pcr").format(lambda v: numero_br(v, 1))
+```
+
+::: {.funcao}
+- **`modelo[1]`**: o segundo passo do `Pipeline`, a `PCA` ajustada; `components_.T @ coef_` multiplica as cargas pelos $\theta_m$ da regressão e dá um $\beta_j$ por coluna original.
+- **`df.drop(columns=lista)`**: uma cópia de `df` sem as colunas de `lista`; numa `Series`, **`serie.drop(rotulos)`** tira os elementos com esses rótulos.
+:::
+
+```{python}
+#| label: fig-pcr-credit
+#| fig-cap: 'A PCR em `Credit`, contra o número de componentes $M$. Em cima, os coeficientes padronizados $\beta_j$ reconstruídos das componentes, com `renda`, `limite` (tracejada, por cima), `pontuacao` e `estudante_sim` (mais grossa, por baixo) em cor; de $M = 7$ a $M = 9$, a linha de `renda` corre sobre a de `estudante_sim`, a no máximo 3,0 dela; embaixo, o erro de validação cruzada em 10 grupos. Em $M = 11$, a PCR é o ajuste dos mínimos quadrados.'
+#| fig-alt: "Dois painéis empilhados com M de 1 a 11 no eixo horizontal comum. No de cima, os coeficientes: renda em azul, limite em laranja tracejado, por cima de pontuacao em verde, ficam juntos, perto de 114 a 124 em M igual a 1 e de 113 a 134 em M igual a 9, e estudante_sim em roxo, mais grossa e por baixo da azul, vai de −0,5 em M igual a 1 a 112,0 em M igual a 9; em M igual a 10, renda cai para −275,0, e limite e pontuacao sobem juntos para perto de 308; em M igual a 11, limite vai a 440,1 e pontuacao desce a 175,6. As sete colunas restantes, em cinza, ficam entre −60,3 e 50,4. No de baixo, o erro de validação cruzada, em dólares ao quadrado divididos por 1.000, sobe de 89,2 em M igual a 1 para 89,7 em M igual a 2, desce até 69,6 em M igual a 7, fica perto desse nível em M igual a 8 e 9, com 69,7 e 70,7, despenca para 10,13 em M igual a 10 e termina em 10,11 em M igual a 11."
+fig, (ax_coef, ax_cv) = plt.subplots(
+    2, 1, figsize=(4.8, 5.8), sharex=True, layout="constrained"
+)
+tracejado = (0, (4, 3))
+# estudante_sim, mais grossa e por baixo, fica visível como borda da
+# renda de M = 7 a 9, onde as duas quase coincidem
+espessura = {"estudante_sim": 4}
+camada = {"limite": 5, "renda": 4, "pontuacao": 3, "estudante_sim": 2}
+for coluna in X.columns:
+    em_destaque = coluna in destaque
+    ax_coef.plot(coef_pcr.index, coef_pcr[coluna],
+                 color=destaque.get(coluna, "0.45"),
+                 linewidth=espessura.get(coluna, 2 if em_destaque else 1),
+                 linestyle=tracejado if coluna == "limite" else "-",
+                 zorder=camada.get(coluna, 1))
+ax_coef.axhline(0, color="0.45", linewidth=0.8)
+ax_coef.set_ylim(-320, 480)
+ax_coef.set_ylabel("coeficiente padronizado")
+ax_cv.plot(cv_pcr.index, cv_pcr / 1000, color="0.45", linewidth=2,
+           marker="o", markersize=5)
+ax_cv.set_ylim(0, 95)
+ax_cv.set_ylabel("erro de validação\ncruzada (dólares² ÷ 1.000)")
+ax_cv.set_xticks(list(Ms_credit))
+ax_cv.set_xlabel("número de componentes, M")
+entradas = [Line2D([], [], color=c, linewidth=espessura.get(nome, 2),
+                   linestyle=tracejado if nome == "limite" else "-")
+            for nome, c in destaque.items()]
+entradas.append(Line2D([], [], color="0.45", linewidth=1))
+fig.legend(entradas, [*destaque, "outras sete"],
+           loc="outside lower center", ncols=3, frameon=False,
+           fontsize="small")
+plt.show()
+```
+
+Na tabela de coeficientes, acima da figura, com $M = 1$ e com $M = 9$, os coeficientes de `renda`, `limite` e `pontuacao` são positivos e parecidos, de 113,2 a 134,4. Com $M = 10$, o de `renda` troca de sinal e vai a −275,0, quase o −274,7 dos mínimos quadrados. `estudante_sim` fica em destaque porque, com $M = 10$ e $M = 11$, o coeficiente dela, 126,9 e 127,7, passa longe do das outras sete colunas, que ficam entre −60,3 e 50,4 em todos os $M$. A troca de sinal de `renda` vem da 10.ª componente.
+
+```{python}
+#| label: decima-componente
+pca_credit = modelos[11][1]
+escores_credit = modelos[11][:2].transform(X)
+componentes = pd.DataFrame({
+    "variância de X": pca_credit.explained_variance_ratio_,
+    "|corr. com saldo|": [
+        abs(np.corrcoef(escores_credit[:, m], y)[0, 1])
+        for m in range(X.shape[1])
+    ],
+}, index=range(1, X.shape[1] + 1))
+componentes.index.name = "componente"
+cargas10 = pd.Series(pca_credit.components_[9], index=X.columns)
+ordem = componentes["|corr. com saldo|"].sort_values(ascending=False)
+print("mais correlacionadas:", *ordem.index[:2])
+print("|cargas| da 10.ª:")
+for coluna in ["renda", "limite", "pontuacao"]:
+    print(f"  {coluna}: {numero_br(abs(cargas10[coluna]), 3)}")
+print("maior |carga| nas outras:",
+      numero_br(cargas10.drop(["renda", "limite", "pontuacao"])
+                .abs().max(), 3))
+print("renda contra limite:",
+      bool(np.sign(cargas10["renda"]) != np.sign(cargas10["limite"])))
+print("renda contra pontuacao:",
+      bool(np.sign(cargas10["renda"])
+           != np.sign(cargas10["pontuacao"])))
+cargas11 = pd.Series(pca_credit.components_[10], index=X.columns)
+print("|cargas| da 11.ª:",
+      numero_br(abs(cargas11["limite"]), 3),
+      numero_br(abs(cargas11["pontuacao"]), 3))
+print("limite contra pontuacao:",
+      bool(np.sign(cargas11["limite"])
+           != np.sign(cargas11["pontuacao"])))
+componentes.style.set_uuid("componentes").format(
+    lambda v: numero_br(v, 3))
+```
+
+::: {.funcao}
+**`modelo[:2]`**: um `Pipeline` só com os dois primeiros passos, já ajustados, o `StandardScaler` e a `PCA`; com `.transform(X)`, dá os escores das componentes.
+:::
+
+As componentes vêm em ordem decrescente de variância, e a 10.ª carrega só 0,024 da variância de $X$. Mesmo assim, ela é a segunda mais correlacionada com `saldo`, com 0,517 em valor absoluto, atrás só da 1.ª, com 0,762. As cargas dela põem `renda`, com 0,836, de um lado, e `limite` e `pontuacao`, com 0,379 e 0,374, do outro, com o sinal oposto; nas outras oito colunas, nenhuma carga passa de 0,103 em valor absoluto. O escore mede o quanto a renda do cliente se afasta do que o `limite` e a `pontuacao` dele sugeririam.
+
+É essa direção que dá à `renda` o coeficiente negativo dos mínimos quadrados: entre clientes com o mesmo limite, a mesma pontuação e as demais colunas iguais, mais renda vai com menos `saldo`. Ela fica no fim da ordem porque `renda`, `limite` e `pontuacao` andam juntas (a correlação entre `renda` e `limite` é 0,792), e o afastamento entre elas tem pouca variância, os 0,024. Pouca variância, mas muita relação com `saldo`.
+
+A 11.ª componente é a diferença entre `limite` e `pontuacao`, com cargas de 0,705 e 0,708 e sinais opostos, e carrega uma fração da variância que a tabela arredonda para 0,000, porque as duas colunas, com correlação de 0,997, quase se repetem. Com ela, os coeficientes das duas, 308,3 e 307,9 com $M = 10$, se separam em 440,1 e 175,6, e o erro desce os 22,00 da conta acima.
+
+Trocar $p$ colunas por $M$ combinações corta a variância, mas a PCR escolhe as direções pela variância de $X$, sem olhar $Y$. Com três fatores escondidos, as direções de maior variância eram as da $f$; com colunas independentes e em `Credit`, não eram.
+
+Lado a lado, os quatro métodos para colunas que repetem informação:
+
+| Método | O que faz com as colunas |
+|---|---|
+| seleção de subconjuntos | escolhe algumas e descarta as outras |
+| ridge | mantém todas e encolhe os coeficientes |
+| lasso | encolhe os coeficientes e leva alguns a zero, o que descarta colunas |
+| PCR | troca as colunas por $M$ combinações de todas elas |
+
+Como a ridge, a PCR mantém todas as colunas originais no modelo: cada componente é uma combinação delas, e em `Credit` nenhum $\beta_j$ da PCR é zero, nem com $M = 1$. Ela funciona quando as direções em que $X$ mais varia são as que carregam a $f$; quando a $f$ depende de uma direção de pouca variância, ela precisa de quase todas as componentes, e a redução de dimensão se perde.

@@ -1,0 +1,434 @@
+# Escolhendo o Modelo: Cp, AIC, BIC e Validação
+
+::: {.callout-note}
+Esta seção corresponde à seção 6.1.3 de @james2023.
+:::
+
+A busca completa em `Credit` deixa doze candidatos: para cada tamanho $k$, o $\mathcal{M}_k$, o melhor modelo com $k$ preditores entre todos os daquele tamanho, de $\mathcal{M}_0$, sem preditor nenhum, a $\mathcal{M}_{11}$, com as 11 colunas. Qual deles usar? O RSS de treino não decide: ele cai quando o modelo ganha colunas, e acabaria escolhendo o modelo com todas. Há duas saídas. A primeira é **corrigir** o erro de treino, somando a ele uma penalidade que cresce com o número de preditores. A segunda é **medir** o erro de teste diretamente, em observações que o ajuste não viu.
+
+```{python}
+#| label: setup
+#| include: false
+import itertools
+
+import matplotlib.pyplot as plt
+import numpy as np
+import pandas as pd
+from sklearn.linear_model import LinearRegression
+from sklearn.model_selection import KFold, train_test_split
+
+plt.style.use("estilo-figuras.mplstyle")
+
+credit = pd.read_csv("dados/Credit.csv")
+X = pd.get_dummies(credit.drop(columns="saldo"), drop_first=True, dtype=float)
+y = credit["saldo"]
+```
+
+## Corrigir o erro de treino
+
+Os coeficientes de mínimos quadrados são escolhidos para deixar o RSS **de treino** o menor possível. É por isso que o MSE de treino subestima o de teste, e subestima mais quanto mais flexível é o modelo: na seção 7.6, o erro de treino só cai com a flexibilidade, enquanto o de teste desenha um U. Um modelo com mais colunas tem mais liberdade para se ajustar ao ruído do treino, e a correção precisa crescer com o número de preditores.
+
+A função abaixo é o laço da busca completa da seção 11.1: devolve, para cada tamanho $k$, as colunas de $\mathcal{M}_k$ e o RSS de treino dele.
+
+```{python}
+#| label: melhores-por-tamanho
+def melhores_por_tamanho(X, y):
+    """Busca completa: para cada tamanho k, as colunas de M_k e o RSS de treino."""
+    colunas = X.columns.tolist()
+    melhores = {0: ((), float(((y - y.mean()) ** 2).sum()))}
+    for k in range(1, len(colunas) + 1):
+        for preditores in itertools.combinations(colunas, k):
+            Xk = X[list(preditores)]
+            previsao = LinearRegression().fit(Xk, y).predict(Xk)
+            rss = float(((y - previsao) ** 2).sum())
+            if k not in melhores or rss < melhores[k][1]:
+                melhores[k] = (preditores, rss)
+    linhas = [{"k": k, "preditores": t, "rss": r} for k, (t, r) in melhores.items()]
+    return pd.DataFrame(linhas).set_index("k")
+
+
+n, p = X.shape
+melhores = melhores_por_tamanho(X, y)
+print(f"{n} clientes, {p} colunas; o RSS nunca sobe: "
+      f"{melhores['rss'].is_monotonic_decreasing}")
+melhores["rss"].map(lambda r: f"{r:,.0f}".replace(",", ".")).to_frame("RSS")
+```
+
+::: {.funcao}
+**`serie.is_monotonic_decreasing`**: `True` se cada valor da série é menor ou igual ao anterior. Na última linha, o `map` só escreve cada RSS arredondado, com ponto de milhar. **`serie.to_frame(nome)`**: a série como uma tabela de uma coluna, com o título `nome`.
+:::
+
+A linha $k = 0$ é o TSS, o RSS do modelo nulo, e o `True` confirma que o RSS nunca sobe de um tamanho para o seguinte: vai de 84.339.912 no modelo nulo a 3.786.730 com as 11 colunas.
+
+O $C_p$ e o BIC, a seguir, precisam de uma estimativa de $\sigma^2$, a variância do erro $\varepsilon$: quanto o `saldo` varia em torno do que as colunas conseguem prever, a parte que nenhum modelo explica. A estimativa usual sai do modelo com todas as colunas: é o quadrado do RSE da seção 8.3, o RSS de $\mathcal{M}_p$ dividido por $n - p - 1$.
+
+```{python}
+#| label: sigma2
+sigma2 = melhores.loc[p, "rss"] / (n - p - 1)
+round(float(sigma2), 1), round(float(np.sqrt(sigma2)), 2)
+```
+
+::: {.funcao}
+**`np.sqrt(x)`**: a raiz quadrada de `x`, seja um número, um array ou uma série; numa série, a raiz de cada valor, com o mesmo índice.
+:::
+
+$\hat\sigma^2$ vale 9.759,6, e a raiz dele, 98,79 dólares, é o afastamento típico entre o `saldo` de um cliente e a previsão do modelo completo. Com $\hat\sigma^2$, e com $d$ o número de preditores de um modelo, o primeiro critério é o $C_p$.
+
+::: {.conceito}
+Para um modelo de mínimos quadrados com $d$ preditores, ajustado em $n$ observações,
+
+$$
+C_p = \frac{1}{n}\left(\mathrm{RSS} + 2d\hat\sigma^2\right).
+$$
+
+O $C_p$ é uma estimativa do MSE de teste, e escolhe-se o modelo de **menor** $C_p$. O **AIC** (critério de informação de Akaike) vale para muitos tipos de modelo. Na regressão linear, supondo que o erro $\varepsilon$ segue uma distribuição normal, a curva em sino, ele tem a mesma fórmula que o $C_p$, a menos de constantes que não mudam a escolha.
+:::
+
+O RSS sozinho é otimista, e o $C_p$ soma a ele $2d\hat\sigma^2$: cada coluna a mais custa $2\hat\sigma^2$, e só compensa se reduzir o RSS mais do que isso. O segundo critério tem a mesma forma, com outra penalidade.
+
+::: {.conceito}
+$$
+\mathrm{BIC} = \frac{1}{n}\left(\mathrm{RSS} + \log(n)\,d\hat\sigma^2\right).
+$$
+
+O **BIC** (critério de informação bayesiano) não vem de uma estimativa do MSE de teste, e sim de uma aproximação de quão provável cada modelo é, dado o que se observou. Para usá-lo, basta a fórmula: também é o RSS mais uma penalidade por coluna, e também se escolhe o modelo de **menor** valor.
+:::
+
+O BIC troca o 2 por $\log n$, o logaritmo natural de $n$. Quando $\log n$ passa de 2, o BIC cobra mais caro por coluna que o $C_p$ e tende a escolher modelos menores. O terceiro critério não soma penalidade nenhuma.
+
+::: {.conceito}
+$$
+R^2\ \text{ajustado} = 1 - \frac{\mathrm{RSS}/(n - d - 1)}{\mathrm{TSS}/(n - 1)}.
+$$
+
+No $R^2$ ajustado, escolhe-se o modelo de **maior** valor.
+:::
+
+O $R^2$ ajustado divide o RSS por $n - d - 1$, que diminui quando $d$ cresce. Uma coluna que quase não reduz o RSS faz $\mathrm{RSS}/(n - d - 1)$ subir, e o $R^2$ ajustado cair. Os três critérios são uma expressão cada sobre a coluna `rss`:
+
+```{python}
+#| label: criterios
+d = melhores.index.to_numpy()
+rss = melhores["rss"]
+tss = rss[0]
+criterios = pd.DataFrame({
+    "Cp": (rss + 2 * d * sigma2) / n,
+    "BIC": (rss + np.log(n) * d * sigma2) / n,
+    "R² ajustado": 1 - (rss / (n - d - 1)) / (tss / (n - 1)),
+})
+escolhas = {
+    "Cp": int(criterios["Cp"].idxmin()),
+    "BIC": int(criterios["BIC"].idxmin()),
+    "R² ajustado": int(criterios["R² ajustado"].idxmax()),
+}
+round(float(np.log(n)), 2), escolhas
+```
+
+::: {.funcao}
+**`melhores.index.to_numpy()`**: o índice da tabela, os tamanhos de 0 a 11, como array do `numpy`, para entrar na conta como o $d$ de cada linha. **`np.log(x)`**: o logaritmo natural.
+
+**`serie.idxmin()`** e **`serie.idxmax()`**: o rótulo do índice onde a série tem o menor valor e onde tem o maior, respectivamente. Aqui o índice é $k$, e o rótulo é o tamanho do modelo escolhido.
+:::
+
+Com $n = 400$, $\log n$ vale 5,99, quase três vezes o 2 do $C_p$. O $C_p$ escolhe o modelo de 6 preditores, o BIC o de 4 e o $R^2$ ajustado o de 7. As colunas de cada um, e se um modelo está contido no outro:
+
+```{python}
+#| label: colunas-escolhidas
+colunas = {
+    criterio: set(melhores.loc[k, "preditores"]) for criterio, k in escolhas.items()
+}
+encaixados = (colunas["BIC"].issubset(colunas["Cp"])
+              and colunas["Cp"].issubset(colunas["R² ajustado"]))
+for criterio, c in colunas.items():
+    print(f"{criterio}: {', '.join(sorted(c))}")
+print("encaixados:", encaixados)
+```
+
+`a.issubset(b)` pergunta se todo elemento do conjunto `a` também está em `b`. O `True` diz que os três modelos são encaixados: o do BIC está contido no do $C_p$, que está contido no do $R^2$ ajustado. O do BIC tem `cartoes`, `estudante_sim`, `limite` e `renda`; o do $C_p$ acrescenta `idade` e `pontuacao`; o do $R^2$ ajustado acrescenta ainda `imovel_proprio_sim`. A figura mostra as três curvas, de 1 a 11 preditores.
+
+```{python}
+#| label: fig-criterios
+#| fig-cap: '$C_p$, BIC e $R^2$ ajustado do melhor modelo de cada tamanho em `Credit`, de 1 a 11 preditores. O "x" laranja marca o modelo escolhido por cada critério: o menor $C_p$, o menor BIC e o maior $R^2$ ajustado. $C_p$ e BIC estão em milhares de dólares², como um MSE.'
+#| fig-alt: "Três painéis empilhados, com o número de preditores de 1 a 11 no eixo horizontal comum. No de cima, o Cp, em milhares de dólares ao quadrado, cai de mais de 50 com um preditor para perto de 11 com três e fica quase plano até onze, com um x laranja em seis. No do meio, o BIC tem a mesma forma, com o mínimo marcado em quatro e uma subida leve depois. No de baixo, o R² ajustado sobe de cerca de 0,75 com um preditor para perto de 0,95 com três e fica plano, com o máximo marcado em sete."
+rotulos = {
+    "Cp": "$C_p$ (mil dólares²)",
+    "BIC": "BIC (mil dólares²)",
+    "R² ajustado": "$R^2$ ajustado",
+}
+fig, eixos = plt.subplots(3, 1, figsize=(6.4, 5.6), sharex=True)
+tamanhos = criterios.index[1:]
+for ax, nome in zip(eixos, criterios.columns):
+    escala = 1 if nome == "R² ajustado" else 1000
+    curva = criterios.loc[tamanhos, nome] / escala
+    ax.plot(tamanhos, curva, color="C0", marker="o", markersize=4)
+    k = escolhas[nome]
+    ax.plot(k, curva[k], "x", color="C1", markersize=11, markeredgewidth=2.5,
+            label="_nolegend_")
+    ax.set_ylabel(rotulos[nome])
+eixos[2].yaxis.set_major_formatter(lambda valor, _: f"{valor:.2f}".replace(".", ","))
+eixos[2].set_xticks(range(1, 12))
+eixos[2].set_xlabel("número de preditores")
+fig.tight_layout()
+plt.show()
+```
+
+::: {.funcao}
+**`ax.yaxis.set_major_formatter(funcao)`**: escreve cada marca do eixo vertical com a função dada, que recebe o valor e a posição; aqui, com duas casas e vírgula decimal.
+:::
+
+As três curvas mudam depressa no começo e quase nada a partir de 4 preditores. Quanto, em cada trecho?
+
+```{python}
+#| label: quase-plana
+def mudancas(tabela):
+    """Quanto cada coluna muda de 1 a 3, de 3 a 4, e a amplitude de 4 a 11."""
+    return pd.DataFrame({
+        "de 1 a 3": (tabela.loc[1] - tabela.loc[3]).abs(),
+        "de 3 a 4": (tabela.loc[3] - tabela.loc[4]).abs(),
+        "de 4 a 11, maior − menor": tabela.loc[4:].max() - tabela.loc[4:].min(),
+    }).T
+
+
+mudancas(criterios).round({"Cp": 1, "BIC": 1, "R² ajustado": 4})
+```
+
+::: {.funcao}
+**`tabela.loc[4:]`**: as linhas de rótulo 4 em diante; **`.max()`** e **`.min()`**, numa tabela, o maior e o menor valor de cada coluna. **`.abs()`**: o valor absoluto, para a queda do $C_p$ e a subida do $R^2$ ajustado saírem positivas. **`.T`**: a tabela transposta, com as linhas no lugar das colunas. **`df.round({coluna: casas})`**: arredonda cada coluna com o seu número de casas.
+:::
+
+De 1 a 3 preditores, o $C_p$ cai 42.922,2 dólares²; de 4 a 11, a distância entre o maior e o menor valor é de só 156,8. O BIC e o $R^2$ ajustado têm o mesmo desenho na tabela: uma mudança grande de 1 a 3 e uma variação pequena de 4 a 11. Todo modelo de 4 a 11 preditores tem um $C_p$ parecido, e a escolha exata entre eles pesa pouco. O BIC, que cobra mais por coluna, é o que fica com o modelo menor.
+
+Os três critérios dependem da contagem $d$ de preditores, e o $C_p$ e o BIC dependem também de $\hat\sigma^2$. Num método sem um número claro de parâmetros, como o *k*-NN da seção 7.3, falta o $d$ para pôr na fórmula.
+
+## Medir o erro de teste
+
+A alternativa é a do capítulo 10: separar observações que o ajuste não vê e medir nelas o erro de cada tamanho, por conjunto de validação ou por validação cruzada. Não depende de $\hat\sigma^2$ nem de contar parâmetros, e estima o erro de teste diretamente.
+
+Há um cuidado, o mesmo da seção 10.6. Os $\mathcal{M}_k$ da tabela `melhores` foram escolhidos olhando os 400 clientes. Validar esses modelos em parte desses clientes deixaria as linhas de validação influenciarem a escolha das colunas: é vazamento. A busca completa tem de ser **refeita só com as linhas de treino**, e o $\mathcal{M}_k$ de um treino pode ser diferente do de outro. A função abaixo faz isso: recebe um treino e uma validação, refaz a busca no treino e mede, na validação, o MSE do melhor modelo de cada tamanho.
+
+```{python}
+#| label: erros-de-validacao
+def erros_de_validacao(X_treino, y_treino, X_val, y_val):
+    """MSE de validação do M_k de cada tamanho, escolhido só com o treino."""
+    erros = []
+    busca = melhores_por_tamanho(X_treino, y_treino)
+    for k, preditores in busca["preditores"].items():
+        if k == 0:
+            previsao = np.full(len(y_val), y_treino.mean())
+        else:
+            colunas = list(preditores)
+            modelo = LinearRegression().fit(X_treino[colunas], y_treino)
+            previsao = modelo.predict(X_val[colunas])
+        erros.append(float(((y_val - previsao) ** 2).mean()))
+    return pd.Series(erros, index=pd.Index(range(p + 1), name="k"))
+
+
+X_treino, X_val, y_treino, y_val = train_test_split(
+    X, y, test_size=0.25, random_state=11
+)
+validacao = erros_de_validacao(X_treino, y_treino, X_val, y_val)
+len(y_treino), len(y_val), int(validacao.idxmin())
+```
+
+::: {.funcao}
+**`train_test_split(X, y, test_size, random_state)`**: sorteia quais linhas vão para cada lado e devolve, nesta ordem, `X` de treino, `X` de validação, `y` de treino e `y` de validação. `test_size=0.25` manda um quarto das linhas para a validação, e `random_state=11` é a semente do sorteio.
+
+**`np.full(tamanho, valor)`**: um array de `tamanho` posições, todas iguais a `valor`. É a previsão do modelo nulo: a média de `saldo` no treino, para todos os clientes da validação.
+
+**`pd.Series(valores, index)`**: uma série com os valores e o índice dados; aqui, um MSE por tamanho, com o índice $k$ de 0 a 11.
+:::
+
+Com 300 clientes no treino e 100 na validação, o menor erro de validação é o do modelo de 6 preditores. Uma única partição depende muito do sorteio; a validação cruzada em 10 grupos repete a conta 10 vezes, cada grupo servindo uma vez de validação, e tira a média. Cada grupo refaz a busca completa no seu treino. A função abaixo recebe a semente, para a mesma conta servir a outros sorteios adiante. A célula demora a terminar, e o tempo depende da máquina: espere a saída aparecer.
+
+```{python}
+#| label: validacao-cruzada
+def erros_por_grupo(semente):
+    """MSE de validação de cada tamanho em cada um dos 10 grupos, um por linha."""
+    grupos = KFold(10, shuffle=True, random_state=semente)
+    return pd.DataFrame([
+        erros_de_validacao(X.iloc[treino], y.iloc[treino], X.iloc[val], y.iloc[val])
+        for treino, val in grupos.split(X)
+    ])
+
+
+erros = erros_por_grupo(11)
+cv = erros.mean()
+{
+    "ajustes nas buscas": 10 * (2**p - 1),
+    "tamanho escolhido": int(cv.idxmin()),
+}
+```
+
+::: {.funcao}
+**`KFold(n_splits, shuffle, random_state)`**: o esquema de divisão do *k*-fold, aqui com 10 grupos, linhas embaralhadas antes da divisão e a semente recebida pela função. **`grupos.split(X)`** devolve, uma divisão por vez, o par (posições de treino, posições de validação), que **`X.iloc[posicoes]`** usa para recortar as linhas pela posição.
+
+**`erros.mean()`**: numa tabela, a média de cada coluna. `erros` tem uma linha por grupo e uma coluna por tamanho, e `cv` fica com o erro de validação cruzada de cada tamanho.
+:::
+
+São 10 buscas completas, uma por grupo, com 20.470 ajustes só nelas. A validação cruzada também escolhe o modelo de 6 preditores. Para pôr lado a lado o BIC e os dois erros medidos fora do treino, a figura usa a raiz de cada um, que fica na unidade de `saldo`, em dólares.
+
+```{python}
+#| label: fig-bic-validacao-cv
+#| fig-cap: 'O BIC e dois erros medidos fora do treino, para o melhor modelo de cada tamanho em `Credit`, de 1 a 11 preditores, todos como raiz, em dólares. De cima para baixo: a raiz do BIC; a raiz do MSE de validação, com 300 clientes no treino e 100 na validação; e a raiz do erro de validação cruzada em 10 grupos. O "x" laranja marca o mínimo de cada curva. Nos dois de baixo, os modelos de cada tamanho foram escolhidos de novo em cada treino.'
+#| fig-alt: "Três painéis empilhados, com o número de preditores de 1 a 11 no eixo horizontal comum e o mesmo eixo vertical, em dólares. Nos três, a curva azul cai de mais de 200 com um preditor para perto de 100 com três ou quatro e fica quase plana até onze. O x laranja está em quatro na raiz do BIC, no painel de cima, e em seis nos erros de validação e de validação cruzada, nos dois de baixo."
+estimativas = {
+    "raiz do BIC": np.sqrt(criterios["BIC"]),
+    "validação": np.sqrt(validacao),
+    "validação cruzada": np.sqrt(cv),
+}
+fig, eixos = plt.subplots(3, 1, figsize=(6.4, 5.6), sharex=True, sharey=True)
+for ax, (nome, curva) in zip(eixos, estimativas.items()):
+    curva = curva[1:]
+    ax.plot(curva.index, curva, color="C0", marker="o", markersize=4)
+    k = curva.idxmin()
+    ax.plot(k, curva[k], "x", color="C1", markersize=11, markeredgewidth=2.5,
+            label="_nolegend_")
+    ax.set_title(nome)
+eixos[1].set_ylabel("raiz, em dólares")
+eixos[2].set_xticks(range(1, 12))
+eixos[2].set_xlabel("número de preditores")
+fig.tight_layout()
+plt.show()
+```
+
+::: {.funcao}
+**`sharey=True`**, em `plt.subplots`: os painéis dividem também o eixo vertical, e a mesma altura quer dizer o mesmo erro nos três. **`ax.set_title(texto)`**: o título escrito acima de cada painel.
+:::
+
+As três curvas têm a mesma forma. Nos mesmos trechos da tabela dos critérios:
+
+```{python}
+#| label: forma-das-estimativas
+print("menor raiz do erro de validação cruzada:", round(float(np.sqrt(cv).min()), 1))
+mudancas(pd.DataFrame(estimativas)).round(1)
+```
+
+De 1 a 3 preditores, a raiz cai 126,9 dólares no BIC, 120,2 na validação e 126,6 na validação cruzada. De 4 a 11, a distância entre o maior e o menor valor é de 3,4, 1,7 e 1,2 dólares, na mesma ordem: pouco, perto de um erro típico de previsão de 100,0 dólares, a menor raiz do erro de validação cruzada. Se o sorteio da validação fosse outro, ou os grupos da validação cruzada fossem outros, o mínimo cairia no mesmo tamanho?
+
+## A regra do um desvio
+
+A resposta se mede repetindo as duas contas com as sementes 12 e 13. Na validação cruzada, são mais 20 buscas completas, e esta célula também demora.
+
+```{python}
+#| label: outros-sorteios
+k_minimo = int(cv.idxmin())
+escolhidos = {
+    "validação": {11: int(validacao.idxmin())},
+    "validação cruzada": {11: k_minimo},
+}
+for semente in [12, 13]:
+    Xt, Xv, yt, yv = train_test_split(X, y, test_size=0.25, random_state=semente)
+    menor = erros_de_validacao(Xt, yt, Xv, yv).idxmin()
+    escolhidos["validação"][semente] = int(menor)
+    cv_semente = erros_por_grupo(semente).mean()
+    escolhidos["validação cruzada"][semente] = int(cv_semente.idxmin())
+escolhidos
+```
+
+Um conjunto de validação muda de ideia conforme o sorteio: com as sementes 11, 12 e 13, o menor erro fica em 6, 11 e 5 preditores. A validação cruzada, que tira a média de 10 grupos, escolhe 6 nas três.
+
+A escolha se repete, mas isso não faz do modelo de 6 um modelo melhor que o de 4: a curva é quase plana de 4 a 11, e os 400 clientes são uma amostra. Com outros clientes, a curva inteira seria outra, e uma diferença pequena entre dois tamanhos pode não se repetir. A **regra do um desvio** transforma essa cautela numa escolha.
+
+::: {.conceito}
+**Regra do um desvio.** Para cada tamanho $k$, seja $s_k$ o desvio padrão dos erros dos 10 grupos.
+
+1. Ache o tamanho $k^*$ de menor erro de validação cruzada.
+2. Some a esse erro mínimo a margem $s_{k^*}/\sqrt{10}$. O resultado é o **teto**.
+3. Escolha o **menor** tamanho cujo erro de validação cruzada não passe do teto.
+:::
+
+A margem é uma medida grosseira de quanto a média dos 10 erros de grupo mudaria com outra amostra de clientes. Se os 10 erros de grupo fossem medidas independentes, $s_k/\sqrt{10}$ estimaria o desvio padrão da média deles; não são, porque os treinos de dois grupos quaisquer têm quase todas as linhas em comum, e a margem serve só de régua. Dentro dela, os modelos não se distinguem com segurança, e a regra fica com o mais simples: menos colunas para coletar e para manter.
+
+```{python}
+#| label: um-desvio
+desvio = erros.std(ddof=1) / np.sqrt(10)
+teto = cv[k_minimo] + desvio[k_minimo]
+k_regra = int(cv[cv <= teto].index.min())
+modelo_da_regra = set(melhores.loc[k_regra, "preditores"])
+{
+    "raiz do teto": round(float(np.sqrt(teto)), 2),
+    "tamanho pela regra": k_regra,
+    "colunas": ", ".join(sorted(modelo_da_regra)),
+    "igual ao modelo do BIC": modelo_da_regra == colunas["BIC"],
+    "raiz do erro, 1 a 3 preditores": np.sqrt(cv[1:4]).round(1).tolist(),
+    "tamanhos abaixo do teto": cv[cv <= teto].index.tolist(),
+}
+```
+
+::: {.funcao}
+**`erros.std(ddof=1)`**: o desvio padrão de cada coluna, com $n - 1$ no denominador (`ddof=1`). **`cv[cv <= teto]`** fica só com os tamanhos cujo erro não passa do teto, e **`.index.min()`** pega o menor deles. **`serie.round(casas)`**: arredonda cada valor com o número de casas dado.
+:::
+
+A raiz do teto é 103,19 dólares, e todos os tamanhos de 4 a 11 ficam no teto ou abaixo dele; o de 3, com 105,5, fica acima. A regra escolhe então o modelo de 4 preditores. As colunas vêm da tabela `melhores`, a busca completa com os 400 clientes: a validação cruzada decide só o tamanho, e o modelo final é o melhor daquele tamanho no conjunto todo. O `True` diz que é o mesmo modelo que o BIC escolheu, com `cartoes`, `estudante_sim`, `limite` e `renda`.
+
+A figura começa em 3 preditores: com 1 e 2, a raiz do erro é de 232,2 e 163,3 dólares, e as duas alturas achatariam o resto da curva.
+
+```{python}
+#| label: fig-um-desvio
+#| fig-cap: 'Raiz do erro de validação cruzada em 10 grupos contra o número de preditores, em `Credit`, de 3 a 11. A faixa azul vai da raiz de (erro − $s_k/\sqrt{10}$) à raiz de (erro + $s_k/\sqrt{10}$) em cada tamanho. A linha tracejada é o teto da regra: o mínimo mais a margem do tamanho do mínimo. O círculo cinza marca o mínimo, e o "x" laranja, o tamanho que a regra escolhe, o menor que não passa do teto.'
+#| fig-alt: "Uma curva azul com uma faixa azul clara em volta, com o número de preditores de 3 a 11 no eixo horizontal e a raiz do erro em dólares no vertical. A curva cai de três para quatro preditores e fica quase plana. Uma linha cinza tracejada horizontal, com o rótulo teto na ponta direita, passa na altura do topo da faixa no ponto mais baixo, e toda a curva de quatro a onze fica abaixo dela. Um círculo cinza marca seis, e um x laranja marca quatro, o primeiro ponto abaixo da linha; os rótulos mínimo e regra ficam abaixo da faixa, ligados a eles por fios finos."
+tamanhos = cv.index[3:]
+abaixo = np.sqrt(cv[tamanhos] - desvio[tamanhos])
+acima = np.sqrt(cv[tamanhos] + desvio[tamanhos])
+fig, ax = plt.subplots(figsize=(6.4, 3.8))
+ax.fill_between(tamanhos, abaixo, acima, color="C0", alpha=0.3, linewidth=0)
+ax.plot(tamanhos, np.sqrt(cv[tamanhos]), color="C0", marker="o", markersize=4)
+ax.axhline(np.sqrt(teto), color="0.5", linestyle="--", linewidth=1.6)
+ax.plot(k_minimo, np.sqrt(cv[k_minimo]), "o", color="0.5", markersize=11,
+        markerfacecolor="none", markeredgewidth=1.8, label="_nolegend_")
+ax.plot(k_regra, np.sqrt(cv[k_regra]), "x", color="C1", markersize=11,
+        markeredgewidth=2.5, label="_nolegend_")
+ax.annotate("teto", xy=(11.3, np.sqrt(teto)), xytext=(0, 3),
+            textcoords="offset points", ha="left", va="bottom")
+fio = {"arrowstyle": "-", "color": "0.5", "linewidth": 1.0, "shrinkB": 7}
+for texto, k in [("mínimo", k_minimo), ("regra", k_regra)]:
+    ax.annotate(texto, xy=(k, np.sqrt(cv[k])), xytext=(k, abaixo.min() - 1.5),
+                ha="center", va="top", arrowprops=fio)
+ax.set_ylim(abaixo.min() - 5, None)
+ax.yaxis.set_major_formatter(lambda valor, _: f"{valor:.1f}".replace(".", ","))
+ax.set_xticks(tamanhos)
+ax.set_xlim(2.5, 12.2)
+ax.set_xlabel("número de preditores")
+ax.set_ylabel("raiz do erro de validação\ncruzada (dólares)")
+fig.tight_layout()
+plt.show()
+```
+
+::: {.funcao}
+**`ax.fill_between(x, abaixo, acima, alpha)`**: pinta a faixa entre as curvas `abaixo` e `acima`; `alpha` é a opacidade.
+
+**`ax.axhline(y, linestyle)`**: uma linha horizontal na altura `y`, de uma ponta à outra do eixo.
+
+**`ax.annotate(texto, xy, xytext, textcoords, arrowprops)`**: escreve `texto` no ponto `xy` ou, se houver `xytext`, nessa outra posição, ligada a `xy` pelo fio descrito em `arrowprops`. Com `textcoords="offset points"`, `xytext` é um deslocamento em pontos tipográficos a partir de `xy`.
+
+**`ax.set_ylim(baixo, None)`**: fixa o limite de baixo do eixo vertical e deixa o de cima automático, para os rótulos caberem abaixo da faixa.
+:::
+
+O "x" está no primeiro ponto que não passa da linha tracejada, 2 tamanhos à esquerda do mínimo. Todas as escolhas da seção, juntas num dicionário só (`a | b` junta os dicionários `a` e `b`):
+
+```{python}
+#| label: todas-as-escolhas
+todas = escolhas | {
+    "validação": int(validacao.idxmin()),
+    "validação cruzada": k_minimo,
+    "regra do um desvio": k_regra,
+}
+todas, min(todas.values()), max(todas.values())
+```
+
+As seis escolhas vão de 4 a 7 preditores, e a diferença entre elas pesa pouco: nesses tamanhos, a raiz do erro de validação cruzada fica entre a menor raiz, 100,0 dólares, e a raiz do teto, 103,19: uma faixa de pouco mais de 3 dólares.
+
+Depois de escolhido o $\mathcal{M}_k$ de cada tamanho, o $C_p$ e o BIC custam só o RSS dele, que a busca já calculou, mas exigem o $d$ e o $\hat\sigma^2$. O $\hat\sigma^2$ sai do modelo com todas as colunas, e o denominador $n - p - 1$ só é positivo quando $n > p + 1$, isto é, quando há mais observações do que coeficientes a estimar, contando o intercepto. A validação cruzada não pede nenhum dos dois, mas refaz a busca completa em cada grupo.
+
+Os critérios podem partir dos $\mathcal{M}_k$ escolhidos nos 400 clientes porque corrigem o erro de treino em vez de medi-lo fora. A correção, porém, conta só os $d$ preditores do modelo, e não a busca entre as combinações que o escolheu: mais um motivo para não levar a sério diferenças pequenas entre os tamanhos. A validação cruzada mede em linhas que o ajuste não viu, e elas só continuam de fora se não ajudaram a escolher as colunas.
+
+Qual usar, então? A tabela junta o que cada caminho faz com o erro de treino, o tamanho que escolheu em `Credit` e o que precisa para ser calculado.
+
+| Caminho | O que faz com o erro de treino | Escolheu em `Credit` | Precisa de $d$ e $\hat\sigma^2$? |
+|---|---|---|---|
+| $C_p$ | soma $2d\hat\sigma^2$ ao RSS | 6 | os dois |
+| BIC | soma $\log(n)\,d\hat\sigma^2$ ao RSS | 4 | os dois |
+| $R^2$ ajustado | divide o RSS por $n - d - 1$ | 7 | só o $d$ |
+| validação cruzada | mede o erro fora do treino | 6; com a regra do um desvio, 4 | nenhum |
+
+Quando dá para contar $d$ e estimar $\hat\sigma^2$, o $C_p$ mira o erro de teste, e o BIC, com a penalidade maior, prefere o modelo enxuto; o $R^2$ ajustado, o de justificativa teórica mais fraca dos três [@james2023], ficou aqui com o maior modelo. Quando falta o $d$ ou o $\hat\sigma^2$, ou quando se quer medir em vez de corrigir, fica a validação cruzada, e entre tamanhos quase empatados a regra do um desvio fica com o menor.

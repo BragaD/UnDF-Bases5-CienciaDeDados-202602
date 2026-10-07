@@ -1,0 +1,634 @@
+# Componentes Principais
+
+::: {.callout-note}
+Esta seção corresponde às seções 12.2.1 e 12.2.2 de @james2023.
+:::
+
+Cada estado do `USArrests` é um ponto em quatro dimensões: prisões por homicídio, por agressão e por estupro a cada 100.000 habitantes, e o percentual da população em áreas urbanas. Uma página tem duas. Escolher um par de colunas descarta as outras duas por inteiro; um resumo melhor combinaria as quatro em dois números por estado, escolhidos para perder o mínimo da variação. Que combinações são essas, e quanto elas perdem?
+
+```{python}
+#| label: setup
+#| include: false
+import matplotlib.pyplot as plt
+
+plt.style.use("estilo-figuras.mplstyle")
+```
+
+A função `numero_br` escreve os números com a pontuação brasileira:
+
+```{python}
+#| label: numero-br
+numero_br = lambda v, casas=2: (
+    f"{v:,.{casas}f}"
+    .replace(",", "_")
+    .replace(".", ",")
+    .replace("_", ".")
+    .replace("-", "−")
+)
+```
+
+## A direção de maior variância
+
+Com duas colunas, dá para ver a ideia inteira num plano. As duas aqui são `homicidio` e `agressao`, padronizadas: cada coluna menos a média dela, dividida pelo desvio padrão. As duas ficam com média 0 e variância 1, e nenhuma pesa mais só por estar em números maiores.
+
+```{python}
+#| label: duas-colunas
+import numpy as np
+import pandas as pd
+from sklearn.preprocessing import (
+    StandardScaler)
+
+prisoes = pd.read_csv(
+    "dados/USArrests.csv",
+    index_col="estado")
+colunas = ["homicidio", "agressao"]
+padronizador = StandardScaler()
+duas = padronizador.fit_transform(
+    prisoes[colunas])
+r = np.corrcoef(duas.T)[0, 1]
+print("forma:", duas.shape)
+medias = duas.mean(axis=0)
+variancias = duas.var(axis=0)
+print("médias 0:",
+    bool(np.allclose(medias, 0)))
+print("variâncias 1:",
+    bool(np.allclose(variancias, 1)))
+print("correlação:", numero_br(r, 3))
+```
+
+::: {.funcao}
+- **`StandardScaler()`** — o padronizador: subtrai de cada coluna a média dela e divide pelo desvio padrão. O desvio padrão dele divide por $n$, e não por $n - 1$ como o `df.std()` do `pandas`; por isso a variância das colunas padronizadas sai 1, a menos do arredondamento.
+- **`padronizador.fit_transform(df)`** — calcula a média e o desvio padrão de cada coluna de `df` e já devolve as colunas padronizadas, como um array do `numpy`.
+- **`arr.mean(axis=0)`** e **`arr.var(axis=0)`** — a média e a variância de cada coluna do array; a variância do `numpy` divide por $n$.
+- **`np.allclose(a, b)`** — `True` quando todos os valores de `a` estão perto dos de `b` (ou do número `b`), com uma tolerância pequena para o arredondamento das contas; `bool(...)` o imprime como `True` ou `False`.
+- **`np.corrcoef(arr.T)`** — a tabela das correlações entre as colunas de `arr`; o `.T` transpõe o array, porque o `np.corrcoef` correlaciona linhas. O elemento `[0, 1]` é a correlação entre a primeira coluna e a segunda.
+:::
+
+Cada estado é um ponto no plano, e as duas colunas sobem juntas, com correlação de 0,802. Agora tome uma reta qualquer que passe pela origem, isto é, pela média dos 50 estados. Cada ponto tem um pé sobre ela: o ponto da reta mais perto dele, onde cai o segmento perpendicular. A posição do pé ao longo da reta é a **projeção** do ponto sobre ela, um número só por estado, que resume as duas colunas numa. Algumas retas espalham bem esses 50 números, outras os amontoam. Qual reta os espalha mais? E essa reta fica perto ou longe dos pontos?
+
+Uma reta pela origem fica definida pelo ângulo $\theta$ que faz com o eixo horizontal, ou pelo vetor $v = (\cos\theta, \operatorname{sen}\theta)$, que aponta ao longo dela. Esse vetor tem comprimento 1, porque $\cos^2\theta + \operatorname{sen}^2\theta = 1$, e com um vetor de comprimento 1 a projeção é o produto escalar da seção 4.1: o produto escalar de um ponto com $v$ mede quanto o ponto avança na direção de $v$. O código gira a reta de grau em grau, de 0 a 179, e em cada ângulo mede duas coisas: a variância das posições ao longo da reta e a média dos quadrados das distâncias dos pontos até ela.
+
+```{python}
+#| label: angulos
+graus = np.arange(180)
+variancia = []
+distancia = []
+for grau in graus:
+    rad = np.radians(grau)
+    v = np.array([np.cos(rad),
+        np.sin(rad)])
+    posicao = duas @ v
+    pe = np.outer(posicao, v)
+    sobra = duas - pe
+    d2 = (sobra**2).sum(axis=1)
+    variancia.append(posicao.var())
+    distancia.append(d2.mean())
+variancia = np.array(variancia)
+distancia = np.array(distancia)
+for grau in [0, 45, 90, 135]:
+    print(f"{grau:>3}°:",
+        numero_br(variancia[grau], 3),
+        "·",
+        numero_br(distancia[grau], 3))
+print("maior variância em:",
+    graus[variancia.argmax()], "graus")
+print("menor distância em:",
+    graus[distancia.argmin()], "graus")
+soma = variancia + distancia
+print("soma sempre 2:",
+    bool(np.allclose(soma, 2)))
+```
+
+::: {.funcao}
+- **`np.arange(180)`** — os inteiros de 0 a 179.
+- **`np.radians(grau)`**, **`np.cos`** e **`np.sin`** — o ângulo convertido de graus para radianos, e o cosseno e o seno dele.
+- **`np.array(lista)`** — um array do `numpy` com os valores da lista: aqui, o vetor `v`, de duas coordenadas, e depois as listas `variancia` e `distancia`, para que se possa fazer conta com elas.
+- **`duas @ v`** — o produto escalar de cada linha de `duas` com `v`: a projeção de cada ponto, a posição do pé dele ao longo da reta. **`np.outer(posicao, v)`** — cada posição vezes o vetor `v`: as coordenadas dos pés no plano, uma linha por estado.
+- **`(sobra**2).sum(axis=1)`** — o quadrado da distância de cada ponto até o seu pé, somando as duas coordenadas de cada linha.
+- **`arr.argmax()`** e **`arr.argmin()`** — a posição do maior e do menor valor do array.
+:::
+
+Em cada linha, o primeiro número é a variância das posições e o segundo, a distância média ao quadrado. A reta de 45 graus, a diagonal, espalha mais os pontos, com variância 1,802, e é também a que passa mais perto deles, com distância média ao quadrado de 0,198. Na de 135 graus, os dois números trocam de lugar: variância 0,198 e distância 1,802.
+
+```{python}
+#| label: fig-direcao
+#| fig-cap: "Em cima, os 50 estados em `homicidio` e `agressao`, as duas padronizadas, com os dois eixos na mesma escala: à esquerda, a reta de 45 graus, a de maior variância, e à direita, tracejada, a de 135 graus. Cada segmento cinza liga um estado ao pé dele sobre a reta. O ponto verde é o Alabama, com o triângulo formado pela origem, pelo pé e pelo ponto. Embaixo, para cada reta pela origem, do ângulo 0 ao 179, a variância das posições ao longo dela, em laranja, e a distância média ao quadrado dos pontos até ela, em cinza, com marcas nos ângulos 0, 45, 90 e 135."
+#| fig-alt: "Três painéis. Nos dois de cima, lado a lado, a mesma nuvem de 50 pontos azuis alongada ao longo da diagonal que sobe para a direita, com homicidio no eixo horizontal e agressao no vertical. No da esquerda, uma reta laranja contínua segue a diagonal, e os segmentos cinza que ligam os pontos a ela são curtos. No da direita, uma reta laranja tracejada cruza a nuvem na diagonal oposta, e os segmentos cinza são longos. Nos dois, um ponto verde à direita e acima da origem, o Alabama, forma com a origem e com o pé dele sobre a reta um triângulo retângulo verde: a hipotenusa, da origem ao ponto, é a mesma nos dois painéis, e o cateto que vai do pé ao ponto é curto à esquerda e longo à direita. No painel de baixo, o ângulo da reta de 0 a 180 graus no eixo horizontal e duas curvas que se espelham, com marcas em 0, 45, 90 e 135 graus: a laranja, da variância das posições, começa em 1, sobe até 1,802 em 45 graus, desce até 0,198 em 135 graus e volta a subir; a cinza, da distância média ao quadrado, faz o contrário. As duas valem 1 em 0 e em 90 graus."
+import matplotlib.pyplot as plt
+
+virgula = lambda v, _: (
+    f"{v:g}".replace(".", ",")
+    .replace("-", "−"))
+fig, eixos = plt.subplot_mosaic(
+    [["45", "135"], ["giro", "giro"]],
+    figsize=(3.8, 4.6),
+    height_ratios=[1.1, 1])
+alabama = duas[0]
+for grau in [45, 135]:
+    ax = eixos[str(grau)]
+    rad = np.radians(grau)
+    v = np.array([np.cos(rad),
+        np.sin(rad)])
+    pe = np.outer(duas @ v, v)
+    for ponto, alvo in zip(duas, pe):
+        ax.plot(
+            [ponto[0], alvo[0]],
+            [ponto[1], alvo[1]],
+            color="0.45", linewidth=0.6)
+    tipo = "-" if grau == 45 else "--"
+    ax.axline((0, 0), v, color="C1",
+        linestyle=tipo)
+    ax.scatter(duas[:, 0], duas[:, 1],
+        s=8, color="C0", zorder=3,
+        linewidths=0)
+    pe_a = (alabama @ v) * v
+    canto = [(0, 0), pe_a, alabama,
+        (0, 0)]
+    ax.plot(*np.array(canto).T,
+        color="C2", linewidth=1.5,
+        zorder=4)
+    ax.scatter(*alabama, s=30,
+        color="C2", zorder=5)
+    ax.set_xlim(-2.6, 2.6)
+    ax.set_ylim(-2.6, 2.6)
+    ax.set_xticks([-2, 0, 2])
+    ax.set_yticks([-2, 0, 2])
+    for eixo in [ax.xaxis, ax.yaxis]:
+        eixo.set_major_formatter(
+            virgula)
+    ax.set_aspect("equal")
+    ax.set_title(f"reta de {grau}°")
+    ax.set_xlabel("homicidio")
+eixos["45"].set_ylabel("agressao")
+
+ax_giro = eixos["giro"]
+ax_giro.plot(graus, variancia,
+    color="C1", linewidth=2)
+ax_giro.plot(graus, distancia,
+    color="0.45", linewidth=2)
+marcas = [0, 45, 90, 135]
+ax_giro.plot(marcas,
+    variancia[marcas], "o",
+    color="C1")
+ax_giro.plot(marcas,
+    distancia[marcas], "o",
+    color="0.45")
+ax_giro.text(45, 1.95, "variância",
+    ha="center", color="C1")
+ax_giro.text(135, 1.95, "distância²",
+    ha="center", color="0.45")
+ax_giro.set_ylim(0, 2.3)
+ax_giro.set_xlim(0, 180)
+ax_giro.set_xticks([0, 45, 90, 135, 180])
+ax_giro.set_yticks([0, 0.5, 1, 1.5, 2])
+ax_giro.yaxis.set_major_formatter(
+    virgula)
+ax_giro.set_xlabel("ângulo da reta (graus)")
+ax_giro.set_ylabel("valor (padronizado²)")
+plt.tight_layout()
+plt.show()
+```
+
+::: {.funcao}
+- **`plt.subplot_mosaic(desenho, figsize, height_ratios)`** — uma figura com os gráficos dispostos como no `desenho`, uma lista de linhas com um nome por posição; um nome repetido ocupa as duas posições, como o `"giro"`, que atravessa a largura. `height_ratios` dá as alturas relativas das linhas. Devolve um dicionário: `eixos["45"]` é o gráfico de nome `"45"`.
+- **`ax.axline(ponto, direcao, linestyle)`** — a reta que passa por `ponto` na `direcao` dada, de ponta a ponta do gráfico; `linestyle="--"` a desenha tracejada.
+- **`ax.plot(xs, ys)`** — uma linha pelos pontos `(xs[k], ys[k])`; com dois pontos, um segmento. `ax.plot(*np.array(canto).T)` passa as coordenadas horizontais e as verticais dos três cantos do triângulo, com a origem repetida no fim para fechar o contorno, e com `"o"` a função desenha só os pontos, sem a linha.
+- **`ax.set_aspect("equal")`** — a mesma escala nos dois eixos, para que a perpendicular pareça perpendicular.
+- **`ax.text(x, y, texto)`** — escreve `texto` na posição `(x, y)` dos eixos; `ha="center"` o centra nessa posição. **`ax.set_xticks(lista)`** e **`ax.set_yticks(lista)`** — as marcas dos eixos.
+- **`ax.xaxis.set_major_formatter(funcao)`** — escreve cada marca do eixo com a função dada, que recebe o valor e a posição; a `virgula` troca o ponto decimal pela vírgula.
+:::
+
+Pelo teorema de Pitágoras, em cada estado o quadrado da distância até a origem é a posição do pé ao quadrado mais o quadrado da distância até a reta: é o triângulo verde do Alabama, em que a hipotenusa não muda com a reta e os dois catetos, sim. Na média dos 50 estados, o quadrado da distância até a origem vale 1 mais 1, a soma das variâncias das duas colunas, qualquer que seja a reta. Como as duas colunas têm média zero, as posições também têm, e a média das posições ao quadrado é a variância delas; por isso, em todo ângulo, a variância e a distância média ao quadrado somam 2, e **a direção de maior variância é também a reta mais próxima dos pontos**.
+
+A `PCA`, do `scikit-learn`, acha essa direção sem girar reta nenhuma. Ela devolve o vetor de comprimento 1 ao longo da reta, e as coordenadas desse vetor são as **cargas** da componente; a posição de cada estado ao longo da reta, a projeção, é o **escore** do estado na componente:
+
+```{python}
+#| label: pca-duas
+from sklearn.decomposition import PCA
+
+pca2 = PCA().fit(duas)
+cargas2 = pca2.components_
+c1, c2 = cargas2
+rad = np.arctan2(
+    cargas2[:, 1], cargas2[:, 0])
+angulos = np.degrees(rad) % 180
+print("retas da 1.ª e da 2.ª:")
+print(" ", numero_br(angulos[0], 1),
+    "e", numero_br(angulos[1], 1),
+    "graus")
+print("|cargas| da 1.ª:",
+    *[numero_br(v, 3)
+        for v in np.abs(c1)])
+print("|cargas| da 2.ª:",
+    *[numero_br(v, 3)
+        for v in np.abs(c2)])
+sinal = np.sign(cargas2)
+print("mesmo sinal na 1.ª:",
+    bool(sinal[0, 0] == sinal[0, 1]))
+print("sinais opostos na 2.ª:",
+    bool(sinal[1, 0] != sinal[1, 1]))
+prop = pca2.explained_variance_ratio_
+print("proporção da variância:",
+    *[numero_br(v, 3) for v in prop])
+```
+
+::: {.funcao}
+- **`PCA()`**, do módulo `sklearn.decomposition` — a análise de componentes principais; sem argumento, calcula todas as componentes, tantas quanto as colunas. A `PCA` centra cada coluna na média, mas **não** divide pelo desvio padrão: quem padroniza é o `StandardScaler`.
+- **`PCA().fit(duas)`** — calcula as componentes de `duas`. **`pca.components_`** — as cargas, uma **linha** por componente e uma coluna por variável; `components_[0]` é a direção da primeira componente.
+- **`np.arctan2(y, x)`** — o ângulo, em radianos, do vetor `(x, y)`, um para cada linha de `cargas2`; **`np.degrees`** o converte em graus, e `% 180` fica com o resto da divisão por 180, que é o mesmo para a direção e para a oposta.
+- **`np.abs(arr)`** — o valor absoluto de cada elemento. **`np.sign(arr)`** — 1, −1 ou 0, conforme o sinal de cada elemento.
+- **`pca.explained_variance_ratio_`** — a proporção da variância total que cada componente carrega; a seção 15.3 trata dela.
+:::
+
+A reta da `PCA` é a de 45 graus, a mesma que o giro de grau em grau achou. As cargas da primeira componente têm o mesmo tamanho, 0,707, e o mesmo sinal: o escore de cada estado é, a menos da escala e do sinal (que é arbitrário, como se vê adiante), a média de `homicidio` e `agressao` padronizadas. Um estado com as duas medidas acima da média fica de um lado da origem, tanto mais longe quanto mais acima; um com as duas abaixo, do outro.
+
+A primeira componente carrega uma proporção de 0,901 da variância: é a variância ao longo da reta, 1,802, dividida pela variância total, 2.
+
+A **segunda componente** é a direção de maior variância entre as que não têm correlação com a primeira. Com duas colunas, isso a deixa perpendicular à primeira, na reta de 135 graus, com cargas de mesmo tamanho e sinais opostos. O escore dela é, a menos da escala, a diferença entre `homicidio` e `agressao` padronizadas, e ela carrega o resto da variância, 0,099.
+
+## As quatro colunas
+
+Com as quatro colunas padronizadas, `pop_urbana`, que está em percentual, passa a ter a mesma escala das três de crime, e a `PCA` acha quatro componentes. As duas primeiras se chamam `PC1` e `PC2`, do inglês *principal component*. As cargas delas, com cada valor passado pela `numero_br`:
+
+```{python}
+#| label: pca
+from sklearn.pipeline import (
+    make_pipeline)
+
+pca = make_pipeline(
+    StandardScaler(), PCA())
+escores = pca.fit_transform(prisoes)
+nomes = ["PC1", "PC2", "PC3", "PC4"]
+cargas = pd.DataFrame(
+    pca[-1].components_.T,
+    index=prisoes.columns,
+    columns=nomes)
+tabela = cargas[["PC1", "PC2"]].style
+tabela = tabela.set_uuid("cargas")
+tabela.format(
+    lambda v: numero_br(v, 3))
+```
+
+::: {.funcao}
+- **`make_pipeline(StandardScaler(), PCA())`** — encadeia os dois passos: padroniza as colunas e calcula as componentes das colunas padronizadas.
+- **`pca.fit_transform(prisoes)`** — ajusta os dois passos e devolve os escores, um array com uma linha por estado e uma coluna por componente.
+- **`pca[-1]`** — o último passo do *pipeline*, a `PCA`; `pca[-1].components_.T` tem uma linha por variável e uma coluna por componente, a forma da tabela.
+- **`pd.DataFrame(arr, index=..., columns=...)`** — uma tabela a partir de um array, com os rótulos das linhas em `index` e os nomes das colunas em `columns`.
+- **`tabela.format(funcao)`** — escreve cada valor da tabela como o texto que `funcao` devolve para ele; aqui, a `numero_br` com três casas.
+:::
+
+### Os pesos de uma componente
+
+O escore é uma soma das colunas com pesos, e os pesos são as cargas.
+
+::: {.exemplo}
+Com as duas colunas, as cargas da primeira componente tinham o mesmo tamanho, 0,707, e o mesmo sinal. A menos do sinal, o escore do estado $i$ é
+
+$$
+z_{i1} = 0{,}707\,x_{i1} + 0{,}707\,x_{i2},
+$$
+
+em que $x_{i1}$ é o `homicidio` do estado e $x_{i2}$ é a `agressao` dele, as duas padronizadas.
+:::
+
+Os índices dizem de quem é cada número: $i$ é a observação (aqui, o estado), $j$ é a coluna e $m$ é a componente. Assim, $x_{ij}$ é o valor da coluna $j$ na observação $i$, já centrado; no exemplo, $x_{i1}$ é o `homicidio` e $x_{i2}$, a `agressao`.
+
+A carga da coluna $j$ na componente $m$ é $\phi_{jm}$, e o escore da observação $i$ na componente $m$ é $z_{im}$; no exemplo, $\phi_{11} = \phi_{21} = 0{,}707$. Com $p$ colunas, a soma da primeira componente, $m = 1$, tem $p$ termos:
+
+$$
+z_{i1} = \phi_{11}x_{i1} + \phi_{21}x_{i2} + \dots + \phi_{p1}x_{ip}.
+$$
+
+No `USArrests`, $p = 4$, e o escore do Alabama, a primeira linha, é a linha padronizada dele multiplicada pelas cargas da `PC1`, na conta do produto escalar:
+
+```{python}
+#| label: alabama
+padr = StandardScaler().fit_transform(
+    prisoes)
+a_mao = padr[0] @ cargas["PC1"]
+# + 0.0 troca −0,0 por 0,0
+dois = lambda v: numero_br(
+    round(v, 2) + 0.0)
+print("Alabama (hom·agr·urb·est):")
+print(" ", *[dois(v)
+    for v in padr[0]])
+print("|escore| à mão:",
+    numero_br(abs(a_mao), 3))
+print("igual ao da PCA:",
+    bool(np.isclose(a_mao,
+        escores[0, 0])))
+```
+
+::: {.funcao}
+- **`padr[0]`** — a primeira linha do array, a do Alabama, com as quatro colunas na ordem do arquivo; `padr[0] @ cargas["PC1"]` soma os quatro produtos valor vezes carga.
+- **`np.isclose(a, b)`** — `True` quando os dois números estão perto, com a mesma tolerância do `np.allclose`.
+:::
+
+O produto dá 0,986 em valor absoluto, o mesmo escore que a `PCA` devolve para o Alabama: o escore é essa soma de valores com pesos. O número sai em valor absoluto porque o sinal da componente é arbitrário; o booleano compara os dois com sinal.
+
+As cargas são as que dão aos $z_{i1}$ a maior variância, com a soma dos quadrados das cargas igual a 1:
+
+$$
+\max_{\phi_{11}, \dots, \phi_{p1}}
+\frac{1}{n}\sum_{i=1}^{n} z_{i1}^2
+\quad\text{com}\quad
+\sum_{j=1}^{p}\phi_{j1}^2 = 1.
+$$
+
+É a condição de comprimento 1 do vetor $v$ do giro, agora com $p$ coordenadas. Como as colunas estão centradas, os $z_{i1}$ têm média zero, e a média dos quadrados é a variância deles. Sem a condição sobre as cargas, bastaria multiplicá-las por 10 para multiplicar a variância por 100, e o problema não teria solução.
+
+::: {.conceito}
+A **primeira componente principal** de $X_1, \dots, X_p$, centradas, é a combinação $Z_1 = \phi_{11}X_1 + \dots + \phi_{p1}X_p$, com $\sum_j\phi_{j1}^2 = 1$, de maior variância. As **cargas** $\phi_{j1}$ são os pesos da combinação, e o valor $z_{i1}$ na observação $i$ é o **escore** da observação: a posição do ponto $i$ ao longo da direção $(\phi_{11}, \dots, \phi_{p1})$.
+
+A segunda componente é a de maior variância entre as combinações sem correlação com a primeira, o que equivale a uma direção perpendicular à primeira; cada componente seguinte faz o mesmo em relação a todas as anteriores.
+:::
+
+O sinal de uma componente é arbitrário. O pé de cada ponto sobre a reta é o escore vezes as cargas, o `np.outer(posicao, v)` do giro, e trocar o sinal de todas as cargas troca o sinal de todos os escores sem mudar esse produto: a reta, os pés, as distâncias e a proporção da variância continuam os mesmos. Por isso o que se lê de uma componente é o tamanho das cargas e quais têm o mesmo sinal, nunca se uma carga é positiva ou negativa.
+
+### A leitura das cargas
+
+Aplicada às cargas das quatro colunas, a regra dá:
+
+```{python}
+#| label: leitura
+crimes = ["homicidio", "agressao",
+    "estupro"]
+pc1 = cargas["PC1"].abs()
+pc2 = cargas["PC2"].abs()
+print("PC1, crimes entre:",
+    numero_br(pc1[crimes].min()),
+    "e",
+    numero_br(pc1[crimes].max()))
+print("PC1, |pop_urbana|:",
+    numero_br(pc1["pop_urbana"]))
+sinais = np.sign(cargas["PC1"])
+iguais = sinais == sinais.iloc[0]
+print("PC1, as 4 com o mesmo sinal:",
+    bool(iguais.all()))
+print("PC2, maior |carga|:",
+    pc2.idxmax())
+print("PC2, |pop_urbana|:",
+    numero_br(pc2["pop_urbana"]))
+print("PC2, maior |crime|:",
+    numero_br(pc2[crimes].max()))
+s2 = np.sign(cargas["PC2"])
+duas_crime = ["homicidio", "agressao"]
+opostos = (s2[duas_crime]
+    != s2["pop_urbana"])
+print("PC2, hom. e agr. com sinal")
+print("  oposto a pop_urbana:",
+    bool(opostos.all()))
+corr = np.corrcoef(escores.T)
+fora = corr[~np.eye(4, dtype=bool)]
+print("escores sem correlação:",
+    bool(np.all(np.abs(fora) < 1e-10)))
+```
+
+::: {.funcao}
+- **`serie.abs()`** — o valor absoluto de cada elemento da série; **`serie.min()`** e **`serie.max()`** — o menor e o maior valor.
+- **`sinais == sinais.iloc[0]`** — compara cada elemento com o primeiro e devolve uma série de `True` e `False`; **`.all()`** dá `True` quando todos são `True`.
+- **`np.eye(4, dtype=bool)`** — uma matriz 4 × 4 com `True` na diagonal; o `~` a inverte, e `corr[~np.eye(...)]` fica só com as correlações entre componentes diferentes.
+:::
+
+Na primeira componente, as três colunas de crime têm cargas entre 0,54 e 0,58, quase o mesmo peso, e `pop_urbana` pesa 0,28, cerca de metade de 0,54. As quatro têm o mesmo sinal. O escore $z_{i1}$ é, então, a menos da escala e do sinal, quase uma média das três colunas de crime padronizadas, com um pouco de urbanização: uma medida do nível geral de prisões do estado.
+
+Na segunda componente, a maior carga em valor absoluto, 0,87, é a de `pop_urbana`, e a maior das três de crime, também em valor absoluto, é 0,42. As cargas de `homicidio` e `agressao` têm sinal oposto ao de `pop_urbana`: o escore $z_{i2}$ mede sobretudo a urbanização, e as prisões por homicídio e por agressão o puxam no sentido contrário. E, como na definição, os escores das quatro componentes não têm correlação entre si.
+
+A `PCA` supõe que a direção em que os dados mais variam é a que mais importa. Um grupo de colunas correlacionadas entre si, mas sem relação com a pergunta que se quer responder, pode dominar a primeira componente, e, sem padronizar, basta uma coluna em números grandes. Cada componente é uma soma das colunas com pesos, uma direção reta: se os pontos se arrumam ao longo de uma curva, a reta e o plano só a aproximam. E nada na escolha das componentes olha para uma resposta: elas resumem só as colunas.
+
+### Os estados no plano das duas componentes
+
+Com os escores das duas primeiras componentes, cada estado vira um ponto num gráfico só. Antes de ver os nomes: as três colunas de crime têm, na `PC1`, cargas de mesmo sinal e peso parecido. Um estado com muitas prisões pelos três crimes fica perto da origem na horizontal, ou longe dela? Abaixo estão os dois menores e os dois maiores $z_{i1}$, o menor e o maior $z_{i2}$ e o estado mais perto da origem, com as quatro medidas de cada um:
+
+```{python}
+#| label: estados
+z = pd.DataFrame(escores[:, :2],
+    index=prisoes.index,
+    columns=["z1", "z2"])
+ordem1 = z["z1"].sort_values()
+ordem2 = z["z2"].sort_values()
+raio = (z**2).sum(axis=1)
+destaques = [
+    *ordem1.index[:2],
+    *ordem1.index[-2:],
+    ordem2.index[0],
+    ordem2.index[-1],
+    raio.idxmin()]
+print("hom. · agr. · est. · urb.")
+for estado in destaques:
+    # ordem do arquivo: hom, agr, urb, est
+    h, a, u, e = prisoes.loc[estado]
+    print(f"{estado}:")
+    print("  ", numero_br(h, 1),
+        "·", numero_br(a, 0),
+        "·", numero_br(e, 1),
+        "·", numero_br(u, 0))
+lado1 = np.sign(z["z1"])
+mesmo1 = lado1 == sinais["homicidio"]
+lado2 = np.sign(z["z2"])
+mesmo2 = lado2 == s2["pop_urbana"]
+print("do lado dos crimes:")
+print("  Flórida e Nevada:", bool(
+    mesmo1[["Flórida", "Nevada"]].all()))
+print("do lado de pop_urbana:")
+print("  Havaí:", bool(mesmo2["Havaí"]))
+lado = np.sign(z.loc["Havaí", "z2"])
+topo = (lado * z["z2"]).nlargest(2)
+print("lado do Havaí, 2 mais longe:")
+for estado, v in topo.items():
+    print(" ", estado, numero_br(v))
+margem = topo.iloc[0] - topo.iloc[1]
+print("  margem:", numero_br(margem))
+```
+
+::: {.funcao}
+- **`.index[:2]`** e **`.index[-2:]`** — os rótulos dos dois primeiros e dos dois últimos da série ordenada.
+- **`(z**2).sum(axis=1)`** — para cada estado, $z_{i1}^2 + z_{i2}^2$, o quadrado da distância até a origem do gráfico.
+- **`serie.nlargest(2)`** — os dois maiores valores da série, do maior para o menor, com os rótulos. Multiplicar `z2` pelo sinal do escore do Havaí faz o lado dele ser o positivo, seja qual for o sinal da componente.
+:::
+
+As duas pontas da primeira componente são Dakota do Norte e Vermont, de um lado, e Flórida e Nevada, do outro. A Flórida tem 15,4 prisões por homicídio e 335 por agressão; a Dakota do Norte, 0,8 e 45. Flórida e Nevada ficam do lado para onde apontam as cargas das colunas de crime, e longe da origem: muitas prisões nos três crimes somam três termos grandes do mesmo sinal no escore.
+
+Na segunda componente, o menor e o maior escore são os do Mississípi, com 44% de população urbana, e do Havaí, com 83%, do lado da carga de `pop_urbana`. O Havaí fica nessa ponta por pouco: a Califórnia, logo atrás, está a 0,03 dele. Já o Vermont, com 32%, é menos urbano que o Mississípi e não é ponta. As três linhas, padronizadas:
+
+```{python}
+#| label: pontas-pc2
+tab_padr = pd.DataFrame(padr,
+    index=prisoes.index,
+    columns=prisoes.columns)
+trio = ["Mississípi", "Vermont",
+    "Havaí"]
+for estado in trio:
+    linha = tab_padr.loc[estado]
+    h = numero_br(linha["homicidio"])
+    a = numero_br(linha["agressao"])
+    u = numero_br(linha["pop_urbana"])
+    print(f"{estado}:")
+    print("  hom.", h, "· agr.", a)
+    print("  urb.", u)
+```
+
+O Mississípi junta pouca urbanização, 1,50 desvio padrão abaixo da média, com muitas prisões por homicídio, 16,1, que ficam 1,93 desvio acima dela. Na segunda componente os dois efeitos vão para o mesmo lado, porque `homicidio` e `pop_urbana` têm cargas de sinais opostos. O Vermont é menos urbano, 2,34 desvios abaixo da média, mas também tem poucas prisões por homicídio e por agressão, 1,30 e 1,49 desvio abaixo, e elas o puxam de volta.
+
+E o estado mais perto da origem, a Virgínia? Todos os escores valem zero num estado imaginário com a média de cada coluna. Perto da origem do gráfico quer dizer perto da média nos dois resumos, o nível geral de prisões e a urbanização; se o estado também está perto da média em cada uma das quatro colunas, só a conta diz. Para os dois estados mais perto da origem:
+
+```{python}
+#| label: virginia
+perto = raio.sort_values().index[:2]
+print("mais perto da origem:")
+print(" ", *perto)
+for estado in perto:
+    linha = tab_padr.loc[estado]
+    print(f"{estado}, padronizado:")
+    for coluna, v in linha.items():
+        print(" ", coluna, numero_br(v))
+    todas = (linha.abs() < 0.2).all()
+    print("  todas a menos de 0,2:",
+        bool(todas))
+# agressao só com PC1 e PC2:
+# escore vezes carga, somado
+segundo = perto[1]
+z_seg = z.loc[segundo].to_numpy()
+phi = cargas.loc["agressao",
+    ["PC1", "PC2"]].to_numpy()
+agr = tab_padr.loc[segundo,
+    "agressao"]
+print(f"{segundo}, agressao:")
+print("  dado:", numero_br(agr))
+print("  só PC1 e PC2:",
+    numero_br(z_seg @ phi))
+```
+
+::: {.funcao}
+- **`serie.to_numpy()`** — os valores da série como array do `numpy`, sem os rótulos; o `@` entre duas séries exige os mesmos rótulos nas duas, e `z1`, `z2` não são `PC1`, `PC2`.
+:::
+
+As quatro medidas da Virgínia ficam a menos de 0,2 desvio padrão da média de cada coluna. As do Delaware, o segundo estado mais perto da origem, não: a `agressao` dele fica 0,82 desvio acima da média. Só com as duas primeiras componentes, no pé do Delaware sobre o plano do gráfico (escore vezes carga em cada componente, somados, a conta que a última parte desta seção generaliza), ela fica em −0,03: o gráfico, que tem só essas duas, não mostra esse afastamento.
+
+A figura junta os 50 estados e as quatro cargas. Antes de olhar: com os sinais da `PC2`, em que ponta ficaria um estado muito urbano e com poucas prisões?
+
+```{python}
+#| label: fig-biplot
+#| fig-cap: "Os 50 estados do `USArrests` pelos escores das duas primeiras componentes, um ponto azul por estado, com as colunas padronizadas. As setas laranja são as cargas de cada coluna nas duas componentes, multiplicadas por 3 para caber na escala dos escores. Os nomes marcam os dois menores e os dois maiores escores da 1.ª, o menor e o maior da 2.ª e o estado mais perto da origem. Os dois eixos têm a mesma escala; o sinal de cada componente é arbitrário, e trocá-lo espelharia o gráfico sem mudar a leitura."
+#| fig-alt: "Gráfico de dispersão com o escore da primeira componente no eixo horizontal e o da segunda no vertical, com 50 pontos azuis. Quatro setas laranja saem da origem: as de homicidio, agressao e estupro apontam para o mesmo lado do eixo horizontal, abertas em leque, e a de pop_urbana aponta sobretudo na vertical. Dakota do Norte e Vermont ficam numa ponta do eixo horizontal, e Flórida e Nevada na outra, do lado para onde apontam as setas de crime. Mississípi fica numa ponta do eixo vertical, e Havaí na outra, do lado da seta de pop_urbana, com um ponto sem nome, a Califórnia, quase à mesma altura. A Virgínia aparece quase sobre a origem."
+fig, ax = plt.subplots(
+    figsize=(3.8, 4.0))
+ax.scatter(z["z1"], z["z2"], s=12,
+    color="C0", alpha=0.8,
+    linewidths=0)
+for estado in destaques:
+    x, y = z.loc[estado]
+    rotulo = estado.replace(
+        " do ", "\ndo ")
+    comp = max(np.hypot(x, y), 1e-9)
+    passo = (8 * x / comp,
+        8 * y / comp)
+    ha = "left" if x > 0 else "right"
+    va = "bottom" if y > 0 else "top"
+    if abs(x) > 2 * abs(y):
+        va = "center"
+    if abs(y) > 2 * abs(x):
+        ha = "center"
+    fio = None
+    if estado == raio.idxmin():
+        passo = (-22, -26)
+        fio = dict(arrowstyle="-",
+            color="0.45", lw=0.6)
+    ax.annotate(rotulo, (x, y),
+        xytext=passo,
+        textcoords="offset points",
+        ha=ha, va=va, fontsize=9,
+        arrowprops=fio)
+for coluna in cargas.index:
+    x, y = 3 * cargas.loc[
+        coluna, ["PC1", "PC2"]]
+    ax.annotate("", xy=(x, y),
+        xytext=(0, 0),
+        arrowprops=dict(color="C1",
+            arrowstyle="-|>", lw=1.5))
+    comp = np.hypot(x, y)
+    passo = (8 * x / comp, 8 * y / comp)
+    ax.annotate(coluna, (x, y),
+        xytext=passo,
+        textcoords="offset points",
+        ha="left" if x > 0 else "right",
+        va="center", fontsize=9,
+        color="C1", fontweight="bold")
+ax.set_xlim(-4.6, 4.6)
+ax.set_ylim(-3.4, 3.4)
+ax.set_aspect("equal")
+ax.set_xlabel("escore da 1.ª, $z_{i1}$")
+ax.set_ylabel("escore da 2.ª, $z_{i2}$")
+plt.tight_layout()
+plt.show()
+```
+
+::: {.funcao}
+- **`ax.annotate(texto, (x, y), xytext, textcoords="offset points")`** — escreve `texto` junto do ponto `(x, y)`, deslocado de `xytext` em pontos tipográficos; `ha` e `va` alinham o texto na horizontal e na vertical. Os nomes, dos estados e das colunas, vão para fora, na direção que liga a origem ao ponto; o `if` centra o nome na vertical quando essa direção é quase horizontal, e na horizontal quando ela é quase vertical; `"\ndo "` quebra os nomes compostos em duas linhas, e `fontweight="bold"` põe os nomes das colunas em negrito. O estado mais perto da origem, no meio de vizinhos, tem o nome mais afastado e ligado ao ponto por um fio cinza: `arrowprops` com `arrowstyle="-"` desenha a linha sem ponta; com `None`, nenhuma linha.
+- **`np.hypot(x, y)`** — o comprimento do vetor `(x, y)`, $\sqrt{x^2 + y^2}$; dividir `x` e `y` por ele dá a direção com comprimento 1.
+- **`ax.annotate("", xy, xytext, arrowprops)`** — sem texto, desenha só uma seta de `xytext` até `xy`; `arrowprops` dá a cor, a ponta (`"-|>"`) e a espessura.
+:::
+
+Um gráfico assim, com escores e cargas juntos, se chama *biplot*. As três setas de crime apontam para o mesmo lado do eixo horizontal, e a de `pop_urbana` se afasta delas, sobretudo na vertical: é o retrato das cargas da tabela. A regra de leitura é a da projeção: um estado que fica no sentido de uma seta tende a ter aquela coluna acima da média, e um que fica no sentido oposto, abaixo. O fator 3 muda só o comprimento das setas em relação aos pontos, não a direção delas.
+
+E o estado muito urbano e com poucas prisões ficaria na ponta do Havaí, na vertical. O próprio Havaí é um estado assim: a `pop_urbana` dele fica 1,22 desvio padrão acima da média, e as prisões por homicídio e por agressão, 0,58 e 1,51 desvio abaixo. Na segunda componente, com os sinais opostos, a urbanização e as poucas prisões o empurram para o mesmo lado. Na horizontal, as poucas prisões puxam um estado assim para o lado da Dakota do Norte, e a urbanização, com carga menor, para o outro.
+
+## A melhor aproximação de dimensão $M$
+
+Na reta de 45 graus, a distância de cada estado até o pé dele era o que a reta deixava de fora. Trocar o ponto pelo pé é aproximar duas colunas com um número só, o escore: o pé é o escore vezes as cargas. Com as quatro colunas, o mesmo vale com $M$ componentes: o valor $x_{ij}$, já centrado, se aproxima pela soma das $M$ primeiras componentes, cada escore vezes a carga:
+
+$$
+x_{ij} \approx \sum_{m=1}^{M} z_{im}\,\phi_{jm}.
+$$
+
+Para o estado $i$ e a coluna $j$, cada termo da soma é o escore do estado na componente $m$ vezes a carga da coluna nessa componente, e a soma percorre as $M$ primeiras componentes. Entre todas as aproximações dessa forma, com quaisquer $n \times M$ números no lugar dos escores e $p \times M$ no lugar das cargas, a de menor soma dos quadrados dos erros,
+
+$$
+\sum_{j=1}^{p}\sum_{i=1}^{n}
+\Big(x_{ij} - \sum_{m=1}^{M} z_{im}\,\phi_{jm}\Big)^2,
+$$
+
+é a das componentes principais. Dentro do parêntese está o erro da aproximação num valor, o da coluna $j$ no estado $i$; o quadrado dele é somado em todos os estados e em todas as colunas. A primeira componente é a reta mais próxima dos pontos, as duas primeiras formam o plano mais próximo, e assim por diante. Quanto a aproximação erra no `USArrests`, com $M$ de 1 a 4?
+
+```{python}
+#| label: aproximacao
+erros = []
+iguais = []
+linhas = {}
+for M in range(1, 5):
+    pca_m = PCA(n_components=M)
+    zs = pca_m.fit_transform(padr)
+    aprox = pca_m.inverse_transform(zs)
+    produto = zs @ pca_m.components_
+    iguais.append(
+        np.allclose(aprox, produto))
+    erro = ((padr - aprox)**2).mean()
+    erros.append(erro)
+    linhas[M] = aprox[0]
+    print(f"M = {M}:", numero_br(erro, 4))
+print("cai a cada M:",
+    bool(np.all(np.diff(erros) < 0)))
+print("exata com M = 4:",
+    bool(np.allclose(aprox, padr)))
+print("soma de z·φ, todo M:",
+    bool(all(iguais)))
+print("Alabama (hom·agr·urb·est):")
+print("  dado:",
+    *[dois(v) for v in padr[0]])
+for M in [1, 2, 4]:
+    print(f"  M = {M}:",
+        *[dois(v) for v in linhas[M]])
+```
+
+::: {.funcao}
+- **`PCA(n_components=M)`** — calcula só as `M` primeiras componentes; **`fit_transform`** devolve os `M` escores de cada linha.
+- **`pca.inverse_transform(zs)`** — volta dos escores às colunas: soma, em cada linha, os escores vezes as cargas, mais a média de cada coluna, que aqui é zero.
+- **`zs @ pca.components_`** — a soma $\sum_m z_{im}\phi_{jm}$ para todo $i$ e todo $j$ de uma vez.
+- **`np.diff(lista)`** — as diferenças entre valores vizinhos; todas negativas quer dizer que a lista só cai. **`np.all(arr)`** — `True` quando todos os elementos são `True`.
+:::
+
+O erro quadrático médio por valor, numa tabela padronizada em que cada coluna tem variância 1, vai de 0,3799 com uma componente a 0,0434 com três, e cai a cada componente. Com $M = 4$ a aproximação é exata: quatro componentes reconstroem as quatro colunas. O booleano da soma confirma, em cada $M$, que a aproximação da `PCA` é a soma dos escores vezes as cargas.
+
+Na linha do Alabama, uma componente só põe o estado acima da média nas quatro colunas, inclusive em `pop_urbana`, em que o dado fica abaixo dela, em −0,53. Com duas componentes, a `pop_urbana` aproximada passa para baixo da média, −0,72, e com as quatro a linha volta a ser a do dado.
+
+As duas combinações que perdem o mínimo são as duas primeiras componentes, e o plano delas é o do *biplot*. O que elas perdem se mede pela aproximação: com $M = 2$, o erro quadrático médio por valor cai para 0,1325, contra 0,3799 com uma componente. Quanto da variação as duas componentes guardam, e quantas componentes guardar, é a pergunta da seção 15.3.

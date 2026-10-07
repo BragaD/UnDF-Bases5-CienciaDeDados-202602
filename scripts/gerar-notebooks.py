@@ -149,7 +149,7 @@ def referencia_completa(campos: dict[str, str]) -> str:
     nomes = sobrenomes(campos.get("author", ""))
     partes = [f"**{'; '.join(nomes)}**. *{campos.get('title', '')}*"]
     if campos.get("edition"):
-        partes.append(f"{campos['edition']} ed.")
+        partes.append(f"{campos['edition']} ed")
     if campos.get("publisher"):
         partes.append(campos["publisher"])
     if campos.get("year"):
@@ -237,6 +237,13 @@ def reescreve_citacoes(texto: str, curtas: dict[str, str]) -> str:
     for chave, curta in curtas.items():
         autor_ano = curta.rsplit(" (", 1)
         entre_parenteses = f"({autor_ano[0]}, {autor_ano[1].rstrip(')')})"
+        # [-@chave, p. 273] suprime o autor: sobra "(ano, p. 273)".
+        ano = autor_ano[1].rstrip(")")
+        texto = re.sub(
+            rf"\[-@{re.escape(chave)}(,[^\]]*)?\]",
+            lambda m: f"({ano}{m.group(1) or ''})",
+            texto,
+        )
         texto = texto.replace(f"[@{chave}]", entre_parenteses)
         texto = texto.replace(f"@{chave}", curta)
     return texto
@@ -350,6 +357,9 @@ def converte(texto: str, dir_fonte: str, rebaixa: int, curtas: dict[str, str]) -
                     descarrega_md()
                     prefixo = []
                     if legenda := opcoes.get("fig-cap"):
+                        # A legenda vem entre aspas no YAML do chunk: desfaz
+                        # os escapes para o comentário não mostrar \\ nem \".
+                        legenda = legenda.replace('\\"', '"').replace("\\\\", "\\")
                         prefixo = [f"# Figura: {legenda}"]
                     while codigo and not codigo[0].strip():
                         codigo.pop(0)

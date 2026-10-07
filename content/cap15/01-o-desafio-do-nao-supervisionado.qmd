@@ -1,0 +1,216 @@
+# O Desafio do Não Supervisionado
+
+::: {.callout-note}
+Esta seção corresponde à seção 12.1 de @james2023.
+:::
+
+Uma tabela traz, para cada um dos 50 estados americanos, as prisões por três crimes e a parcela da população que vive em áreas urbanas. Outra traz a expressão de 6.830 genes em 64 amostras de células de câncer. Em nenhuma das duas a análise tem uma coluna a prever. O que dá para perguntar a uma tabela assim? E, feita a pergunta, como saber se a resposta está certa?
+
+```{python}
+#| label: setup
+#| include: false
+import matplotlib.pyplot as plt
+import pandas as pd
+
+plt.style.use("estilo-figuras.mplstyle")
+```
+
+A função `numero_br` escreve os números com a pontuação brasileira:
+
+```{python}
+#| label: numero-br
+numero_br = lambda v, casas=2: (
+    f"{v:,.{casas}f}"
+    .replace(",", "_")
+    .replace(".", ",")
+    .replace("_", ".")
+    .replace("-", "−")
+)
+```
+
+## Uma tabela sem resposta
+
+A tabela `USArrests` é de 1973. Para cada estado, `homicidio`, `agressao` e `estupro` são prisões por esses crimes a cada 100.000 habitantes, e `pop_urbana` é o percentual da população que mora em áreas urbanas. O nome do estado vai para o índice, e cada linha fica com as quatro medidas:
+
+```{python}
+#| label: prisoes
+prisoes = pd.read_csv(
+    "dados/USArrests.csv",
+    index_col="estado")
+n, p = prisoes.shape
+print("estados:", n)
+print("colunas:", p)
+print("primeira linha:",
+    prisoes.index[0])
+linha = prisoes.iloc[0]
+for coluna, v in linha.items():
+    print(coluna, numero_br(v, 1))
+```
+
+::: {.funcao}
+- **`pd.read_csv(caminho, index_col="estado")`** — lê o arquivo e usa a coluna `estado` como índice: os nomes dos estados passam a identificar as linhas e deixam de ser uma coluna de dados.
+- **`df.shape`** — a tupla `(linhas, colunas)` da tabela.
+- **`df.index`** — os rótulos das linhas; `df.index[0]` é o rótulo da primeira.
+- **`df.iloc[0]`** — a linha na posição 0, a primeira, como uma série com um valor por coluna.
+- **`serie.items()`** — percorre os pares (rótulo, valor) da série.
+:::
+
+São 50 estados e 4 colunas. A primeira linha é a do Alabama, com 13,2 prisões por homicídio, 236 por agressão e 58% da população em áreas urbanas. As colunas não estão na mesma escala. A média, o desvio padrão e a variância de cada uma:
+
+```{python}
+#| label: resumo
+resumo = pd.DataFrame({
+    "média": prisoes.mean(),
+    "desvio padrão": prisoes.std(),
+    "variância": prisoes.var(),
+})
+variancias = resumo["variância"]
+print("maior variância:",
+    variancias.idxmax())
+print("menor variância:",
+    variancias.idxmin())
+tabela = resumo.style
+tabela = tabela.set_uuid("resumo")
+tabela.format(decimal=",",
+    thousands=".", precision=2)
+```
+
+::: {.funcao}
+- **`pd.DataFrame({nome: serie, ...})`** — monta uma tabela a partir de um dicionário: cada chave vira o nome de uma coluna, e cada série, os valores dela, alinhados pelo rótulo das linhas.
+- **`df.mean()`**, **`df.std()`** e **`df.var()`** — a média, o desvio padrão e a variância de cada coluna. A variância do `pandas` divide a soma dos quadrados dos desvios por $n - 1$, e não por $n$; o desvio padrão é a raiz quadrada dela.
+- **`serie.idxmax()`** e **`serie.idxmin()`** — o rótulo do maior e do menor valor da série.
+- **`df.style.format(...)`** — mostra a tabela com vírgula decimal, ponto de milhar e duas casas, sem mudar os números guardados.
+- **`set_uuid(nome)`** — fixa o identificador da tabela no HTML.
+:::
+
+As três colunas de crime estão na mesma unidade, e mesmo assim a variância de `agressao`, 6.945,17, é a maior das quatro, e a de `homicidio`, 18,97, a menor: a primeira é cerca de 366 vezes a segunda. A média de `agressao`, 170,76, é quase 22 vezes a de `homicidio`, 7,79, e o desvio padrão de `agressao`, 83,34, é cerca de 19 vezes o de `homicidio`, 4,36; como a variância é o quadrado do desvio padrão, a razão entre as variâncias é exatamente o quadrado da razão entre os desvios. Já `pop_urbana` está em outra unidade, o percentual, e a variância muda quando a unidade muda; a seção 15.3 mostra o que essas diferenças de escala fazem com o resumo da tabela.
+
+Nenhuma dessas colunas é uma resposta. No aprendizado supervisionado, cada observação traz os preditores e uma resposta $y_i$, e a previsão se confere contra ela, como na seção 7.5. Aqui não há $y_i$: não se quer prever as prisões por estupro a partir das outras três colunas, nem a parcela urbana a partir das prisões por crime. As quatro colunas são tratadas do mesmo jeito.
+
+::: {.conceito}
+No **aprendizado não supervisionado**, há $n$ observações e, para cada uma, $p$ variáveis $X_1, X_2, \dots, X_p$, sem resposta $Y$. No `USArrests`, $n = 50$ e $p = 4$. Os objetivos mais comuns são dois, e são os deste capítulo:
+
+- **visualizar e resumir** os dados com poucas variáveis novas, que guardem o máximo possível da variação das originais: as **componentes principais**, das seções 15.2 e 15.3;
+- **encontrar subgrupos** de observações parecidas entre si: o **agrupamento** (*clustering*), das seções 15.4 a 15.6.
+:::
+
+No `USArrests`, o segundo objetivo vira uma pergunta concreta: os 50 estados se separam em poucos grupos, cada um com estados de perfil parecido nas quatro colunas? Ninguém anotou de antemão a que grupo cada estado pertence. Primeiro, porém, vale olhar a tabela.
+
+Com $p$ variáveis, uma primeira forma de olhar é desenhar um gráfico de dispersão para cada par de colunas. São $p(p-1)/2$ pares. Antes de calcular: um estado com mais prisões por homicídio tende a ser mais urbano? E a ter mais prisões por agressão? A correlação $r$ de cada par, em ordem decrescente:
+
+```{python}
+#| label: pares
+from itertools import (
+    combinations)
+
+correlacoes = prisoes.corr()
+colunas = prisoes.columns
+duplas = combinations(colunas, 2)
+pares = pd.Series({
+    (a, b): correlacoes.loc[a, b]
+    for a, b in duplas
+})
+pares = pares.sort_values(
+    ascending=False)
+print("pares:", len(pares))
+for dupla, r in pares.items():
+    a, b = dupla
+    print(f"{a} × {b}:",
+        numero_br(r))
+```
+
+::: {.funcao}
+- **`df.corr()`** — a tabela das correlações entre as **colunas**, duas a duas; na linha `a` e na coluna `b` fica a correlação entre `a` e `b`.
+- **`df.columns`** — os nomes das colunas da tabela.
+- **`combinations(colunas, 2)`**, do módulo `itertools` — cada par de itens distintos, sem repetir o par na ordem inversa.
+- **`df.loc[a, b]`** — o valor na linha de rótulo `a` e na coluna de rótulo `b`.
+- **`pd.Series({rotulo: valor, ...})`** — uma série a partir de um dicionário. Aqui cada rótulo é o par de colunas, e por isso `pares.items()` entrega o par, em `dupla`, e a correlação, em `r`; `a, b = dupla` separa os dois nomes do par.
+- **`serie.sort_values(...)`** — com `ascending=False`, a série em ordem decrescente de valor.
+:::
+
+Os seis gráficos, na ordem da lista, com o Alabama em destaque:
+
+```{python}
+#| label: fig-pares
+#| fig-cap: "Os 50 estados do `USArrests` em cada par das quatro colunas, um ponto por estado, com a correlação no título. `homicidio`, `agressao` e `estupro` estão em prisões por 100.000 habitantes, e `pop_urbana` em percentual. O ponto laranja, maior, é o Alabama. Os painéis seguem a ordem decrescente da correlação, da esquerda para a direita e de cima para baixo."
+#| fig-alt: "Seis gráficos de dispersão pequenos, em três linhas de dois, com um ponto azul por estado e um ponto laranja maior para o Alabama. Na ordem: homicidio contra agressao, r = 0,80, pontos numa faixa inclinada para cima; agressao contra estupro, r = 0,67; homicidio contra estupro, r = 0,56; pop_urbana contra estupro, r = 0,41; agressao contra pop_urbana, r = 0,26; e homicidio contra pop_urbana, r = 0,07, pontos espalhados sem inclinação visível. O ponto laranja aparece em lugar diferente em cada painel."
+fig, eixos = plt.subplots(
+    3, 2, figsize=(3.8, 5.4))
+for ax, dupla in zip(
+        eixos.flat, pares.index):
+    a, b = dupla
+    r = pares[dupla]
+    x, y = prisoes[a], prisoes[b]
+    ax.scatter(x, y, s=8,
+        color="C0", alpha=0.8,
+        linewidths=0)
+    ax.scatter(x["Alabama"],
+        y["Alabama"], s=28,
+        color="C1", zorder=3)
+    ax.set_xlabel(a)
+    ax.set_ylabel(b)
+    titulo = "r = " + numero_br(r)
+    ax.set_title(titulo)
+    ax.locator_params(nbins=3)
+    ax.set_xlim(left=0)
+    ax.set_ylim(bottom=0)
+plt.tight_layout()
+plt.show()
+```
+
+::: {.funcao}
+- **`plt.subplots(3, 2, figsize=(3.8, 5.4))`** — uma figura com uma grade de 3 linhas e 2 colunas de gráficos, com 3,8 × 5,4 polegadas; **`eixos.flat`** percorre os seis gráficos da grade em ordem de leitura, e `pares.index`, os seis pares na ordem da lista; `pares[dupla]` é a correlação do par.
+- **`ax.scatter(x, y, s, color, alpha)`** — um ponto por par $(x, y)$; `s` é o tamanho do ponto, `alpha`, a opacidade, e `linewidths=0` tira o contorno do ponto. O segundo `scatter` desenha só o Alabama, e `zorder=3` o põe por cima dos outros.
+- **`ax.set_xlabel(texto)`**, **`ax.set_ylabel(texto)`** e **`ax.set_title(texto)`** — o rótulo do eixo horizontal, o do vertical e o título do gráfico.
+- **`ax.locator_params(nbins=3)`** — deixa poucas marcas em cada eixo, para os números não se encostarem num gráfico pequeno; **`ax.set_xlim(left=0)`** e **`ax.set_ylim(bottom=0)`** começam os dois eixos no zero, já que nenhuma das quatro medidas é negativa.
+- **`plt.tight_layout()`** — ajusta o espaço entre os gráficos para os rótulos não se sobreporem; **`plt.show()`** mostra a figura.
+:::
+
+Mais urbano, não: `homicidio` e `pop_urbana` têm correlação de 0,07, a menor dos seis pares, e o último painel é uma nuvem quase sem inclinação. Mais prisões por agressão, sim: no primeiro painel, `homicidio` e `agressao`, com 0,80, sobem juntos. As três colunas de crime têm, entre si, as três maiores correlações da lista.
+
+Seis gráficos ainda se leem, mas cada um mostra só duas das quatro colunas, e nenhum usa as quatro medidas de cada estado ao mesmo tempo: o Alabama vira seis pontos laranja, um em cada painel. Dá para reunir os 50 estados num gráfico só, que guarde o máximo possível da variação das quatro colunas? É essa a pergunta das componentes principais.
+
+## Como conferir sem resposta
+
+Dentro de cada célula, cada gene está mais ou menos ativo, e a **expressão** do gene mede essa atividade. A tabela `NCI60` traz a expressão de 6.830 genes, obtida por microarranjo, um chip que mede milhares de genes de uma vez, em 64 amostras de células de câncer. Cada amostra vem de uma linhagem, uma cultura de células mantida em laboratório, e a coluna `tipo` diz, para quase todas, o tipo de câncer dela:
+
+```{python}
+#| label: nci
+arquivo = "dados/NCI60.csv.gz"
+nci = pd.read_csv(arquivo)
+tipo = nci["tipo"]
+genes = nci.drop(columns="tipo")
+n, p = genes.shape
+print("amostras:", n)
+print("genes:", numero_br(p, 0))
+pares_nci = p * (p - 1) // 2
+print("pares de genes:",
+    numero_br(pares_nci, 0))
+contagens = tipo.value_counts()
+print(contagens.to_string())
+```
+
+::: {.funcao}
+- **`pd.read_csv(arquivo)`** — com um arquivo terminado em `.gz`, descomprime antes de ler, pela extensão.
+- **`df.drop(columns="tipo")`** — a tabela sem a coluna `tipo`; a original não muda.
+- **`serie.value_counts()`** — quantas vezes cada valor aparece, do mais frequente ao menos frequente.
+- **`serie.to_string()`** — a série como texto, uma linha por rótulo.
+:::
+
+Os rótulos terminados em `-repro` são medições repetidas de duas linhagens, a K562, de leucemia, e a MCF7, de mama; `desconhecido` é uma amostra de origem não identificada. Com $p = 6{.}830$ genes, os gráficos de dispersão, um por par de genes, seriam 23.321.035, demais para olhar um a um.
+
+As 64 amostras se separam em grupos de perfil de expressão parecido? É a pergunta do agrupamento, e ela se faz só com os genes: os métodos das próximas seções recebem a tabela `genes`, e a coluna `tipo` fica de fora. Ela serve para conferir depois o que eles acharem: se um agrupamento juntar as 6 amostras de leucemia num grupo, isso se vê comparando os grupos com `tipo`. Se os grupos não coincidirem com os tipos, o método errou?
+
+Não necessariamente. O tipo de câncer é uma classificação pelo tecido de origem, feita fora da tabela; duas linhagens de tecidos diferentes podem ter perfis de expressão parecidos, e linhagens do mesmo tecido podem diferir. A comparação com `tipo` mostra se os grupos têm relação com uma informação externa, não se estão certos. Essa é a dificuldade do aprendizado não supervisionado. Num problema supervisionado, a previsão se confere contra a resposta em observações que não entraram no ajuste, com um conjunto de teste ou com a validação cruzada do capítulo 10. Sem $Y$, não existe um erro de teste a medir, nem um critério aceito por todos para dizer que um resumo ou um agrupamento está certo. Lado a lado:
+
+| Aspecto | Supervisionado | Não supervisionado |
+|---|---|---|
+| Dados | preditores e $y_i$ | só as $p$ variáveis |
+| Avalia | erro de teste | sem erro de teste |
+| Uso | prever `tipo` com `genes` | agrupar por `genes` |
+
+::: {.conceito}
+Sem resposta, a análise não supervisionada costuma ser **exploratória**: um passo para conhecer os dados e levantar hipóteses, com escolhas que dependem de quem analisa.
+:::
+
+Há, ainda assim, formas parciais de conferir, como ver se os grupos resistem a perder parte dos dados, e a seção 15.6 mostra algumas delas.
