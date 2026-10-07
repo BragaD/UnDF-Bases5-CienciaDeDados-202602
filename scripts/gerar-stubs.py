@@ -114,9 +114,10 @@ LIVRO = [
         ("01-por-que-nao-regressao-linear", "Por que Não Regressão Linear", ("4.1", "4.2")),
         ("02-regressao-logistica", "Regressão Logística", ("4.3.1", "4.3.2", "4.3.3", "4.3.4")),
         ("03-logistica-multinomial", "Logística Multinomial", "4.3.5"),
-        ("04-modelos-generativos", "Modelos Generativos: LDA, QDA e Naive Bayes", ("4.4.1", "4.4.3", "4.4.4")),
+        ("04-naive-bayes", "Naive Bayes", ("4.4", "4.4.4", "4.5.1")),
         ("05-avaliando-um-classificador", "Avaliando um Classificador", "4.4.2"),
         ("06-comparando-os-metodos", "Comparando os Métodos", "4.5"),
+        ("07-leitura-complementar-lda-e-qda", "Leitura Complementar: LDA e QDA", ("4.4.1", "4.4.2", "4.4.3", "4.5.1")),
     ]),
     (10, "Reamostragem", 5, [
         ("01-o-conjunto-de-validacao", "O Conjunto de Validação", "5.1.1"),

@@ -156,7 +156,7 @@ def test_cada_capitulo_tem_index():
         assert (CONTENT / f"cap{n:02d}" / "index.qmd").is_file(), f"falta cap{n:02d}/index.qmd"
 
 
-def test_livro_completo_92_secoes_109_arquivos():
+def test_livro_completo_93_secoes_110_arquivos():
     """Nenhum outro teste deste arquivo detecta uma seção inteira sumindo.
 
     `test_todo_qmd_esta_registrado_no_quarto_yml` e
@@ -167,7 +167,7 @@ def test_livro_completo_92_secoes_109_arquivos():
     `index.qmd`. A fonte da verdade sobre o que o livro DEVE conter é o
     `LIVRO` de `scripts/gerar-stubs.py`, então este teste confere, capítulo
     por capítulo, que cada arquivo esperado existe em disco E aparece no
-    `_quarto.yml`, e fecha nos totais (17 capítulos, 92 seções, 109 arquivos).
+    `_quarto.yml`, e fecha nos totais (17 capítulos, 93 seções, 110 arquivos).
     Como fim de linha, também pega um arquivo de seção com nome digitado
     errado (por exemplo com um `_` no início, que `qmds_no_disco()` ignora de
     propósito): o nome exato esperado não existiria em nenhum dos dois lados.
@@ -176,7 +176,9 @@ def test_livro_completo_92_secoes_109_arquivos():
     saíram do livro — ver a spec da ruptura com o Grus. O capítulo 17
     entrou em 2026-09-29, antes do 12, por causa do prazo do HPE; o 12
     entrou no mesmo dia, logo depois; o 13 e o 14, em seguida; o 15, em
-    2026-09-30, depois do 14; o 16, no mesmo dia, depois do 15.
+    2026-09-30, depois do 14; o 16, no mesmo dia, depois do 15. Em
+    2026-10-07, o capítulo 9 ganhou a 9.7 (leitura complementar de LDA e
+    QDA), e os totais passaram de 92 / 109 para 93 / 110.
     """
     livro = carregar_livro()
     assert len(livro) == 17, f"esperava 17 capítulos no LIVRO, achei {len(livro)}"
@@ -201,8 +203,8 @@ def test_livro_completo_92_secoes_109_arquivos():
             total_arquivos += 1
             total_secoes += 1
 
-    assert total_secoes == 92, f"esperava 92 seções, achei {total_secoes}"
-    assert total_arquivos == 109, f"esperava 109 arquivos, achei {total_arquivos}"
+    assert total_secoes == 93, f"esperava 93 seções, achei {total_secoes}"
+    assert total_arquivos == 110, f"esperava 110 arquivos, achei {total_arquivos}"
 
 
 def test_nenhum_chunk_comeca_com_linha_indentada():

@@ -10,32 +10,49 @@ Um classificador de inadimplência pode errar de dois jeitos bem diferentes: diz
 #| label: setup
 #| include: false
 import matplotlib.pyplot as plt
-import numpy as np
-import pandas as pd
-from sklearn.discriminant_analysis import (
-    LinearDiscriminantAnalysis,
-    QuadraticDiscriminantAnalysis,
-)
-from sklearn.linear_model import LogisticRegression
-from sklearn.metrics import (
-    confusion_matrix,
-    precision_score,
-    recall_score,
-    roc_auc_score,
-    roc_curve,
-)
-from sklearn.naive_bayes import GaussianNB
 
 plt.style.use("estilo-figuras.mplstyle")
-
-base = pd.read_csv("dados/Default.csv")
-y = (base["inadimplente"] == "sim").astype(int)
-X = base[["saldo", "renda"]].copy()
-X["estudante_sim"] = (base["estudante"] == "sim").astype(int)
-
-modelo = LogisticRegression(C=np.inf, solver="newton-cholesky", tol=1e-8).fit(X, y)
-proba = modelo.predict_proba(X)[:, 1]
 ```
+
+O classificador é o da seção 9.2, refeito aqui com os mesmos dados e as mesmas opções:
+
+```{python}
+#| label: dados-e-modelo
+import numpy as np
+import pandas as pd
+import sklearn.metrics as mt
+from sklearn.linear_model import (
+    LogisticRegression)
+
+confusion_matrix = (
+    mt.confusion_matrix)
+roc_curve = mt.roc_curve
+roc_auc_score = mt.roc_auc_score
+precision_score = (
+    mt.precision_score)
+recall_score = mt.recall_score
+
+base = pd.read_csv(
+    "dados/Default.csv")
+y = (base["inadimplente"]
+    == "sim").astype(int)
+X = base[["saldo", "renda"]]
+X = X.copy()
+X["estudante_sim"] = (
+    base["estudante"] == "sim"
+).astype(int)
+
+modelo = LogisticRegression(
+    C=np.inf,
+    solver="newton-cholesky",
+    tol=1e-8).fit(X, y)
+proba = modelo.predict_proba(
+    X)[:, 1]
+```
+
+::: {.funcao}
+**`import sklearn.metrics as mt`**: importa o módulo de métricas com um nome curto; `mt.roc_curve` e as demais funções dele ficam acessíveis pelo prefixo, e as atribuições dão a cada uma o nome sem prefixo que o resto da seção usa.
+:::
 
 ## A acurácia engana quando a classe é rara
 
@@ -96,7 +113,7 @@ $$
 A precisão responde: entre quem o modelo acusou de inadimplente, quantos de fato eram? Aqui, 105 entre 105 + 40 = 145, ou 0,7241. A revocação responde: entre quem de fato ficou inadimplente, quantos o modelo achou? São 105 entre 105 + 228 = 333, ou 0,3153. O erro total de 2,68% parece ótimo até se perguntar de quem é o erro: no limiar padrão, o modelo acha 105 dos 333 inadimplentes e deixa 228 passarem sem sinal nenhum.
 
 ::: {.conceito}
-Matriz de confusão, precisão e revocação são o vocabulário mínimo para julgar um classificador. A matriz separa os quatro jeitos de acertar e errar: VN, FP, FN e VP. A **precisão**, VP / (VP + FP), mede a confiança de um alarme: quando o modelo diz `sim`, com que frequência está certo. A **revocação**, VP / (VP + FN), mede a cobertura sobre quem de fato é positivo: da classe que interessa achar, quanto o modelo encontra. Nenhuma das duas depende do algoritmo que gerou a previsão; servem do mesmo jeito para regressão logística, LDA, QDA, Naive Bayes ou qualquer outro classificador.
+Matriz de confusão, precisão e revocação são o vocabulário mínimo para julgar um classificador. A matriz separa os quatro jeitos de acertar e errar: VN, FP, FN e VP. A **precisão**, VP / (VP + FP), mede a confiança de um alarme: quando o modelo diz `sim`, com que frequência está certo. A **revocação**, VP / (VP + FN), mede a cobertura sobre quem de fato é positivo: da classe que interessa achar, quanto o modelo encontra. Nenhuma das duas depende do algoritmo que gerou a previsão; servem do mesmo jeito para a regressão logística, o Naive Bayes, o *k*-NN ou qualquer outro classificador.
 :::
 
 ## O limiar é escolha, não verdade
@@ -206,6 +223,8 @@ O menor erro total da varredura, 0,0261, aparece em dois limiares, 0,428 e 0,430
 #| label: fig-taxas-por-limiar
 #| fig-cap: "Taxas de erro contra o limiar de decisão, de 0,0 a 0,5, para o classificador logístico do Default. Verde: erro total. Laranja tracejada: fração de inadimplentes (verdadeiros \"sim\") que o modelo deixa passar. Azul pontilhada: fração de adimplentes (verdadeiros \"não\") que o modelo alarma por engano. As duas últimas se cruzam perto de 0,04 e se movem em direções opostas em toda a faixa. O erro total é a média das outras duas, com peso de 96,67% para os alarmes falsos e 3,33% para os perdidos; por isso a curva verde acompanha a azul de perto nos limiares baixos e passa pelo mesmo ponto de cruzamento."
 #| fig-alt: "Três curvas contra o limiar. A azul pontilhada começa em 1 e cai depressa; a laranja tracejada começa em 0 e sobe devagar; as duas se cruzam num ponto cinza marcado perto do limiar 0,04. A verde, do erro total, começa alta e cai para perto de zero, ficando quase plana a partir de 0,2."
+import matplotlib.pyplot as plt
+
 fig, ax = plt.subplots()
 ax.plot(grade_limiares, erro_total, color="C2", linewidth=2.2, label="erro total")
 ax.plot(
@@ -328,44 +347,63 @@ plt.show()
 
 O ponto marcado é o limiar 0,5 da matriz de confusão: FPR de 0,004 (os 40 falsos alarmes sobre 9.627 + 40 = 9.667 adimplentes) e revocação de 0,315 (os 105 acertos sobre 105 + 228 = 333 inadimplentes). É o mesmo par de números da matriz, agora como um ponto sobre a curva inteira. A diagonal pontilhada marca o que um classificador sem informação produziria: ganhar revocação só à custa de FPR, na mesma proporção. A curva do modelo logístico nunca passa para baixo dela, e é a distância entre as duas, resumida na área de 0,9496, que separa um classificador que aprendeu algo de um que está adivinhando.
 
-A matriz de confusão, a precisão, a revocação e a curva ROC não dependem de qual classificador as produziu. A seção 9.4 deixou em aberto como LDA, QDA e Naive Bayes erram sobre o `Default`, e com esse vocabulário a pergunta tem resposta. No limiar 0,5, os quatro classificadores:
+A matriz de confusão, a precisão, a revocação e a curva ROC não dependem de qual classificador as produziu. Com o mesmo vocabulário, a logística se compara ao Naive Bayes da seção 9.4 e ao *k*-NN com *k* = 15, este com os preditores padronizados, como na seção 7.3, para que `renda`, com valores na casa das dezenas de milhares de dólares, não domine a distância. No limiar de 0,5, sobre as mesmas linhas do ajuste:
 
 ```{python}
-#| label: quatro-classificadores-no-limiar-05
+#| label: tres-classificadores-no-limiar-05
+from sklearn.naive_bayes import (
+    GaussianNB)
+from sklearn.neighbors import (
+    KNeighborsClassifier)
+from sklearn.pipeline import (
+    make_pipeline)
+import sklearn.preprocessing as pp
+
+knn = make_pipeline(
+    pp.StandardScaler(),
+    KNeighborsClassifier(
+        n_neighbors=15))
 classificadores = {
     "logística": modelo,
-    "LDA": LinearDiscriminantAnalysis().fit(X, y),
-    "QDA": QuadraticDiscriminantAnalysis().fit(X, y),
-    "Naive Bayes": GaussianNB().fit(X, y),
+    "Naive Bayes": GaussianNB(),
+    "k-NN (k=15)": knn,
 }
-tabela_quatro = pd.DataFrame(
-    {
-        nome: {
-            "precisão": precision_score(y, m.predict(X)),
-            "revocação": recall_score(y, m.predict(X)),
-            "erro total": (m.predict(X) != y).mean(),
-        }
-        for nome, m in classificadores.items()
+colunas = {}
+for nome in classificadores:
+    m = classificadores[nome]
+    prev = m.fit(X, y).predict(X)
+    prec = precision_score(
+        y, prev)
+    rev = recall_score(y, prev)
+    errou = prev != y
+    colunas[nome] = {
+        "precisão": prec,
+        "revocação": rev,
+        "erro": errou.mean(),
     }
-).T.round(4)
-tabela_quatro
-```
-
-```{python}
-#| label: revocacao-dos-quatro
-maior_revocacao = float(tabela_quatro["revocação"].max())
-menor_revocacao = float(tabela_quatro["revocação"].min())
-todos_perdem_a_maioria = bool(maior_revocacao < 0.5)
-faixa_erro_total = (
-    float(tabela_quatro["erro total"].min()),
-    float(tabela_quatro["erro total"].max()),
-)
-
-menor_revocacao, maior_revocacao, todos_perdem_a_maioria, faixa_erro_total
+tabela_tres = pd.DataFrame(
+    colunas).T.round(4)
+tabela_tres
 ```
 
 ::: {.funcao}
-**`precision_score(y, previsto)`** e **`recall_score(y, previsto)`**: a precisão e a revocação da classe 1, calculadas direto das previsões, sem montar a matriz de confusão.
+**`precision_score(y, previsto)`** e **`recall_score(y, previsto)`**: a precisão e a revocação da classe 1, calculadas direto das previsões, sem montar a matriz de confusão. **`KNeighborsClassifier(n_neighbors)`**: o *k*-NN para classificação, que prevê a classe mais comum entre os `n_neighbors` vizinhos mais próximos. **`make_pipeline(pp.StandardScaler(), KNeighborsClassifier(n_neighbors=15))`**, com o `StandardScaler` do módulo `sklearn.preprocessing` importado como `pp`, encadeia a padronização e o classificador num objeto só: `fit` padroniza cada preditor (média 0, desvio 1) com as médias e os desvios do próprio treino e ajusta o *k*-NN sobre o resultado; `predict` repete a mesma padronização antes de prever.
 :::
 
-Os erros totais ficam entre 2,68% e 2,93%, mas os quatro dividem os erros de jeitos diferentes. A revocação vai de 0,2372 a 0,3153 entre eles, e `todos_perdem_a_maioria` confirma que nenhum acha metade dos inadimplentes no limiar 0,5. Para qualquer um dos quatro, baixar o limiar é o que muda esse quadro, e o preço é do mesmo tipo que a varredura mostrou para a logística: mais alarmes falsos.
+```{python}
+#| label: revocacao-dos-tres
+br4 = lambda v: (
+    f"{v:.4f}".replace(".", ","))
+rev = tabela_tres["revocação"]
+erro = tabela_tres["erro"]
+print("revocação:",
+    br4(rev.min()), "a",
+    br4(rev.max()))
+print("erro total:",
+    br4(erro.min()), "a",
+    br4(erro.max()))
+print("nenhum acha metade:",
+    bool(rev.max() < 0.5))
+```
+
+Os erros totais ficam entre 2,59% e 2,93%, mas os três dividem os erros de jeitos diferentes. A revocação vai de 0,2613 a 0,3544 entre eles, e nenhum acha metade dos inadimplentes no limiar 0,5. O *k*-NN parte com vantagem nesta comparação: medido nas próprias linhas do ajuste, cada cliente é um dos seus 15 vizinhos mais próximos, e a seção 9.6 mede quanto isso pesa. Para qualquer um dos três, baixar o limiar é o que muda esse quadro, e o preço é do mesmo tipo que a varredura mostrou para a logística: mais alarmes falsos.
