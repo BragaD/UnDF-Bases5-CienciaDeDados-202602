@@ -10,32 +10,8 @@ Em vez de separar metade das observações para validar, dá para separar **uma*
 #| label: setup
 #| include: false
 import matplotlib.pyplot as plt
-import numpy as np
-import pandas as pd
-from sklearn.linear_model import LinearRegression
-from sklearn.model_selection import LeaveOneOut, cross_val_score
-from sklearn.pipeline import make_pipeline
-from sklearn.preprocessing import PolynomialFeatures, StandardScaler
 
 plt.style.use("estilo-figuras.mplstyle")
-
-auto = pd.read_csv("dados/Auto.csv")
-auto["potencia"] = pd.to_numeric(auto["potencia"], errors="coerce")
-auto = auto.dropna(subset=["potencia"]).reset_index(drop=True)
-
-X = auto[["potencia"]]
-y = auto["milhas_por_galao"]
-
-
-def modelo_polinomial(grau):
-    return make_pipeline(
-        StandardScaler(),
-        PolynomialFeatures(grau, include_bias=False),
-        LinearRegression(),
-    )
-
-
-graus = range(1, 11)
 ```
 
 ::: {.conceito}
@@ -52,19 +28,125 @@ A troca ataca as duas desvantagens do conjunto de validação. Cada ajuste usa $
 
 ## A LOOCV nos carros
 
-A pergunta continua a mesma: que grau de polinômio em `potencia` prevê melhor `milhas_por_galao` nos dados `Auto`? Cada grau passa agora pela LOOCV.
+Os carros são os 392 de `Auto` da seção 10.1, e `polinomial(grau)` monta o mesmo polinômio em `potencia` para prever `milhas_por_galao`:
 
 ```{python}
-#| label: loocv-auto
-loocv = np.array([
-    -cross_val_score(
-        modelo_polinomial(grau), X, y,
-        cv=LeaveOneOut(), scoring="neg_mean_squared_error",
-    ).mean()
-    for grau in graus
-])
+#| label: dados-auto
+import numpy as np
+import pandas as pd
+from sklearn.linear_model \
+    import LinearRegression
+from sklearn.pipeline \
+    import make_pipeline
+from sklearn.preprocessing \
+    import PolynomialFeatures
+from sklearn.preprocessing \
+    import StandardScaler
 
-len(X), len(X) * len(graus)
+auto = pd.read_csv(
+    "dados/Auto.csv")
+auto["potencia"] = pd.to_numeric(
+    auto["potencia"],
+    errors="coerce")
+auto = auto.dropna(
+    subset=["potencia"])
+auto = auto.reset_index(
+    drop=True)
+X = auto[["potencia"]]
+y = auto["milhas_por_galao"]
+
+
+def polinomial(grau):
+    return make_pipeline(
+        StandardScaler(),
+        PolynomialFeatures(
+            grau,
+            include_bias=False),
+        LinearRegression(),
+    )
+
+
+graus = range(1, 11)
+print("carros:", len(X))
+```
+
+O primeiro ajuste da LOOCV da reta deixa de fora o carro da linha 0. O modelo é ajustado nos outros 391 e prevê o consumo desse carro:
+
+```{python}
+#| label: um-carro-fora
+i = 0
+X_sem_i = X.drop(index=i)
+y_sem_i = y.drop(index=i)
+
+reta = polinomial(1)
+reta.fit(X_sem_i, y_sem_i)
+
+previsto = reta.predict(
+    X.iloc[[i]])
+erro_i = (y.iloc[i]
+    - previsto[0]) ** 2
+
+print("treino:", len(X_sem_i))
+print("real:", y.iloc[i])
+print("previsto:",
+    round(previsto[0], 2))
+print("erro ao quadrado:",
+    round(erro_i, 2))
+```
+
+::: {.funcao}
+**`X.drop(index=i)`**: uma cópia da tabela sem a linha de rótulo `i`; a tabela original não muda.
+
+**`X.iloc[[i]]`**: a linha na posição `i`. Com os colchetes duplos, o resultado continua sendo uma tabela de uma linha, a forma que o `predict` espera; com colchetes simples, sairia uma `Series`.
+:::
+
+O carro da linha 0 é a observação $i = 1$ da fórmula, e esse erro ao quadrado é o seu $\mathrm{MSE}_1$. A LOOCV repete os mesmos passos com cada um dos 392 carros e tira a média dos 392 erros:
+
+```{python}
+#| label: loocv-a-mao
+erros = []
+for i in range(len(X)):
+    X_sem_i = X.drop(index=i)
+    y_sem_i = y.drop(index=i)
+    reta = polinomial(1)
+    reta.fit(X_sem_i, y_sem_i)
+    previsto = reta.predict(
+        X.iloc[[i]])
+    erro_i = (y.iloc[i]
+        - previsto[0]) ** 2
+    erros.append(erro_i)
+
+loocv_a_mao = np.mean(erros)
+print("ajustes:", len(erros))
+print("CV(n) da reta:",
+    round(loocv_a_mao, 2))
+```
+
+O `scikit-learn` faz o mesmo laço com duas peças. O `LeaveOneOut` diz quais linhas ficam de fora em cada ajuste, e o `cross_val_score` ajusta, prevê e mede em cada um:
+
+```{python}
+#| label: loocv-reta
+from sklearn.model_selection \
+    import LeaveOneOut
+from sklearn.model_selection \
+    import cross_val_score
+
+neg_mse = "neg_mean_squared_error"
+pontuacoes = cross_val_score(
+    polinomial(1), X, y,
+    cv=LeaveOneOut(),
+    scoring=neg_mse,
+)
+loocv_reta = -pontuacoes.mean()
+
+print("pontuações:",
+    len(pontuacoes))
+pd.DataFrame(
+    {"laço": [loocv_a_mao],
+        "cross_val_score":
+        [loocv_reta]},
+    index=["CV(n) da reta"],
+).round(2)
 ```
 
 ::: {.funcao}
@@ -73,41 +155,85 @@ len(X), len(X) * len(graus)
 **`cross_val_score(estimador, X, y, cv, scoring)`**: ajusta e avalia o estimador em cada divisão de `cv` e devolve um array com uma pontuação por divisão.
 
 - `cv=LeaveOneOut()`: as divisões a usar.
-- `scoring="neg_mean_squared_error"`: a pontuação é o MSE com o sinal trocado. O `scikit-learn` sempre maximiza a pontuação; por isso o erro entra negativo, e o `-` na frente de `cross_val_score` o desfaz.
+- `scoring=neg_mse`, o texto `"neg_mean_squared_error"`: a pontuação é o MSE com o sinal trocado. O `scikit-learn` sempre maximiza a pontuação; por isso o erro entra negativo, e o `-` na frente de `pontuacoes.mean()` o desfaz.
 :::
+
+As duas colunas dão o mesmo número: as 392 pontuações, com o sinal trocado, têm a mesma média que o laço escrito à mão. Para os outros graus, a conta é a mesma, com outro modelo:
+
+```{python}
+#| label: loocv-auto
+loocv = []
+for grau in graus:
+    pontuacoes = cross_val_score(
+        polinomial(grau), X, y,
+        cv=LeaveOneOut(),
+        scoring=neg_mse,
+    )
+    cv_grau = -pontuacoes.mean()
+    loocv.append(cv_grau)
+loocv = np.array(loocv)
+
+print("ajustes por grau:", len(X))
+print("nos dez graus:",
+    len(X) * len(graus))
+```
 
 São 392 carros, portanto 392 ajustes por grau, e 3.920 ajustes nos dez graus. A média de cada array de 392 erros é a $\mathrm{CV}_{(n)}$ daquele grau:
 
 ```{python}
 #| label: tabela-loocv
 pd.DataFrame(
-    {"MSE da LOOCV": [round(float(v), 2) for v in loocv]},
-    index=pd.Index(graus, name="grau"),
+    {"MSE da LOOCV":
+        loocv.round(2)},
+    index=pd.Index(
+        graus, name="grau"),
 )
 ```
 
 ```{python}
 #| label: leitura-loocv
-grau_minimo_loocv = int(graus[np.argmin(loocv)])
-salto_grau_1_para_2 = round(float(loocv[0] - loocv[1]), 2)
-amplitude_graus_2_a_10 = round(float(loocv[1:].max() - loocv[1:].min()), 2)
-ganho_minimo_sobre_grau_2 = round(float(loocv[1] - loocv.min()), 2)
+grau_minimo_loocv = graus[
+    np.argmin(loocv)]
+salto_grau_1_para_2 = (
+    loocv[0] - loocv[1])
+faixa = loocv[1:]
+amplitude_2_a_10 = (
+    faixa.max() - faixa.min())
+ganho_sobre_grau_2 = (
+    loocv[1] - loocv.min())
 
-grau_minimo_loocv, salto_grau_1_para_2, amplitude_graus_2_a_10, ganho_minimo_sobre_grau_2
+print("menor MSE no grau",
+    grau_minimo_loocv)
+print("reta menos parábola:",
+    round(float(
+        salto_grau_1_para_2), 2))
+print("faixa dos graus 2 a 10:",
+    round(float(
+        amplitude_2_a_10), 2))
+print("parábola menos mínimo:",
+    round(float(
+        ganho_sobre_grau_2), 2))
 ```
 
 A reta erra 24,23; a parábola, 19,25, e o erro cai 4,98 de um grau para o outro. Do grau 2 ao grau 10, as nove estimativas cabem numa faixa de 0,66. O menor MSE da LOOCV cai no grau 7, com 18,83, como aponta o `np.argmin`: 0,42 abaixo da parábola, contra os 4,98 que a curvatura já tinha tirado.
 
 ```{python}
 #| label: fig-loocv-auto
-#| fig-cap: "MSE da LOOCV contra o grau do polinômio em potencia, nos dados Auto. O eixo vertical é o mesmo da figura do conjunto de validação, de 13 a 29."
+#| fig-cap: "MSE da LOOCV contra o grau do polinômio em potencia, nos dados Auto. O eixo vertical é o mesmo da figura do conjunto de validação, de 13 a 33."
 #| fig-alt: "Uma curva laranja com marcadores cai de cerca de 24 no grau 1 para cerca de 19 no grau 2 e fica quase plana, pouco abaixo de 20, até o grau 10."
-fig, ax = plt.subplots(figsize=(6, 4.2))
-ax.plot(graus, loocv, color="C1", marker="o", linewidth=2)
+import matplotlib.pyplot as plt
+
+fig, ax = plt.subplots(
+    figsize=(6, 4.2))
+ax.plot(
+    graus, loocv, color="C1",
+    marker="o", linewidth=2)
 ax.set_xlabel("grau do polinômio")
 ax.set_ylabel("MSE da LOOCV")
 ax.set_xticks(list(graus))
-ax.set_ylim(13, 29)
+ax.set_ylim(13, 33)
+ax.set_yticks(
+    [15, 20, 25, 30])
 plt.tight_layout()
 plt.show()
 ```
@@ -122,62 +248,151 @@ $$
 \mathrm{CV}_{(n)} = \frac{1}{n}\sum_{i=1}^n \left(\frac{y_i - \hat y_i}{1 - h_i}\right)^2,
 $$
 
-em que $\hat y_i$ agora vem do ajuste com todas as $n$ observações, e $h_i$ é a alavancagem da observação $i$, a diagonal da matriz chapéu definida na seção 8.6. Sem o denominador, a soma seria a média dos quadrados dos resíduos de treino. O $1 - h_i$ corrige isso ponto a ponto: o resíduo de um ponto de alavancagem alta é inflado na medida exata do quanto aquele ponto puxou o próprio ajuste para perto de si. O que acontece com o termo de uma observação cujo $h_i$ se aproxima de 1?
+em que $\hat y_i$ agora vem do ajuste com todas as $n$ observações, e $h_i$ é a alavancagem da observação $i$, da seção 8.6. Sem o denominador, a soma seria a média dos quadrados dos resíduos de treino, que é otimista: cada carro ajudou a traçar a curva que o prevê. O $1 - h_i$ corrige isso carro a carro, e $h_i$ mede justamente essa ajuda, isto é, quanto o carro $i$ puxa o próprio ajuste para perto de si.
 
-A conferência é fazer as duas contas e comparar. Para a fórmula, o chunk ajusta o modelo nos 392 carros, reconstrói as colunas que o `LinearRegression` de fato recebe (padronização seguida das potências), acrescenta a coluna de 1 e calcula a matriz chapéu como na seção 8.6.
+Essa leitura de $h_i$ se confere com uma conta. Primeiro, o ajuste da reta com os 392 carros e o resíduo de cada um:
 
 ```{python}
-#| label: formula-atalho
-formula = []
-condicao = []
-for grau in graus:
-    previsto = modelo_polinomial(grau).fit(X, y).predict(X)
-    colunas = make_pipeline(
-        StandardScaler(), PolynomialFeatures(grau, include_bias=False)
-    ).fit_transform(X)
-    X_design = np.column_stack([np.ones(len(X)), colunas])
-    condicao.append(float(np.linalg.cond(X_design.T @ X_design)))
-    H = X_design @ np.linalg.inv(X_design.T @ X_design) @ X_design.T
-    h = np.diag(H)
-    formula.append(np.mean(((y - previsto) / (1 - h)) ** 2))
-formula = np.array(formula)
+#| label: reta-com-todos
+reta = polinomial(1)
+reta.fit(X, y)
+previsto = reta.predict(X)
+residuo = y - previsto
+print("resíduo do carro 0:",
+    round(residuo[0], 2))
+```
+
+Agora, um empurrão: soma-se 1 ao consumo do carro 0, só dele, e a reta é ajustada de novo. Quanto a previsão desse mesmo carro sobe?
+
+```{python}
+#| label: empurrao
+y_empurrado = y.copy()
+y_empurrado.iloc[0] += 1
+
+empurrada = polinomial(1)
+empurrada.fit(X, y_empurrado)
+novo = empurrada.predict(
+    X.iloc[[0]])
+
+h_0 = novo[0] - previsto[0]
+print("h do carro 0:",
+    round(h_0, 4))
+```
+
+O consumo do carro 0 subiu 1, e a previsão dele subiu só uma fração disso: é o quanto ele puxa a reta. Esse número é o $h_i$ do carro 0. Para não fazer um empurrão e um ajuste por carro, o que custaria de novo 392 ajustes, a seção 8.6 dá a conta que tira todos os $h_i$ de uma vez, a diagonal da matriz chapéu. Ela usa as colunas que o `LinearRegression` de fato recebe (a padronização seguida das potências) e uma coluna de 1 para o intercepto:
+
+```{python}
+#| label: alavancagens
+transf = make_pipeline(
+    StandardScaler(),
+    PolynomialFeatures(
+        1, include_bias=False))
+colunas = transf.fit_transform(X)
+uns = np.ones(len(X))
+X_design = np.column_stack(
+    [uns, colunas])
+
+XtX = X_design.T @ X_design
+H = (X_design
+    @ np.linalg.inv(XtX)
+    @ X_design.T)
+h = np.diag(H)
 
 pd.DataFrame(
-    {"LOOCV (392 ajustes)": loocv.round(6), "fórmula (1 ajuste)": formula.round(6)},
-    index=pd.Index(graus, name="grau"),
-)
+    {"empurrão": [h_0],
+        "matriz chapéu": [h[0]]},
+    index=["carro 0"],
+).round(4)
 ```
 
 ::: {.funcao}
-**`fit_transform(X)`**: ajusta as transformações de um `Pipeline` sem estimador final e devolve o resultado delas sobre `X`. Aqui, as colunas padronizadas $x, x^2, \dots, x^{\text{grau}}$.
+**`fit_transform(X)`**: ajusta as transformações de um `Pipeline` sem estimador final e devolve o resultado delas sobre `X`. Aqui, a coluna padronizada $x$; com grau maior, $x, x^2, \dots, x^{\text{grau}}$.
 
 **`np.ones(n)`**: um array de `n` uns, a coluna do intercepto. **`np.column_stack(lista)`**: junta os arrays da lista lado a lado, como colunas de uma matriz.
 
 **`np.linalg.inv(M)`**: a inversa da matriz `M`. **`np.diag(M)`**: a diagonal de uma matriz quadrada, como array; aqui, os $h_i$.
 :::
 
-```{python}
-#| label: formula-confere
-formula_bate_com_loocv = bool(np.allclose(loocv, formula))
-diferenca = np.abs(loocv - formula)
-abaixo_de_um_milionesimo = bool(diferenca.max() < 1e-6)
-grau_da_maior_diferenca = int(graus[np.argmax(diferenca)])
-condicao_sobe_com_o_grau = bool(np.all(np.diff(condicao) > 0))
+O empurrão e a matriz dão o mesmo $h$ para o carro 0. Com o resíduo e o $h_i$ de cada carro, o termo da fórmula sai sem nenhum ajuste novo. A tabela o põe ao lado do erro que a LOOCV mediu deixando o carro de fora, nos três primeiros carros:
 
-(
-    formula_bate_com_loocv, abaixo_de_um_milionesimo, grau_da_maior_diferenca,
-    condicao_sobe_com_o_grau, f"{condicao[0]:.0e}", f"{condicao[-1]:.0e}",
+```{python}
+#| label: termo-por-carro
+termo = (residuo / (1 - h)) ** 2
+
+pd.DataFrame({
+    "resíduo": residuo[:3],
+    "h": h[:3],
+    "termo": termo[:3],
+    "LOOCV": erros[:3],
+}).rename_axis("carro").round(4)
+```
+
+A coluna `termo`, que vem do ajuste com os 392, repete a coluna `LOOCV`, que vem de um ajuste sem o carro. A média dos 392 termos é, portanto, a $\mathrm{CV}_{(n)}$ da reta:
+
+```{python}
+#| label: media-dos-termos
+media = termo.mean()
+pd.DataFrame(
+    {"laço": [loocv_a_mao],
+        "fórmula": [media]},
+    index=["CV(n) da reta"],
+).round(2)
+```
+
+O que acontece com o termo de um carro cujo $h_i$ se aproxima de 1?
+
+Para os outros graus, a conta é a mesma, com o polinômio do grau no lugar da reta:
+
+```{python}
+#| label: formula-atalho
+formula = []
+for grau in graus:
+    modelo = polinomial(grau)
+    modelo.fit(X, y)
+    previsto = modelo.predict(X)
+    residuo = y - previsto
+
+    transf = make_pipeline(
+        StandardScaler(),
+        PolynomialFeatures(
+            grau,
+            include_bias=False))
+    colunas = (
+        transf.fit_transform(X))
+    X_design = np.column_stack(
+        [uns, colunas])
+    XtX = X_design.T @ X_design
+    H = (X_design
+        @ np.linalg.inv(XtX)
+        @ X_design.T)
+    h = np.diag(H)
+
+    termo = (
+        residuo / (1 - h)) ** 2
+    formula.append(termo.mean())
+formula = np.array(formula)
+
+diferenca = np.abs(
+    loocv - formula)
+abaixo = np.where(
+    diferenca < 1e-6,
+    "< 1e-6", "maior")
+pd.DataFrame(
+    {"LOOCV": loocv.round(6),
+        "fórmula":
+            formula.round(6),
+        "diferença": abaixo},
+    index=pd.Index(
+        graus, name="grau"),
 )
 ```
 
 ::: {.funcao}
-**`np.allclose(a, b)`**: `True` se os dois arrays são iguais elemento a elemento, a menos de uma tolerância pequena para o arredondamento de ponto flutuante.
-
-**`np.linalg.cond(M)`**: o número de condição da matriz `M`. Quanto maior, mais os erros de arredondamento se amplificam ao inverter `M`. **`np.diff(a)`**: as diferenças entre elementos vizinhos de `a`; `np.all(np.diff(a) > 0)` diz se `a` só sobe.
+**`np.where(condicao, a, b)`**: elemento a elemento, `a` onde a condição vale e `b` onde não vale. Aqui, escreve `"< 1e-6"` em cada grau cuja diferença fica abaixo de um milionésimo.
 :::
 
-`formula_bate_com_loocv` confirma `True`: nos dez graus, um ajuste só dá o mesmo número que 392. A maior diferença entre as duas colunas fica abaixo de um milionésimo e aparece no grau 10. Ela vem do arredondamento, não da fórmula: o número de condição de $X^\top X$, que mede o quanto a inversão amplifica os erros de arredondamento, sobe a cada grau, de cerca de 1 no grau 1 a cerca de $2 \times 10^{11}$ no grau 10.
+A coluna `LOOCV` vem dos 392 ajustes por grau; a coluna `fórmula`, de um ajuste só. Nos dez graus, as duas coincidem até a sexta casa, e a coluna `diferença` mostra que nenhuma passa de um milionésimo. A diferença que sobra vem do arredondamento, não da fórmula: a fórmula é exata, e os dois caminhos fazem contas diferentes, cada um com seus próprios erros no último dígito do ponto flutuante.
 
-Há uma pergunta que o leitor atento faz aqui. Dentro da LOOCV, o `StandardScaler` é reajustado a cada um dos 392 ajustes, com a média e o desvio padrão de 391 carros; na fórmula, a padronização usa os 392. Por que a igualdade sobrevive? Porque padronizar é trocar $x$ por $(x - m)/s$, e um polinômio de grau $d$ em $(x - m)/s$ é, depois de expandido, um polinômio de grau $d$ em $x$. Os mínimos quadrados escolhem a melhor curva entre os mesmos polinômios, com ou sem a troca, e chegam à mesma curva; só os coeficientes que a descrevem mudam. A frase explica, e o `True` impresso acima prova.
+Dentro da LOOCV, o `StandardScaler` é reajustado a cada um dos 392 ajustes, com a média e o desvio padrão de 391 carros; na fórmula, a padronização usa os 392. Por que a igualdade sobrevive? Porque padronizar é trocar $x$ por $(x - m)/s$, e um polinômio de grau $d$ em $(x - m)/s$ é, depois de expandido, um polinômio de grau $d$ em $x$. Os mínimos quadrados escolhem a melhor curva entre os mesmos polinômios, com ou sem a troca, e chegam à mesma curva; só os coeficientes que a descrevem mudam.
 
 O atalho é uma propriedade dos mínimos quadrados. Para a regressão logística, o *k*-NN e os outros métodos, a LOOCV não tem fórmula equivalente e exige mesmo os $n$ ajustes.

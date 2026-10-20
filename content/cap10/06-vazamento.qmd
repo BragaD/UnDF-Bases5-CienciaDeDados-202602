@@ -6,19 +6,8 @@ A validação cruzada estima o erro em observações que o modelo não viu. A es
 #| label: setup
 #| include: false
 import matplotlib.pyplot as plt
-import numpy as np
-import pandas as pd
-from sklearn.feature_selection import SelectKBest, f_classif
-from sklearn.model_selection import KFold, cross_val_score
-from sklearn.neighbors import KNeighborsClassifier, KNeighborsRegressor
-from sklearn.pipeline import make_pipeline
-from sklearn.preprocessing import StandardScaler
 
 plt.style.use("estilo-figuras.mplstyle")
-
-auto = pd.read_csv("dados/Auto.csv")
-auto["potencia"] = pd.to_numeric(auto["potencia"], errors="coerce")
-auto = auto.dropna(subset=["potencia"]).reset_index(drop=True)
 ```
 
 ::: {.conceito}
@@ -27,21 +16,48 @@ auto = auto.dropna(subset=["potencia"]).reset_index(drop=True)
 
 ## Padronizar antes ou dentro
 
-O *k*-NN mede distância entre observações, e por isso precisa de padronização: sem ela, a coluna de maior escala decide sozinha quem é vizinho de quem, como a seção 7.3 mostrou. Nos dados `Auto`, um *k*-NN com 10 vizinhos prevê `milhas_por_galao` a partir de `potencia`, `peso`, `cilindrada` e `aceleracao`, e o 10-fold mede o erro de três jeitos: sem padronizar, padronizando a tabela toda de uma vez antes da validação cruzada, e com o `StandardScaler` dentro do `Pipeline`.
+O *k*-NN mede distância entre observações, e por isso precisa de padronização: sem ela, a coluna de maior escala decide sozinha quem é vizinho de quem, como a seção 7.3 mostrou. Nos dados `Auto`, um *k*-NN com 10 vizinhos prevê `milhas_por_galao` a partir de `potencia`, `peso`, `cilindrada` e `aceleracao`, e o 10-fold mede o erro de três jeitos: sem padronizar, padronizando a tabela toda de uma vez antes da validação cruzada, e com o `StandardScaler` dentro do `Pipeline`. Os carros são os 392 da seção 10.1, e o primeiro jeito não padroniza nada:
 
 ```{python}
 #| label: auto-knn
-X = auto[["potencia", "peso", "cilindrada", "aceleracao"]]
+import numpy as np
+import pandas as pd
+from sklearn.model_selection \
+    import KFold
+from sklearn.model_selection \
+    import cross_val_score
+from sklearn.neighbors \
+    import KNeighborsRegressor
+
+auto = pd.read_csv(
+    "dados/Auto.csv")
+auto["potencia"] = pd.to_numeric(
+    auto["potencia"],
+    errors="coerce")
+auto = auto.dropna(
+    subset=["potencia"])
+auto = auto.reset_index(
+    drop=True)
+
+colunas = ["potencia", "peso",
+    "cilindrada", "aceleracao"]
+X = auto[colunas]
 y = auto["milhas_por_galao"]
-dez_grupos = KFold(10, shuffle=True, random_state=10)
-knn = KNeighborsRegressor(n_neighbors=10)
 
-def mse_cv(modelo, X):
-    return float(-cross_val_score(
-        modelo, X, y, cv=dez_grupos, scoring="neg_mean_squared_error"
-    ).mean())
+dez_grupos = KFold(
+    10, shuffle=True,
+    random_state=10)
+knn = KNeighborsRegressor(
+    n_neighbors=10)
+neg_mse = "neg_mean_squared_error"
 
-mse_sem_padronizar = mse_cv(knn, X)
+pont = cross_val_score(
+    knn, X, y, cv=dez_grupos,
+    scoring=neg_mse)
+mse_sem = float(
+    -pont.mean())
+print("sem padronizar:",
+    round(mse_sem, 2))
 ```
 
 ::: {.funcao}
@@ -52,43 +68,154 @@ O jeito errado padroniza a tabela inteira e só depois entrega o resultado à va
 
 ```{python}
 #| label: errado-auto
-X_padronizado = StandardScaler().fit_transform(X)
-mse_padronizado_antes = mse_cv(knn, X_padronizado)
+from sklearn.preprocessing \
+    import StandardScaler
+
+# o fit vê os 392 carros
+escala = StandardScaler()
+X_padronizado = (
+    escala.fit_transform(X))
+
+pont = cross_val_score(
+    knn, X_padronizado, y,
+    cv=dez_grupos,
+    scoring=neg_mse)
+mse_antes = float(
+    -pont.mean())
+print("padronizando antes:",
+    round(mse_antes, 2))
 ```
 
-O jeito certo põe o `StandardScaler` no `Pipeline` e entrega o `Pipeline` inteiro:
+O jeito certo ajusta o `StandardScaler` só nos carros de treino de cada divisão. Antes do laço, a primeira das dez divisões por extenso:
+
+```{python}
+#| label: primeira-divisao
+divisoes = dez_grupos.split(X)
+treino_1, validacao_1 = next(
+    divisoes)
+X_tr = X.iloc[treino_1]
+X_va = X.iloc[validacao_1]
+y_tr = y.iloc[treino_1]
+y_va = y.iloc[validacao_1]
+print("treino:", len(X_tr))
+print("validação:", len(X_va))
+```
+
+O primeiro passo é aprender a média e o desvio padrão de cada coluna, só nos carros de treino. A tabela põe as médias aprendidas ao lado das médias dos 392 carros, que o jeito errado usa:
+
+```{python}
+#| label: aprende-no-treino
+escala = StandardScaler()
+escala.fit(X_tr)
+
+todos = f"{len(X)} carros"
+so_treino = f"{len(X_tr)} treino"
+pd.DataFrame({
+    todos: X.mean(),
+    so_treino: escala.mean_,
+}).round(2)
+```
+
+::: {.funcao}
+**`escala.fit(X)`**: o `StandardScaler` aprende a média e o desvio padrão de cada coluna de `X`, e guarda as médias em **`escala.mean_`**. **`escala.transform(X)`**: padroniza `X` com os números aprendidos no `fit`, sem reaprender nada.
+:::
+
+Com esses números, o treino e a validação são padronizados, o *k*-NN é ajustado no treino padronizado, e o erro é medido na validação:
+
+```{python}
+#| label: primeiro-grupo
+from sklearn.metrics \
+    import mean_squared_error
+
+X_tr_p = escala.transform(X_tr)
+X_va_p = escala.transform(X_va)
+
+vizinhos = KNeighborsRegressor(
+    n_neighbors=10)
+vizinhos.fit(X_tr_p, y_tr)
+previsto = vizinhos.predict(
+    X_va_p)
+mse = mean_squared_error(
+    y_va, previsto)
+print("MSE do grupo 1:",
+    round(mse, 2))
+```
+
+O laço repete os mesmos passos em cada uma das dez divisões:
+
+```{python}
+#| label: certo-a-mao
+erros = []
+divisoes = dez_grupos.split(X)
+for treino, validacao in divisoes:
+    X_tr = X.iloc[treino]
+    X_va = X.iloc[validacao]
+    y_tr = y.iloc[treino]
+    y_va = y.iloc[validacao]
+
+    # o fit vê só o treino
+    escala = StandardScaler()
+    escala.fit(X_tr)
+    X_tr_p = (
+        escala.transform(X_tr))
+    X_va_p = (
+        escala.transform(X_va))
+
+    vizinhos = (
+        KNeighborsRegressor(
+            n_neighbors=10))
+    vizinhos.fit(X_tr_p, y_tr)
+    previsto = vizinhos.predict(
+        X_va_p)
+    mse = mean_squared_error(
+        y_va, previsto)
+    erros.append(mse)
+
+mse_a_mao = float(np.mean(erros))
+print("padronizando dentro:",
+    round(mse_a_mao, 2))
+```
+
+O `Pipeline` faz o mesmo laço: entregue inteiro ao `cross_val_score`, ele é reajustado em cada grupo de treino, com o `StandardScaler` junto.
 
 ```{python}
 #| label: certo-auto
-mse_padronizado_dentro = mse_cv(make_pipeline(StandardScaler(), knn), X)
+from sklearn.pipeline \
+    import make_pipeline
+
+modelo = make_pipeline(
+    StandardScaler(), knn)
+pont = cross_val_score(
+    modelo, X, y, cv=dez_grupos,
+    scoring=neg_mse)
+mse_dentro = float(
+    -pont.mean())
 
 pd.DataFrame(
     {"MSE do 10-fold": [
-        round(mse_sem_padronizar, 2),
-        round(mse_padronizado_antes, 2),
-        round(mse_padronizado_dentro, 2),
-    ]},
-    index=["sem padronizar", "padronizando antes (errado)", "padronizando dentro (certo)"],
-)
+        mse_sem, mse_antes,
+        mse_a_mao, mse_dentro]},
+    index=["sem padronizar",
+        "antes (errado)",
+        "dentro (laço)",
+        "dentro (Pipeline)"],
+).round(2)
 ```
 
-A diferença entre os dois códigos é onde o `fit` do `StandardScaler` acontece. No errado, ele acontece uma vez, em todos os carros, e cada grupo de validação é padronizado com uma média e um desvio que ele mesmo ajudou a calcular. No certo, o `cross_val_score` ajusta o `Pipeline` inteiro em cada grupo de treino: o `StandardScaler` aprende a média e o desvio só dos carros de treino, e o grupo de validação é padronizado com esses números, como um carro novo seria.
+A diferença entre os dois códigos é onde o `fit` do `StandardScaler` acontece. No errado, ele acontece uma vez, em todos os carros, e cada grupo de validação é padronizado com uma média e um desvio que ele mesmo ajudou a calcular. No certo, o `fit` acontece em cada grupo de treino: o `StandardScaler` aprende a média e o desvio só dos carros de treino, e o grupo de validação é padronizado com esses números, como um carro novo seria. As linhas `dentro (laço)` e `dentro (Pipeline)` dão o mesmo número: o `Pipeline` dentro do `cross_val_score` faz o laço por extenso.
 
-Padronizar importa: o MSE cai de 17,43, sem padronizar, para 15,06, com o `StandardScaler` dentro, uma diferença de 2,37. **Onde** padronizar importa pouco neste caso: 14,93 no jeito errado contra 15,06 no certo, uma diferença de 0,13. O motivo aparece nos números que o `StandardScaler` aprende.
+Padronizar importa: o MSE cai de 17,43, sem padronizar, para 15,06, com o `StandardScaler` dentro, uma diferença de 2,37. **Onde** padronizar importa pouco neste caso: 14,93 no jeito errado contra 15,06 no certo, uma diferença de 0,13. O motivo aparece nos números que o `StandardScaler` aprende. As médias da primeira divisão já estão na tabela de cima; os desvios padrão, nos mesmos carros:
 
 ```{python}
-#| label: medias-treino
-treino, validacao = next(dez_grupos.split(X))
-print(f"{len(X)} carros: {len(treino)} de treino e {len(validacao)} de validação")
+#| label: desvios-treino
+X_tr_1 = X.iloc[treino_1]
 pd.DataFrame({
-    f"média, {len(X)} carros": X.mean().round(2),
-    f"média, {len(treino)} de treino": X.iloc[treino].mean().round(2),
-    f"desvio, {len(X)} carros": X.std().round(2),
-    f"desvio, {len(treino)} de treino": X.iloc[treino].std().round(2),
-})
+    todos: X.std(),
+    so_treino: X_tr_1.std(),
+}).round(2)
 ```
 
-`next(dez_grupos.split(X))` pega só a primeira das dez divisões, um par com as posições do treino e as da validação. No primeiro grupo, tirar os 40 carros de validação move a média de `peso` de 2.977,58 para 2.952,62, e a padronização quase não muda. O vazamento existe, e é pequeno porque uma média de centenas de carros mal sente 40 deles. Há etapas em que ele não é pequeno.
+No primeiro grupo, tirar os 40 carros de validação move a média de `peso` de 2.977,58 para 2.952,62, e a padronização quase não muda. O vazamento existe, e é pequeno porque uma média de centenas de carros mal sente 40 deles. Há etapas em que ele não é pequeno.
 
 ## Quando o vazamento decide tudo
 
@@ -97,32 +224,63 @@ Um conjunto de dados fabricado para não ter nada a aprender: 50 observações, 
 ```{python}
 #| label: ruido
 def conjunto_de_ruido(rng):
-    X = rng.normal(size=(50, 5000))
-    y = rng.permutation(np.repeat([0, 1], 25))
+    X = rng.normal(
+        size=(50, 5000))
+    classes = np.repeat(
+        [0, 1], 25)
+    y = rng.permutation(classes)
     return X, y
 
+
 rng = np.random.default_rng(10)
-X_ruido, y_ruido = conjunto_de_ruido(rng)
-X_ruido.shape, int(y_ruido.sum())
+X_ruido, y_ruido = (
+    conjunto_de_ruido(rng))
+print("observações:",
+    X_ruido.shape[0])
+print("colunas:",
+    X_ruido.shape[1])
+print("classe 1:",
+    int(y_ruido.sum()))
 ```
 
 ::: {.funcao}
-**`rng.normal(size=(linhas, colunas))`**: uma matriz de sorteios da normal com média 0 e desvio padrão 1, do tamanho pedido.
-
 **`np.repeat([0, 1], 25)`**: 25 zeros seguidos de 25 uns.
 
 **`rng.permutation(arr)`**: uma cópia de `arr` com os elementos numa ordem sorteada. Aqui, embaralha as 50 classes.
 :::
 
-Com tantas colunas e tão poucas linhas, um procedimento comum é escolher primeiro as colunas mais promissoras e ajustar o modelo só nelas: as 100 colunas que mais separam as duas classes, e um *k*-NN com um vizinho.
+Com tantas colunas e tão poucas linhas, um procedimento comum é escolher primeiro as colunas mais promissoras e ajustar o modelo só nelas: as 100 colunas que mais separam as duas classes, e um *k*-NN com um vizinho. O jeito errado escolhe as colunas com as 50 observações e só depois faz a validação cruzada. A taxa de erro de teste é 50% por construção; que número uma estimativa honesta deveria devolver, e que número você espera do jeito errado?
 
 ```{python}
 #| label: errado-ruido
-cinco_grupos = KFold(5, shuffle=True, random_state=10)
-vizinho = KNeighborsClassifier(n_neighbors=1)
+from sklearn.feature_selection \
+    import SelectKBest
+from sklearn.feature_selection \
+    import f_classif
+from sklearn.neighbors \
+    import KNeighborsClassifier
 
-X_escolhidas = SelectKBest(f_classif, k=100).fit_transform(X_ruido, y_ruido)
-erro_errado = 1 - cross_val_score(vizinho, X_escolhidas, y_ruido, cv=cinco_grupos).mean()
+cinco_grupos = KFold(
+    5, shuffle=True,
+    random_state=10)
+vizinho = KNeighborsClassifier(
+    n_neighbors=1)
+
+# a seleção vê as 50 observações
+selecao = SelectKBest(
+    f_classif, k=100)
+X_escolhidas = (
+    selecao.fit_transform(
+        X_ruido, y_ruido))
+
+acuracias = cross_val_score(
+    vizinho,
+    X_escolhidas, y_ruido,
+    cv=cinco_grupos)
+erro_errado = 1 - acuracias.mean()
+erro_errado = float(erro_errado)
+print("seleção antes (%):",
+    round(erro_errado * 100, 2))
 ```
 
 ::: {.funcao}
@@ -135,10 +293,17 @@ O jeito certo põe a seleção de colunas dentro do `Pipeline`:
 
 ```{python}
 #| label: certo-ruido
-selecao_e_vizinho = make_pipeline(SelectKBest(f_classif, k=100), vizinho)
-erro_certo = 1 - cross_val_score(selecao_e_vizinho, X_ruido, y_ruido, cv=cinco_grupos).mean()
-
-round(float(erro_errado) * 100, 2), round(float(erro_certo) * 100, 2)
+selecao_e_vizinho = make_pipeline(
+    SelectKBest(f_classif, k=100),
+    vizinho)
+acuracias = cross_val_score(
+    selecao_e_vizinho,
+    X_ruido, y_ruido,
+    cv=cinco_grupos)
+erro_certo = 1 - acuracias.mean()
+erro_certo = float(erro_certo)
+print("seleção dentro (%):",
+    round(erro_certo * 100, 2))
 ```
 
 Com a seleção feita antes, o 5-fold estima 2% de erro, num problema em que nenhum classificador passa do acaso. Com a seleção dentro do `Pipeline`, estima 48%. As 100 colunas do jeito errado foram escolhidas olhando a classe das 50 observações, inclusive das que depois servem de validação. Entre 5.000 colunas de ruído, algumas separam aquelas 50 observações por puro acaso, e a validação cruzada mede o acerto nesse acaso, que não se repete em observação nova. No jeito certo, cada grupo de treino escolhe as suas próprias 100 colunas sem ver a classe do grupo de validação, e o acaso que ele encontra no treino não vale para a validação.
@@ -147,51 +312,104 @@ O desenho deste exemplo vem de @hastie2009, seção 7.10.2.
 
 ## Trinta conjuntos de ruído
 
-Um conjunto só pode ter saído por sorte. A mesma comparação, repetida em 30 conjuntos de ruído, cada um com a sua partição em cinco grupos:
+Um conjunto só pode ter saído por sorte. A mesma comparação, repetida em 30 conjuntos de ruído, cada um com a sua partição em cinco grupos; a tabela dá as taxas de erro em porcentagem, com a seleção antes da validação cruzada (o jeito errado) e dentro dela (o certo):
 
 ```{python}
 #| label: trinta-conjuntos
 rng = np.random.default_rng(10)
-erros_errados, erros_certos = [], []
+erros_errados = []
+erros_certos = []
 for r in range(30):
-    X_r, y_r = conjunto_de_ruido(rng)
-    grupos = KFold(5, shuffle=True, random_state=r)
-    escolhidas = SelectKBest(f_classif, k=100).fit_transform(X_r, y_r)
-    erros_errados.append(1 - cross_val_score(vizinho, escolhidas, y_r, cv=grupos).mean())
-    erros_certos.append(1 - cross_val_score(selecao_e_vizinho, X_r, y_r, cv=grupos).mean())
-erros_errados, erros_certos = np.array(erros_errados), np.array(erros_certos)
+    X_r, y_r = (
+        conjunto_de_ruido(rng))
+    grupos = KFold(
+        5, shuffle=True,
+        random_state=r)
+    # errado: seleção antes
+    selecao = SelectKBest(
+        f_classif, k=100)
+    escolhidas = (
+        selecao.fit_transform(
+            X_r, y_r))
+    acuracias = cross_val_score(
+        vizinho, escolhidas, y_r,
+        cv=grupos)
+    erros_errados.append(
+        1 - acuracias.mean())
+    # certo: seleção no Pipeline
+    acuracias = cross_val_score(
+        selecao_e_vizinho,
+        X_r, y_r, cv=grupos)
+    erros_certos.append(
+        1 - acuracias.mean())
+erros_errados = np.array(
+    erros_errados)
+erros_certos = np.array(
+    erros_certos)
 
-todos_errados_abaixo_de_todos_certos = bool(erros_errados.max() < erros_certos.min())
-pd.DataFrame(
-    {
-        "menor (%)": [round(float(e.min()) * 100, 2) for e in (erros_errados, erros_certos)],
-        "média (%)": [round(float(e.mean()) * 100, 2) for e in (erros_errados, erros_certos)],
-        "maior (%)": [round(float(e.max()) * 100, 2) for e in (erros_errados, erros_certos)],
-    },
-    index=["seleção antes (errado)", "seleção dentro (certo)"],
-), todos_errados_abaixo_de_todos_certos
+# em porcentagem
+em_pct = pd.DataFrame({
+    "antes": erros_errados * 100,
+    "dentro": erros_certos * 100,
+})
+resumo = em_pct.agg(
+    ["min", "mean", "max"])
+resumo.index = [
+    "menor", "média", "maior"]
+resumo.T.round(2)
 ```
 
 ```{python}
 #| label: fig-vazamento-ruido
 #| fig-cap: "Taxa de erro do 5-fold em 30 conjuntos de ruído puro (50 observações, 5.000 colunas), com a seleção das 100 colunas feita antes da validação cruzada (laranja) e dentro do Pipeline (azul). Cada ponto é um conjunto; a altura dentro de cada fileira é sorteada só para os pontos não se sobreporem. A linha tracejada marca 50%, a taxa de erro de teste de qualquer classificador nesse dado."
-#| fig-alt: "Duas fileiras horizontais de 30 pontos sobre um eixo de taxa de erro de 0% a 100%. A fileira laranja, da seleção antes, fica toda encostada à esquerda, entre 0% e 6%. A fileira azul, da seleção dentro, se espalha entre 38% e 72%, em volta de uma linha cinza tracejada vertical em 50% marcada como acaso."
-deslocamento = np.random.default_rng(10).uniform(-0.12, 0.12, size=(2, 30))
+#| fig-alt: "Duas fileiras horizontais de 30 pontos sobre um eixo de taxa de erro de 0% a 100%. A fileira laranja, da seleção antes, fica toda encostada à esquerda, entre 0% e 6%. A fileira azul, da seleção dentro, se espalha entre 38% e 72%, dos dois lados de uma linha cinza tracejada vertical em 50% marcada como acaso."
+import matplotlib.pyplot as plt
+
+# só para os pontos não se
+# sobreporem dentro da fileira
+deslocamento = (
+    np.random.default_rng(10)
+    .uniform(-0.12, 0.12,
+        size=(2, 30)))
 fileiras = [
     (erros_errados, 1, "C1"),
     (erros_certos, 0, "C0"),
 ]
 
-fig, ax = plt.subplots(figsize=(8, 3))
-for erros, altura, cor in fileiras:
-    ax.scatter(erros, altura + deslocamento[altura], s=40, alpha=0.8, color=cor)
-ax.axvline(0.5, color="0.45", linestyle="--", linewidth=1.5)
-ax.annotate("acaso", xy=(0.5, 1.35), xytext=(6, 0), textcoords="offset points", color="0.45")
-ax.set_yticks([0, 1], ["seleção dentro\n(certo)", "seleção antes\n(errado)"])
+
+def porcentagem(valor, posicao):
+    return f"{valor:.0%}"
+
+
+fig, ax = plt.subplots(
+    figsize=(6, 3.2))
+for fileira in fileiras:
+    erros, altura, cor = fileira
+    y_pontos = (altura
+        + deslocamento[altura])
+    ax.scatter(
+        erros, y_pontos,
+        s=40, alpha=0.8,
+        color=cor)
+ax.axvline(
+    0.5, color="0.45",
+    linestyle="--", linewidth=1.5)
+ax.annotate(
+    "acaso", xy=(0.5, 1.35),
+    xytext=(6, 0),
+    textcoords="offset points",
+    color="0.45")
+ax.set_yticks(
+    [0, 1],
+    ["seleção dentro\n(certo)",
+        "seleção antes"
+        "\n(errado)"])
 ax.set_ylim(-0.5, 1.5)
 ax.set_xlim(-0.02, 1.0)
-ax.xaxis.set_major_formatter(lambda valor, _: f"{valor:.0%}")
-ax.set_xlabel("taxa de erro do 5-fold")
+ax.xaxis.set_major_formatter(
+    porcentagem)
+ax.set_xlabel(
+    "taxa de erro do 5-fold")
 plt.tight_layout()
 plt.show()
 ```
@@ -204,7 +422,7 @@ plt.show()
 **`ax.set_yticks(posicoes, rotulos)`**: põe marcas no eixo vertical só nas `posicoes` dadas, com os `rotulos` no lugar dos números.
 :::
 
-`todos_errados_abaixo_de_todos_certos` confirma que, nos 30 conjuntos, o maior erro estimado com a seleção antes fica abaixo do menor erro estimado com a seleção dentro. O jeito errado vai de 0% a 6%, com média de 1,60%; o certo, de 38% a 72%, com média de 55,47%. O certo não acerta 50% em cada conjunto, e nem deveria: com 50 observações e cinco grupos de 10, a estimativa da validação cruzada oscila muito de uma amostra para outra, como a seção 10.4 mediu. Ela oscila em volta de 50%, onde está o erro verdadeiro. O errado não oscila em volta de nada que exista: ele mede o quanto o acaso das 5.000 colunas consegue separar 50 observações, e esse acaso é grande.
+Na tabela, o maior erro estimado com a seleção antes, 6%, fica abaixo do menor erro estimado com a seleção dentro, 38%: nos 30 conjuntos, as duas fileiras da figura não se encostam. O jeito errado vai de 0% a 6%, com média de 1,60%; o certo, de 38% a 72%, com média de 55,47%. O certo não acerta 50% em cada conjunto, e nem deveria: com 50 observações e cinco grupos de 10, a estimativa da validação cruzada oscila muito de uma amostra para outra, como a seção 10.4 mediu. Ela fica do lado do acaso, de 38% a 72%, um pouco acima de 50% em média porque os grupos não são estratificados. O errado não fica perto de nada que exista: ele mede o quanto o acaso das 5.000 colunas consegue separar 50 observações, e esse acaso é grande.
 
 Os dois exemplos cometem o mesmo erro, uma etapa que aprende do dado ajustada fora da validação cruzada. O tamanho do estrago depende do quanto a etapa aprende. A padronização aprende uma média e um desvio por coluna, sem olhar a resposta; a seleção de colunas olha a resposta e escolhe, entre 5.000, as que melhor a acompanham naquelas 50 observações.
 

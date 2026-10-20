@@ -28,6 +28,32 @@ O que existe hoje:
 
 A cicatriz: a seção 6.5 afirmou que São Paulo tinha a maior distância entre média e mediana; era Belo Horizonte, e a tabela que desmentia estava impressa no chunk acima.
 
+### O código é didático: passo a passo, e toda saída se lê sozinha
+
+Duas regras do autor (20/10/2026), que valem para todo capítulo novo e para a revisão dos que já existem:
+
+1. **Passo a passo antes do laço.** Na primeira vez que uma ideia aparece no capítulo, o código a desmonta em passos com nome, cada um visível: dividir → montar o modelo → `fit` no treino → `predict` na validação → calcular o erro, imprimindo o resultado daquele caso. Só depois vem a repetição ("a mesma conta, para cada grau"), num `for` explícito. Nada de compreensão de lista aninhada dentro de `np.array([...])`, `lambda` sem necessidade, cadeia longa de métodos, ou função auxiliar que esconde `fit`/`predict` antes de o passo a passo aparecer por extenso uma vez. Pedido literal: *"o código de uma divisão, primeiro treine, depois preveja, depois calcule o MSE. dessa forma, é mais fácil do aluno entender o que está ocorrendo."*
+2. **Nenhuma saída é uma tupla ou lista de valores sem nome, e nenhuma comparação se afirma por booleano.** A última linha de um chunk não é `a, b, c` nem `[int(g) for g in ...]`; cada valor impresso tem rótulo (`print("rótulo:", valor)`), e o ideal é um `DataFrame` com colunas nomeadas. Para sustentar uma comparação ou um superlativo ("o grau 2 erra menos que o 1 em todas as divisões"), **mostre os números** — uma tabela com uma linha por caso e as colunas lado a lado, ou um gráfico com cada caso —, e a prosa lê a tabela ou o gráfico; nunca `bool((x < y).all())`. Mesmo uma igualdade ("a função pronta dá o mesmo que o laço à mão") se mostra com os dois números lado a lado, numa tabela de duas colunas (`laço` e `cross_val_score`), e não com `True`. O único booleano aceito é o de um limite de plataforma que não se escreve pelo valor ("diferença abaixo de um milionésimo"), e ainda assim com rótulo e, de preferência, como coluna de tabela. Isso não afrouxa a regra acima: o superlativo continua saindo de uma saída da mesma seção — agora visível, não um `True`. Exemplo do que **não** fazer, real, da seção 10.1:
+
+   ```python
+   grau_minimo_por_divisao = [int(graus[i]) for i in np.argmin(mse_dez, axis=1)]
+   grau_2_abaixo_do_1_em_todas = bool((mse_dez[:, 1] < mse_dez[:, 0]).all())
+   grau_minimo_por_divisao, grau_2_abaixo_do_1_em_todas
+   ```
+
+   Vira uma tabela de dez linhas (semente, MSE do grau 1, MSE do grau 2, grau escolhido) ou um gráfico. *"a impressão sai uma tupla com listas de coisas não nomeadas que não sabemos o que significa."*
+
+### O livro é lido no computador
+
+Decisão do autor (20/10/2026): *"dont worry about phone render."* **A largura de celular (390 px) não é requisito do livro**, como já não era de `apoio/`. A página precisa funcionar em tela de computador e de projetor, nos temas claro e escuro. Consequências:
+
+- O código usa largura normal de Python legível (estilo PEP 8): nada de quebrar linhas a 34 colunas, extrair variáveis só para encurtar, ou `import ... as` só por largura. O `quality_reports/largura_codigo.py` não é mais critério.
+- Figuras não precisam ser empilhadas para o celular; painéis lado a lado são aceitáveis se legíveis no desktop.
+- Tabelas e equações só precisam caber na coluna de texto do desktop.
+- Revisores (`slide-auditor`, `/visual-audit`, lentes de render) **não** medem a 390 px nem abrem achado de largura de celular.
+
+**O capítulo 10 foi o primeiro revisado sob essas duas regras; os capítulos 6 a 9 e 11 a 17 ainda não.** Um agente que revisar um desses capítulos aplica as duas, seção a seção, com os números da prosa intactos (diff das saídas antes e depois, host e container).
+
 ### O que falta
 
 Onze capítulos, na ementa que a spec fixa:
@@ -309,7 +335,7 @@ O link é do site para o notebook e **não** o contrário: `LINHA_COLAB`, no ger
 
 **São arquivos estáticos, não conteúdo do site.** Um HTML só, sem build, sem dependência de rede, que abre com dois cliques e roda offline. Não têm `.qmd`, não entram no `book.chapters` e não aparecem no sidebar — o que os leva ao site é uma linha em `project.resources`, no `_quarto.yml`, que o Quarto copia para `_book/apoio/`. Sem essa linha, a página existe no repositório e **não** existe no site publicado.
 
-**Celular não é requisito.** As páginas de `apoio/` são projetadas na aula e abertas no computador; basta que funcionem em tela de desktop e de projetor, nos temas claro e escuro. Não gaste rodada de verificação nem de revisão com largura de celular nelas — a exigência de 390 px do `slide-auditor` e do `/visual-audit` vale para as seções do livro, não para `apoio/`.
+**Celular não é requisito.** As páginas de `apoio/` são projetadas na aula e abertas no computador; basta que funcionem em tela de desktop e de projetor, nos temas claro e escuro. Não gaste rodada de verificação nem de revisão com largura de celular nelas — nem nas seções do livro (ver "O livro é lido no computador", acima).
 
 As duas dividem tokens, tipografia e componentes de propósito — são irmãs, e uma terceira página deve copiar o mesmo bloco `:root` em vez de inventar outro.
 

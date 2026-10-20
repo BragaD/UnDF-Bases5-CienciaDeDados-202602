@@ -7,7 +7,7 @@ paths:
   - "notebooks/**/*.ipynb"
 ---
 
-# Invariantes de conteúdo (INV-1 a INV-14)
+# Invariantes de conteúdo (INV-1 a INV-15)
 
 Regras numeradas e inegociáveis para o conteúdo deste livro. Críticos, revisores e auditores
 citam o número ao apontar um problema ("viola INV-3") — e o campo `rule` de um `FINDING`
@@ -32,7 +32,8 @@ INV-10: não é defeito eles não citarem o ISLP nem usarem o estilo das figuras
 - **INV-5: Semente explícita, no gerador que sorteia.** `np.random.default_rng(<n>)` para o `numpy`, `random_state=<n>` para o `scikit-learn`. Semear um gerador e sortear de outro não fixa nada. Sorteio novo → número novo: toda afirmação da prosa que dependa do sorteio é recalculada.
 - **INV-6: Caminhos a partir da raiz.** `pd.read_csv("dados/...")`, nunca `../../dados/...` (`execute-dir: project`). (`test_nenhum_qmd_usa_caminho_relativo_de_dados`)
 - **INV-7: Biblioteca proibida em chunk que executa.** Nada de `statsmodels`, `torch`, pacote `ISLP`; `scipy` só nas exceções de `BIBLIOTECA_LIBERADA`, com motivo escrito. Dependência nova entra no `pyproject.toml` com teto de versão (minor para `0.x`). (`test_nenhum_chunk_executavel_usa_biblioteca_proibida`)
-- **INV-8: Todo número da prosa sai da saída de um chunk.** A única exceção é aritmética sobre números impressos **na mesma seção**, nomeando os dois operandos. **Superlativo e comparação** ("o maior", "mais que o dobro", "nenhum passa de") não são aritmética: exigem o chunk que ordena, conta ou compara.
+- **INV-8: Todo número da prosa sai da saída de um chunk.** A única exceção é aritmética sobre números impressos **na mesma seção**, nomeando os dois operandos. **Superlativo e comparação** ("o maior", "mais que o dobro", "nenhum passa de") não são aritmética: exigem o chunk que ordena, conta ou compara — e essa saída é **visível e legível**: uma tabela com colunas nomeadas ou um gráfico com cada caso, nunca uma tupla de valores sem nome nem um booleano de comparação (`bool((x < y).all())`). Igualdade também se mostra com os dois números lado a lado; booleano só para limite de plataforma ("abaixo de um milionésimo"), com rótulo.
+- **INV-15: O código é passo a passo.** Na primeira aparição de uma ideia no capítulo, dividir → montar → `fit` → `predict` → erro, cada passo visível e impresso com rótulo; só depois o laço explícito. Sem compreensão aninhada, `lambda` desnecessária ou função auxiliar que esconda `fit`/`predict` antes do passo a passo por extenso (CLAUDE.md, "O código é didático").
 - **INV-9: Cada seção reconstrói o que herda.** Cada `.qmd` roda num kernel próprio: `import` se repete, e uma decisão sobre o dado tomada numa seção anterior ("preencher `andar` com zero") é refeita no chunk de setup da seguinte, sem reexplicar.
 - **INV-10: Erro mostrado com `try/except`, nunca `#| error: true`.** A opção não é honrada pelos scripts de verificação. A mensagem é truncada antes de imprimir.
 

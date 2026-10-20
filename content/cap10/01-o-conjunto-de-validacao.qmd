@@ -10,13 +10,6 @@ O número que decide entre dois modelos é o MSE de teste, definido na seção 7
 #| label: setup
 #| include: false
 import matplotlib.pyplot as plt
-import numpy as np
-import pandas as pd
-from sklearn.linear_model import LinearRegression
-from sklearn.metrics import mean_squared_error
-from sklearn.model_selection import train_test_split
-from sklearn.pipeline import make_pipeline
-from sklearn.preprocessing import PolynomialFeatures, StandardScaler
 
 plt.style.use("estilo-figuras.mplstyle")
 ```
@@ -31,30 +24,74 @@ A pergunta de trabalho vem dos dados `Auto`: de que grau deve ser o polinômio e
 
 ```{python}
 #| label: leitura-auto
-auto = pd.read_csv("dados/Auto.csv")
-n_interrogacao = int((auto["potencia"] == "?").sum())
-auto["potencia"] = pd.to_numeric(auto["potencia"], errors="coerce")
-auto = auto.dropna(subset=["potencia"]).reset_index(drop=True)
+import pandas as pd
+
+auto = pd.read_csv(
+    "dados/Auto.csv")
+interrogacao = (
+    auto["potencia"] == "?")
+n_interrogacao = int(
+    interrogacao.sum())
+
+auto["potencia"] = pd.to_numeric(
+    auto["potencia"],
+    errors="coerce")
+auto = auto.dropna(
+    subset=["potencia"])
+auto = auto.reset_index(
+    drop=True)
 
 X = auto[["potencia"]]
 y = auto["milhas_por_galao"]
-
-n_interrogacao, len(auto)
+print("com '?':", n_interrogacao)
+print("ficam:", len(auto))
 ```
 
 Cinco carros trazem `potencia` como o texto `"?"`; `pd.to_numeric(..., errors="coerce")` os transforma em `NaN` e `dropna` os descarta, e restam 392 carros.
 
+## Uma divisão
+
+Metade dos 392 carros ajusta, a outra metade valida. O primeiro passo é sortear quais carros vão para cada lado. Nos nomes, `_tr` é o treino e `_va` a validação:
+
 ```{python}
-#| label: modelo-polinomial
-def modelo_polinomial(grau):
-    return make_pipeline(
-        StandardScaler(),
-        PolynomialFeatures(grau, include_bias=False),
-        LinearRegression(),
-    )
+#| label: uma-divisao
+from sklearn.model_selection \
+    import train_test_split
 
+X_tr, X_va, y_tr, y_va = (
+    train_test_split(
+        X, y, test_size=196,
+        random_state=10))
+print("treino:", len(X_tr))
+print("validação:", len(X_va))
+```
 
-graus = range(1, 11)
+::: {.funcao}
+**`train_test_split(X, y, test_size, random_state)`**: sorteia quais linhas vão para cada lado e devolve, nesta ordem, `X` de treino, `X` de validação, `y` de treino e `y` de validação.
+
+- `test_size=196`: um número inteiro é a quantidade de linhas separadas, não uma fração.
+- `random_state=10`: a semente do sorteio, que deixa a divisão reproduzível.
+:::
+
+O segundo passo é montar o modelo. O primeiro candidato é a reta, o polinômio de grau 1:
+
+```{python}
+#| label: modelo-reta
+from sklearn.linear_model \
+    import LinearRegression
+from sklearn.pipeline \
+    import make_pipeline
+from sklearn.preprocessing \
+    import PolynomialFeatures
+from sklearn.preprocessing \
+    import StandardScaler
+
+reta = make_pipeline(
+    StandardScaler(),
+    PolynomialFeatures(
+        1, include_bias=False),
+    LinearRegression(),
+)
 ```
 
 ::: {.funcao}
@@ -67,128 +104,279 @@ graus = range(1, 11)
 **`LinearRegression()`**: ajusta os coeficientes por mínimos quadrados.
 :::
 
-`modelo_polinomial(grau)` devolve o modelo de um grau qualquer, e `graus` percorre de 1 a 10. O `StandardScaler` vem antes das potências pelo motivo da seção 8.5: elevar `potencia` à décima potência sem padronizar deixa as colunas em escalas tão distantes que a solução de mínimos quadrados perde precisão.
+Com grau 1, o `PolynomialFeatures` devolve a própria coluna, e o modelo é a reta. O `StandardScaler` vem antes das potências pelo motivo da seção 8.5: elevar `potencia` à décima potência sem padronizar deixa as colunas em escalas tão distantes que a solução de mínimos quadrados perde precisão. Na reta ele não faz diferença, mas vai fazer nos graus altos.
 
-## Uma divisão
-
-Metade dos 392 carros ajusta, a outra metade valida.
+O terceiro passo é ajustar o modelo, só com os carros de treino:
 
 ```{python}
-#| label: uma-divisao
-X_treino, X_validacao, y_treino, y_validacao = train_test_split(
-    X, y, test_size=196, random_state=10
-)
-
-mse_uma_divisao = np.array([
-    mean_squared_error(
-        y_validacao, modelo_polinomial(grau).fit(X_treino, y_treino).predict(X_validacao)
-    )
-    for grau in graus
-])
-
-len(X_treino), len(X_validacao)
+#| label: treina-reta
+reta.fit(X_tr, y_tr)
+print("ajustada com",
+    len(X_tr), "carros")
 ```
 
 ::: {.funcao}
-**`train_test_split(X, y, test_size, random_state)`**: sorteia quais linhas vão para cada lado e devolve, nesta ordem, `X` de treino, `X` de validação, `y` de treino e `y` de validação.
+**`modelo.fit(X, y)`**: ajusta o modelo aos preditores `X` e à resposta `y`. Num `Pipeline`, cada passo aprende o que precisa só com essas linhas (o `StandardScaler`, a média e o desvio padrão; o `LinearRegression`, os coeficientes), e o modelo ajustado fica guardado no próprio objeto.
+:::
 
-- `test_size=196`: um número inteiro é a quantidade de linhas separadas, não uma fração.
-- `random_state=10`: a semente do sorteio, que deixa a divisão reproduzível.
+O quarto é prever o consumo dos carros de validação, que o ajuste não viu:
 
+```{python}
+#| label: preve-reta
+previsto = reta.predict(X_va)
+
+tres_carros = pd.DataFrame({
+    "previsto": previsto[:3],
+    "real": y_va.to_numpy()[:3],
+})
+tres_carros["erro"] = (
+    tres_carros["real"]
+    - tres_carros["previsto"])
+tres_carros.rename_axis(
+    "carro").round(1)
+```
+
+::: {.funcao}
+**`modelo.predict(X)`**: aplica o modelo já ajustado às linhas de `X` e devolve um array com uma previsão por linha. Num `Pipeline`, as transformações usam o que foi aprendido no `fit`, sem reaprender nada com as linhas novas.
+:::
+
+A tabela mostra os três primeiros carros de validação: a previsão da reta, o consumo verdadeiro e a diferença entre os dois. O último passo resume essa diferença, carro a carro, num número só:
+
+```{python}
+#| label: mse-reta
+from sklearn.metrics \
+    import mean_squared_error
+
+mse_reta = mean_squared_error(
+    y_va, previsto)
+print("MSE da reta:",
+    round(mse_reta, 2))
+```
+
+::: {.funcao}
 **`mean_squared_error(y_verdadeiro, y_previsto)`**: a média dos quadrados das diferenças entre os dois.
 :::
 
-Cada grau é ajustado nos 196 carros de treino e julgado nos 196 de validação:
+Dividir, montar, ajustar no treino, prever a validação, medir o erro: é essa a abordagem do conjunto de validação inteira. Para comparar graus, a mesma conta se repete com outro modelo. A função `polinomial` monta o modelo de um grau qualquer, com os mesmos três passos da reta:
+
+```{python}
+#| label: modelo-polinomial
+def polinomial(grau):
+    return make_pipeline(
+        StandardScaler(),
+        PolynomialFeatures(
+            grau,
+            include_bias=False),
+        LinearRegression(),
+    )
+```
+
+E o laço percorre os graus de 1 a 10, cada um ajustado nos mesmos 196 carros de treino e julgado nos mesmos 196 de validação:
+
+```{python}
+#| label: laco-uma-divisao
+import numpy as np
+
+graus = range(1, 11)
+mse_uma_divisao = []
+for grau in graus:
+    modelo = polinomial(grau)
+    modelo.fit(X_tr, y_tr)
+    previsto = modelo.predict(
+        X_va)
+    mse = mean_squared_error(
+        y_va, previsto)
+    mse_uma_divisao.append(mse)
+mse_uma_divisao = np.array(
+    mse_uma_divisao)
+
+pd.DataFrame(
+    {"reta": [mse_reta],
+        "laço, grau 1":
+        [mse_uma_divisao[0]]},
+    index=["MSE"],
+).round(2)
+```
+
+As duas colunas dão o mesmo número: a primeira volta do laço refez a conta da reta. A tabela dá o MSE de validação dos dez graus:
 
 ```{python}
 #| label: tabela-uma-divisao
 pd.DataFrame(
-    {"MSE de validação": [round(float(v), 2) for v in mse_uma_divisao]},
-    index=pd.Index(graus, name="grau"),
+    {"MSE de validação":
+        mse_uma_divisao.round(2)},
+    index=pd.Index(
+        graus, name="grau"),
 )
 ```
 
 ```{python}
 #| label: minimo-uma-divisao
-grau_minimo_uma_divisao = int(graus[np.argmin(mse_uma_divisao)])
-ganho_grau_2 = round(float(mse_uma_divisao[0] - mse_uma_divisao[1]), 2)
-amplitude_graus_2_a_4 = round(
-    float(mse_uma_divisao[1:4].max() - mse_uma_divisao[1:4].min()), 2
-)
+posicao = np.argmin(
+    mse_uma_divisao)
+grau_minimo = graus[posicao]
 
-grau_minimo_uma_divisao, ganho_grau_2, amplitude_graus_2_a_4
+ganho_grau_2 = (
+    mse_uma_divisao[0]
+    - mse_uma_divisao[1])
+
+graus_2_a_4 = mse_uma_divisao[1:4]
+amplitude_2_a_4 = (
+    graus_2_a_4.max()
+    - graus_2_a_4.min())
+
+print("menor MSE no grau",
+    grau_minimo)
+print("reta menos parábola:",
+    round(float(ganho_grau_2), 2))
+print("faixa dos graus 2 a 4:",
+    round(float(
+        amplitude_2_a_4), 2))
 ```
 
 ::: {.funcao}
 **`np.argmin(arr, axis)`**: a posição do menor valor de `arr`. Sem `axis`, no array inteiro; com `axis=1`, a posição do menor valor em cada linha.
 :::
 
-A reta erra 23,06; a parábola, 19,72. A curvatura derruba o erro em 3,34. Dali em diante a tabela é quase plana: entre o maior e o menor MSE dos graus 2, 3 e 4 a diferença é de 0,01, e o menor MSE de validação cai no grau 5, com 19,26, como aponta o `np.argmin`. Por esta divisão, o polinômio de grau 5 seria o escolhido. Mas a divisão foi um sorteio. O que acontece com essa escolha se os carros caírem de outro jeito?
+A reta erra 23,06; a parábola, 19,72. A curvatura derruba o erro em 3,34. Dali em diante a tabela é quase plana: entre o maior e o menor MSE dos graus 2, 3 e 4 a diferença é de 0,01. O menor MSE de validação cai no grau 5, com 19,26, como aponta o `np.argmin`.
+
+Por esta divisão, o polinômio de grau 5 seria o escolhido. Mas a divisão foi um sorteio. O que acontece com essa escolha se os carros caírem de outro jeito?
 
 ## Dez divisões
 
-A mesma conta, repetida com as sementes de 10 a 19: dez sorteios diferentes dos 196 carros de validação, dez curvas.
+A mesma conta, repetida com as sementes de 10 a 19: dez sorteios diferentes dos 196 carros de validação, dez curvas. São dois laços, um dentro do outro. O de fora sorteia a divisão; o de dentro é o laço dos graus, igual ao de cima, e produz a curva daquela divisão.
 
 ```{python}
 #| label: dez-divisoes
 sementes = range(10, 20)
 mse_dez = []
 for semente in sementes:
-    X_tr, X_va, y_tr, y_va = train_test_split(
-        X, y, test_size=196, random_state=semente
-    )
-    mse_dez.append([
-        mean_squared_error(y_va, modelo_polinomial(grau).fit(X_tr, y_tr).predict(X_va))
-        for grau in graus
-    ])
+    X_tr, X_va, y_tr, y_va = (
+        train_test_split(
+            X, y, test_size=196,
+            random_state=semente))
+    curva = []
+    for grau in graus:
+        modelo = polinomial(grau)
+        modelo.fit(X_tr, y_tr)
+        previsto = modelo.predict(
+            X_va)
+        mse = mean_squared_error(
+            y_va, previsto)
+        curva.append(mse)
+    mse_dez.append(curva)
 mse_dez = np.array(mse_dez)
 
-grau_minimo_por_divisao = [int(graus[i]) for i in np.argmin(mse_dez, axis=1)]
-grau_2_abaixo_do_1_em_todas = bool((mse_dez[:, 1] < mse_dez[:, 0]).all())
-
-grau_minimo_por_divisao, grau_2_abaixo_do_1_em_todas
+print("linhas (divisões):",
+    mse_dez.shape[0])
+print("colunas (graus):",
+    mse_dez.shape[1])
 ```
 
-O grau de menor MSE muda de divisão para divisão: 5, 2, 9, 7, 9, 5, 2, 9, 7 e 10, na ordem das sementes. Uma coisa não muda: `grau_2_abaixo_do_1_em_todas` confirma que, nas dez divisões, a parábola erra menos que a reta.
+`mse_dez` tem uma linha por divisão e uma coluna por grau. A primeira linha, da semente 10, deve repetir a curva da divisão de cima:
+
+```{python}
+#| label: semente-10
+pd.DataFrame(
+    {"de cima": mse_uma_divisao,
+        "semente 10": mse_dez[0]},
+    index=pd.Index(
+        graus, name="grau"),
+).round(2)
+```
+
+As duas colunas coincidem grau a grau. Em cada linha de `mse_dez`, o grau de menor MSE:
+
+```{python}
+#| label: minimo-dez-divisoes
+posicoes = np.argmin(
+    mse_dez, axis=1)
+escolhido = []
+for p in posicoes:
+    escolhido.append(graus[p])
+
+mse_g1 = mse_dez[:, 0].round(2)
+mse_g2 = mse_dez[:, 1].round(2)
+por_divisao = pd.DataFrame(
+    {"grau 1": mse_g1,
+        "grau 2": mse_g2,
+        "melhor": escolhido},
+    index=pd.Index(
+        sementes, name="semente"),
+)
+por_divisao
+```
+
+O grau de menor MSE, na coluna `melhor`, muda de divisão para divisão: 5, 2, 9, 7, 9, 5, 2, 9, 7 e 10, na ordem das sementes. Uma coisa não muda: nas dez linhas, o MSE da coluna `grau 2` fica abaixo do da coluna `grau 1`. Em todas as divisões, a parábola erra menos que a reta.
 
 ```{python}
 #| label: amplitude-por-grau
-amplitude_por_grau = mse_dez.max(axis=0) - mse_dez.min(axis=0)
+pior = mse_dez.max(axis=0)
+melhor = mse_dez.min(axis=0)
+amplitude = pior - melhor
+
 pd.DataFrame(
-    {"amplitude entre as dez divisões": [round(float(v), 2) for v in amplitude_por_grau]},
-    index=pd.Index(graus, name="grau"),
-)
+    {"amplitude": amplitude},
+    index=pd.Index(
+        graus, name="grau"),
+).round(2)
 ```
 
-A amplitude é o MSE de validação da pior divisão menos o da melhor, grau a grau. Para a reta, as dez estimativas se espalham por 7,53; para a parábola, por 7,49.
+A amplitude é o MSE de validação da pior divisão menos o da melhor, grau a grau: com `axis=0`, o `max` e o `min` percorrem cada coluna, isto é, as dez divisões de um mesmo grau. Para a reta, as dez estimativas se espalham por 7,53; para a parábola, por 7,49.
 
 ```{python}
 #| label: fig-validacao-auto
-#| fig-cap: "MSE de validação contra o grau do polinômio em potencia, nos dados Auto, com 196 carros de treino e 196 de validação. Esquerda: uma divisão (semente 10). Direita: dez divisões (sementes 10 a 19); a curva laranja é a mesma da esquerda."
-#| fig-alt: "Dois painéis com o mesmo eixo vertical, de 13 a 29. À esquerda, uma curva laranja com marcadores cai de cerca de 23 no grau 1 para perto de 20 no grau 2 e fica quase plana até o grau 10. À direita, dez curvas finas, nove azuis e uma laranja, todas caindo do grau 1 para o grau 2, em alturas bem diferentes entre si, de cerca de 14 a cerca de 27; uma delas tem um pico isolado perto de 28 no grau 8."
-fig, (ax_uma, ax_dez) = plt.subplots(1, 2, figsize=(10, 4.2), sharey=True)
+#| fig-cap: "MSE de validação contra o grau do polinômio em potencia, nos dados Auto, com 196 carros de treino e 196 de validação. Em cima: uma divisão (semente 10). Embaixo: dez divisões (sementes 10 a 19); a curva laranja é a mesma de cima."
+#| fig-alt: "Dois painéis empilhados com o mesmo eixo vertical, de 13 a 33, e o mesmo eixo horizontal, graus de 1 a 10. Em cima, uma curva laranja com marcadores cai de cerca de 23 no grau 1 para perto de 20 no grau 2 e fica quase plana até o grau 10. Embaixo, dez curvas finas, nove azuis e uma laranja, todas caindo do grau 1 para o grau 2, em alturas bem diferentes entre si, de cerca de 14 a cerca de 27; uma delas tem um pico isolado perto de 28 no grau 8. A legenda fica no alto do painel de baixo, acima das curvas."
+import matplotlib.pyplot as plt
 
-ax_uma.plot(graus, mse_uma_divisao, color="C1", marker="o", linewidth=2)
+fig, (ax_uma, ax_dez) = (
+    plt.subplots(
+        2, 1, figsize=(5, 7),
+        sharex=True, sharey=True))
+
+ax_uma.plot(
+    graus, mse_uma_divisao,
+    color="C1", marker="o",
+    linewidth=2)
 ax_uma.set_title("uma divisão")
 
 for linha in mse_dez[1:]:
-    ax_dez.plot(graus, linha, color="C0", linewidth=1.2)
-ax_dez.plot([], [], color="C0", linewidth=1.2, label="sementes 11 a 19")
-ax_dez.plot(graus, mse_dez[0], color="C1", linewidth=2, label="semente 10")
+    ax_dez.plot(
+        graus, linha,
+        color="C0", linewidth=1.2)
+ax_dez.plot(
+    [], [], color="C0",
+    linewidth=1.2,
+    label="sementes 11 a 19")
+ax_dez.plot(
+    graus, mse_dez[0],
+    color="C1", linewidth=2,
+    label="semente 10")
 ax_dez.set_title("dez divisões")
-ax_dez.legend(loc="upper left", bbox_to_anchor=(1.02, 1), frameon=False)
+ax_dez.legend(
+    loc="upper center", ncol=2,
+    frameon=False)
 
 for ax in (ax_uma, ax_dez):
-    ax.set_xlabel("grau do polinômio")
-    ax.set_xticks(list(graus))
-    ax.set_xlim(0.5, 10.5)
-ax_uma.set_ylabel("MSE de validação")
-ax_uma.set_ylim(13, 29)
+    ax.set_ylabel(
+        "MSE de validação")
+ax_dez.set_xlabel(
+    "grau do polinômio")
+ax_dez.set_xticks(list(graus))
+ax_dez.set_xlim(0.5, 10.5)
+ax_dez.set_ylim(13, 33)
+ax_dez.set_yticks(
+    [15, 20, 25, 30])
 plt.tight_layout()
 plt.show()
 ```
 
-As dez curvas descem do grau 1 para o grau 2, cada uma numa altura própria. O painel direito não autoriza escolher entre o grau 2 e o grau 9, porque divisões diferentes discordam sobre isso. O que ele sustenta é mais modesto: a reta não basta.
+::: {.funcao}
+**`plt.subplots(2, 1, figsize, sharex, sharey)`**: cria uma figura com dois painéis empilhados e devolve a figura e os painéis; `figsize` é a largura e a altura em polegadas, e `sharex`/`sharey` fazem os dois painéis usarem os mesmos eixos. **`ax.plot(x, y, color, marker, linewidth, label)`**: desenha a curva que liga os pontos; `label` é o nome que a legenda mostra, e um `plot` de listas vazias só cria a entrada da legenda. **`ax.legend(loc, ncol, frameon)`**: a legenda, presa na posição `loc`, em `ncol` colunas, sem moldura. **`ax.set_title`**, **`ax.set_xlabel`** e **`ax.set_ylabel`** escrevem o título e os rótulos; **`ax.set_xticks`**, **`ax.set_yticks`**, **`ax.set_xlim`** e **`ax.set_ylim`** fixam as marcas e o intervalo de cada eixo.
+:::
+
+As dez curvas descem do grau 1 para o grau 2, cada uma numa altura própria. O painel de baixo não autoriza escolher entre o grau 2 e o grau 9, porque divisões diferentes discordam sobre isso. O que ele sustenta é mais modesto: a reta não basta.
 
 ## As duas desvantagens
 

@@ -20,7 +20,7 @@ passadas pela skill, use-as — leia os PNGs com a ferramenta Read.
 
 ### Transbordamento
 - Saída de chunk com dezenas/centenas de linhas (`print(df)` inteiro, `describe()` de muitas colunas, `coef_` de centenas de preditores).
-- DataFrame mais largo que a coluna de texto; fórmula em bloco longa demais para celular (390 px).
+- DataFrame mais largo que a coluna de texto do desktop; fórmula em bloco mais larga que a coluna. **Largura de celular (390 px) não é requisito** (CLAUDE.md, "O livro é lido no computador"): não abra achado por isso.
 - Linha de código > ~88 caracteres (rolagem horizontal no bloco).
 
 ### Figuras (INV-11)

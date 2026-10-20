@@ -4,27 +4,7 @@
 Esta seção corresponde à seção 5.1.4 de @james2023.
 :::
 
-A validação, o 5-fold, o 10-fold e a LOOCV dão quatro estimativas do mesmo número, o MSE de teste. Qual delas é melhor? Uma estimativa pode errar de dois jeitos, os mesmos dois da decomposição da seção 7.6, agora aplicados à estimativa em vez da previsão. Ela pode ter **viés**: sobre muitas amostras, a média dela passa do alvo. E pode ter **variância**: de uma amostra para outra, ela oscila em torno da própria média.
-
-```{python}
-#| label: setup
-#| include: false
-import numpy as np
-import pandas as pd
-from sklearn.linear_model import LinearRegression
-from sklearn.metrics import mean_squared_error
-from sklearn.model_selection import KFold, LeaveOneOut, cross_val_score, train_test_split
-from sklearn.pipeline import make_pipeline
-from sklearn.preprocessing import PolynomialFeatures, StandardScaler
-
-
-def modelo_polinomial(grau):
-    return make_pipeline(
-        StandardScaler(),
-        PolynomialFeatures(grau, include_bias=False),
-        LinearRegression(),
-    )
-```
+A validação, o 5-fold, o 10-fold e a LOOCV dão quatro estimativas do mesmo número, o MSE de teste. Qual delas é melhor? Uma estimativa pode errar de dois jeitos, os mesmos dois da decomposição da seção 7.6, agora aplicados à estimativa em vez da previsão. Ela pode ter **viés**: sobre muitas amostras, a média dela fica longe do alvo, para cima ou para baixo. E pode ter **variância**: de uma amostra para outra, ela oscila em torno da própria média.
 
 ## O que o argumento prevê
 
@@ -38,10 +18,35 @@ Há uma razão na direção contrária. Cada ajuste da LOOCV vê mais dados que 
 
 A medição usa o gerador da seção 7.6, $f(x) = 4 + 0{,}3x + 3\sin x$ com ruído de desvio padrão 1,5, e um modelo fixo, o polinômio de grau 4. Primeiro se sorteiam 20.000 pontos de teste. Depois, 200 amostras de treino de 100 pontos cada. Em cada amostra, o modelo ajustado nos 100 pontos é julgado nos 20.000, o que dá o MSE de teste verdadeiro dele, e as quatro estimativas são calculadas só com os 100 pontos.
 
+O modelo e o gerador vêm primeiro, com os 20.000 pontos de teste:
+
 ```{python}
-#| label: medicao
+#| label: gerador
+import numpy as np
+import pandas as pd
+from sklearn.linear_model \
+    import LinearRegression
+from sklearn.pipeline \
+    import make_pipeline
+from sklearn.preprocessing \
+    import PolynomialFeatures
+from sklearn.preprocessing \
+    import StandardScaler
+
+
+def polinomial(grau):
+    return make_pipeline(
+        StandardScaler(),
+        PolynomialFeatures(
+            grau,
+            include_bias=False),
+        LinearRegression(),
+    )
+
+
 def f(x):
-    return 4 + 0.3 * x + 3 * np.sin(x)
+    return (4 + 0.3 * x
+        + 3 * np.sin(x))
 
 
 desvio = 1.5
@@ -49,84 +54,218 @@ n = 100
 n_amostras = 200
 grau = 4
 
-
-def cv(x, y, esquema):
-    return -cross_val_score(
-        modelo_polinomial(grau), x, y, cv=esquema, scoring="neg_mean_squared_error"
-    ).mean()
-
-
 rng = np.random.default_rng(10)
-x_teste = rng.uniform(0, 10, size=20_000).reshape(-1, 1)
-y_teste = f(x_teste.ravel()) + rng.normal(0, desvio, size=20_000)
+x_teste = rng.uniform(
+    0, 10, size=20_000)
+ruido_teste = rng.normal(
+    0, desvio, size=20_000)
+X_teste = x_teste.reshape(-1, 1)
+y_teste = f(x_teste) + ruido_teste
+print("pontos de teste:",
+    len(X_teste))
+```
 
-linhas = []
-for r in range(n_amostras):
-    x = rng.uniform(0, 10, size=n).reshape(-1, 1)
-    y = f(x.ravel()) + rng.normal(0, desvio, size=n)
-    x_tr, x_va, y_tr, y_va = train_test_split(x, y, test_size=n // 2, random_state=r)
-    linhas.append({
-        "teste": mean_squared_error(y_teste, modelo_polinomial(grau).fit(x, y).predict(x_teste)),
-        "LOOCV": cv(x, y, LeaveOneOut()),
-        "10-fold": cv(x, y, KFold(10, shuffle=True, random_state=r)),
-        "5-fold": cv(x, y, KFold(5, shuffle=True, random_state=r)),
-        "validação": mean_squared_error(
-            y_va, modelo_polinomial(grau).fit(x_tr, y_tr).predict(x_va)
-        ),
-    })
+A primeira das 200 amostras de treino, com os seus 100 pontos:
+
+```{python}
+#| label: primeira-amostra
+x = rng.uniform(0, 10, size=n)
+ruido = rng.normal(
+    0, desvio, size=n)
+X = x.reshape(-1, 1)
+y = f(x) + ruido
+print("pontos de treino:", len(X))
+```
+
+O alvo é o MSE de teste verdadeiro do modelo que se vai usar: ajustado nos 100 pontos, julgado nos 20.000.
+
+```{python}
+#| label: alvo
+from sklearn.metrics \
+    import mean_squared_error
+
+modelo = polinomial(grau)
+modelo.fit(X, y)
+previsto = modelo.predict(X_teste)
+mse_teste = mean_squared_error(
+    y_teste, previsto)
+print("MSE de teste:",
+    round(mse_teste, 3))
+```
+
+As quatro estimativas do alvo usam só os 100 pontos. As três de validação cruzada saem do `cross_val_score`; a do conjunto de validação, dos passos da seção 10.1, com metade dos pontos de cada lado. A semente `r` é a da partição desta amostra, 0 para a primeira.
+
+```{python}
+#| label: quatro-estimativas
+from sklearn.model_selection \
+    import KFold
+from sklearn.model_selection \
+    import LeaveOneOut
+from sklearn.model_selection \
+    import cross_val_score
+from sklearn.model_selection \
+    import train_test_split
+
+neg_mse = "neg_mean_squared_error"
+r = 0
+
+# LOOCV
+pont = cross_val_score(
+    polinomial(grau), X, y,
+    cv=LeaveOneOut(),
+    scoring=neg_mse)
+loocv = -pont.mean()
+
+# 10-fold
+grupos_10 = KFold(
+    10, shuffle=True,
+    random_state=r)
+pont = cross_val_score(
+    polinomial(grau), X, y,
+    cv=grupos_10,
+    scoring=neg_mse)
+dez = -pont.mean()
+
+# 5-fold
+grupos_5 = KFold(
+    5, shuffle=True,
+    random_state=r)
+pont = cross_val_score(
+    polinomial(grau), X, y,
+    cv=grupos_5,
+    scoring=neg_mse)
+cinco = -pont.mean()
+
+# conjunto de validação
+X_tr, X_va, y_tr, y_va = (
+    train_test_split(
+        X, y, test_size=n // 2,
+        random_state=r))
+modelo = polinomial(grau)
+modelo.fit(X_tr, y_tr)
+previsto = modelo.predict(X_va)
+validacao = mean_squared_error(
+    y_va, previsto)
+
+print("LOOCV:", round(loocv, 3))
+print("10-fold:", round(dez, 3))
+print("5-fold:", round(cinco, 3))
+print("validação:",
+    round(validacao, 3))
+```
+
+Uma amostra só não diz qual das quatro costuma acertar; para isso, a mesma conta se repete nas outras 199. A função `cinco_numeros` reúne os passos acima, e o laço continua sorteando as amostras do mesmo `rng`, com as partições de semente 1 em diante.
+
+```{python}
+#| label: medicao
+def cinco_numeros(X, y, r):
+    modelo = polinomial(grau)
+    modelo.fit(X, y)
+    previsto = modelo.predict(
+        X_teste)
+    numeros = {"teste":
+        mean_squared_error(
+            y_teste, previsto)}
+
+    esquemas = {
+        "LOOCV": LeaveOneOut(),
+        "10-fold": KFold(
+            10, shuffle=True,
+            random_state=r),
+        "5-fold": KFold(
+            5, shuffle=True,
+            random_state=r),
+    }
+    for nome in esquemas:
+        pont = cross_val_score(
+            modelo, X, y,
+            cv=esquemas[nome],
+            scoring=neg_mse)
+        cv_nome = -pont.mean()
+        numeros[nome] = cv_nome
+
+    X_tr, X_va, y_tr, y_va = (
+        train_test_split(
+            X, y,
+            test_size=n // 2,
+            random_state=r))
+    modelo = polinomial(grau)
+    modelo.fit(X_tr, y_tr)
+    previsto = modelo.predict(
+        X_va)
+    numeros["validação"] = (
+        mean_squared_error(
+            y_va, previsto))
+    return numeros
+
+
+# a amostra de cima é a primeira
+linhas = [{
+    "teste": mse_teste,
+    "LOOCV": loocv,
+    "10-fold": dez,
+    "5-fold": cinco,
+    "validação": validacao,
+}]
+for r in range(1, n_amostras):
+    x = rng.uniform(
+        0, 10, size=n)
+    ruido = rng.normal(
+        0, desvio, size=n)
+    X = x.reshape(-1, 1)
+    y = f(x) + ruido
+    linhas.append(
+        cinco_numeros(X, y, r))
 medidas = pd.DataFrame(linhas)
-
-medidas.shape
+print("amostras:", len(medidas))
+print("colunas:",
+    len(medidas.columns))
 ```
 
 Cada linha de `medidas` é uma amostra; cada coluna, o MSE de teste verdadeiro ou uma das quatro estimativas dele. A partição do *k*-fold e da validação muda de amostra para amostra, com a semente `r` da réplica. Para cada coluna, a média sobre as 200 amostras e o desvio padrão:
 
 ```{python}
 #| label: resumo
-resumo = medidas.agg(["mean", "std"]).round(3)
-resumo.index = ["média", "desvio padrão"]
-resumo
+resumo = medidas.agg(
+    ["mean", "std"]).round(3)
+resumo.index = [
+    "média", "desvio padrão"]
+resumo.T
 ```
 
 ::: {.funcao}
-**`df.agg(lista)`**: aplica a cada coluna de `df` cada função da lista e devolve uma tabela com uma linha por função. Aqui, `"mean"` é a média e `"std"` o desvio padrão.
+**`df.agg(lista)`**: aplica a cada coluna de `df` cada função da lista e devolve uma tabela com uma linha por função. Aqui, `"mean"` é a média e `"std"` o desvio padrão. **`df.T`**: a tabela transposta, para caber com uma linha por coluna de `medidas`.
 :::
 
-As duas comparações que interessam, conferidas sobre a tabela:
+As duas comparações que interessam saem da mesma tabela. O viés de cada estimativa é a média dela menos a média do MSE de teste verdadeiro; ao lado, o desvio padrão:
 
 ```{python}
 #| label: evidencias
-estimativas = ["LOOCV", "10-fold", "5-fold", "validação"]
-medias = medidas[estimativas].mean()
-desvios = medidas[estimativas].std()
+estimativas = ["LOOCV", "10-fold",
+    "5-fold", "validação"]
+media = resumo.loc["média"]
+dp = resumo.loc[
+    "desvio padrão"]
+alvo = media["teste"]
 
-vies_cresce_quando_o_treino_encolhe = bool((np.diff(medias.to_numpy()) > 0).all())
-loocv_oscila_menos_que_10_fold = bool(desvios["LOOCV"] < desvios["10-fold"])
-validacao_oscila_mais_que_as_outras = bool(
-    (desvios["validação"] > desvios.drop("validação")).all()
-)
-
-(
-    vies_cresce_quando_o_treino_encolhe,
-    loocv_oscila_menos_que_10_fold,
-    validacao_oscila_mais_que_as_outras,
-)
+vies = media[estimativas] - alvo
+pd.DataFrame({
+    "viés": vies.round(3),
+    "desvio padrão":
+        dp[estimativas],
+})
 ```
-
-::: {.funcao}
-**`np.diff(arr)`**: as diferenças entre elementos vizinhos, `arr[1] - arr[0]`, `arr[2] - arr[1]` e assim por diante. Todas positivas quer dizer que `arr` cresce do começo ao fim.
-:::
 
 ## O que a medição mostra
 
-**O viés sai na ordem que o argumento previu.** `vies_cresce_quando_o_treino_encolhe` confirma que as médias crescem da LOOCV para a validação, na ordem em que os ajustes veem menos dados. Contra a média de 2,771 do MSE de teste verdadeiro, a LOOCV passa do alvo em 0,021 (2,792 menos 2,771), o 10-fold em 0,035 (2,806 menos 2,771), o 5-fold em 0,072 (2,843 menos 2,771) e a validação em 0,225 (2,996 menos 2,771). É o viés para cima da validação que a seção 10.1 enunciou sem medir; aqui ele tem tamanho, e é o maior dos quatro.
+**O viés sai na ordem que o argumento previu.** Na coluna `viés`, os números crescem de cima para baixo, da LOOCV para a validação, na ordem em que os ajustes veem menos dados. Todas passam do alvo, a média de 2,771 do MSE de teste verdadeiro. A LOOCV passa por pouco, 0,021 (2,792 menos 2,771); a validação passa em 0,225 (2,996 menos 2,771), o maior viés dos quatro.
 
-**A validação simples oscila muito mais que a validação cruzada.** `validacao_oscila_mais_que_as_outras` confirma que o desvio padrão dela, 0,714, passa dos três outros. Contra o do 5-fold, 0,437, é cerca de 1,6 vez maior (0,714 dividido por 0,437). É a variância alta da seção 10.1, agora medida contra as alternativas.
+**A validação simples oscila muito mais que a validação cruzada.** Na coluna `desvio padrão`, o da validação, 0,714, passa dos três outros. Contra o do 5-fold, 0,437, é cerca de 1,6 vez maior (0,714 dividido por 0,437). É a variância alta da seção 10.1, agora medida contra as alternativas.
 
-Vale olhar também a primeira coluna. O MSE de teste verdadeiro muda pouco de amostra para amostra, com desvio padrão de 0,087; a LOOCV oscila com 0,404, cerca de 4,6 vezes mais (0,404 dividido por 0,087). Com 100 pontos, mesmo a LOOCV erra, numa amostra só, bem mais do que o alvo varia.
+Na primeira coluna do resumo, o MSE de teste verdadeiro muda pouco de amostra para amostra, com desvio padrão de 0,087; a LOOCV oscila com 0,404, cerca de 4,6 vezes mais (0,404 dividido por 0,087). Com 100 pontos, mesmo a LOOCV erra, numa amostra só, bem mais do que o alvo varia.
 
-**A LOOCV não oscilou mais que o 10-fold.** `loocv_oscila_menos_que_10_fold` confirma o contrário: 0,404 contra 0,418. O argumento da correlação é real, mas compete com o outro efeito, o de cada ajuste da LOOCV ver mais dados e ser mais estável, e nesta simulação a diferença líquida favoreceu a LOOCV. A diferença é pequena, de 0,014 (0,418 menos 0,404). O que esta simulação mostra é que o argumento da correlação, sozinho, não basta para prever qual das duas oscila mais. Se a LOOCV tem o menor viés e, aqui, não oscilou mais, por que alguém escolheria o 10-fold?
+**A LOOCV não oscilou mais que o 10-fold.** A tabela mostra o contrário: 0,404 contra 0,418. O argumento da correlação é real, mas compete com o outro efeito, o de cada ajuste da LOOCV ver mais dados e ser mais estável, e nesta simulação a diferença líquida favoreceu a LOOCV. A diferença é pequena, de 0,014 (0,418 menos 0,404). O que esta simulação mostra é que o argumento da correlação, sozinho, não basta para prever qual das duas oscila mais. Se a LOOCV tem o menor viés e, aqui, não oscilou mais, por que alguém escolheria o 10-fold?
 
-## O que sustenta k = 5 ou k = 10
+## O que sustenta *k* = 5 ou *k* = 10
 
 O custo. Nesta simulação, a LOOCV fez 100 ajustes por amostra, um por observação; o 10-fold fez 10, e o 5-fold, 5. Em troca de fazer dez vezes menos ajustes que a LOOCV, o 10-fold paga um viés a mais de 0,014 (2,806 menos 2,792), contra os 0,225 de viés da validação simples. Com um modelo que leva minutos para ajustar, ou com $n$ na casa das centenas de milhares, essa troca decide o que é viável. Com $n = 100.000$ e um modelo que leva um minuto para ajustar, quanto tempo levaria a LOOCV, e quanto o 10-fold?
