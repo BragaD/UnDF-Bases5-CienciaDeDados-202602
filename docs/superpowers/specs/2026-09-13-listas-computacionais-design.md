@@ -186,6 +186,10 @@ não entra em lista nenhuma: ele é o roteiro do seminário, não aula.
 **As datas são fixas; o conteúdo de cada lista não.** Os exercícios das listas 2
 a 5 saem quando os capítulos delas existirem.
 
+**Emenda de 2026-10-20.** Por decisão do professor, a lista 2 passa a cobrir os
+capítulos 9, 10 e 11 (ISLP 4, 5 e 6), e não só o 9 e o 10. O conteúdo da lista 3,
+que pela tabela acima cobriria o 11 e o 12, fica em aberto.
+
 ## Testes
 
 A suíte ganha o que o padrão da casa já cobra dos outros derivados:

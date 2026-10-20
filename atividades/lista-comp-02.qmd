@@ -1,0 +1,364 @@
+---
+title: "Lista Computacional 2"
+subtitle: "Bases 5 — Ciência de Dados · UnDF · 2026.2"
+author: "Prof. Douglas Braga"
+lang: pt
+---
+
+# Lista Computacional 2
+
+Esta lista cobre os capítulos [9 — Classificação](../content/cap09/index.qmd), [10 — Reamostragem](../content/cap10/index.qmd) e [11 — Seleção de Modelos e Regularização](../content/cap11/index.qmd).
+
+## Como entregar
+
+1. Abra este notebook no Colab pelo link do repositório.
+2. `Arquivo → Salvar uma cópia no Drive`, antes de preencher qualquer coisa — é na sua cópia que você trabalha, não no original.
+3. Preencha as células de resposta. As de texto são células de *markdown*: no Colab elas aparecem já formatadas, sem cursor — **dê um duplo clique** sobre a célula para abrir a edição, escreva por cima do texto que está lá e clique fora para formatar de novo.
+4. **`Ambiente de execução → Executar tudo`**, de cima para baixo.
+5. `Arquivo → Imprimir → Salvar como PDF`.
+6. Poste o PDF no AVA/Moodle.
+
+Sem o passo 4, o PDF sai sem nenhuma saída: gráfico nenhum, número nenhum, só as células que você escreveu.
+
+E o `Executar tudo` **para na primeira célula que levantar erro**: dali para baixo nada é executado, e nenhuma dessas saídas entra no PDF. Se o PDF vier sem as saídas de um trecho, procure a célula que falhou, conserte e rode tudo de novo.
+
+Antes de postar, confira também se alguma saída larga — uma tabela comprida, um gráfico grande — não ficou cortada na impressão.
+
+## Prazo e peso
+
+Entrega até **04/11/2026**. Peso: **10%** da nota.
+
+## Identificação
+
+Nome completo e matrícula:
+
+*sua resposta aqui*
+
+## Bibliotecas
+
+```{python}
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+from sklearn.decomposition import PCA
+from sklearn.linear_model import Lasso, LinearRegression, LogisticRegression, Ridge
+from sklearn.metrics import mean_squared_error
+from sklearn.naive_bayes import GaussianNB
+from sklearn.neighbors import KNeighborsClassifier
+from sklearn.model_selection import (
+    GridSearchCV,
+    KFold,
+    LeaveOneOut,
+    cross_val_score,
+    train_test_split,
+)
+from sklearn.pipeline import make_pipeline
+from sklearn.preprocessing import PolynomialFeatures, StandardScaler
+```
+
+## Exercício 1
+
+*Do exercício 6 do capítulo 4 de @james2023.*
+
+Suponha que coletamos dados de um grupo de alunos de uma disciplina de estatística, com as variáveis $X_1$ = horas de estudo, $X_2$ = média de notas na graduação (o GPA, numa escala de 0 a 4) e $Y$ = tirar A na disciplina. Ajustamos uma regressão logística e obtemos os coeficientes estimados $\hat\beta_0 = -6$, $\hat\beta_1 = 0{,}05$ e $\hat\beta_2 = 1$.
+
+(a) Estime a probabilidade de um aluno que estuda 40 horas e tem GPA de 3,5 tirar A na disciplina.
+
+*sua resposta aqui*
+
+(b) Quantas horas o aluno do item (a) precisaria estudar para ter probabilidade de 50% de tirar A na disciplina?
+
+*sua resposta aqui*
+
+## Exercício 2
+
+*Do exercício 12 do capítulo 4 de @james2023.*
+
+Suponha que você queira classificar uma observação $X \in \mathbb{R}$ em maçã ou laranja. Você ajusta um modelo de regressão logística e encontra
+
+$$
+\widehat{\Pr}(Y = \text{laranja} \mid X = x) = \frac{e^{\hat\beta_0 + \hat\beta_1 x}}{1 + e^{\hat\beta_0 + \hat\beta_1 x}}.
+$$
+
+Um colega ajusta uma regressão logística aos mesmos dados usando a parametrização *softmax* da [seção 9.3](../content/cap09/03-logistica-multinomial.qmd), e encontra
+
+$$
+\widehat{\Pr}(Y = \text{laranja} \mid X = x) = \frac{e^{\hat\alpha_{\text{laranja},0} + \hat\alpha_{\text{laranja},1} x}}{e^{\hat\alpha_{\text{laranja},0} + \hat\alpha_{\text{laranja},1} x} + e^{\hat\alpha_{\text{maçã},0} + \hat\alpha_{\text{maçã},1} x}}.
+$$
+
+(a) Qual é a log-chance de laranja contra maçã no seu modelo? A log-chance é $\log[p/(1-p)]$, da [seção 9.2](../content/cap09/02-regressao-logistica.qmd).
+
+*sua resposta aqui*
+
+(b) Qual é a log-chance de laranja contra maçã no modelo do seu colega?
+
+*sua resposta aqui*
+
+(c) Suponha que, no seu modelo, $\hat\beta_0 = 2$ e $\hat\beta_1 = -1$. Quais são os coeficientes estimados no modelo do seu colega? Seja o mais específico possível.
+
+*sua resposta aqui*
+
+(d) Agora suponha que você e seu colega ajustem os mesmos dois modelos a outro conjunto de dados. Desta vez, seu colega obtém $\hat\alpha_{\text{laranja},0} = 1{,}2$, $\hat\alpha_{\text{laranja},1} = -2$, $\hat\alpha_{\text{maçã},0} = 3$ e $\hat\alpha_{\text{maçã},1} = 0{,}6$. Quais são os coeficientes estimados no seu modelo?
+
+*sua resposta aqui*
+
+(e) Por fim, suponha que vocês apliquem os dois modelos do item (d) a um conjunto com 2.000 observações de teste. Em que fração dessas observações você espera que a classe prevista pelo seu modelo coincida com a prevista pelo modelo do seu colega? Explique sua resposta.
+
+*sua resposta aqui*
+
+## Exercício 3
+
+*Do exercício 14 do capítulo 4 de @james2023.*
+
+Neste exercício, você vai montar um modelo que prevê se um carro tem consumo alto ou baixo de combustível, com o conjunto `Auto`, em `dados/Auto.csv`. As variáveis são:
+
+- `milhas_por_galao`: consumo, em milhas por galão
+- `cilindros`: número de cilindros do motor
+- `cilindrada`: volume deslocado pelo motor, em polegadas cúbicas
+- `potencia`: potência do motor, em cavalos
+- `peso`: peso do veículo, em libras
+- `aceleracao`: tempo para ir de 0 a 60 milhas por hora, em segundos
+- `ano`: ano do modelo, com dois dígitos — de 70 a 82
+- `origem`: procedência do carro, gravada como código numérico — 1 para americano, 2 para europeu, 3 para japonês
+- `nome`: nome do modelo
+
+A coluna `potencia` chega como texto, porque cinco linhas trazem `"?"` em vez de um número. Converta com `pd.to_numeric(..., errors="coerce")` e descarte essas linhas com `dropna` antes de qualquer outra conta.
+
+(a) Crie uma variável binária, `economico`, que vale 1 se `milhas_por_galao` estiver acima da sua mediana, e 0 se estiver abaixo. A mediana sai do método `median()`. Acrescente `economico` como coluna do `DataFrame`, por atribuição: `auto["economico"] = ...`. No texto, diga o valor da mediana e quantos carros ficaram em cada classe.
+
+```{python}
+# sua resposta
+```
+
+*sua resposta aqui*
+
+(b) Explore os dados graficamente para investigar a associação entre `economico` e as outras variáveis. Quais delas parecem mais úteis para prever `economico`? Gráficos de dispersão e boxplots podem ajudar a responder. Descreva o que você encontra.
+
+```{python}
+# sua resposta
+```
+
+*sua resposta aqui*
+
+(c) Divida os dados em um conjunto de treino e um de teste, com `train_test_split` e um `random_state` fixo. No texto, diga quantos carros ficaram em cada conjunto.
+
+```{python}
+# sua resposta
+```
+
+*sua resposta aqui*
+
+(d) Ajuste uma regressão logística aos dados de treino para prever `economico`, usando as variáveis que pareceram mais associadas a `economico` no item (b). Use a logística sem penalização da [seção 9.2](../content/cap09/02-regressao-logistica.qmd). Qual é a taxa de erro de teste do modelo obtido?
+
+```{python}
+# sua resposta
+```
+
+*sua resposta aqui*
+
+(e) Ajuste um Naive Bayes com uma normal por preditor, a `GaussianNB` da [seção 9.4](../content/cap09/04-naive-bayes.qmd), aos dados de treino para prever `economico`, com as mesmas variáveis do item (d). Qual é a taxa de erro de teste do modelo obtido?
+
+```{python}
+# sua resposta
+```
+
+*sua resposta aqui*
+
+(f) Ajuste o *k*-NN aos dados de treino, com vários valores de *k*, para prever `economico`. Use só as variáveis que pareceram mais associadas a `economico` no item (b), e ponha um `StandardScaler` antes do `KNeighborsClassifier` num `Pipeline`, como na [seção 9.6](../content/cap09/06-comparando-os-metodos.qmd). Que taxas de erro de teste você obtém? Que valor de *k* parece funcionar melhor neste conjunto?
+
+```{python}
+# sua resposta
+```
+
+*sua resposta aqui*
+
+## Exercício 4
+
+*Do exercício 5 do capítulo 5 de @james2023.*
+
+Este exercício usa o conjunto `Default`, com dados de dez mil clientes de cartão de crédito, em `dados/Default.csv`. As variáveis são:
+
+- `inadimplente`: se o cliente ficou inadimplente (`sim` ou `não`)
+- `estudante`: se o cliente é estudante (`sim` ou `não`)
+- `saldo`: saldo médio que resta no cartão depois do pagamento mensal, em dólares
+- `renda`: renda do cliente, em dólares
+
+Você vai estimar a taxa de erro de teste de uma regressão logística que prevê `inadimplente` a partir de `renda` e `saldo`, usando a abordagem do conjunto de validação da [seção 10.1](../content/cap10/01-o-conjunto-de-validacao.qmd). Fixe um `random_state` em toda divisão, para que o seu resultado não mude quando você rodar o notebook de novo.
+
+(a) Ajuste uma regressão logística que usa `renda` e `saldo` para prever `inadimplente`, com todas as observações. Use a logística sem penalização da [seção 9.2](../content/cap09/02-regressao-logistica.qmd). No texto, diga o sinal dos coeficientes de `renda` e de `saldo` e o que cada sinal quer dizer.
+
+```{python}
+# sua resposta
+```
+
+*sua resposta aqui*
+
+(b) Usando a abordagem do conjunto de validação, estime a taxa de erro de teste desse modelo. Para isso, siga os passos:
+
+i. Divida a amostra em um conjunto de treino e um de validação.
+
+ii. Ajuste uma regressão logística múltipla usando só as observações de treino.
+
+iii. Obtenha uma previsão de inadimplência para cada cliente do conjunto de validação: calcule a probabilidade estimada de inadimplência desse cliente, e classifique-o como inadimplente se ela passar de 0,5.
+
+iv. Calcule a taxa de erro no conjunto de validação, a fração das observações de validação classificadas errado.
+
+```{python}
+# sua resposta
+```
+
+*sua resposta aqui*
+
+(c) Repita o processo do item (b) três vezes, com três divisões diferentes das observações em treino e validação: três valores diferentes de `random_state` no `train_test_split`. Comente os resultados obtidos.
+
+```{python}
+# sua resposta
+```
+
+*sua resposta aqui*
+
+(d) Agora considere uma regressão logística que prevê a probabilidade de inadimplência a partir de `renda`, `saldo` e uma variável indicadora de `estudante`. Estime a taxa de erro de teste deste modelo com a abordagem do conjunto de validação, usando as mesmas divisões (os mesmos `random_state`) dos itens (b) e (c), para que a diferença venha só do preditor. Comente se a inclusão da indicadora de `estudante` reduz a taxa de erro de teste.
+
+```{python}
+# sua resposta
+```
+
+*sua resposta aqui*
+
+## Exercício 5
+
+*Do exercício 8 do capítulo 5 de @james2023.*
+
+Agora você vai fazer validação cruzada sobre um conjunto de dados simulado.
+
+(a) Gere um conjunto de dados simulado assim:
+
+```python
+rng = np.random.default_rng(1)
+x = rng.normal(size=100)
+y = x - 2 * x**2 + rng.normal(size=100)
+```
+
+Neste conjunto, quanto valem *n* e *p*? Escreva, em forma de equação, o modelo usado para gerar os dados.
+
+```{python}
+# sua resposta
+```
+
+*sua resposta aqui*
+
+(b) Faça um gráfico de dispersão de $Y$ contra $X$. Comente o que você encontra.
+
+```{python}
+# sua resposta
+```
+
+*sua resposta aqui*
+
+(c) Calcule os erros de LOOCV que resultam de ajustar, por mínimos quadrados, os quatro modelos abaixo:
+
+i. $Y = \beta_0 + \beta_1 X + \varepsilon$
+
+ii. $Y = \beta_0 + \beta_1 X + \beta_2 X^2 + \varepsilon$
+
+iii. $Y = \beta_0 + \beta_1 X + \beta_2 X^2 + \beta_3 X^3 + \varepsilon$
+
+iv. $Y = \beta_0 + \beta_1 X + \beta_2 X^2 + \beta_3 X^3 + \beta_4 X^4 + \varepsilon$
+
+Monte cada modelo como um `Pipeline` com `PolynomialFeatures` e `LinearRegression`, e calcule a LOOCV com `cross_val_score` e `LeaveOneOut`, como na [seção 10.2](../content/cap10/02-leave-one-out.qmd). Pode ajudar guardar `x` num `DataFrame` de uma coluna, que é a forma que o `fit` espera para $X$.
+
+```{python}
+# sua resposta
+```
+
+*sua resposta aqui*
+
+(d) Repita o item (c) depois de fixar outra semente, `np.random.default_rng(2)`. Faça a conta de dois jeitos: primeiro mantendo os dados do item (a), e depois gerando o conjunto de novo, com a mesma receita do item (a) e a semente nova. Algum dos dois jeitos dá os mesmos resultados do item (c)? Por quê?
+
+```{python}
+# sua resposta
+```
+
+*sua resposta aqui*
+
+(e) Qual dos modelos do item (c) teve o menor erro de LOOCV? É o que você esperava? Explique sua resposta.
+
+*sua resposta aqui*
+
+## Exercício 6
+
+*Do exercício 2 do capítulo 6 de @james2023.*
+
+Nos itens (a) a (c), diga qual das afirmações i a iv está correta, e justifique sua resposta. A flexibilidade e o compromisso entre viés e variância são os da [seção 7.6](../content/cap07/06-qualidade-do-ajuste-e-vies-variancia.qmd); a ridge e o lasso são os das seções [11.3](../content/cap11/03-regressao-ridge.qmd) e [11.4](../content/cap11/04-o-lasso.qmd).
+
+(a) O lasso, em relação aos mínimos quadrados, é:
+
+i. Mais flexível, e por isso dá previsões melhores quando o aumento do viés é menor que a redução da variância.
+
+ii. Mais flexível, e por isso dá previsões melhores quando o aumento da variância é menor que a redução do viés.
+
+iii. Menos flexível, e por isso dá previsões melhores quando o aumento do viés é menor que a redução da variância.
+
+iv. Menos flexível, e por isso dá previsões melhores quando o aumento da variância é menor que a redução do viés.
+
+*sua resposta aqui*
+
+(b) Repita o item (a) para a regressão ridge em relação aos mínimos quadrados.
+
+*sua resposta aqui*
+
+(c) Repita o item (a) para os métodos não lineares em relação aos mínimos quadrados.
+
+*sua resposta aqui*
+
+## Exercício 7
+
+*Do exercício 9 do capítulo 6 de @james2023.*
+
+Neste exercício, você vai prever o número de inscrições recebidas, `inscricoes`, a partir das outras variáveis do conjunto `College`, em `dados/College.csv`, o mesmo da lista 1. Leia o arquivo com `pd.read_csv("dados/College.csv", index_col=0)`: a primeira coluna do arquivo é o nome de cada universidade, e assim ela vira o índice do `DataFrame`, em vez de entrar como dado. A coluna `privada` vale `sim` ou `não`; troque-a por uma indicadora com `pd.get_dummies(..., drop_first=True)`, como na [seção 8.4](../content/cap08/04-preditores-qualitativos.qmd), e diga qual categoria ficou como base.
+
+Use como erro de teste o MSE no conjunto de teste, com `mean_squared_error`. Use `random_state=14` na divisão e em todo `KFold`.
+
+(a) Divida os dados em um conjunto de treino e um de teste, com `train_test_split(..., test_size=0.5, random_state=14)`. No texto, diga quantas universidades ficaram em cada conjunto.
+
+```{python}
+# sua resposta
+```
+
+*sua resposta aqui*
+
+(b) Ajuste um modelo linear por mínimos quadrados aos dados de treino e informe o erro de teste obtido.
+
+```{python}
+# sua resposta
+```
+
+*sua resposta aqui*
+
+(c) Ajuste uma regressão ridge aos dados de treino, com $\lambda$ escolhido por validação cruzada, e informe o erro de teste obtido. Ponha o `StandardScaler` e a `Ridge` num `Pipeline` e escolha $\lambda$ com `GridSearchCV` e `KFold(10, shuffle=True, random_state=14)`, como na [seção 11.5](../content/cap11/05-escolhendo-o-parametro-de-regularizacao.qmd). Uma grade de 71 valores, `np.logspace(-2, 5, 71)`, serve. No texto, diga o $\lambda$ escolhido.
+
+```{python}
+# sua resposta
+```
+
+*sua resposta aqui*
+
+(d) Ajuste um lasso aos dados de treino, com $\lambda$ escolhido por validação cruzada, com os mesmos grupos do item (c). Informe o erro de teste obtido e quantas estimativas de coeficiente não são zero. O `alpha` do `Lasso` não é o $\lambda$ da fórmula: a [seção 11.4](../content/cap11/04-o-lasso.qmd) mostra a conversão. Use `Lasso(max_iter=100_000, tol=1e-8)` e uma grade de $\lambda$ de 71 valores, `np.logspace(0, 7, 71)`. No texto, diga o $\lambda$ escolhido.
+
+```{python}
+# sua resposta
+```
+
+*sua resposta aqui*
+
+(e) Ajuste uma regressão por componentes principais (PCR) aos dados de treino, com o número de componentes $M$ escolhido por validação cruzada, com os mesmos grupos do item (c). A [seção 11.6](../content/cap11/06-regressao-por-componentes-principais.qmd) mostra o `Pipeline` e a grade. Informe o erro de teste obtido e o valor de $M$ escolhido.
+
+```{python}
+# sua resposta
+```
+
+*sua resposta aqui*
+
+(f) Comente os resultados. Com que precisão dá para prever o número de inscrições que uma universidade recebe? Há muita diferença entre os erros de teste das quatro abordagens?
+
+*sua resposta aqui*
