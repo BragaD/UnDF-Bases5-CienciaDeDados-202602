@@ -1228,19 +1228,150 @@ Nota
 <p>A troca ataca as duas desvantagens do conjunto de validação. Cada ajuste usa <span class="math inline">\(n-1\)</span> observações, quase todas, e não metade; o modelo avaliado fica muito mais parecido com o que se vai usar de fato, ajustado em todas, e o viés para cima encolhe. E não há sorteio nenhum: cada observação sai uma vez, na ordem em que está, e rodar a LOOCV de novo dá exatamente o mesmo número.</p>
 <section id="a-loocv-nos-carros" class="level2">
 <h2 class="anchored" data-anchor-id="a-loocv-nos-carros">A LOOCV nos carros</h2>
-<p>A pergunta continua a mesma: que grau de polinômio em <code>potencia</code> prevê melhor <code>milhas_por_galao</code> nos dados <code>Auto</code>? Cada grau passa agora pela LOOCV.</p>
-<div id="cell-loocv-auto" class="cell" data-execution_count="2">
-<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb1"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a>loocv <span class="op">=</span> np.array([</span>
-<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a>    <span class="op">-</span>cross_val_score(</span>
-<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a>        modelo_polinomial(grau), X, y,</span>
-<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a>        cv<span class="op">=</span>LeaveOneOut(), scoring<span class="op">=</span><span class="st">"neg_mean_squared_error"</span>,</span>
-<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a>    ).mean()</span>
-<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> grau <span class="kw">in</span> graus</span>
-<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a>])</span>
-<span id="cb1-8"><a href="#cb1-8" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb1-9"><a href="#cb1-9" aria-hidden="true" tabindex="-1"></a><span class="bu">len</span>(X), <span class="bu">len</span>(X) <span class="op">*</span> <span class="bu">len</span>(graus)</span></code></pre></div><button title="Copiar para a área de transferência" class="code-copy-button"><i class="bi"></i></button></div>
-<div id="loocv-auto" class="cell-output cell-output-display" data-execution_count="2">
-<pre><code>(392, 3920)</code></pre>
+<p>Os carros são os 392 de <code>Auto</code> da seção 10.1, e <code>polinomial(grau)</code> monta o mesmo polinômio em <code>potencia</code> para prever <code>milhas_por_galao</code>:</p>
+<div id="dados-auto" class="cell" data-execution_count="2">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb1"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> numpy <span class="im">as</span> np</span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> pandas <span class="im">as</span> pd</span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> sklearn.linear_model <span class="op">\</span></span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a>    <span class="im">import</span> LinearRegression</span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> sklearn.pipeline <span class="op">\</span></span>
+<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a>    <span class="im">import</span> make_pipeline</span>
+<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> sklearn.preprocessing <span class="op">\</span></span>
+<span id="cb1-8"><a href="#cb1-8" aria-hidden="true" tabindex="-1"></a>    <span class="im">import</span> PolynomialFeatures</span>
+<span id="cb1-9"><a href="#cb1-9" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> sklearn.preprocessing <span class="op">\</span></span>
+<span id="cb1-10"><a href="#cb1-10" aria-hidden="true" tabindex="-1"></a>    <span class="im">import</span> StandardScaler</span>
+<span id="cb1-11"><a href="#cb1-11" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-12"><a href="#cb1-12" aria-hidden="true" tabindex="-1"></a>auto <span class="op">=</span> pd.read_csv(</span>
+<span id="cb1-13"><a href="#cb1-13" aria-hidden="true" tabindex="-1"></a>    <span class="st">"dados/Auto.csv"</span>)</span>
+<span id="cb1-14"><a href="#cb1-14" aria-hidden="true" tabindex="-1"></a>auto[<span class="st">"potencia"</span>] <span class="op">=</span> pd.to_numeric(</span>
+<span id="cb1-15"><a href="#cb1-15" aria-hidden="true" tabindex="-1"></a>    auto[<span class="st">"potencia"</span>],</span>
+<span id="cb1-16"><a href="#cb1-16" aria-hidden="true" tabindex="-1"></a>    errors<span class="op">=</span><span class="st">"coerce"</span>)</span>
+<span id="cb1-17"><a href="#cb1-17" aria-hidden="true" tabindex="-1"></a>auto <span class="op">=</span> auto.dropna(</span>
+<span id="cb1-18"><a href="#cb1-18" aria-hidden="true" tabindex="-1"></a>    subset<span class="op">=</span>[<span class="st">"potencia"</span>])</span>
+<span id="cb1-19"><a href="#cb1-19" aria-hidden="true" tabindex="-1"></a>auto <span class="op">=</span> auto.reset_index(</span>
+<span id="cb1-20"><a href="#cb1-20" aria-hidden="true" tabindex="-1"></a>    drop<span class="op">=</span><span class="va">True</span>)</span>
+<span id="cb1-21"><a href="#cb1-21" aria-hidden="true" tabindex="-1"></a>X <span class="op">=</span> auto[[<span class="st">"potencia"</span>]]</span>
+<span id="cb1-22"><a href="#cb1-22" aria-hidden="true" tabindex="-1"></a>y <span class="op">=</span> auto[<span class="st">"milhas_por_galao"</span>]</span>
+<span id="cb1-23"><a href="#cb1-23" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-24"><a href="#cb1-24" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-25"><a href="#cb1-25" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> polinomial(grau):</span>
+<span id="cb1-26"><a href="#cb1-26" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> make_pipeline(</span>
+<span id="cb1-27"><a href="#cb1-27" aria-hidden="true" tabindex="-1"></a>        StandardScaler(),</span>
+<span id="cb1-28"><a href="#cb1-28" aria-hidden="true" tabindex="-1"></a>        PolynomialFeatures(</span>
+<span id="cb1-29"><a href="#cb1-29" aria-hidden="true" tabindex="-1"></a>            grau,</span>
+<span id="cb1-30"><a href="#cb1-30" aria-hidden="true" tabindex="-1"></a>            include_bias<span class="op">=</span><span class="va">False</span>),</span>
+<span id="cb1-31"><a href="#cb1-31" aria-hidden="true" tabindex="-1"></a>        LinearRegression(),</span>
+<span id="cb1-32"><a href="#cb1-32" aria-hidden="true" tabindex="-1"></a>    )</span>
+<span id="cb1-33"><a href="#cb1-33" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-34"><a href="#cb1-34" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-35"><a href="#cb1-35" aria-hidden="true" tabindex="-1"></a>graus <span class="op">=</span> <span class="bu">range</span>(<span class="dv">1</span>, <span class="dv">11</span>)</span>
+<span id="cb1-36"><a href="#cb1-36" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">"carros:"</span>, <span class="bu">len</span>(X))</span></code></pre></div><button title="Copiar para a área de transferência" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>carros: 392</code></pre>
+</div>
+</div>
+<p>O primeiro ajuste da LOOCV da reta deixa de fora o carro da linha 0. O modelo é ajustado nos outros 391 e prevê o consumo desse carro:</p>
+<div id="um-carro-fora" class="cell" data-execution_count="3">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb3"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a>i <span class="op">=</span> <span class="dv">0</span></span>
+<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a>X_sem_i <span class="op">=</span> X.drop(index<span class="op">=</span>i)</span>
+<span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a>y_sem_i <span class="op">=</span> y.drop(index<span class="op">=</span>i)</span>
+<span id="cb3-4"><a href="#cb3-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-5"><a href="#cb3-5" aria-hidden="true" tabindex="-1"></a>reta <span class="op">=</span> polinomial(<span class="dv">1</span>)</span>
+<span id="cb3-6"><a href="#cb3-6" aria-hidden="true" tabindex="-1"></a>reta.fit(X_sem_i, y_sem_i)</span>
+<span id="cb3-7"><a href="#cb3-7" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-8"><a href="#cb3-8" aria-hidden="true" tabindex="-1"></a>previsto <span class="op">=</span> reta.predict(</span>
+<span id="cb3-9"><a href="#cb3-9" aria-hidden="true" tabindex="-1"></a>    X.iloc[[i]])</span>
+<span id="cb3-10"><a href="#cb3-10" aria-hidden="true" tabindex="-1"></a>erro_i <span class="op">=</span> (y.iloc[i]</span>
+<span id="cb3-11"><a href="#cb3-11" aria-hidden="true" tabindex="-1"></a>    <span class="op">-</span> previsto[<span class="dv">0</span>]) <span class="op">**</span> <span class="dv">2</span></span>
+<span id="cb3-12"><a href="#cb3-12" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-13"><a href="#cb3-13" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">"treino:"</span>, <span class="bu">len</span>(X_sem_i))</span>
+<span id="cb3-14"><a href="#cb3-14" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">"real:"</span>, y.iloc[i])</span>
+<span id="cb3-15"><a href="#cb3-15" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">"previsto:"</span>,</span>
+<span id="cb3-16"><a href="#cb3-16" aria-hidden="true" tabindex="-1"></a>    <span class="bu">round</span>(previsto[<span class="dv">0</span>], <span class="dv">2</span>))</span>
+<span id="cb3-17"><a href="#cb3-17" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">"erro ao quadrado:"</span>,</span>
+<span id="cb3-18"><a href="#cb3-18" aria-hidden="true" tabindex="-1"></a>    <span class="bu">round</span>(erro_i, <span class="dv">2</span>))</span></code></pre></div><button title="Copiar para a área de transferência" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>treino: 391
+real: 18.0
+previsto: 19.42
+erro ao quadrado: 2.02</code></pre>
+</div>
+</div>
+<div class="funcao">
+<p><strong><code>X.drop(index=i)</code></strong>: uma cópia da tabela sem a linha de rótulo <code>i</code>; a tabela original não muda.</p>
+<p><strong><code>X.iloc[[i]]</code></strong>: a linha na posição <code>i</code>. Com os colchetes duplos, o resultado continua sendo uma tabela de uma linha, a forma que o <code>predict</code> espera; com colchetes simples, sairia uma <code>Series</code>.</p>
+</div>
+<p>O carro da linha 0 é a observação <span class="math inline">\(i = 1\)</span> da fórmula, e esse erro ao quadrado é o seu <span class="math inline">\(\mathrm{MSE}_1\)</span>. A LOOCV repete os mesmos passos com cada um dos 392 carros e tira a média dos 392 erros:</p>
+<div id="loocv-a-mao" class="cell" data-execution_count="4">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb5"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a>erros <span class="op">=</span> []</span>
+<span id="cb5-2"><a href="#cb5-2" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> i <span class="kw">in</span> <span class="bu">range</span>(<span class="bu">len</span>(X)):</span>
+<span id="cb5-3"><a href="#cb5-3" aria-hidden="true" tabindex="-1"></a>    X_sem_i <span class="op">=</span> X.drop(index<span class="op">=</span>i)</span>
+<span id="cb5-4"><a href="#cb5-4" aria-hidden="true" tabindex="-1"></a>    y_sem_i <span class="op">=</span> y.drop(index<span class="op">=</span>i)</span>
+<span id="cb5-5"><a href="#cb5-5" aria-hidden="true" tabindex="-1"></a>    reta <span class="op">=</span> polinomial(<span class="dv">1</span>)</span>
+<span id="cb5-6"><a href="#cb5-6" aria-hidden="true" tabindex="-1"></a>    reta.fit(X_sem_i, y_sem_i)</span>
+<span id="cb5-7"><a href="#cb5-7" aria-hidden="true" tabindex="-1"></a>    previsto <span class="op">=</span> reta.predict(</span>
+<span id="cb5-8"><a href="#cb5-8" aria-hidden="true" tabindex="-1"></a>        X.iloc[[i]])</span>
+<span id="cb5-9"><a href="#cb5-9" aria-hidden="true" tabindex="-1"></a>    erro_i <span class="op">=</span> (y.iloc[i]</span>
+<span id="cb5-10"><a href="#cb5-10" aria-hidden="true" tabindex="-1"></a>        <span class="op">-</span> previsto[<span class="dv">0</span>]) <span class="op">**</span> <span class="dv">2</span></span>
+<span id="cb5-11"><a href="#cb5-11" aria-hidden="true" tabindex="-1"></a>    erros.append(erro_i)</span>
+<span id="cb5-12"><a href="#cb5-12" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb5-13"><a href="#cb5-13" aria-hidden="true" tabindex="-1"></a>loocv_a_mao <span class="op">=</span> np.mean(erros)</span>
+<span id="cb5-14"><a href="#cb5-14" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">"ajustes:"</span>, <span class="bu">len</span>(erros))</span>
+<span id="cb5-15"><a href="#cb5-15" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">"CV(n) da reta:"</span>,</span>
+<span id="cb5-16"><a href="#cb5-16" aria-hidden="true" tabindex="-1"></a>    <span class="bu">round</span>(loocv_a_mao, <span class="dv">2</span>))</span></code></pre></div><button title="Copiar para a área de transferência" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>ajustes: 392
+CV(n) da reta: 24.23</code></pre>
+</div>
+</div>
+<p>O <code>scikit-learn</code> faz o mesmo laço com duas peças. O <code>LeaveOneOut</code> diz quais linhas ficam de fora em cada ajuste, e o <code>cross_val_score</code> ajusta, prevê e mede em cada um:</p>
+<div id="cell-loocv-reta" class="cell" data-execution_count="5">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb7"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb7-1"><a href="#cb7-1" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> sklearn.model_selection <span class="op">\</span></span>
+<span id="cb7-2"><a href="#cb7-2" aria-hidden="true" tabindex="-1"></a>    <span class="im">import</span> LeaveOneOut</span>
+<span id="cb7-3"><a href="#cb7-3" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> sklearn.model_selection <span class="op">\</span></span>
+<span id="cb7-4"><a href="#cb7-4" aria-hidden="true" tabindex="-1"></a>    <span class="im">import</span> cross_val_score</span>
+<span id="cb7-5"><a href="#cb7-5" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb7-6"><a href="#cb7-6" aria-hidden="true" tabindex="-1"></a>neg_mse <span class="op">=</span> <span class="st">"neg_mean_squared_error"</span></span>
+<span id="cb7-7"><a href="#cb7-7" aria-hidden="true" tabindex="-1"></a>pontuacoes <span class="op">=</span> cross_val_score(</span>
+<span id="cb7-8"><a href="#cb7-8" aria-hidden="true" tabindex="-1"></a>    polinomial(<span class="dv">1</span>), X, y,</span>
+<span id="cb7-9"><a href="#cb7-9" aria-hidden="true" tabindex="-1"></a>    cv<span class="op">=</span>LeaveOneOut(),</span>
+<span id="cb7-10"><a href="#cb7-10" aria-hidden="true" tabindex="-1"></a>    scoring<span class="op">=</span>neg_mse,</span>
+<span id="cb7-11"><a href="#cb7-11" aria-hidden="true" tabindex="-1"></a>)</span>
+<span id="cb7-12"><a href="#cb7-12" aria-hidden="true" tabindex="-1"></a>loocv_reta <span class="op">=</span> <span class="op">-</span>pontuacoes.mean()</span>
+<span id="cb7-13"><a href="#cb7-13" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb7-14"><a href="#cb7-14" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">"pontuações:"</span>,</span>
+<span id="cb7-15"><a href="#cb7-15" aria-hidden="true" tabindex="-1"></a>    <span class="bu">len</span>(pontuacoes))</span>
+<span id="cb7-16"><a href="#cb7-16" aria-hidden="true" tabindex="-1"></a>pd.DataFrame(</span>
+<span id="cb7-17"><a href="#cb7-17" aria-hidden="true" tabindex="-1"></a>    {<span class="st">"laço"</span>: [loocv_a_mao],</span>
+<span id="cb7-18"><a href="#cb7-18" aria-hidden="true" tabindex="-1"></a>        <span class="st">"cross_val_score"</span>:</span>
+<span id="cb7-19"><a href="#cb7-19" aria-hidden="true" tabindex="-1"></a>        [loocv_reta]},</span>
+<span id="cb7-20"><a href="#cb7-20" aria-hidden="true" tabindex="-1"></a>    index<span class="op">=</span>[<span class="st">"CV(n) da reta"</span>],</span>
+<span id="cb7-21"><a href="#cb7-21" aria-hidden="true" tabindex="-1"></a>).<span class="bu">round</span>(<span class="dv">2</span>)</span></code></pre></div><button title="Copiar para a área de transferência" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>pontuações: 392</code></pre>
+</div>
+<div id="loocv-reta" class="cell-output cell-output-display" data-execution_count="5">
+<div>
+
+
+<table class="dataframe caption-top table table-sm table-striped small" data-border="1">
+<thead>
+<tr class="header">
+<th data-quarto-table-cell-role="th"></th>
+<th data-quarto-table-cell-role="th">laço</th>
+<th data-quarto-table-cell-role="th">cross_val_score</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<th data-quarto-table-cell-role="th">CV(n) da reta</th>
+<td>24.23</td>
+<td>24.23</td>
+</tr>
+</tbody>
+</table>
+
+</div>
 </div>
 </div>
 <div class="funcao">
@@ -1248,16 +1379,39 @@ Nota
 <p><strong><code>cross_val_score(estimador, X, y, cv, scoring)</code></strong>: ajusta e avalia o estimador em cada divisão de <code>cv</code> e devolve um array com uma pontuação por divisão.</p>
 <ul>
 <li><code>cv=LeaveOneOut()</code>: as divisões a usar.</li>
-<li><code>scoring="neg_mean_squared_error"</code>: a pontuação é o MSE com o sinal trocado. O <code>scikit-learn</code> sempre maximiza a pontuação; por isso o erro entra negativo, e o <code>-</code> na frente de <code>cross_val_score</code> o desfaz.</li>
+<li><code>scoring=neg_mse</code>, o texto <code>"neg_mean_squared_error"</code>: a pontuação é o MSE com o sinal trocado. O <code>scikit-learn</code> sempre maximiza a pontuação; por isso o erro entra negativo, e o <code>-</code> na frente de <code>pontuacoes.mean()</code> o desfaz.</li>
 </ul>
 </div>
+<p>As duas colunas dão o mesmo número: as 392 pontuações, com o sinal trocado, têm a mesma média que o laço escrito à mão. Para os outros graus, a conta é a mesma, com outro modelo:</p>
+<div id="loocv-auto" class="cell" data-execution_count="6">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb9"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb9-1"><a href="#cb9-1" aria-hidden="true" tabindex="-1"></a>loocv <span class="op">=</span> []</span>
+<span id="cb9-2"><a href="#cb9-2" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> grau <span class="kw">in</span> graus:</span>
+<span id="cb9-3"><a href="#cb9-3" aria-hidden="true" tabindex="-1"></a>    pontuacoes <span class="op">=</span> cross_val_score(</span>
+<span id="cb9-4"><a href="#cb9-4" aria-hidden="true" tabindex="-1"></a>        polinomial(grau), X, y,</span>
+<span id="cb9-5"><a href="#cb9-5" aria-hidden="true" tabindex="-1"></a>        cv<span class="op">=</span>LeaveOneOut(),</span>
+<span id="cb9-6"><a href="#cb9-6" aria-hidden="true" tabindex="-1"></a>        scoring<span class="op">=</span>neg_mse,</span>
+<span id="cb9-7"><a href="#cb9-7" aria-hidden="true" tabindex="-1"></a>    )</span>
+<span id="cb9-8"><a href="#cb9-8" aria-hidden="true" tabindex="-1"></a>    cv_grau <span class="op">=</span> <span class="op">-</span>pontuacoes.mean()</span>
+<span id="cb9-9"><a href="#cb9-9" aria-hidden="true" tabindex="-1"></a>    loocv.append(cv_grau)</span>
+<span id="cb9-10"><a href="#cb9-10" aria-hidden="true" tabindex="-1"></a>loocv <span class="op">=</span> np.array(loocv)</span>
+<span id="cb9-11"><a href="#cb9-11" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb9-12"><a href="#cb9-12" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">"ajustes por grau:"</span>, <span class="bu">len</span>(X))</span>
+<span id="cb9-13"><a href="#cb9-13" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">"nos dez graus:"</span>,</span>
+<span id="cb9-14"><a href="#cb9-14" aria-hidden="true" tabindex="-1"></a>    <span class="bu">len</span>(X) <span class="op">*</span> <span class="bu">len</span>(graus))</span></code></pre></div><button title="Copiar para a área de transferência" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>ajustes por grau: 392
+nos dez graus: 3920</code></pre>
+</div>
+</div>
 <p>São 392 carros, portanto 392 ajustes por grau, e 3.920 ajustes nos dez graus. A média de cada array de 392 erros é a <span class="math inline">\(\mathrm{CV}_{(n)}\)</span> daquele grau:</p>
-<div id="cell-tabela-loocv" class="cell" data-execution_count="3">
-<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb3"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a>pd.DataFrame(</span>
-<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a>    {<span class="st">"MSE da LOOCV"</span>: [<span class="bu">round</span>(<span class="bu">float</span>(v), <span class="dv">2</span>) <span class="cf">for</span> v <span class="kw">in</span> loocv]},</span>
-<span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a>    index<span class="op">=</span>pd.Index(graus, name<span class="op">=</span><span class="st">"grau"</span>),</span>
-<span id="cb3-4"><a href="#cb3-4" aria-hidden="true" tabindex="-1"></a>)</span></code></pre></div><button title="Copiar para a área de transferência" class="code-copy-button"><i class="bi"></i></button></div>
-<div id="tabela-loocv" class="cell-output cell-output-display" data-execution_count="3">
+<div id="cell-tabela-loocv" class="cell" data-execution_count="7">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb11"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb11-1"><a href="#cb11-1" aria-hidden="true" tabindex="-1"></a>pd.DataFrame(</span>
+<span id="cb11-2"><a href="#cb11-2" aria-hidden="true" tabindex="-1"></a>    {<span class="st">"MSE da LOOCV"</span>:</span>
+<span id="cb11-3"><a href="#cb11-3" aria-hidden="true" tabindex="-1"></a>        loocv.<span class="bu">round</span>(<span class="dv">2</span>)},</span>
+<span id="cb11-4"><a href="#cb11-4" aria-hidden="true" tabindex="-1"></a>    index<span class="op">=</span>pd.Index(</span>
+<span id="cb11-5"><a href="#cb11-5" aria-hidden="true" tabindex="-1"></a>        graus, name<span class="op">=</span><span class="st">"grau"</span>),</span>
+<span id="cb11-6"><a href="#cb11-6" aria-hidden="true" tabindex="-1"></a>)</span></code></pre></div><button title="Copiar para a área de transferência" class="code-copy-button"><i class="bi"></i></button></div>
+<div id="tabela-loocv" class="cell-output cell-output-display" data-execution_count="7">
 <div>
 
 
@@ -1319,27 +1473,52 @@ Nota
 </div>
 </div>
 </div>
-<div id="cell-leitura-loocv" class="cell" data-execution_count="4">
-<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb4"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a>grau_minimo_loocv <span class="op">=</span> <span class="bu">int</span>(graus[np.argmin(loocv)])</span>
-<span id="cb4-2"><a href="#cb4-2" aria-hidden="true" tabindex="-1"></a>salto_grau_1_para_2 <span class="op">=</span> <span class="bu">round</span>(<span class="bu">float</span>(loocv[<span class="dv">0</span>] <span class="op">-</span> loocv[<span class="dv">1</span>]), <span class="dv">2</span>)</span>
-<span id="cb4-3"><a href="#cb4-3" aria-hidden="true" tabindex="-1"></a>amplitude_graus_2_a_10 <span class="op">=</span> <span class="bu">round</span>(<span class="bu">float</span>(loocv[<span class="dv">1</span>:].<span class="bu">max</span>() <span class="op">-</span> loocv[<span class="dv">1</span>:].<span class="bu">min</span>()), <span class="dv">2</span>)</span>
-<span id="cb4-4"><a href="#cb4-4" aria-hidden="true" tabindex="-1"></a>ganho_minimo_sobre_grau_2 <span class="op">=</span> <span class="bu">round</span>(<span class="bu">float</span>(loocv[<span class="dv">1</span>] <span class="op">-</span> loocv.<span class="bu">min</span>()), <span class="dv">2</span>)</span>
-<span id="cb4-5"><a href="#cb4-5" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb4-6"><a href="#cb4-6" aria-hidden="true" tabindex="-1"></a>grau_minimo_loocv, salto_grau_1_para_2, amplitude_graus_2_a_10, ganho_minimo_sobre_grau_2</span></code></pre></div><button title="Copiar para a área de transferência" class="code-copy-button"><i class="bi"></i></button></div>
-<div id="leitura-loocv" class="cell-output cell-output-display" data-execution_count="4">
-<pre><code>(7, 4.98, 0.66, 0.42)</code></pre>
+<div id="leitura-loocv" class="cell" data-execution_count="8">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb12"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb12-1"><a href="#cb12-1" aria-hidden="true" tabindex="-1"></a>grau_minimo_loocv <span class="op">=</span> graus[</span>
+<span id="cb12-2"><a href="#cb12-2" aria-hidden="true" tabindex="-1"></a>    np.argmin(loocv)]</span>
+<span id="cb12-3"><a href="#cb12-3" aria-hidden="true" tabindex="-1"></a>salto_grau_1_para_2 <span class="op">=</span> (</span>
+<span id="cb12-4"><a href="#cb12-4" aria-hidden="true" tabindex="-1"></a>    loocv[<span class="dv">0</span>] <span class="op">-</span> loocv[<span class="dv">1</span>])</span>
+<span id="cb12-5"><a href="#cb12-5" aria-hidden="true" tabindex="-1"></a>faixa <span class="op">=</span> loocv[<span class="dv">1</span>:]</span>
+<span id="cb12-6"><a href="#cb12-6" aria-hidden="true" tabindex="-1"></a>amplitude_2_a_10 <span class="op">=</span> (</span>
+<span id="cb12-7"><a href="#cb12-7" aria-hidden="true" tabindex="-1"></a>    faixa.<span class="bu">max</span>() <span class="op">-</span> faixa.<span class="bu">min</span>())</span>
+<span id="cb12-8"><a href="#cb12-8" aria-hidden="true" tabindex="-1"></a>ganho_sobre_grau_2 <span class="op">=</span> (</span>
+<span id="cb12-9"><a href="#cb12-9" aria-hidden="true" tabindex="-1"></a>    loocv[<span class="dv">1</span>] <span class="op">-</span> loocv.<span class="bu">min</span>())</span>
+<span id="cb12-10"><a href="#cb12-10" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb12-11"><a href="#cb12-11" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">"menor MSE no grau"</span>,</span>
+<span id="cb12-12"><a href="#cb12-12" aria-hidden="true" tabindex="-1"></a>    grau_minimo_loocv)</span>
+<span id="cb12-13"><a href="#cb12-13" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">"reta menos parábola:"</span>,</span>
+<span id="cb12-14"><a href="#cb12-14" aria-hidden="true" tabindex="-1"></a>    <span class="bu">round</span>(<span class="bu">float</span>(</span>
+<span id="cb12-15"><a href="#cb12-15" aria-hidden="true" tabindex="-1"></a>        salto_grau_1_para_2), <span class="dv">2</span>))</span>
+<span id="cb12-16"><a href="#cb12-16" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">"faixa dos graus 2 a 10:"</span>,</span>
+<span id="cb12-17"><a href="#cb12-17" aria-hidden="true" tabindex="-1"></a>    <span class="bu">round</span>(<span class="bu">float</span>(</span>
+<span id="cb12-18"><a href="#cb12-18" aria-hidden="true" tabindex="-1"></a>        amplitude_2_a_10), <span class="dv">2</span>))</span>
+<span id="cb12-19"><a href="#cb12-19" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">"parábola menos mínimo:"</span>,</span>
+<span id="cb12-20"><a href="#cb12-20" aria-hidden="true" tabindex="-1"></a>    <span class="bu">round</span>(<span class="bu">float</span>(</span>
+<span id="cb12-21"><a href="#cb12-21" aria-hidden="true" tabindex="-1"></a>        ganho_sobre_grau_2), <span class="dv">2</span>))</span></code></pre></div><button title="Copiar para a área de transferência" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>menor MSE no grau 7
+reta menos parábola: 4.98
+faixa dos graus 2 a 10: 0.66
+parábola menos mínimo: 0.42</code></pre>
 </div>
 </div>
 <p>A reta erra 24,23; a parábola, 19,25, e o erro cai 4,98 de um grau para o outro. Do grau 2 ao grau 10, as nove estimativas cabem numa faixa de 0,66. O menor MSE da LOOCV cai no grau 7, com 18,83, como aponta o <code>np.argmin</code>: 0,42 abaixo da parábola, contra os 4,98 que a curvatura já tinha tirado.</p>
-<div id="cell-fig-loocv-auto" class="cell" data-execution_count="5">
-<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb6"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb6-1"><a href="#cb6-1" aria-hidden="true" tabindex="-1"></a>fig, ax <span class="op">=</span> plt.subplots(figsize<span class="op">=</span>(<span class="dv">6</span>, <span class="fl">4.2</span>))</span>
-<span id="cb6-2"><a href="#cb6-2" aria-hidden="true" tabindex="-1"></a>ax.plot(graus, loocv, color<span class="op">=</span><span class="st">"C1"</span>, marker<span class="op">=</span><span class="st">"o"</span>, linewidth<span class="op">=</span><span class="dv">2</span>)</span>
-<span id="cb6-3"><a href="#cb6-3" aria-hidden="true" tabindex="-1"></a>ax.set_xlabel(<span class="st">"grau do polinômio"</span>)</span>
-<span id="cb6-4"><a href="#cb6-4" aria-hidden="true" tabindex="-1"></a>ax.set_ylabel(<span class="st">"MSE da LOOCV"</span>)</span>
-<span id="cb6-5"><a href="#cb6-5" aria-hidden="true" tabindex="-1"></a>ax.set_xticks(<span class="bu">list</span>(graus))</span>
-<span id="cb6-6"><a href="#cb6-6" aria-hidden="true" tabindex="-1"></a>ax.set_ylim(<span class="dv">13</span>, <span class="dv">29</span>)</span>
-<span id="cb6-7"><a href="#cb6-7" aria-hidden="true" tabindex="-1"></a>plt.tight_layout()</span>
-<span id="cb6-8"><a href="#cb6-8" aria-hidden="true" tabindex="-1"></a>plt.show()</span></code></pre></div><button title="Copiar para a área de transferência" class="code-copy-button"><i class="bi"></i></button></div>
+<div id="cell-fig-loocv-auto" class="cell" data-execution_count="9">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb14"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb14-1"><a href="#cb14-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> matplotlib.pyplot <span class="im">as</span> plt</span>
+<span id="cb14-2"><a href="#cb14-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb14-3"><a href="#cb14-3" aria-hidden="true" tabindex="-1"></a>fig, ax <span class="op">=</span> plt.subplots(</span>
+<span id="cb14-4"><a href="#cb14-4" aria-hidden="true" tabindex="-1"></a>    figsize<span class="op">=</span>(<span class="dv">6</span>, <span class="fl">4.2</span>))</span>
+<span id="cb14-5"><a href="#cb14-5" aria-hidden="true" tabindex="-1"></a>ax.plot(</span>
+<span id="cb14-6"><a href="#cb14-6" aria-hidden="true" tabindex="-1"></a>    graus, loocv, color<span class="op">=</span><span class="st">"C1"</span>,</span>
+<span id="cb14-7"><a href="#cb14-7" aria-hidden="true" tabindex="-1"></a>    marker<span class="op">=</span><span class="st">"o"</span>, linewidth<span class="op">=</span><span class="dv">2</span>)</span>
+<span id="cb14-8"><a href="#cb14-8" aria-hidden="true" tabindex="-1"></a>ax.set_xlabel(<span class="st">"grau do polinômio"</span>)</span>
+<span id="cb14-9"><a href="#cb14-9" aria-hidden="true" tabindex="-1"></a>ax.set_ylabel(<span class="st">"MSE da LOOCV"</span>)</span>
+<span id="cb14-10"><a href="#cb14-10" aria-hidden="true" tabindex="-1"></a>ax.set_xticks(<span class="bu">list</span>(graus))</span>
+<span id="cb14-11"><a href="#cb14-11" aria-hidden="true" tabindex="-1"></a>ax.set_ylim(<span class="dv">13</span>, <span class="dv">33</span>)</span>
+<span id="cb14-12"><a href="#cb14-12" aria-hidden="true" tabindex="-1"></a>ax.set_yticks(</span>
+<span id="cb14-13"><a href="#cb14-13" aria-hidden="true" tabindex="-1"></a>    [<span class="dv">15</span>, <span class="dv">20</span>, <span class="dv">25</span>, <span class="dv">30</span>])</span>
+<span id="cb14-14"><a href="#cb14-14" aria-hidden="true" tabindex="-1"></a>plt.tight_layout()</span>
+<span id="cb14-15"><a href="#cb14-15" aria-hidden="true" tabindex="-1"></a>plt.show()</span></code></pre></div><button title="Copiar para a área de transferência" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-display">
 <div id="fig-loocv-auto" class="quarto-float quarto-figure quarto-figure-center anchored" alt="Uma curva laranja com marcadores cai de cerca de 24 no grau 1 para cerca de 19 no grau 2 e fica quase plana, pouco abaixo de 20, até o grau 10.">
 <figure class="quarto-float quarto-float-fig figure">
@@ -1347,7 +1526,7 @@ Nota
 <img src="02-leave-one-out_files/figure-html/fig-loocv-auto-output-1.png" alt="Uma curva laranja com marcadores cai de cerca de 24 no grau 1 para cerca de 19 no grau 2 e fica quase plana, pouco abaixo de 20, até o grau 10." width="827" height="574" class="figure-img">
 </div>
 <figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-fig" id="fig-loocv-auto-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
-Figura&nbsp;1: MSE da LOOCV contra o grau do polinômio em potencia, nos dados Auto. O eixo vertical é o mesmo da figura do conjunto de validação, de 13 a 29.
+Figura&nbsp;1: MSE da LOOCV contra o grau do polinômio em potencia, nos dados Auto. O eixo vertical é o mesmo da figura do conjunto de validação, de 13 a 33.
 </figcaption>
 </figure>
 </div>
@@ -1361,28 +1540,59 @@ Figura&nbsp;1: MSE da LOOCV contra o grau do polinômio em potencia, nos dados A
 <p><span class="math display">\[
 \mathrm{CV}_{(n)} = \frac{1}{n}\sum_{i=1}^n \left(\frac{y_i - \hat y_i}{1 - h_i}\right)^2,
 \]</span></p>
-<p>em que <span class="math inline">\(\hat y_i\)</span> agora vem do ajuste com todas as <span class="math inline">\(n\)</span> observações, e <span class="math inline">\(h_i\)</span> é a alavancagem da observação <span class="math inline">\(i\)</span>, a diagonal da matriz chapéu definida na seção 8.6. Sem o denominador, a soma seria a média dos quadrados dos resíduos de treino. O <span class="math inline">\(1 - h_i\)</span> corrige isso ponto a ponto: o resíduo de um ponto de alavancagem alta é inflado na medida exata do quanto aquele ponto puxou o próprio ajuste para perto de si. O que acontece com o termo de uma observação cujo <span class="math inline">\(h_i\)</span> se aproxima de 1?</p>
-<p>A conferência é fazer as duas contas e comparar. Para a fórmula, o chunk ajusta o modelo nos 392 carros, reconstrói as colunas que o <code>LinearRegression</code> de fato recebe (padronização seguida das potências), acrescenta a coluna de 1 e calcula a matriz chapéu como na seção 8.6.</p>
-<div id="cell-formula-atalho" class="cell" data-execution_count="6">
-<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb7"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb7-1"><a href="#cb7-1" aria-hidden="true" tabindex="-1"></a>formula <span class="op">=</span> []</span>
-<span id="cb7-2"><a href="#cb7-2" aria-hidden="true" tabindex="-1"></a>condicao <span class="op">=</span> []</span>
-<span id="cb7-3"><a href="#cb7-3" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> grau <span class="kw">in</span> graus:</span>
-<span id="cb7-4"><a href="#cb7-4" aria-hidden="true" tabindex="-1"></a>    previsto <span class="op">=</span> modelo_polinomial(grau).fit(X, y).predict(X)</span>
-<span id="cb7-5"><a href="#cb7-5" aria-hidden="true" tabindex="-1"></a>    colunas <span class="op">=</span> make_pipeline(</span>
-<span id="cb7-6"><a href="#cb7-6" aria-hidden="true" tabindex="-1"></a>        StandardScaler(), PolynomialFeatures(grau, include_bias<span class="op">=</span><span class="va">False</span>)</span>
-<span id="cb7-7"><a href="#cb7-7" aria-hidden="true" tabindex="-1"></a>    ).fit_transform(X)</span>
-<span id="cb7-8"><a href="#cb7-8" aria-hidden="true" tabindex="-1"></a>    X_design <span class="op">=</span> np.column_stack([np.ones(<span class="bu">len</span>(X)), colunas])</span>
-<span id="cb7-9"><a href="#cb7-9" aria-hidden="true" tabindex="-1"></a>    condicao.append(<span class="bu">float</span>(np.linalg.cond(X_design.T <span class="op">@</span> X_design)))</span>
-<span id="cb7-10"><a href="#cb7-10" aria-hidden="true" tabindex="-1"></a>    H <span class="op">=</span> X_design <span class="op">@</span> np.linalg.inv(X_design.T <span class="op">@</span> X_design) <span class="op">@</span> X_design.T</span>
-<span id="cb7-11"><a href="#cb7-11" aria-hidden="true" tabindex="-1"></a>    h <span class="op">=</span> np.diag(H)</span>
-<span id="cb7-12"><a href="#cb7-12" aria-hidden="true" tabindex="-1"></a>    formula.append(np.mean(((y <span class="op">-</span> previsto) <span class="op">/</span> (<span class="dv">1</span> <span class="op">-</span> h)) <span class="op">**</span> <span class="dv">2</span>))</span>
-<span id="cb7-13"><a href="#cb7-13" aria-hidden="true" tabindex="-1"></a>formula <span class="op">=</span> np.array(formula)</span>
-<span id="cb7-14"><a href="#cb7-14" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb7-15"><a href="#cb7-15" aria-hidden="true" tabindex="-1"></a>pd.DataFrame(</span>
-<span id="cb7-16"><a href="#cb7-16" aria-hidden="true" tabindex="-1"></a>    {<span class="st">"LOOCV (392 ajustes)"</span>: loocv.<span class="bu">round</span>(<span class="dv">6</span>), <span class="st">"fórmula (1 ajuste)"</span>: formula.<span class="bu">round</span>(<span class="dv">6</span>)},</span>
-<span id="cb7-17"><a href="#cb7-17" aria-hidden="true" tabindex="-1"></a>    index<span class="op">=</span>pd.Index(graus, name<span class="op">=</span><span class="st">"grau"</span>),</span>
-<span id="cb7-18"><a href="#cb7-18" aria-hidden="true" tabindex="-1"></a>)</span></code></pre></div><button title="Copiar para a área de transferência" class="code-copy-button"><i class="bi"></i></button></div>
-<div id="formula-atalho" class="cell-output cell-output-display" data-execution_count="6">
+<p>em que <span class="math inline">\(\hat y_i\)</span> agora vem do ajuste com todas as <span class="math inline">\(n\)</span> observações, e <span class="math inline">\(h_i\)</span> é a alavancagem da observação <span class="math inline">\(i\)</span>, da seção 8.6. Sem o denominador, a soma seria a média dos quadrados dos resíduos de treino, que é otimista: cada carro ajudou a traçar a curva que o prevê. O <span class="math inline">\(1 - h_i\)</span> corrige isso carro a carro, e <span class="math inline">\(h_i\)</span> mede justamente essa ajuda, isto é, quanto o carro <span class="math inline">\(i\)</span> puxa o próprio ajuste para perto de si.</p>
+<p>Essa leitura de <span class="math inline">\(h_i\)</span> se confere com uma conta. Primeiro, o ajuste da reta com os 392 carros e o resíduo de cada um:</p>
+<div id="reta-com-todos" class="cell" data-execution_count="10">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb15"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb15-1"><a href="#cb15-1" aria-hidden="true" tabindex="-1"></a>reta <span class="op">=</span> polinomial(<span class="dv">1</span>)</span>
+<span id="cb15-2"><a href="#cb15-2" aria-hidden="true" tabindex="-1"></a>reta.fit(X, y)</span>
+<span id="cb15-3"><a href="#cb15-3" aria-hidden="true" tabindex="-1"></a>previsto <span class="op">=</span> reta.predict(X)</span>
+<span id="cb15-4"><a href="#cb15-4" aria-hidden="true" tabindex="-1"></a>residuo <span class="op">=</span> y <span class="op">-</span> previsto</span>
+<span id="cb15-5"><a href="#cb15-5" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">"resíduo do carro 0:"</span>,</span>
+<span id="cb15-6"><a href="#cb15-6" aria-hidden="true" tabindex="-1"></a>    <span class="bu">round</span>(residuo[<span class="dv">0</span>], <span class="dv">2</span>))</span></code></pre></div><button title="Copiar para a área de transferência" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>resíduo do carro 0: -1.42</code></pre>
+</div>
+</div>
+<p>Agora, um empurrão: soma-se 1 ao consumo do carro 0, só dele, e a reta é ajustada de novo. Quanto a previsão desse mesmo carro sobe?</p>
+<div id="empurrao" class="cell" data-execution_count="11">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb17"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb17-1"><a href="#cb17-1" aria-hidden="true" tabindex="-1"></a>y_empurrado <span class="op">=</span> y.copy()</span>
+<span id="cb17-2"><a href="#cb17-2" aria-hidden="true" tabindex="-1"></a>y_empurrado.iloc[<span class="dv">0</span>] <span class="op">+=</span> <span class="dv">1</span></span>
+<span id="cb17-3"><a href="#cb17-3" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb17-4"><a href="#cb17-4" aria-hidden="true" tabindex="-1"></a>empurrada <span class="op">=</span> polinomial(<span class="dv">1</span>)</span>
+<span id="cb17-5"><a href="#cb17-5" aria-hidden="true" tabindex="-1"></a>empurrada.fit(X, y_empurrado)</span>
+<span id="cb17-6"><a href="#cb17-6" aria-hidden="true" tabindex="-1"></a>novo <span class="op">=</span> empurrada.predict(</span>
+<span id="cb17-7"><a href="#cb17-7" aria-hidden="true" tabindex="-1"></a>    X.iloc[[<span class="dv">0</span>]])</span>
+<span id="cb17-8"><a href="#cb17-8" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb17-9"><a href="#cb17-9" aria-hidden="true" tabindex="-1"></a>h_0 <span class="op">=</span> novo[<span class="dv">0</span>] <span class="op">-</span> previsto[<span class="dv">0</span>]</span>
+<span id="cb17-10"><a href="#cb17-10" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">"h do carro 0:"</span>,</span>
+<span id="cb17-11"><a href="#cb17-11" aria-hidden="true" tabindex="-1"></a>    <span class="bu">round</span>(h_0, <span class="dv">4</span>))</span></code></pre></div><button title="Copiar para a área de transferência" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>h do carro 0: 0.0037</code></pre>
+</div>
+</div>
+<p>O consumo do carro 0 subiu 1, e a previsão dele subiu só uma fração disso: é o quanto ele puxa a reta. Esse número é o <span class="math inline">\(h_i\)</span> do carro 0. Para não fazer um empurrão e um ajuste por carro, o que custaria de novo 392 ajustes, a seção 8.6 dá a conta que tira todos os <span class="math inline">\(h_i\)</span> de uma vez, a diagonal da matriz chapéu. Ela usa as colunas que o <code>LinearRegression</code> de fato recebe (a padronização seguida das potências) e uma coluna de 1 para o intercepto:</p>
+<div id="cell-alavancagens" class="cell" data-execution_count="12">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb19"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb19-1"><a href="#cb19-1" aria-hidden="true" tabindex="-1"></a>transf <span class="op">=</span> make_pipeline(</span>
+<span id="cb19-2"><a href="#cb19-2" aria-hidden="true" tabindex="-1"></a>    StandardScaler(),</span>
+<span id="cb19-3"><a href="#cb19-3" aria-hidden="true" tabindex="-1"></a>    PolynomialFeatures(</span>
+<span id="cb19-4"><a href="#cb19-4" aria-hidden="true" tabindex="-1"></a>        <span class="dv">1</span>, include_bias<span class="op">=</span><span class="va">False</span>))</span>
+<span id="cb19-5"><a href="#cb19-5" aria-hidden="true" tabindex="-1"></a>colunas <span class="op">=</span> transf.fit_transform(X)</span>
+<span id="cb19-6"><a href="#cb19-6" aria-hidden="true" tabindex="-1"></a>uns <span class="op">=</span> np.ones(<span class="bu">len</span>(X))</span>
+<span id="cb19-7"><a href="#cb19-7" aria-hidden="true" tabindex="-1"></a>X_design <span class="op">=</span> np.column_stack(</span>
+<span id="cb19-8"><a href="#cb19-8" aria-hidden="true" tabindex="-1"></a>    [uns, colunas])</span>
+<span id="cb19-9"><a href="#cb19-9" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb19-10"><a href="#cb19-10" aria-hidden="true" tabindex="-1"></a>XtX <span class="op">=</span> X_design.T <span class="op">@</span> X_design</span>
+<span id="cb19-11"><a href="#cb19-11" aria-hidden="true" tabindex="-1"></a>H <span class="op">=</span> (X_design</span>
+<span id="cb19-12"><a href="#cb19-12" aria-hidden="true" tabindex="-1"></a>    <span class="op">@</span> np.linalg.inv(XtX)</span>
+<span id="cb19-13"><a href="#cb19-13" aria-hidden="true" tabindex="-1"></a>    <span class="op">@</span> X_design.T)</span>
+<span id="cb19-14"><a href="#cb19-14" aria-hidden="true" tabindex="-1"></a>h <span class="op">=</span> np.diag(H)</span>
+<span id="cb19-15"><a href="#cb19-15" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb19-16"><a href="#cb19-16" aria-hidden="true" tabindex="-1"></a>pd.DataFrame(</span>
+<span id="cb19-17"><a href="#cb19-17" aria-hidden="true" tabindex="-1"></a>    {<span class="st">"empurrão"</span>: [h_0],</span>
+<span id="cb19-18"><a href="#cb19-18" aria-hidden="true" tabindex="-1"></a>        <span class="st">"matriz chapéu"</span>: [h[<span class="dv">0</span>]]},</span>
+<span id="cb19-19"><a href="#cb19-19" aria-hidden="true" tabindex="-1"></a>    index<span class="op">=</span>[<span class="st">"carro 0"</span>],</span>
+<span id="cb19-20"><a href="#cb19-20" aria-hidden="true" tabindex="-1"></a>).<span class="bu">round</span>(<span class="dv">4</span>)</span></code></pre></div><button title="Copiar para a área de transferência" class="code-copy-button"><i class="bi"></i></button></div>
+<div id="alavancagens" class="cell-output cell-output-display" data-execution_count="12">
 <div>
 
 
@@ -1390,11 +1600,176 @@ Figura&nbsp;1: MSE da LOOCV contra o grau do polinômio em potencia, nos dados A
 <thead>
 <tr class="header">
 <th data-quarto-table-cell-role="th"></th>
-<th data-quarto-table-cell-role="th">LOOCV (392 ajustes)</th>
-<th data-quarto-table-cell-role="th">fórmula (1 ajuste)</th>
+<th data-quarto-table-cell-role="th">empurrão</th>
+<th data-quarto-table-cell-role="th">matriz chapéu</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<th data-quarto-table-cell-role="th">carro 0</th>
+<td>0.0037</td>
+<td>0.0037</td>
+</tr>
+</tbody>
+</table>
+
+</div>
+</div>
+</div>
+<div class="funcao">
+<p><strong><code>fit_transform(X)</code></strong>: ajusta as transformações de um <code>Pipeline</code> sem estimador final e devolve o resultado delas sobre <code>X</code>. Aqui, a coluna padronizada <span class="math inline">\(x\)</span>; com grau maior, <span class="math inline">\(x, x^2, \dots, x^{\text{grau}}\)</span>.</p>
+<p><strong><code>np.ones(n)</code></strong>: um array de <code>n</code> uns, a coluna do intercepto. <strong><code>np.column_stack(lista)</code></strong>: junta os arrays da lista lado a lado, como colunas de uma matriz.</p>
+<p><strong><code>np.linalg.inv(M)</code></strong>: a inversa da matriz <code>M</code>. <strong><code>np.diag(M)</code></strong>: a diagonal de uma matriz quadrada, como array; aqui, os <span class="math inline">\(h_i\)</span>.</p>
+</div>
+<p>O empurrão e a matriz dão o mesmo <span class="math inline">\(h\)</span> para o carro 0. Com o resíduo e o <span class="math inline">\(h_i\)</span> de cada carro, o termo da fórmula sai sem nenhum ajuste novo. A tabela o põe ao lado do erro que a LOOCV mediu deixando o carro de fora, nos três primeiros carros:</p>
+<div id="cell-termo-por-carro" class="cell" data-execution_count="13">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb20"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb20-1"><a href="#cb20-1" aria-hidden="true" tabindex="-1"></a>termo <span class="op">=</span> (residuo <span class="op">/</span> (<span class="dv">1</span> <span class="op">-</span> h)) <span class="op">**</span> <span class="dv">2</span></span>
+<span id="cb20-2"><a href="#cb20-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb20-3"><a href="#cb20-3" aria-hidden="true" tabindex="-1"></a>pd.DataFrame({</span>
+<span id="cb20-4"><a href="#cb20-4" aria-hidden="true" tabindex="-1"></a>    <span class="st">"resíduo"</span>: residuo[:<span class="dv">3</span>],</span>
+<span id="cb20-5"><a href="#cb20-5" aria-hidden="true" tabindex="-1"></a>    <span class="st">"h"</span>: h[:<span class="dv">3</span>],</span>
+<span id="cb20-6"><a href="#cb20-6" aria-hidden="true" tabindex="-1"></a>    <span class="st">"termo"</span>: termo[:<span class="dv">3</span>],</span>
+<span id="cb20-7"><a href="#cb20-7" aria-hidden="true" tabindex="-1"></a>    <span class="st">"LOOCV"</span>: erros[:<span class="dv">3</span>],</span>
+<span id="cb20-8"><a href="#cb20-8" aria-hidden="true" tabindex="-1"></a>}).rename_axis(<span class="st">"carro"</span>).<span class="bu">round</span>(<span class="dv">4</span>)</span></code></pre></div><button title="Copiar para a área de transferência" class="code-copy-button"><i class="bi"></i></button></div>
+<div id="termo-por-carro" class="cell-output cell-output-display" data-execution_count="13">
+<div>
+
+
+<table class="dataframe caption-top table table-sm table-striped small" data-border="1">
+<thead>
+<tr class="header">
+<th data-quarto-table-cell-role="th"></th>
+<th data-quarto-table-cell-role="th">resíduo</th>
+<th data-quarto-table-cell-role="th">h</th>
+<th data-quarto-table-cell-role="th">termo</th>
+<th data-quarto-table-cell-role="th">LOOCV</th>
+</tr>
+<tr class="even">
+<th data-quarto-table-cell-role="th">carro</th>
+<th data-quarto-table-cell-role="th"></th>
+<th data-quarto-table-cell-role="th"></th>
+<th data-quarto-table-cell-role="th"></th>
+<th data-quarto-table-cell-role="th"></th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<th data-quarto-table-cell-role="th">0</th>
+<td>-1.4160</td>
+<td>0.0037</td>
+<td>2.0200</td>
+<td>2.0200</td>
+</tr>
+<tr class="even">
+<th data-quarto-table-cell-role="th">1</th>
+<td>1.1085</td>
+<td>0.0089</td>
+<td>1.2509</td>
+<td>1.2509</td>
+</tr>
+<tr class="odd">
+<th data-quarto-table-cell-role="th">2</th>
+<td>1.7408</td>
+<td>0.0061</td>
+<td>3.0681</td>
+<td>3.0681</td>
+</tr>
+</tbody>
+</table>
+
+</div>
+</div>
+</div>
+<p>A coluna <code>termo</code>, que vem do ajuste com os 392, repete a coluna <code>LOOCV</code>, que vem de um ajuste sem o carro. A média dos 392 termos é, portanto, a <span class="math inline">\(\mathrm{CV}_{(n)}\)</span> da reta:</p>
+<div id="cell-media-dos-termos" class="cell" data-execution_count="14">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb21"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb21-1"><a href="#cb21-1" aria-hidden="true" tabindex="-1"></a>media <span class="op">=</span> termo.mean()</span>
+<span id="cb21-2"><a href="#cb21-2" aria-hidden="true" tabindex="-1"></a>pd.DataFrame(</span>
+<span id="cb21-3"><a href="#cb21-3" aria-hidden="true" tabindex="-1"></a>    {<span class="st">"laço"</span>: [loocv_a_mao],</span>
+<span id="cb21-4"><a href="#cb21-4" aria-hidden="true" tabindex="-1"></a>        <span class="st">"fórmula"</span>: [media]},</span>
+<span id="cb21-5"><a href="#cb21-5" aria-hidden="true" tabindex="-1"></a>    index<span class="op">=</span>[<span class="st">"CV(n) da reta"</span>],</span>
+<span id="cb21-6"><a href="#cb21-6" aria-hidden="true" tabindex="-1"></a>).<span class="bu">round</span>(<span class="dv">2</span>)</span></code></pre></div><button title="Copiar para a área de transferência" class="code-copy-button"><i class="bi"></i></button></div>
+<div id="media-dos-termos" class="cell-output cell-output-display" data-execution_count="14">
+<div>
+
+
+<table class="dataframe caption-top table table-sm table-striped small" data-border="1">
+<thead>
+<tr class="header">
+<th data-quarto-table-cell-role="th"></th>
+<th data-quarto-table-cell-role="th">laço</th>
+<th data-quarto-table-cell-role="th">fórmula</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<th data-quarto-table-cell-role="th">CV(n) da reta</th>
+<td>24.23</td>
+<td>24.23</td>
+</tr>
+</tbody>
+</table>
+
+</div>
+</div>
+</div>
+<p>O que acontece com o termo de um carro cujo <span class="math inline">\(h_i\)</span> se aproxima de 1?</p>
+<p>Para os outros graus, a conta é a mesma, com o polinômio do grau no lugar da reta:</p>
+<div id="cell-formula-atalho" class="cell" data-execution_count="15">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb22"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb22-1"><a href="#cb22-1" aria-hidden="true" tabindex="-1"></a>formula <span class="op">=</span> []</span>
+<span id="cb22-2"><a href="#cb22-2" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> grau <span class="kw">in</span> graus:</span>
+<span id="cb22-3"><a href="#cb22-3" aria-hidden="true" tabindex="-1"></a>    modelo <span class="op">=</span> polinomial(grau)</span>
+<span id="cb22-4"><a href="#cb22-4" aria-hidden="true" tabindex="-1"></a>    modelo.fit(X, y)</span>
+<span id="cb22-5"><a href="#cb22-5" aria-hidden="true" tabindex="-1"></a>    previsto <span class="op">=</span> modelo.predict(X)</span>
+<span id="cb22-6"><a href="#cb22-6" aria-hidden="true" tabindex="-1"></a>    residuo <span class="op">=</span> y <span class="op">-</span> previsto</span>
+<span id="cb22-7"><a href="#cb22-7" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb22-8"><a href="#cb22-8" aria-hidden="true" tabindex="-1"></a>    transf <span class="op">=</span> make_pipeline(</span>
+<span id="cb22-9"><a href="#cb22-9" aria-hidden="true" tabindex="-1"></a>        StandardScaler(),</span>
+<span id="cb22-10"><a href="#cb22-10" aria-hidden="true" tabindex="-1"></a>        PolynomialFeatures(</span>
+<span id="cb22-11"><a href="#cb22-11" aria-hidden="true" tabindex="-1"></a>            grau,</span>
+<span id="cb22-12"><a href="#cb22-12" aria-hidden="true" tabindex="-1"></a>            include_bias<span class="op">=</span><span class="va">False</span>))</span>
+<span id="cb22-13"><a href="#cb22-13" aria-hidden="true" tabindex="-1"></a>    colunas <span class="op">=</span> (</span>
+<span id="cb22-14"><a href="#cb22-14" aria-hidden="true" tabindex="-1"></a>        transf.fit_transform(X))</span>
+<span id="cb22-15"><a href="#cb22-15" aria-hidden="true" tabindex="-1"></a>    X_design <span class="op">=</span> np.column_stack(</span>
+<span id="cb22-16"><a href="#cb22-16" aria-hidden="true" tabindex="-1"></a>        [uns, colunas])</span>
+<span id="cb22-17"><a href="#cb22-17" aria-hidden="true" tabindex="-1"></a>    XtX <span class="op">=</span> X_design.T <span class="op">@</span> X_design</span>
+<span id="cb22-18"><a href="#cb22-18" aria-hidden="true" tabindex="-1"></a>    H <span class="op">=</span> (X_design</span>
+<span id="cb22-19"><a href="#cb22-19" aria-hidden="true" tabindex="-1"></a>        <span class="op">@</span> np.linalg.inv(XtX)</span>
+<span id="cb22-20"><a href="#cb22-20" aria-hidden="true" tabindex="-1"></a>        <span class="op">@</span> X_design.T)</span>
+<span id="cb22-21"><a href="#cb22-21" aria-hidden="true" tabindex="-1"></a>    h <span class="op">=</span> np.diag(H)</span>
+<span id="cb22-22"><a href="#cb22-22" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb22-23"><a href="#cb22-23" aria-hidden="true" tabindex="-1"></a>    termo <span class="op">=</span> (</span>
+<span id="cb22-24"><a href="#cb22-24" aria-hidden="true" tabindex="-1"></a>        residuo <span class="op">/</span> (<span class="dv">1</span> <span class="op">-</span> h)) <span class="op">**</span> <span class="dv">2</span></span>
+<span id="cb22-25"><a href="#cb22-25" aria-hidden="true" tabindex="-1"></a>    formula.append(termo.mean())</span>
+<span id="cb22-26"><a href="#cb22-26" aria-hidden="true" tabindex="-1"></a>formula <span class="op">=</span> np.array(formula)</span>
+<span id="cb22-27"><a href="#cb22-27" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb22-28"><a href="#cb22-28" aria-hidden="true" tabindex="-1"></a>diferenca <span class="op">=</span> np.<span class="bu">abs</span>(</span>
+<span id="cb22-29"><a href="#cb22-29" aria-hidden="true" tabindex="-1"></a>    loocv <span class="op">-</span> formula)</span>
+<span id="cb22-30"><a href="#cb22-30" aria-hidden="true" tabindex="-1"></a>abaixo <span class="op">=</span> np.where(</span>
+<span id="cb22-31"><a href="#cb22-31" aria-hidden="true" tabindex="-1"></a>    diferenca <span class="op">&lt;</span> <span class="fl">1e-6</span>,</span>
+<span id="cb22-32"><a href="#cb22-32" aria-hidden="true" tabindex="-1"></a>    <span class="st">"&lt; 1e-6"</span>, <span class="st">"maior"</span>)</span>
+<span id="cb22-33"><a href="#cb22-33" aria-hidden="true" tabindex="-1"></a>pd.DataFrame(</span>
+<span id="cb22-34"><a href="#cb22-34" aria-hidden="true" tabindex="-1"></a>    {<span class="st">"LOOCV"</span>: loocv.<span class="bu">round</span>(<span class="dv">6</span>),</span>
+<span id="cb22-35"><a href="#cb22-35" aria-hidden="true" tabindex="-1"></a>        <span class="st">"fórmula"</span>:</span>
+<span id="cb22-36"><a href="#cb22-36" aria-hidden="true" tabindex="-1"></a>            formula.<span class="bu">round</span>(<span class="dv">6</span>),</span>
+<span id="cb22-37"><a href="#cb22-37" aria-hidden="true" tabindex="-1"></a>        <span class="st">"diferença"</span>: abaixo},</span>
+<span id="cb22-38"><a href="#cb22-38" aria-hidden="true" tabindex="-1"></a>    index<span class="op">=</span>pd.Index(</span>
+<span id="cb22-39"><a href="#cb22-39" aria-hidden="true" tabindex="-1"></a>        graus, name<span class="op">=</span><span class="st">"grau"</span>),</span>
+<span id="cb22-40"><a href="#cb22-40" aria-hidden="true" tabindex="-1"></a>)</span></code></pre></div><button title="Copiar para a área de transferência" class="code-copy-button"><i class="bi"></i></button></div>
+<div id="formula-atalho" class="cell-output cell-output-display" data-execution_count="15">
+<div>
+
+
+<table class="dataframe caption-top table table-sm table-striped small" data-border="1">
+<thead>
+<tr class="header">
+<th data-quarto-table-cell-role="th"></th>
+<th data-quarto-table-cell-role="th">LOOCV</th>
+<th data-quarto-table-cell-role="th">fórmula</th>
+<th data-quarto-table-cell-role="th">diferença</th>
 </tr>
 <tr class="even">
 <th data-quarto-table-cell-role="th">grau</th>
+<th data-quarto-table-cell-role="th"></th>
 <th data-quarto-table-cell-role="th"></th>
 <th data-quarto-table-cell-role="th"></th>
 </tr>
@@ -1404,51 +1779,61 @@ Figura&nbsp;1: MSE da LOOCV contra o grau do polinômio em potencia, nos dados A
 <th data-quarto-table-cell-role="th">1</th>
 <td>24.231514</td>
 <td>24.231514</td>
+<td>&lt; 1e-6</td>
 </tr>
 <tr class="even">
 <th data-quarto-table-cell-role="th">2</th>
 <td>19.248213</td>
 <td>19.248213</td>
+<td>&lt; 1e-6</td>
 </tr>
 <tr class="odd">
 <th data-quarto-table-cell-role="th">3</th>
 <td>19.334984</td>
 <td>19.334984</td>
+<td>&lt; 1e-6</td>
 </tr>
 <tr class="even">
 <th data-quarto-table-cell-role="th">4</th>
 <td>19.424430</td>
 <td>19.424430</td>
+<td>&lt; 1e-6</td>
 </tr>
 <tr class="odd">
 <th data-quarto-table-cell-role="th">5</th>
 <td>19.033214</td>
 <td>19.033214</td>
+<td>&lt; 1e-6</td>
 </tr>
 <tr class="even">
 <th data-quarto-table-cell-role="th">6</th>
 <td>18.978644</td>
 <td>18.978644</td>
+<td>&lt; 1e-6</td>
 </tr>
 <tr class="odd">
 <th data-quarto-table-cell-role="th">7</th>
 <td>18.833045</td>
 <td>18.833045</td>
+<td>&lt; 1e-6</td>
 </tr>
 <tr class="even">
 <th data-quarto-table-cell-role="th">8</th>
 <td>18.961151</td>
 <td>18.961151</td>
+<td>&lt; 1e-6</td>
 </tr>
 <tr class="odd">
 <th data-quarto-table-cell-role="th">9</th>
 <td>19.068630</td>
 <td>19.068630</td>
+<td>&lt; 1e-6</td>
 </tr>
 <tr class="even">
 <th data-quarto-table-cell-role="th">10</th>
 <td>19.490932</td>
 <td>19.490932</td>
+<td>&lt; 1e-6</td>
 </tr>
 </tbody>
 </table>
@@ -1457,31 +1842,10 @@ Figura&nbsp;1: MSE da LOOCV contra o grau do polinômio em potencia, nos dados A
 </div>
 </div>
 <div class="funcao">
-<p><strong><code>fit_transform(X)</code></strong>: ajusta as transformações de um <code>Pipeline</code> sem estimador final e devolve o resultado delas sobre <code>X</code>. Aqui, as colunas padronizadas <span class="math inline">\(x, x^2, \dots, x^{\text{grau}}\)</span>.</p>
-<p><strong><code>np.ones(n)</code></strong>: um array de <code>n</code> uns, a coluna do intercepto. <strong><code>np.column_stack(lista)</code></strong>: junta os arrays da lista lado a lado, como colunas de uma matriz.</p>
-<p><strong><code>np.linalg.inv(M)</code></strong>: a inversa da matriz <code>M</code>. <strong><code>np.diag(M)</code></strong>: a diagonal de uma matriz quadrada, como array; aqui, os <span class="math inline">\(h_i\)</span>.</p>
+<p><strong><code>np.where(condicao, a, b)</code></strong>: elemento a elemento, <code>a</code> onde a condição vale e <code>b</code> onde não vale. Aqui, escreve <code>"&lt; 1e-6"</code> em cada grau cuja diferença fica abaixo de um milionésimo.</p>
 </div>
-<div id="cell-formula-confere" class="cell" data-execution_count="7">
-<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb8"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb8-1"><a href="#cb8-1" aria-hidden="true" tabindex="-1"></a>formula_bate_com_loocv <span class="op">=</span> <span class="bu">bool</span>(np.allclose(loocv, formula))</span>
-<span id="cb8-2"><a href="#cb8-2" aria-hidden="true" tabindex="-1"></a>diferenca <span class="op">=</span> np.<span class="bu">abs</span>(loocv <span class="op">-</span> formula)</span>
-<span id="cb8-3"><a href="#cb8-3" aria-hidden="true" tabindex="-1"></a>abaixo_de_um_milionesimo <span class="op">=</span> <span class="bu">bool</span>(diferenca.<span class="bu">max</span>() <span class="op">&lt;</span> <span class="fl">1e-6</span>)</span>
-<span id="cb8-4"><a href="#cb8-4" aria-hidden="true" tabindex="-1"></a>grau_da_maior_diferenca <span class="op">=</span> <span class="bu">int</span>(graus[np.argmax(diferenca)])</span>
-<span id="cb8-5"><a href="#cb8-5" aria-hidden="true" tabindex="-1"></a>condicao_sobe_com_o_grau <span class="op">=</span> <span class="bu">bool</span>(np.<span class="bu">all</span>(np.diff(condicao) <span class="op">&gt;</span> <span class="dv">0</span>))</span>
-<span id="cb8-6"><a href="#cb8-6" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb8-7"><a href="#cb8-7" aria-hidden="true" tabindex="-1"></a>(</span>
-<span id="cb8-8"><a href="#cb8-8" aria-hidden="true" tabindex="-1"></a>    formula_bate_com_loocv, abaixo_de_um_milionesimo, grau_da_maior_diferenca,</span>
-<span id="cb8-9"><a href="#cb8-9" aria-hidden="true" tabindex="-1"></a>    condicao_sobe_com_o_grau, <span class="ss">f"</span><span class="sc">{</span>condicao[<span class="dv">0</span>]<span class="sc">:.0e}</span><span class="ss">"</span>, <span class="ss">f"</span><span class="sc">{</span>condicao[<span class="op">-</span><span class="dv">1</span>]<span class="sc">:.0e}</span><span class="ss">"</span>,</span>
-<span id="cb8-10"><a href="#cb8-10" aria-hidden="true" tabindex="-1"></a>)</span></code></pre></div><button title="Copiar para a área de transferência" class="code-copy-button"><i class="bi"></i></button></div>
-<div id="formula-confere" class="cell-output cell-output-display" data-execution_count="7">
-<pre><code>(True, True, 10, True, '1e+00', '2e+11')</code></pre>
-</div>
-</div>
-<div class="funcao">
-<p><strong><code>np.allclose(a, b)</code></strong>: <code>True</code> se os dois arrays são iguais elemento a elemento, a menos de uma tolerância pequena para o arredondamento de ponto flutuante.</p>
-<p><strong><code>np.linalg.cond(M)</code></strong>: o número de condição da matriz <code>M</code>. Quanto maior, mais os erros de arredondamento se amplificam ao inverter <code>M</code>. <strong><code>np.diff(a)</code></strong>: as diferenças entre elementos vizinhos de <code>a</code>; <code>np.all(np.diff(a) &gt; 0)</code> diz se <code>a</code> só sobe.</p>
-</div>
-<p><code>formula_bate_com_loocv</code> confirma <code>True</code>: nos dez graus, um ajuste só dá o mesmo número que 392. A maior diferença entre as duas colunas fica abaixo de um milionésimo e aparece no grau 10. Ela vem do arredondamento, não da fórmula: o número de condição de <span class="math inline">\(X^\top X\)</span>, que mede o quanto a inversão amplifica os erros de arredondamento, sobe a cada grau, de cerca de 1 no grau 1 a cerca de <span class="math inline">\(2 \times 10^{11}\)</span> no grau 10.</p>
-<p>Há uma pergunta que o leitor atento faz aqui. Dentro da LOOCV, o <code>StandardScaler</code> é reajustado a cada um dos 392 ajustes, com a média e o desvio padrão de 391 carros; na fórmula, a padronização usa os 392. Por que a igualdade sobrevive? Porque padronizar é trocar <span class="math inline">\(x\)</span> por <span class="math inline">\((x - m)/s\)</span>, e um polinômio de grau <span class="math inline">\(d\)</span> em <span class="math inline">\((x - m)/s\)</span> é, depois de expandido, um polinômio de grau <span class="math inline">\(d\)</span> em <span class="math inline">\(x\)</span>. Os mínimos quadrados escolhem a melhor curva entre os mesmos polinômios, com ou sem a troca, e chegam à mesma curva; só os coeficientes que a descrevem mudam. A frase explica, e o <code>True</code> impresso acima prova.</p>
+<p>A coluna <code>LOOCV</code> vem dos 392 ajustes por grau; a coluna <code>fórmula</code>, de um ajuste só. Nos dez graus, as duas coincidem até a sexta casa, e a coluna <code>diferença</code> mostra que nenhuma passa de um milionésimo. A diferença que sobra vem do arredondamento, não da fórmula: a fórmula é exata, e os dois caminhos fazem contas diferentes, cada um com seus próprios erros no último dígito do ponto flutuante.</p>
+<p>Dentro da LOOCV, o <code>StandardScaler</code> é reajustado a cada um dos 392 ajustes, com a média e o desvio padrão de 391 carros; na fórmula, a padronização usa os 392. Por que a igualdade sobrevive? Porque padronizar é trocar <span class="math inline">\(x\)</span> por <span class="math inline">\((x - m)/s\)</span>, e um polinômio de grau <span class="math inline">\(d\)</span> em <span class="math inline">\((x - m)/s\)</span> é, depois de expandido, um polinômio de grau <span class="math inline">\(d\)</span> em <span class="math inline">\(x\)</span>. Os mínimos quadrados escolhem a melhor curva entre os mesmos polinômios, com ou sem a troca, e chegam à mesma curva; só os coeficientes que a descrevem mudam.</p>
 <p>O atalho é uma propriedade dos mínimos quadrados. Para a regressão logística, o <em>k</em>-NN e os outros métodos, a LOOCV não tem fórmula equivalente e exige mesmo os <span class="math inline">\(n\)</span> ajustes.</p>
 
 

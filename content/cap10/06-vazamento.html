@@ -1182,41 +1182,223 @@ div.csl-indent {
 </div>
 <section id="padronizar-antes-ou-dentro" class="level2">
 <h2 class="anchored" data-anchor-id="padronizar-antes-ou-dentro">Padronizar antes ou dentro</h2>
-<p>O <em>k</em>-NN mede distância entre observações, e por isso precisa de padronização: sem ela, a coluna de maior escala decide sozinha quem é vizinho de quem, como a seção 7.3 mostrou. Nos dados <code>Auto</code>, um <em>k</em>-NN com 10 vizinhos prevê <code>milhas_por_galao</code> a partir de <code>potencia</code>, <code>peso</code>, <code>cilindrada</code> e <code>aceleracao</code>, e o 10-fold mede o erro de três jeitos: sem padronizar, padronizando a tabela toda de uma vez antes da validação cruzada, e com o <code>StandardScaler</code> dentro do <code>Pipeline</code>.</p>
+<p>O <em>k</em>-NN mede distância entre observações, e por isso precisa de padronização: sem ela, a coluna de maior escala decide sozinha quem é vizinho de quem, como a seção 7.3 mostrou. Nos dados <code>Auto</code>, um <em>k</em>-NN com 10 vizinhos prevê <code>milhas_por_galao</code> a partir de <code>potencia</code>, <code>peso</code>, <code>cilindrada</code> e <code>aceleracao</code>, e o 10-fold mede o erro de três jeitos: sem padronizar, padronizando a tabela toda de uma vez antes da validação cruzada, e com o <code>StandardScaler</code> dentro do <code>Pipeline</code>. Os carros são os 392 da seção 10.1, e o primeiro jeito não padroniza nada:</p>
 <div id="auto-knn" class="cell" data-execution_count="2">
-<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb1"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a>X <span class="op">=</span> auto[[<span class="st">"potencia"</span>, <span class="st">"peso"</span>, <span class="st">"cilindrada"</span>, <span class="st">"aceleracao"</span>]]</span>
-<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a>y <span class="op">=</span> auto[<span class="st">"milhas_por_galao"</span>]</span>
-<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a>dez_grupos <span class="op">=</span> KFold(<span class="dv">10</span>, shuffle<span class="op">=</span><span class="va">True</span>, random_state<span class="op">=</span><span class="dv">10</span>)</span>
-<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a>knn <span class="op">=</span> KNeighborsRegressor(n_neighbors<span class="op">=</span><span class="dv">10</span>)</span>
-<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> mse_cv(modelo, X):</span>
-<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> <span class="bu">float</span>(<span class="op">-</span>cross_val_score(</span>
-<span id="cb1-8"><a href="#cb1-8" aria-hidden="true" tabindex="-1"></a>        modelo, X, y, cv<span class="op">=</span>dez_grupos, scoring<span class="op">=</span><span class="st">"neg_mean_squared_error"</span></span>
-<span id="cb1-9"><a href="#cb1-9" aria-hidden="true" tabindex="-1"></a>    ).mean())</span>
-<span id="cb1-10"><a href="#cb1-10" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb1-11"><a href="#cb1-11" aria-hidden="true" tabindex="-1"></a>mse_sem_padronizar <span class="op">=</span> mse_cv(knn, X)</span></code></pre></div><button title="Copiar para a área de transferência" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb1"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> numpy <span class="im">as</span> np</span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> pandas <span class="im">as</span> pd</span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> sklearn.model_selection <span class="op">\</span></span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a>    <span class="im">import</span> KFold</span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> sklearn.model_selection <span class="op">\</span></span>
+<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a>    <span class="im">import</span> cross_val_score</span>
+<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> sklearn.neighbors <span class="op">\</span></span>
+<span id="cb1-8"><a href="#cb1-8" aria-hidden="true" tabindex="-1"></a>    <span class="im">import</span> KNeighborsRegressor</span>
+<span id="cb1-9"><a href="#cb1-9" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-10"><a href="#cb1-10" aria-hidden="true" tabindex="-1"></a>auto <span class="op">=</span> pd.read_csv(</span>
+<span id="cb1-11"><a href="#cb1-11" aria-hidden="true" tabindex="-1"></a>    <span class="st">"dados/Auto.csv"</span>)</span>
+<span id="cb1-12"><a href="#cb1-12" aria-hidden="true" tabindex="-1"></a>auto[<span class="st">"potencia"</span>] <span class="op">=</span> pd.to_numeric(</span>
+<span id="cb1-13"><a href="#cb1-13" aria-hidden="true" tabindex="-1"></a>    auto[<span class="st">"potencia"</span>],</span>
+<span id="cb1-14"><a href="#cb1-14" aria-hidden="true" tabindex="-1"></a>    errors<span class="op">=</span><span class="st">"coerce"</span>)</span>
+<span id="cb1-15"><a href="#cb1-15" aria-hidden="true" tabindex="-1"></a>auto <span class="op">=</span> auto.dropna(</span>
+<span id="cb1-16"><a href="#cb1-16" aria-hidden="true" tabindex="-1"></a>    subset<span class="op">=</span>[<span class="st">"potencia"</span>])</span>
+<span id="cb1-17"><a href="#cb1-17" aria-hidden="true" tabindex="-1"></a>auto <span class="op">=</span> auto.reset_index(</span>
+<span id="cb1-18"><a href="#cb1-18" aria-hidden="true" tabindex="-1"></a>    drop<span class="op">=</span><span class="va">True</span>)</span>
+<span id="cb1-19"><a href="#cb1-19" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-20"><a href="#cb1-20" aria-hidden="true" tabindex="-1"></a>colunas <span class="op">=</span> [<span class="st">"potencia"</span>, <span class="st">"peso"</span>,</span>
+<span id="cb1-21"><a href="#cb1-21" aria-hidden="true" tabindex="-1"></a>    <span class="st">"cilindrada"</span>, <span class="st">"aceleracao"</span>]</span>
+<span id="cb1-22"><a href="#cb1-22" aria-hidden="true" tabindex="-1"></a>X <span class="op">=</span> auto[colunas]</span>
+<span id="cb1-23"><a href="#cb1-23" aria-hidden="true" tabindex="-1"></a>y <span class="op">=</span> auto[<span class="st">"milhas_por_galao"</span>]</span>
+<span id="cb1-24"><a href="#cb1-24" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-25"><a href="#cb1-25" aria-hidden="true" tabindex="-1"></a>dez_grupos <span class="op">=</span> KFold(</span>
+<span id="cb1-26"><a href="#cb1-26" aria-hidden="true" tabindex="-1"></a>    <span class="dv">10</span>, shuffle<span class="op">=</span><span class="va">True</span>,</span>
+<span id="cb1-27"><a href="#cb1-27" aria-hidden="true" tabindex="-1"></a>    random_state<span class="op">=</span><span class="dv">10</span>)</span>
+<span id="cb1-28"><a href="#cb1-28" aria-hidden="true" tabindex="-1"></a>knn <span class="op">=</span> KNeighborsRegressor(</span>
+<span id="cb1-29"><a href="#cb1-29" aria-hidden="true" tabindex="-1"></a>    n_neighbors<span class="op">=</span><span class="dv">10</span>)</span>
+<span id="cb1-30"><a href="#cb1-30" aria-hidden="true" tabindex="-1"></a>neg_mse <span class="op">=</span> <span class="st">"neg_mean_squared_error"</span></span>
+<span id="cb1-31"><a href="#cb1-31" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-32"><a href="#cb1-32" aria-hidden="true" tabindex="-1"></a>pont <span class="op">=</span> cross_val_score(</span>
+<span id="cb1-33"><a href="#cb1-33" aria-hidden="true" tabindex="-1"></a>    knn, X, y, cv<span class="op">=</span>dez_grupos,</span>
+<span id="cb1-34"><a href="#cb1-34" aria-hidden="true" tabindex="-1"></a>    scoring<span class="op">=</span>neg_mse)</span>
+<span id="cb1-35"><a href="#cb1-35" aria-hidden="true" tabindex="-1"></a>mse_sem <span class="op">=</span> <span class="bu">float</span>(</span>
+<span id="cb1-36"><a href="#cb1-36" aria-hidden="true" tabindex="-1"></a>    <span class="op">-</span>pont.mean())</span>
+<span id="cb1-37"><a href="#cb1-37" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">"sem padronizar:"</span>,</span>
+<span id="cb1-38"><a href="#cb1-38" aria-hidden="true" tabindex="-1"></a>    <span class="bu">round</span>(mse_sem, <span class="dv">2</span>))</span></code></pre></div><button title="Copiar para a área de transferência" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>sem padronizar: 17.43</code></pre>
+</div>
 </div>
 <div class="funcao">
 <p><strong><code>KNeighborsRegressor(n_neighbors)</code></strong>: o <em>k</em>-NN para resposta numérica, que prevê a média da resposta dos <code>n_neighbors</code> vizinhos mais próximos.</p>
 </div>
 <p>O jeito errado padroniza a tabela inteira e só depois entrega o resultado à validação cruzada:</p>
 <div id="errado-auto" class="cell" data-execution_count="3">
-<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb2"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a>X_padronizado <span class="op">=</span> StandardScaler().fit_transform(X)</span>
-<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a>mse_padronizado_antes <span class="op">=</span> mse_cv(knn, X_padronizado)</span></code></pre></div><button title="Copiar para a área de transferência" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb3"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> sklearn.preprocessing <span class="op">\</span></span>
+<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a>    <span class="im">import</span> StandardScaler</span>
+<span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-4"><a href="#cb3-4" aria-hidden="true" tabindex="-1"></a><span class="co"># o fit vê os 392 carros</span></span>
+<span id="cb3-5"><a href="#cb3-5" aria-hidden="true" tabindex="-1"></a>escala <span class="op">=</span> StandardScaler()</span>
+<span id="cb3-6"><a href="#cb3-6" aria-hidden="true" tabindex="-1"></a>X_padronizado <span class="op">=</span> (</span>
+<span id="cb3-7"><a href="#cb3-7" aria-hidden="true" tabindex="-1"></a>    escala.fit_transform(X))</span>
+<span id="cb3-8"><a href="#cb3-8" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-9"><a href="#cb3-9" aria-hidden="true" tabindex="-1"></a>pont <span class="op">=</span> cross_val_score(</span>
+<span id="cb3-10"><a href="#cb3-10" aria-hidden="true" tabindex="-1"></a>    knn, X_padronizado, y,</span>
+<span id="cb3-11"><a href="#cb3-11" aria-hidden="true" tabindex="-1"></a>    cv<span class="op">=</span>dez_grupos,</span>
+<span id="cb3-12"><a href="#cb3-12" aria-hidden="true" tabindex="-1"></a>    scoring<span class="op">=</span>neg_mse)</span>
+<span id="cb3-13"><a href="#cb3-13" aria-hidden="true" tabindex="-1"></a>mse_antes <span class="op">=</span> <span class="bu">float</span>(</span>
+<span id="cb3-14"><a href="#cb3-14" aria-hidden="true" tabindex="-1"></a>    <span class="op">-</span>pont.mean())</span>
+<span id="cb3-15"><a href="#cb3-15" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">"padronizando antes:"</span>,</span>
+<span id="cb3-16"><a href="#cb3-16" aria-hidden="true" tabindex="-1"></a>    <span class="bu">round</span>(mse_antes, <span class="dv">2</span>))</span></code></pre></div><button title="Copiar para a área de transferência" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>padronizando antes: 14.93</code></pre>
 </div>
-<p>O jeito certo põe o <code>StandardScaler</code> no <code>Pipeline</code> e entrega o <code>Pipeline</code> inteiro:</p>
-<div id="cell-certo-auto" class="cell" data-execution_count="4">
-<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb3"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a>mse_padronizado_dentro <span class="op">=</span> mse_cv(make_pipeline(StandardScaler(), knn), X)</span>
-<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a>pd.DataFrame(</span>
-<span id="cb3-4"><a href="#cb3-4" aria-hidden="true" tabindex="-1"></a>    {<span class="st">"MSE do 10-fold"</span>: [</span>
-<span id="cb3-5"><a href="#cb3-5" aria-hidden="true" tabindex="-1"></a>        <span class="bu">round</span>(mse_sem_padronizar, <span class="dv">2</span>),</span>
-<span id="cb3-6"><a href="#cb3-6" aria-hidden="true" tabindex="-1"></a>        <span class="bu">round</span>(mse_padronizado_antes, <span class="dv">2</span>),</span>
-<span id="cb3-7"><a href="#cb3-7" aria-hidden="true" tabindex="-1"></a>        <span class="bu">round</span>(mse_padronizado_dentro, <span class="dv">2</span>),</span>
-<span id="cb3-8"><a href="#cb3-8" aria-hidden="true" tabindex="-1"></a>    ]},</span>
-<span id="cb3-9"><a href="#cb3-9" aria-hidden="true" tabindex="-1"></a>    index<span class="op">=</span>[<span class="st">"sem padronizar"</span>, <span class="st">"padronizando antes (errado)"</span>, <span class="st">"padronizando dentro (certo)"</span>],</span>
-<span id="cb3-10"><a href="#cb3-10" aria-hidden="true" tabindex="-1"></a>)</span></code></pre></div><button title="Copiar para a área de transferência" class="code-copy-button"><i class="bi"></i></button></div>
-<div id="certo-auto" class="cell-output cell-output-display" data-execution_count="4">
+</div>
+<p>O jeito certo ajusta o <code>StandardScaler</code> só nos carros de treino de cada divisão. Antes do laço, a primeira das dez divisões por extenso:</p>
+<div id="primeira-divisao" class="cell" data-execution_count="4">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb5"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a>divisoes <span class="op">=</span> dez_grupos.split(X)</span>
+<span id="cb5-2"><a href="#cb5-2" aria-hidden="true" tabindex="-1"></a>treino_1, validacao_1 <span class="op">=</span> <span class="bu">next</span>(</span>
+<span id="cb5-3"><a href="#cb5-3" aria-hidden="true" tabindex="-1"></a>    divisoes)</span>
+<span id="cb5-4"><a href="#cb5-4" aria-hidden="true" tabindex="-1"></a>X_tr <span class="op">=</span> X.iloc[treino_1]</span>
+<span id="cb5-5"><a href="#cb5-5" aria-hidden="true" tabindex="-1"></a>X_va <span class="op">=</span> X.iloc[validacao_1]</span>
+<span id="cb5-6"><a href="#cb5-6" aria-hidden="true" tabindex="-1"></a>y_tr <span class="op">=</span> y.iloc[treino_1]</span>
+<span id="cb5-7"><a href="#cb5-7" aria-hidden="true" tabindex="-1"></a>y_va <span class="op">=</span> y.iloc[validacao_1]</span>
+<span id="cb5-8"><a href="#cb5-8" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">"treino:"</span>, <span class="bu">len</span>(X_tr))</span>
+<span id="cb5-9"><a href="#cb5-9" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">"validação:"</span>, <span class="bu">len</span>(X_va))</span></code></pre></div><button title="Copiar para a área de transferência" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>treino: 352
+validação: 40</code></pre>
+</div>
+</div>
+<p>O primeiro passo é aprender a média e o desvio padrão de cada coluna, só nos carros de treino. A tabela põe as médias aprendidas ao lado das médias dos 392 carros, que o jeito errado usa:</p>
+<div id="cell-aprende-no-treino" class="cell" data-execution_count="5">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb7"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb7-1"><a href="#cb7-1" aria-hidden="true" tabindex="-1"></a>escala <span class="op">=</span> StandardScaler()</span>
+<span id="cb7-2"><a href="#cb7-2" aria-hidden="true" tabindex="-1"></a>escala.fit(X_tr)</span>
+<span id="cb7-3"><a href="#cb7-3" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb7-4"><a href="#cb7-4" aria-hidden="true" tabindex="-1"></a>todos <span class="op">=</span> <span class="ss">f"</span><span class="sc">{</span><span class="bu">len</span>(X)<span class="sc">}</span><span class="ss"> carros"</span></span>
+<span id="cb7-5"><a href="#cb7-5" aria-hidden="true" tabindex="-1"></a>so_treino <span class="op">=</span> <span class="ss">f"</span><span class="sc">{</span><span class="bu">len</span>(X_tr)<span class="sc">}</span><span class="ss"> treino"</span></span>
+<span id="cb7-6"><a href="#cb7-6" aria-hidden="true" tabindex="-1"></a>pd.DataFrame({</span>
+<span id="cb7-7"><a href="#cb7-7" aria-hidden="true" tabindex="-1"></a>    todos: X.mean(),</span>
+<span id="cb7-8"><a href="#cb7-8" aria-hidden="true" tabindex="-1"></a>    so_treino: escala.mean_,</span>
+<span id="cb7-9"><a href="#cb7-9" aria-hidden="true" tabindex="-1"></a>}).<span class="bu">round</span>(<span class="dv">2</span>)</span></code></pre></div><button title="Copiar para a área de transferência" class="code-copy-button"><i class="bi"></i></button></div>
+<div id="aprende-no-treino" class="cell-output cell-output-display" data-execution_count="5">
+<div>
+
+
+<table class="dataframe caption-top table table-sm table-striped small" data-border="1">
+<thead>
+<tr class="header">
+<th data-quarto-table-cell-role="th"></th>
+<th data-quarto-table-cell-role="th">392 carros</th>
+<th data-quarto-table-cell-role="th">352 treino</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<th data-quarto-table-cell-role="th">potencia</th>
+<td>104.47</td>
+<td>103.63</td>
+</tr>
+<tr class="even">
+<th data-quarto-table-cell-role="th">peso</th>
+<td>2977.58</td>
+<td>2952.62</td>
+</tr>
+<tr class="odd">
+<th data-quarto-table-cell-role="th">cilindrada</th>
+<td>194.41</td>
+<td>190.77</td>
+</tr>
+<tr class="even">
+<th data-quarto-table-cell-role="th">aceleracao</th>
+<td>15.54</td>
+<td>15.54</td>
+</tr>
+</tbody>
+</table>
+
+</div>
+</div>
+</div>
+<div class="funcao">
+<p><strong><code>escala.fit(X)</code></strong>: o <code>StandardScaler</code> aprende a média e o desvio padrão de cada coluna de <code>X</code>, e guarda as médias em <strong><code>escala.mean_</code></strong>. <strong><code>escala.transform(X)</code></strong>: padroniza <code>X</code> com os números aprendidos no <code>fit</code>, sem reaprender nada.</p>
+</div>
+<p>Com esses números, o treino e a validação são padronizados, o <em>k</em>-NN é ajustado no treino padronizado, e o erro é medido na validação:</p>
+<div id="primeiro-grupo" class="cell" data-execution_count="6">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb8"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb8-1"><a href="#cb8-1" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> sklearn.metrics <span class="op">\</span></span>
+<span id="cb8-2"><a href="#cb8-2" aria-hidden="true" tabindex="-1"></a>    <span class="im">import</span> mean_squared_error</span>
+<span id="cb8-3"><a href="#cb8-3" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb8-4"><a href="#cb8-4" aria-hidden="true" tabindex="-1"></a>X_tr_p <span class="op">=</span> escala.transform(X_tr)</span>
+<span id="cb8-5"><a href="#cb8-5" aria-hidden="true" tabindex="-1"></a>X_va_p <span class="op">=</span> escala.transform(X_va)</span>
+<span id="cb8-6"><a href="#cb8-6" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb8-7"><a href="#cb8-7" aria-hidden="true" tabindex="-1"></a>vizinhos <span class="op">=</span> KNeighborsRegressor(</span>
+<span id="cb8-8"><a href="#cb8-8" aria-hidden="true" tabindex="-1"></a>    n_neighbors<span class="op">=</span><span class="dv">10</span>)</span>
+<span id="cb8-9"><a href="#cb8-9" aria-hidden="true" tabindex="-1"></a>vizinhos.fit(X_tr_p, y_tr)</span>
+<span id="cb8-10"><a href="#cb8-10" aria-hidden="true" tabindex="-1"></a>previsto <span class="op">=</span> vizinhos.predict(</span>
+<span id="cb8-11"><a href="#cb8-11" aria-hidden="true" tabindex="-1"></a>    X_va_p)</span>
+<span id="cb8-12"><a href="#cb8-12" aria-hidden="true" tabindex="-1"></a>mse <span class="op">=</span> mean_squared_error(</span>
+<span id="cb8-13"><a href="#cb8-13" aria-hidden="true" tabindex="-1"></a>    y_va, previsto)</span>
+<span id="cb8-14"><a href="#cb8-14" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">"MSE do grupo 1:"</span>,</span>
+<span id="cb8-15"><a href="#cb8-15" aria-hidden="true" tabindex="-1"></a>    <span class="bu">round</span>(mse, <span class="dv">2</span>))</span></code></pre></div><button title="Copiar para a área de transferência" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>MSE do grupo 1: 14.47</code></pre>
+</div>
+</div>
+<p>O laço repete os mesmos passos em cada uma das dez divisões:</p>
+<div id="certo-a-mao" class="cell" data-execution_count="7">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb10"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb10-1"><a href="#cb10-1" aria-hidden="true" tabindex="-1"></a>erros <span class="op">=</span> []</span>
+<span id="cb10-2"><a href="#cb10-2" aria-hidden="true" tabindex="-1"></a>divisoes <span class="op">=</span> dez_grupos.split(X)</span>
+<span id="cb10-3"><a href="#cb10-3" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> treino, validacao <span class="kw">in</span> divisoes:</span>
+<span id="cb10-4"><a href="#cb10-4" aria-hidden="true" tabindex="-1"></a>    X_tr <span class="op">=</span> X.iloc[treino]</span>
+<span id="cb10-5"><a href="#cb10-5" aria-hidden="true" tabindex="-1"></a>    X_va <span class="op">=</span> X.iloc[validacao]</span>
+<span id="cb10-6"><a href="#cb10-6" aria-hidden="true" tabindex="-1"></a>    y_tr <span class="op">=</span> y.iloc[treino]</span>
+<span id="cb10-7"><a href="#cb10-7" aria-hidden="true" tabindex="-1"></a>    y_va <span class="op">=</span> y.iloc[validacao]</span>
+<span id="cb10-8"><a href="#cb10-8" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb10-9"><a href="#cb10-9" aria-hidden="true" tabindex="-1"></a>    <span class="co"># o fit vê só o treino</span></span>
+<span id="cb10-10"><a href="#cb10-10" aria-hidden="true" tabindex="-1"></a>    escala <span class="op">=</span> StandardScaler()</span>
+<span id="cb10-11"><a href="#cb10-11" aria-hidden="true" tabindex="-1"></a>    escala.fit(X_tr)</span>
+<span id="cb10-12"><a href="#cb10-12" aria-hidden="true" tabindex="-1"></a>    X_tr_p <span class="op">=</span> (</span>
+<span id="cb10-13"><a href="#cb10-13" aria-hidden="true" tabindex="-1"></a>        escala.transform(X_tr))</span>
+<span id="cb10-14"><a href="#cb10-14" aria-hidden="true" tabindex="-1"></a>    X_va_p <span class="op">=</span> (</span>
+<span id="cb10-15"><a href="#cb10-15" aria-hidden="true" tabindex="-1"></a>        escala.transform(X_va))</span>
+<span id="cb10-16"><a href="#cb10-16" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb10-17"><a href="#cb10-17" aria-hidden="true" tabindex="-1"></a>    vizinhos <span class="op">=</span> (</span>
+<span id="cb10-18"><a href="#cb10-18" aria-hidden="true" tabindex="-1"></a>        KNeighborsRegressor(</span>
+<span id="cb10-19"><a href="#cb10-19" aria-hidden="true" tabindex="-1"></a>            n_neighbors<span class="op">=</span><span class="dv">10</span>))</span>
+<span id="cb10-20"><a href="#cb10-20" aria-hidden="true" tabindex="-1"></a>    vizinhos.fit(X_tr_p, y_tr)</span>
+<span id="cb10-21"><a href="#cb10-21" aria-hidden="true" tabindex="-1"></a>    previsto <span class="op">=</span> vizinhos.predict(</span>
+<span id="cb10-22"><a href="#cb10-22" aria-hidden="true" tabindex="-1"></a>        X_va_p)</span>
+<span id="cb10-23"><a href="#cb10-23" aria-hidden="true" tabindex="-1"></a>    mse <span class="op">=</span> mean_squared_error(</span>
+<span id="cb10-24"><a href="#cb10-24" aria-hidden="true" tabindex="-1"></a>        y_va, previsto)</span>
+<span id="cb10-25"><a href="#cb10-25" aria-hidden="true" tabindex="-1"></a>    erros.append(mse)</span>
+<span id="cb10-26"><a href="#cb10-26" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb10-27"><a href="#cb10-27" aria-hidden="true" tabindex="-1"></a>mse_a_mao <span class="op">=</span> <span class="bu">float</span>(np.mean(erros))</span>
+<span id="cb10-28"><a href="#cb10-28" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">"padronizando dentro:"</span>,</span>
+<span id="cb10-29"><a href="#cb10-29" aria-hidden="true" tabindex="-1"></a>    <span class="bu">round</span>(mse_a_mao, <span class="dv">2</span>))</span></code></pre></div><button title="Copiar para a área de transferência" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>padronizando dentro: 15.06</code></pre>
+</div>
+</div>
+<p>O <code>Pipeline</code> faz o mesmo laço: entregue inteiro ao <code>cross_val_score</code>, ele é reajustado em cada grupo de treino, com o <code>StandardScaler</code> junto.</p>
+<div id="cell-certo-auto" class="cell" data-execution_count="8">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb12"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb12-1"><a href="#cb12-1" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> sklearn.pipeline <span class="op">\</span></span>
+<span id="cb12-2"><a href="#cb12-2" aria-hidden="true" tabindex="-1"></a>    <span class="im">import</span> make_pipeline</span>
+<span id="cb12-3"><a href="#cb12-3" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb12-4"><a href="#cb12-4" aria-hidden="true" tabindex="-1"></a>modelo <span class="op">=</span> make_pipeline(</span>
+<span id="cb12-5"><a href="#cb12-5" aria-hidden="true" tabindex="-1"></a>    StandardScaler(), knn)</span>
+<span id="cb12-6"><a href="#cb12-6" aria-hidden="true" tabindex="-1"></a>pont <span class="op">=</span> cross_val_score(</span>
+<span id="cb12-7"><a href="#cb12-7" aria-hidden="true" tabindex="-1"></a>    modelo, X, y, cv<span class="op">=</span>dez_grupos,</span>
+<span id="cb12-8"><a href="#cb12-8" aria-hidden="true" tabindex="-1"></a>    scoring<span class="op">=</span>neg_mse)</span>
+<span id="cb12-9"><a href="#cb12-9" aria-hidden="true" tabindex="-1"></a>mse_dentro <span class="op">=</span> <span class="bu">float</span>(</span>
+<span id="cb12-10"><a href="#cb12-10" aria-hidden="true" tabindex="-1"></a>    <span class="op">-</span>pont.mean())</span>
+<span id="cb12-11"><a href="#cb12-11" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb12-12"><a href="#cb12-12" aria-hidden="true" tabindex="-1"></a>pd.DataFrame(</span>
+<span id="cb12-13"><a href="#cb12-13" aria-hidden="true" tabindex="-1"></a>    {<span class="st">"MSE do 10-fold"</span>: [</span>
+<span id="cb12-14"><a href="#cb12-14" aria-hidden="true" tabindex="-1"></a>        mse_sem, mse_antes,</span>
+<span id="cb12-15"><a href="#cb12-15" aria-hidden="true" tabindex="-1"></a>        mse_a_mao, mse_dentro]},</span>
+<span id="cb12-16"><a href="#cb12-16" aria-hidden="true" tabindex="-1"></a>    index<span class="op">=</span>[<span class="st">"sem padronizar"</span>,</span>
+<span id="cb12-17"><a href="#cb12-17" aria-hidden="true" tabindex="-1"></a>        <span class="st">"antes (errado)"</span>,</span>
+<span id="cb12-18"><a href="#cb12-18" aria-hidden="true" tabindex="-1"></a>        <span class="st">"dentro (laço)"</span>,</span>
+<span id="cb12-19"><a href="#cb12-19" aria-hidden="true" tabindex="-1"></a>        <span class="st">"dentro (Pipeline)"</span>],</span>
+<span id="cb12-20"><a href="#cb12-20" aria-hidden="true" tabindex="-1"></a>).<span class="bu">round</span>(<span class="dv">2</span>)</span></code></pre></div><button title="Copiar para a área de transferência" class="code-copy-button"><i class="bi"></i></button></div>
+<div id="certo-auto" class="cell-output cell-output-display" data-execution_count="8">
 <div>
 
 
@@ -1233,11 +1415,15 @@ div.csl-indent {
 <td>17.43</td>
 </tr>
 <tr class="even">
-<th data-quarto-table-cell-role="th">padronizando antes (errado)</th>
+<th data-quarto-table-cell-role="th">antes (errado)</th>
 <td>14.93</td>
 </tr>
 <tr class="odd">
-<th data-quarto-table-cell-role="th">padronizando dentro (certo)</th>
+<th data-quarto-table-cell-role="th">dentro (laço)</th>
+<td>15.06</td>
+</tr>
+<tr class="even">
+<th data-quarto-table-cell-role="th">dentro (Pipeline)</th>
 <td>15.06</td>
 </tr>
 </tbody>
@@ -1246,21 +1432,15 @@ div.csl-indent {
 </div>
 </div>
 </div>
-<p>A diferença entre os dois códigos é onde o <code>fit</code> do <code>StandardScaler</code> acontece. No errado, ele acontece uma vez, em todos os carros, e cada grupo de validação é padronizado com uma média e um desvio que ele mesmo ajudou a calcular. No certo, o <code>cross_val_score</code> ajusta o <code>Pipeline</code> inteiro em cada grupo de treino: o <code>StandardScaler</code> aprende a média e o desvio só dos carros de treino, e o grupo de validação é padronizado com esses números, como um carro novo seria.</p>
-<p>Padronizar importa: o MSE cai de 17,43, sem padronizar, para 15,06, com o <code>StandardScaler</code> dentro, uma diferença de 2,37. <strong>Onde</strong> padronizar importa pouco neste caso: 14,93 no jeito errado contra 15,06 no certo, uma diferença de 0,13. O motivo aparece nos números que o <code>StandardScaler</code> aprende.</p>
-<div id="cell-medias-treino" class="cell" data-execution_count="5">
-<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb4"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a>treino, validacao <span class="op">=</span> <span class="bu">next</span>(dez_grupos.split(X))</span>
-<span id="cb4-2"><a href="#cb4-2" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="ss">f"</span><span class="sc">{</span><span class="bu">len</span>(X)<span class="sc">}</span><span class="ss"> carros: </span><span class="sc">{</span><span class="bu">len</span>(treino)<span class="sc">}</span><span class="ss"> de treino e </span><span class="sc">{</span><span class="bu">len</span>(validacao)<span class="sc">}</span><span class="ss"> de validação"</span>)</span>
-<span id="cb4-3"><a href="#cb4-3" aria-hidden="true" tabindex="-1"></a>pd.DataFrame({</span>
-<span id="cb4-4"><a href="#cb4-4" aria-hidden="true" tabindex="-1"></a>    <span class="ss">f"média, </span><span class="sc">{</span><span class="bu">len</span>(X)<span class="sc">}</span><span class="ss"> carros"</span>: X.mean().<span class="bu">round</span>(<span class="dv">2</span>),</span>
-<span id="cb4-5"><a href="#cb4-5" aria-hidden="true" tabindex="-1"></a>    <span class="ss">f"média, </span><span class="sc">{</span><span class="bu">len</span>(treino)<span class="sc">}</span><span class="ss"> de treino"</span>: X.iloc[treino].mean().<span class="bu">round</span>(<span class="dv">2</span>),</span>
-<span id="cb4-6"><a href="#cb4-6" aria-hidden="true" tabindex="-1"></a>    <span class="ss">f"desvio, </span><span class="sc">{</span><span class="bu">len</span>(X)<span class="sc">}</span><span class="ss"> carros"</span>: X.std().<span class="bu">round</span>(<span class="dv">2</span>),</span>
-<span id="cb4-7"><a href="#cb4-7" aria-hidden="true" tabindex="-1"></a>    <span class="ss">f"desvio, </span><span class="sc">{</span><span class="bu">len</span>(treino)<span class="sc">}</span><span class="ss"> de treino"</span>: X.iloc[treino].std().<span class="bu">round</span>(<span class="dv">2</span>),</span>
-<span id="cb4-8"><a href="#cb4-8" aria-hidden="true" tabindex="-1"></a>})</span></code></pre></div><button title="Copiar para a área de transferência" class="code-copy-button"><i class="bi"></i></button></div>
-<div class="cell-output cell-output-stdout">
-<pre><code>392 carros: 352 de treino e 40 de validação</code></pre>
-</div>
-<div id="medias-treino" class="cell-output cell-output-display" data-execution_count="5">
+<p>A diferença entre os dois códigos é onde o <code>fit</code> do <code>StandardScaler</code> acontece. No errado, ele acontece uma vez, em todos os carros, e cada grupo de validação é padronizado com uma média e um desvio que ele mesmo ajudou a calcular. No certo, o <code>fit</code> acontece em cada grupo de treino: o <code>StandardScaler</code> aprende a média e o desvio só dos carros de treino, e o grupo de validação é padronizado com esses números, como um carro novo seria. As linhas <code>dentro (laço)</code> e <code>dentro (Pipeline)</code> dão o mesmo número: o <code>Pipeline</code> dentro do <code>cross_val_score</code> faz o laço por extenso.</p>
+<p>Padronizar importa: o MSE cai de 17,43, sem padronizar, para 15,06, com o <code>StandardScaler</code> dentro, uma diferença de 2,37. <strong>Onde</strong> padronizar importa pouco neste caso: 14,93 no jeito errado contra 15,06 no certo, uma diferença de 0,13. O motivo aparece nos números que o <code>StandardScaler</code> aprende. As médias da primeira divisão já estão na tabela de cima; os desvios padrão, nos mesmos carros:</p>
+<div id="cell-desvios-treino" class="cell" data-execution_count="9">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb13"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb13-1"><a href="#cb13-1" aria-hidden="true" tabindex="-1"></a>X_tr_1 <span class="op">=</span> X.iloc[treino_1]</span>
+<span id="cb13-2"><a href="#cb13-2" aria-hidden="true" tabindex="-1"></a>pd.DataFrame({</span>
+<span id="cb13-3"><a href="#cb13-3" aria-hidden="true" tabindex="-1"></a>    todos: X.std(),</span>
+<span id="cb13-4"><a href="#cb13-4" aria-hidden="true" tabindex="-1"></a>    so_treino: X_tr_1.std(),</span>
+<span id="cb13-5"><a href="#cb13-5" aria-hidden="true" tabindex="-1"></a>}).<span class="bu">round</span>(<span class="dv">2</span>)</span></code></pre></div><button title="Copiar para a área de transferência" class="code-copy-button"><i class="bi"></i></button></div>
+<div id="desvios-treino" class="cell-output cell-output-display" data-execution_count="9">
 <div>
 
 
@@ -1268,38 +1448,28 @@ div.csl-indent {
 <thead>
 <tr class="header">
 <th data-quarto-table-cell-role="th"></th>
-<th data-quarto-table-cell-role="th">média, 392 carros</th>
-<th data-quarto-table-cell-role="th">média, 352 de treino</th>
-<th data-quarto-table-cell-role="th">desvio, 392 carros</th>
-<th data-quarto-table-cell-role="th">desvio, 352 de treino</th>
+<th data-quarto-table-cell-role="th">392 carros</th>
+<th data-quarto-table-cell-role="th">352 treino</th>
 </tr>
 </thead>
 <tbody>
 <tr class="odd">
 <th data-quarto-table-cell-role="th">potencia</th>
-<td>104.47</td>
-<td>103.63</td>
 <td>38.49</td>
 <td>37.72</td>
 </tr>
 <tr class="even">
 <th data-quarto-table-cell-role="th">peso</th>
-<td>2977.58</td>
-<td>2952.62</td>
 <td>849.40</td>
 <td>850.05</td>
 </tr>
 <tr class="odd">
 <th data-quarto-table-cell-role="th">cilindrada</th>
-<td>194.41</td>
-<td>190.77</td>
 <td>104.64</td>
 <td>103.99</td>
 </tr>
 <tr class="even">
 <th data-quarto-table-cell-role="th">aceleracao</th>
-<td>15.54</td>
-<td>15.54</td>
 <td>2.76</td>
 <td>2.71</td>
 </tr>
@@ -1309,49 +1479,93 @@ div.csl-indent {
 </div>
 </div>
 </div>
-<p><code>next(dez_grupos.split(X))</code> pega só a primeira das dez divisões, um par com as posições do treino e as da validação. No primeiro grupo, tirar os 40 carros de validação move a média de <code>peso</code> de 2.977,58 para 2.952,62, e a padronização quase não muda. O vazamento existe, e é pequeno porque uma média de centenas de carros mal sente 40 deles. Há etapas em que ele não é pequeno.</p>
+<p>No primeiro grupo, tirar os 40 carros de validação move a média de <code>peso</code> de 2.977,58 para 2.952,62, e a padronização quase não muda. O vazamento existe, e é pequeno porque uma média de centenas de carros mal sente 40 deles. Há etapas em que ele não é pequeno.</p>
 </section>
 <section id="quando-o-vazamento-decide-tudo" class="level2">
 <h2 class="anchored" data-anchor-id="quando-o-vazamento-decide-tudo">Quando o vazamento decide tudo</h2>
 <p>Um conjunto de dados fabricado para não ter nada a aprender: 50 observações, 25 de cada classe, e 5.000 colunas de ruído sorteadas de uma normal padrão, sem relação nenhuma com a classe. A classe de uma observação nova não depende de nenhuma das 5.000 colunas, e um classificador qualquer acerta como quem joga uma moeda justa: a taxa de erro de teste é 50%.</p>
-<div id="cell-ruido" class="cell" data-execution_count="6">
-<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb6"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb6-1"><a href="#cb6-1" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> conjunto_de_ruido(rng):</span>
-<span id="cb6-2"><a href="#cb6-2" aria-hidden="true" tabindex="-1"></a>    X <span class="op">=</span> rng.normal(size<span class="op">=</span>(<span class="dv">50</span>, <span class="dv">5000</span>))</span>
-<span id="cb6-3"><a href="#cb6-3" aria-hidden="true" tabindex="-1"></a>    y <span class="op">=</span> rng.permutation(np.repeat([<span class="dv">0</span>, <span class="dv">1</span>], <span class="dv">25</span>))</span>
-<span id="cb6-4"><a href="#cb6-4" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> X, y</span>
-<span id="cb6-5"><a href="#cb6-5" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb6-6"><a href="#cb6-6" aria-hidden="true" tabindex="-1"></a>rng <span class="op">=</span> np.random.default_rng(<span class="dv">10</span>)</span>
-<span id="cb6-7"><a href="#cb6-7" aria-hidden="true" tabindex="-1"></a>X_ruido, y_ruido <span class="op">=</span> conjunto_de_ruido(rng)</span>
-<span id="cb6-8"><a href="#cb6-8" aria-hidden="true" tabindex="-1"></a>X_ruido.shape, <span class="bu">int</span>(y_ruido.<span class="bu">sum</span>())</span></code></pre></div><button title="Copiar para a área de transferência" class="code-copy-button"><i class="bi"></i></button></div>
-<div id="ruido" class="cell-output cell-output-display" data-execution_count="6">
-<pre><code>((50, 5000), 25)</code></pre>
+<div id="ruido" class="cell" data-execution_count="10">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb14"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb14-1"><a href="#cb14-1" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> conjunto_de_ruido(rng):</span>
+<span id="cb14-2"><a href="#cb14-2" aria-hidden="true" tabindex="-1"></a>    X <span class="op">=</span> rng.normal(</span>
+<span id="cb14-3"><a href="#cb14-3" aria-hidden="true" tabindex="-1"></a>        size<span class="op">=</span>(<span class="dv">50</span>, <span class="dv">5000</span>))</span>
+<span id="cb14-4"><a href="#cb14-4" aria-hidden="true" tabindex="-1"></a>    classes <span class="op">=</span> np.repeat(</span>
+<span id="cb14-5"><a href="#cb14-5" aria-hidden="true" tabindex="-1"></a>        [<span class="dv">0</span>, <span class="dv">1</span>], <span class="dv">25</span>)</span>
+<span id="cb14-6"><a href="#cb14-6" aria-hidden="true" tabindex="-1"></a>    y <span class="op">=</span> rng.permutation(classes)</span>
+<span id="cb14-7"><a href="#cb14-7" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> X, y</span>
+<span id="cb14-8"><a href="#cb14-8" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb14-9"><a href="#cb14-9" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb14-10"><a href="#cb14-10" aria-hidden="true" tabindex="-1"></a>rng <span class="op">=</span> np.random.default_rng(<span class="dv">10</span>)</span>
+<span id="cb14-11"><a href="#cb14-11" aria-hidden="true" tabindex="-1"></a>X_ruido, y_ruido <span class="op">=</span> (</span>
+<span id="cb14-12"><a href="#cb14-12" aria-hidden="true" tabindex="-1"></a>    conjunto_de_ruido(rng))</span>
+<span id="cb14-13"><a href="#cb14-13" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">"observações:"</span>,</span>
+<span id="cb14-14"><a href="#cb14-14" aria-hidden="true" tabindex="-1"></a>    X_ruido.shape[<span class="dv">0</span>])</span>
+<span id="cb14-15"><a href="#cb14-15" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">"colunas:"</span>,</span>
+<span id="cb14-16"><a href="#cb14-16" aria-hidden="true" tabindex="-1"></a>    X_ruido.shape[<span class="dv">1</span>])</span>
+<span id="cb14-17"><a href="#cb14-17" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">"classe 1:"</span>,</span>
+<span id="cb14-18"><a href="#cb14-18" aria-hidden="true" tabindex="-1"></a>    <span class="bu">int</span>(y_ruido.<span class="bu">sum</span>()))</span></code></pre></div><button title="Copiar para a área de transferência" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>observações: 50
+colunas: 5000
+classe 1: 25</code></pre>
 </div>
 </div>
 <div class="funcao">
-<p><strong><code>rng.normal(size=(linhas, colunas))</code></strong>: uma matriz de sorteios da normal com média 0 e desvio padrão 1, do tamanho pedido.</p>
 <p><strong><code>np.repeat([0, 1], 25)</code></strong>: 25 zeros seguidos de 25 uns.</p>
 <p><strong><code>rng.permutation(arr)</code></strong>: uma cópia de <code>arr</code> com os elementos numa ordem sorteada. Aqui, embaralha as 50 classes.</p>
 </div>
-<p>Com tantas colunas e tão poucas linhas, um procedimento comum é escolher primeiro as colunas mais promissoras e ajustar o modelo só nelas: as 100 colunas que mais separam as duas classes, e um <em>k</em>-NN com um vizinho.</p>
-<div id="errado-ruido" class="cell" data-execution_count="7">
-<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb8"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb8-1"><a href="#cb8-1" aria-hidden="true" tabindex="-1"></a>cinco_grupos <span class="op">=</span> KFold(<span class="dv">5</span>, shuffle<span class="op">=</span><span class="va">True</span>, random_state<span class="op">=</span><span class="dv">10</span>)</span>
-<span id="cb8-2"><a href="#cb8-2" aria-hidden="true" tabindex="-1"></a>vizinho <span class="op">=</span> KNeighborsClassifier(n_neighbors<span class="op">=</span><span class="dv">1</span>)</span>
-<span id="cb8-3"><a href="#cb8-3" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb8-4"><a href="#cb8-4" aria-hidden="true" tabindex="-1"></a>X_escolhidas <span class="op">=</span> SelectKBest(f_classif, k<span class="op">=</span><span class="dv">100</span>).fit_transform(X_ruido, y_ruido)</span>
-<span id="cb8-5"><a href="#cb8-5" aria-hidden="true" tabindex="-1"></a>erro_errado <span class="op">=</span> <span class="dv">1</span> <span class="op">-</span> cross_val_score(vizinho, X_escolhidas, y_ruido, cv<span class="op">=</span>cinco_grupos).mean()</span></code></pre></div><button title="Copiar para a área de transferência" class="code-copy-button"><i class="bi"></i></button></div>
+<p>Com tantas colunas e tão poucas linhas, um procedimento comum é escolher primeiro as colunas mais promissoras e ajustar o modelo só nelas: as 100 colunas que mais separam as duas classes, e um <em>k</em>-NN com um vizinho. O jeito errado escolhe as colunas com as 50 observações e só depois faz a validação cruzada. A taxa de erro de teste é 50% por construção; que número uma estimativa honesta deveria devolver, e que número você espera do jeito errado?</p>
+<div id="errado-ruido" class="cell" data-execution_count="11">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb16"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb16-1"><a href="#cb16-1" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> sklearn.feature_selection <span class="op">\</span></span>
+<span id="cb16-2"><a href="#cb16-2" aria-hidden="true" tabindex="-1"></a>    <span class="im">import</span> SelectKBest</span>
+<span id="cb16-3"><a href="#cb16-3" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> sklearn.feature_selection <span class="op">\</span></span>
+<span id="cb16-4"><a href="#cb16-4" aria-hidden="true" tabindex="-1"></a>    <span class="im">import</span> f_classif</span>
+<span id="cb16-5"><a href="#cb16-5" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> sklearn.neighbors <span class="op">\</span></span>
+<span id="cb16-6"><a href="#cb16-6" aria-hidden="true" tabindex="-1"></a>    <span class="im">import</span> KNeighborsClassifier</span>
+<span id="cb16-7"><a href="#cb16-7" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb16-8"><a href="#cb16-8" aria-hidden="true" tabindex="-1"></a>cinco_grupos <span class="op">=</span> KFold(</span>
+<span id="cb16-9"><a href="#cb16-9" aria-hidden="true" tabindex="-1"></a>    <span class="dv">5</span>, shuffle<span class="op">=</span><span class="va">True</span>,</span>
+<span id="cb16-10"><a href="#cb16-10" aria-hidden="true" tabindex="-1"></a>    random_state<span class="op">=</span><span class="dv">10</span>)</span>
+<span id="cb16-11"><a href="#cb16-11" aria-hidden="true" tabindex="-1"></a>vizinho <span class="op">=</span> KNeighborsClassifier(</span>
+<span id="cb16-12"><a href="#cb16-12" aria-hidden="true" tabindex="-1"></a>    n_neighbors<span class="op">=</span><span class="dv">1</span>)</span>
+<span id="cb16-13"><a href="#cb16-13" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb16-14"><a href="#cb16-14" aria-hidden="true" tabindex="-1"></a><span class="co"># a seleção vê as 50 observações</span></span>
+<span id="cb16-15"><a href="#cb16-15" aria-hidden="true" tabindex="-1"></a>selecao <span class="op">=</span> SelectKBest(</span>
+<span id="cb16-16"><a href="#cb16-16" aria-hidden="true" tabindex="-1"></a>    f_classif, k<span class="op">=</span><span class="dv">100</span>)</span>
+<span id="cb16-17"><a href="#cb16-17" aria-hidden="true" tabindex="-1"></a>X_escolhidas <span class="op">=</span> (</span>
+<span id="cb16-18"><a href="#cb16-18" aria-hidden="true" tabindex="-1"></a>    selecao.fit_transform(</span>
+<span id="cb16-19"><a href="#cb16-19" aria-hidden="true" tabindex="-1"></a>        X_ruido, y_ruido))</span>
+<span id="cb16-20"><a href="#cb16-20" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb16-21"><a href="#cb16-21" aria-hidden="true" tabindex="-1"></a>acuracias <span class="op">=</span> cross_val_score(</span>
+<span id="cb16-22"><a href="#cb16-22" aria-hidden="true" tabindex="-1"></a>    vizinho,</span>
+<span id="cb16-23"><a href="#cb16-23" aria-hidden="true" tabindex="-1"></a>    X_escolhidas, y_ruido,</span>
+<span id="cb16-24"><a href="#cb16-24" aria-hidden="true" tabindex="-1"></a>    cv<span class="op">=</span>cinco_grupos)</span>
+<span id="cb16-25"><a href="#cb16-25" aria-hidden="true" tabindex="-1"></a>erro_errado <span class="op">=</span> <span class="dv">1</span> <span class="op">-</span> acuracias.mean()</span>
+<span id="cb16-26"><a href="#cb16-26" aria-hidden="true" tabindex="-1"></a>erro_errado <span class="op">=</span> <span class="bu">float</span>(erro_errado)</span>
+<span id="cb16-27"><a href="#cb16-27" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">"seleção antes (%):"</span>,</span>
+<span id="cb16-28"><a href="#cb16-28" aria-hidden="true" tabindex="-1"></a>    <span class="bu">round</span>(erro_errado <span class="op">*</span> <span class="dv">100</span>, <span class="dv">2</span>))</span></code></pre></div><button title="Copiar para a área de transferência" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>seleção antes (%): 2.0</code></pre>
+</div>
 </div>
 <div class="funcao">
 <p><strong><code>SelectKBest(score_func, k)</code></strong>: dá a cada coluna uma pontuação calculada por <code>score_func</code> e fica com as <code>k</code> de pontuação mais alta. Como o <code>StandardScaler</code>, aprende com <code>fit</code> e aplica com <code>transform</code>; <code>fit_transform</code> faz os dois de uma vez.</p>
 <p><strong><code>f_classif</code></strong>: a pontuação usada aqui. Para cada coluna, é maior quanto mais as médias das classes se afastam nela, em relação à dispersão dentro de cada classe.</p>
 </div>
 <p>O jeito certo põe a seleção de colunas dentro do <code>Pipeline</code>:</p>
-<div id="cell-certo-ruido" class="cell" data-execution_count="8">
-<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb9"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb9-1"><a href="#cb9-1" aria-hidden="true" tabindex="-1"></a>selecao_e_vizinho <span class="op">=</span> make_pipeline(SelectKBest(f_classif, k<span class="op">=</span><span class="dv">100</span>), vizinho)</span>
-<span id="cb9-2"><a href="#cb9-2" aria-hidden="true" tabindex="-1"></a>erro_certo <span class="op">=</span> <span class="dv">1</span> <span class="op">-</span> cross_val_score(selecao_e_vizinho, X_ruido, y_ruido, cv<span class="op">=</span>cinco_grupos).mean()</span>
-<span id="cb9-3"><a href="#cb9-3" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb9-4"><a href="#cb9-4" aria-hidden="true" tabindex="-1"></a><span class="bu">round</span>(<span class="bu">float</span>(erro_errado) <span class="op">*</span> <span class="dv">100</span>, <span class="dv">2</span>), <span class="bu">round</span>(<span class="bu">float</span>(erro_certo) <span class="op">*</span> <span class="dv">100</span>, <span class="dv">2</span>)</span></code></pre></div><button title="Copiar para a área de transferência" class="code-copy-button"><i class="bi"></i></button></div>
-<div id="certo-ruido" class="cell-output cell-output-display" data-execution_count="8">
-<pre><code>(2.0, 48.0)</code></pre>
+<div id="certo-ruido" class="cell" data-execution_count="12">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb18"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb18-1"><a href="#cb18-1" aria-hidden="true" tabindex="-1"></a>selecao_e_vizinho <span class="op">=</span> make_pipeline(</span>
+<span id="cb18-2"><a href="#cb18-2" aria-hidden="true" tabindex="-1"></a>    SelectKBest(f_classif, k<span class="op">=</span><span class="dv">100</span>),</span>
+<span id="cb18-3"><a href="#cb18-3" aria-hidden="true" tabindex="-1"></a>    vizinho)</span>
+<span id="cb18-4"><a href="#cb18-4" aria-hidden="true" tabindex="-1"></a>acuracias <span class="op">=</span> cross_val_score(</span>
+<span id="cb18-5"><a href="#cb18-5" aria-hidden="true" tabindex="-1"></a>    selecao_e_vizinho,</span>
+<span id="cb18-6"><a href="#cb18-6" aria-hidden="true" tabindex="-1"></a>    X_ruido, y_ruido,</span>
+<span id="cb18-7"><a href="#cb18-7" aria-hidden="true" tabindex="-1"></a>    cv<span class="op">=</span>cinco_grupos)</span>
+<span id="cb18-8"><a href="#cb18-8" aria-hidden="true" tabindex="-1"></a>erro_certo <span class="op">=</span> <span class="dv">1</span> <span class="op">-</span> acuracias.mean()</span>
+<span id="cb18-9"><a href="#cb18-9" aria-hidden="true" tabindex="-1"></a>erro_certo <span class="op">=</span> <span class="bu">float</span>(erro_certo)</span>
+<span id="cb18-10"><a href="#cb18-10" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">"seleção dentro (%):"</span>,</span>
+<span id="cb18-11"><a href="#cb18-11" aria-hidden="true" tabindex="-1"></a>    <span class="bu">round</span>(erro_certo <span class="op">*</span> <span class="dv">100</span>, <span class="dv">2</span>))</span></code></pre></div><button title="Copiar para a área de transferência" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>seleção dentro (%): 48.0</code></pre>
 </div>
 </div>
 <p>Com a seleção feita antes, o 5-fold estima 2% de erro, num problema em que nenhum classificador passa do acaso. Com a seleção dentro do <code>Pipeline</code>, estima 48%. As 100 colunas do jeito errado foram escolhidas olhando a classe das 50 observações, inclusive das que depois servem de validação. Entre 5.000 colunas de ruído, algumas separam aquelas 50 observações por puro acaso, e a validação cruzada mede o acerto nesse acaso, que não se repete em observação nova. No jeito certo, cada grupo de treino escolhe as suas próprias 100 colunas sem ver a classe do grupo de validação, e o acaso que ele encontra no treino não vale para a validação.</p>
@@ -1359,58 +1573,136 @@ div.csl-indent {
 </section>
 <section id="trinta-conjuntos-de-ruído" class="level2">
 <h2 class="anchored" data-anchor-id="trinta-conjuntos-de-ruído">Trinta conjuntos de ruído</h2>
-<p>Um conjunto só pode ter saído por sorte. A mesma comparação, repetida em 30 conjuntos de ruído, cada um com a sua partição em cinco grupos:</p>
-<div id="cell-trinta-conjuntos" class="cell" data-execution_count="9">
-<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb11"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb11-1"><a href="#cb11-1" aria-hidden="true" tabindex="-1"></a>rng <span class="op">=</span> np.random.default_rng(<span class="dv">10</span>)</span>
-<span id="cb11-2"><a href="#cb11-2" aria-hidden="true" tabindex="-1"></a>erros_errados, erros_certos <span class="op">=</span> [], []</span>
-<span id="cb11-3"><a href="#cb11-3" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> r <span class="kw">in</span> <span class="bu">range</span>(<span class="dv">30</span>):</span>
-<span id="cb11-4"><a href="#cb11-4" aria-hidden="true" tabindex="-1"></a>    X_r, y_r <span class="op">=</span> conjunto_de_ruido(rng)</span>
-<span id="cb11-5"><a href="#cb11-5" aria-hidden="true" tabindex="-1"></a>    grupos <span class="op">=</span> KFold(<span class="dv">5</span>, shuffle<span class="op">=</span><span class="va">True</span>, random_state<span class="op">=</span>r)</span>
-<span id="cb11-6"><a href="#cb11-6" aria-hidden="true" tabindex="-1"></a>    escolhidas <span class="op">=</span> SelectKBest(f_classif, k<span class="op">=</span><span class="dv">100</span>).fit_transform(X_r, y_r)</span>
-<span id="cb11-7"><a href="#cb11-7" aria-hidden="true" tabindex="-1"></a>    erros_errados.append(<span class="dv">1</span> <span class="op">-</span> cross_val_score(vizinho, escolhidas, y_r, cv<span class="op">=</span>grupos).mean())</span>
-<span id="cb11-8"><a href="#cb11-8" aria-hidden="true" tabindex="-1"></a>    erros_certos.append(<span class="dv">1</span> <span class="op">-</span> cross_val_score(selecao_e_vizinho, X_r, y_r, cv<span class="op">=</span>grupos).mean())</span>
-<span id="cb11-9"><a href="#cb11-9" aria-hidden="true" tabindex="-1"></a>erros_errados, erros_certos <span class="op">=</span> np.array(erros_errados), np.array(erros_certos)</span>
-<span id="cb11-10"><a href="#cb11-10" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb11-11"><a href="#cb11-11" aria-hidden="true" tabindex="-1"></a>todos_errados_abaixo_de_todos_certos <span class="op">=</span> <span class="bu">bool</span>(erros_errados.<span class="bu">max</span>() <span class="op">&lt;</span> erros_certos.<span class="bu">min</span>())</span>
-<span id="cb11-12"><a href="#cb11-12" aria-hidden="true" tabindex="-1"></a>pd.DataFrame(</span>
-<span id="cb11-13"><a href="#cb11-13" aria-hidden="true" tabindex="-1"></a>    {</span>
-<span id="cb11-14"><a href="#cb11-14" aria-hidden="true" tabindex="-1"></a>        <span class="st">"menor (%)"</span>: [<span class="bu">round</span>(<span class="bu">float</span>(e.<span class="bu">min</span>()) <span class="op">*</span> <span class="dv">100</span>, <span class="dv">2</span>) <span class="cf">for</span> e <span class="kw">in</span> (erros_errados, erros_certos)],</span>
-<span id="cb11-15"><a href="#cb11-15" aria-hidden="true" tabindex="-1"></a>        <span class="st">"média (%)"</span>: [<span class="bu">round</span>(<span class="bu">float</span>(e.mean()) <span class="op">*</span> <span class="dv">100</span>, <span class="dv">2</span>) <span class="cf">for</span> e <span class="kw">in</span> (erros_errados, erros_certos)],</span>
-<span id="cb11-16"><a href="#cb11-16" aria-hidden="true" tabindex="-1"></a>        <span class="st">"maior (%)"</span>: [<span class="bu">round</span>(<span class="bu">float</span>(e.<span class="bu">max</span>()) <span class="op">*</span> <span class="dv">100</span>, <span class="dv">2</span>) <span class="cf">for</span> e <span class="kw">in</span> (erros_errados, erros_certos)],</span>
-<span id="cb11-17"><a href="#cb11-17" aria-hidden="true" tabindex="-1"></a>    },</span>
-<span id="cb11-18"><a href="#cb11-18" aria-hidden="true" tabindex="-1"></a>    index<span class="op">=</span>[<span class="st">"seleção antes (errado)"</span>, <span class="st">"seleção dentro (certo)"</span>],</span>
-<span id="cb11-19"><a href="#cb11-19" aria-hidden="true" tabindex="-1"></a>), todos_errados_abaixo_de_todos_certos</span></code></pre></div><button title="Copiar para a área de transferência" class="code-copy-button"><i class="bi"></i></button></div>
-<div id="trinta-conjuntos" class="cell-output cell-output-display" data-execution_count="9">
-<pre><code>(                        menor (%)  média (%)  maior (%)
- seleção antes (errado)        0.0       1.60        6.0
- seleção dentro (certo)       38.0      55.47       72.0,
- True)</code></pre>
+<p>Um conjunto só pode ter saído por sorte. A mesma comparação, repetida em 30 conjuntos de ruído, cada um com a sua partição em cinco grupos; a tabela dá as taxas de erro em porcentagem, com a seleção antes da validação cruzada (o jeito errado) e dentro dela (o certo):</p>
+<div id="cell-trinta-conjuntos" class="cell" data-execution_count="13">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb20"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb20-1"><a href="#cb20-1" aria-hidden="true" tabindex="-1"></a>rng <span class="op">=</span> np.random.default_rng(<span class="dv">10</span>)</span>
+<span id="cb20-2"><a href="#cb20-2" aria-hidden="true" tabindex="-1"></a>erros_errados <span class="op">=</span> []</span>
+<span id="cb20-3"><a href="#cb20-3" aria-hidden="true" tabindex="-1"></a>erros_certos <span class="op">=</span> []</span>
+<span id="cb20-4"><a href="#cb20-4" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> r <span class="kw">in</span> <span class="bu">range</span>(<span class="dv">30</span>):</span>
+<span id="cb20-5"><a href="#cb20-5" aria-hidden="true" tabindex="-1"></a>    X_r, y_r <span class="op">=</span> (</span>
+<span id="cb20-6"><a href="#cb20-6" aria-hidden="true" tabindex="-1"></a>        conjunto_de_ruido(rng))</span>
+<span id="cb20-7"><a href="#cb20-7" aria-hidden="true" tabindex="-1"></a>    grupos <span class="op">=</span> KFold(</span>
+<span id="cb20-8"><a href="#cb20-8" aria-hidden="true" tabindex="-1"></a>        <span class="dv">5</span>, shuffle<span class="op">=</span><span class="va">True</span>,</span>
+<span id="cb20-9"><a href="#cb20-9" aria-hidden="true" tabindex="-1"></a>        random_state<span class="op">=</span>r)</span>
+<span id="cb20-10"><a href="#cb20-10" aria-hidden="true" tabindex="-1"></a>    <span class="co"># errado: seleção antes</span></span>
+<span id="cb20-11"><a href="#cb20-11" aria-hidden="true" tabindex="-1"></a>    selecao <span class="op">=</span> SelectKBest(</span>
+<span id="cb20-12"><a href="#cb20-12" aria-hidden="true" tabindex="-1"></a>        f_classif, k<span class="op">=</span><span class="dv">100</span>)</span>
+<span id="cb20-13"><a href="#cb20-13" aria-hidden="true" tabindex="-1"></a>    escolhidas <span class="op">=</span> (</span>
+<span id="cb20-14"><a href="#cb20-14" aria-hidden="true" tabindex="-1"></a>        selecao.fit_transform(</span>
+<span id="cb20-15"><a href="#cb20-15" aria-hidden="true" tabindex="-1"></a>            X_r, y_r))</span>
+<span id="cb20-16"><a href="#cb20-16" aria-hidden="true" tabindex="-1"></a>    acuracias <span class="op">=</span> cross_val_score(</span>
+<span id="cb20-17"><a href="#cb20-17" aria-hidden="true" tabindex="-1"></a>        vizinho, escolhidas, y_r,</span>
+<span id="cb20-18"><a href="#cb20-18" aria-hidden="true" tabindex="-1"></a>        cv<span class="op">=</span>grupos)</span>
+<span id="cb20-19"><a href="#cb20-19" aria-hidden="true" tabindex="-1"></a>    erros_errados.append(</span>
+<span id="cb20-20"><a href="#cb20-20" aria-hidden="true" tabindex="-1"></a>        <span class="dv">1</span> <span class="op">-</span> acuracias.mean())</span>
+<span id="cb20-21"><a href="#cb20-21" aria-hidden="true" tabindex="-1"></a>    <span class="co"># certo: seleção no Pipeline</span></span>
+<span id="cb20-22"><a href="#cb20-22" aria-hidden="true" tabindex="-1"></a>    acuracias <span class="op">=</span> cross_val_score(</span>
+<span id="cb20-23"><a href="#cb20-23" aria-hidden="true" tabindex="-1"></a>        selecao_e_vizinho,</span>
+<span id="cb20-24"><a href="#cb20-24" aria-hidden="true" tabindex="-1"></a>        X_r, y_r, cv<span class="op">=</span>grupos)</span>
+<span id="cb20-25"><a href="#cb20-25" aria-hidden="true" tabindex="-1"></a>    erros_certos.append(</span>
+<span id="cb20-26"><a href="#cb20-26" aria-hidden="true" tabindex="-1"></a>        <span class="dv">1</span> <span class="op">-</span> acuracias.mean())</span>
+<span id="cb20-27"><a href="#cb20-27" aria-hidden="true" tabindex="-1"></a>erros_errados <span class="op">=</span> np.array(</span>
+<span id="cb20-28"><a href="#cb20-28" aria-hidden="true" tabindex="-1"></a>    erros_errados)</span>
+<span id="cb20-29"><a href="#cb20-29" aria-hidden="true" tabindex="-1"></a>erros_certos <span class="op">=</span> np.array(</span>
+<span id="cb20-30"><a href="#cb20-30" aria-hidden="true" tabindex="-1"></a>    erros_certos)</span>
+<span id="cb20-31"><a href="#cb20-31" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb20-32"><a href="#cb20-32" aria-hidden="true" tabindex="-1"></a><span class="co"># em porcentagem</span></span>
+<span id="cb20-33"><a href="#cb20-33" aria-hidden="true" tabindex="-1"></a>em_pct <span class="op">=</span> pd.DataFrame({</span>
+<span id="cb20-34"><a href="#cb20-34" aria-hidden="true" tabindex="-1"></a>    <span class="st">"antes"</span>: erros_errados <span class="op">*</span> <span class="dv">100</span>,</span>
+<span id="cb20-35"><a href="#cb20-35" aria-hidden="true" tabindex="-1"></a>    <span class="st">"dentro"</span>: erros_certos <span class="op">*</span> <span class="dv">100</span>,</span>
+<span id="cb20-36"><a href="#cb20-36" aria-hidden="true" tabindex="-1"></a>})</span>
+<span id="cb20-37"><a href="#cb20-37" aria-hidden="true" tabindex="-1"></a>resumo <span class="op">=</span> em_pct.agg(</span>
+<span id="cb20-38"><a href="#cb20-38" aria-hidden="true" tabindex="-1"></a>    [<span class="st">"min"</span>, <span class="st">"mean"</span>, <span class="st">"max"</span>])</span>
+<span id="cb20-39"><a href="#cb20-39" aria-hidden="true" tabindex="-1"></a>resumo.index <span class="op">=</span> [</span>
+<span id="cb20-40"><a href="#cb20-40" aria-hidden="true" tabindex="-1"></a>    <span class="st">"menor"</span>, <span class="st">"média"</span>, <span class="st">"maior"</span>]</span>
+<span id="cb20-41"><a href="#cb20-41" aria-hidden="true" tabindex="-1"></a>resumo.T.<span class="bu">round</span>(<span class="dv">2</span>)</span></code></pre></div><button title="Copiar para a área de transferência" class="code-copy-button"><i class="bi"></i></button></div>
+<div id="trinta-conjuntos" class="cell-output cell-output-display" data-execution_count="13">
+<div>
+
+
+<table class="dataframe caption-top table table-sm table-striped small" data-border="1">
+<thead>
+<tr class="header">
+<th data-quarto-table-cell-role="th"></th>
+<th data-quarto-table-cell-role="th">menor</th>
+<th data-quarto-table-cell-role="th">média</th>
+<th data-quarto-table-cell-role="th">maior</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<th data-quarto-table-cell-role="th">antes</th>
+<td>0.0</td>
+<td>1.60</td>
+<td>6.0</td>
+</tr>
+<tr class="even">
+<th data-quarto-table-cell-role="th">dentro</th>
+<td>38.0</td>
+<td>55.47</td>
+<td>72.0</td>
+</tr>
+</tbody>
+</table>
+
 </div>
 </div>
-<div id="cell-fig-vazamento-ruido" class="cell" data-execution_count="10">
-<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb13"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb13-1"><a href="#cb13-1" aria-hidden="true" tabindex="-1"></a>deslocamento <span class="op">=</span> np.random.default_rng(<span class="dv">10</span>).uniform(<span class="op">-</span><span class="fl">0.12</span>, <span class="fl">0.12</span>, size<span class="op">=</span>(<span class="dv">2</span>, <span class="dv">30</span>))</span>
-<span id="cb13-2"><a href="#cb13-2" aria-hidden="true" tabindex="-1"></a>fileiras <span class="op">=</span> [</span>
-<span id="cb13-3"><a href="#cb13-3" aria-hidden="true" tabindex="-1"></a>    (erros_errados, <span class="dv">1</span>, <span class="st">"C1"</span>),</span>
-<span id="cb13-4"><a href="#cb13-4" aria-hidden="true" tabindex="-1"></a>    (erros_certos, <span class="dv">0</span>, <span class="st">"C0"</span>),</span>
-<span id="cb13-5"><a href="#cb13-5" aria-hidden="true" tabindex="-1"></a>]</span>
-<span id="cb13-6"><a href="#cb13-6" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb13-7"><a href="#cb13-7" aria-hidden="true" tabindex="-1"></a>fig, ax <span class="op">=</span> plt.subplots(figsize<span class="op">=</span>(<span class="dv">8</span>, <span class="dv">3</span>))</span>
-<span id="cb13-8"><a href="#cb13-8" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> erros, altura, cor <span class="kw">in</span> fileiras:</span>
-<span id="cb13-9"><a href="#cb13-9" aria-hidden="true" tabindex="-1"></a>    ax.scatter(erros, altura <span class="op">+</span> deslocamento[altura], s<span class="op">=</span><span class="dv">40</span>, alpha<span class="op">=</span><span class="fl">0.8</span>, color<span class="op">=</span>cor)</span>
-<span id="cb13-10"><a href="#cb13-10" aria-hidden="true" tabindex="-1"></a>ax.axvline(<span class="fl">0.5</span>, color<span class="op">=</span><span class="st">"0.45"</span>, linestyle<span class="op">=</span><span class="st">"--"</span>, linewidth<span class="op">=</span><span class="fl">1.5</span>)</span>
-<span id="cb13-11"><a href="#cb13-11" aria-hidden="true" tabindex="-1"></a>ax.annotate(<span class="st">"acaso"</span>, xy<span class="op">=</span>(<span class="fl">0.5</span>, <span class="fl">1.35</span>), xytext<span class="op">=</span>(<span class="dv">6</span>, <span class="dv">0</span>), textcoords<span class="op">=</span><span class="st">"offset points"</span>, color<span class="op">=</span><span class="st">"0.45"</span>)</span>
-<span id="cb13-12"><a href="#cb13-12" aria-hidden="true" tabindex="-1"></a>ax.set_yticks([<span class="dv">0</span>, <span class="dv">1</span>], [<span class="st">"seleção dentro</span><span class="ch">\n</span><span class="st">(certo)"</span>, <span class="st">"seleção antes</span><span class="ch">\n</span><span class="st">(errado)"</span>])</span>
-<span id="cb13-13"><a href="#cb13-13" aria-hidden="true" tabindex="-1"></a>ax.set_ylim(<span class="op">-</span><span class="fl">0.5</span>, <span class="fl">1.5</span>)</span>
-<span id="cb13-14"><a href="#cb13-14" aria-hidden="true" tabindex="-1"></a>ax.set_xlim(<span class="op">-</span><span class="fl">0.02</span>, <span class="fl">1.0</span>)</span>
-<span id="cb13-15"><a href="#cb13-15" aria-hidden="true" tabindex="-1"></a>ax.xaxis.set_major_formatter(<span class="kw">lambda</span> valor, _: <span class="ss">f"</span><span class="sc">{</span>valor<span class="sc">:.0%}</span><span class="ss">"</span>)</span>
-<span id="cb13-16"><a href="#cb13-16" aria-hidden="true" tabindex="-1"></a>ax.set_xlabel(<span class="st">"taxa de erro do 5-fold"</span>)</span>
-<span id="cb13-17"><a href="#cb13-17" aria-hidden="true" tabindex="-1"></a>plt.tight_layout()</span>
-<span id="cb13-18"><a href="#cb13-18" aria-hidden="true" tabindex="-1"></a>plt.show()</span></code></pre></div><button title="Copiar para a área de transferência" class="code-copy-button"><i class="bi"></i></button></div>
+</div>
+<div id="cell-fig-vazamento-ruido" class="cell" data-execution_count="14">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb21"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb21-1"><a href="#cb21-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> matplotlib.pyplot <span class="im">as</span> plt</span>
+<span id="cb21-2"><a href="#cb21-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb21-3"><a href="#cb21-3" aria-hidden="true" tabindex="-1"></a><span class="co"># só para os pontos não se</span></span>
+<span id="cb21-4"><a href="#cb21-4" aria-hidden="true" tabindex="-1"></a><span class="co"># sobreporem dentro da fileira</span></span>
+<span id="cb21-5"><a href="#cb21-5" aria-hidden="true" tabindex="-1"></a>deslocamento <span class="op">=</span> (</span>
+<span id="cb21-6"><a href="#cb21-6" aria-hidden="true" tabindex="-1"></a>    np.random.default_rng(<span class="dv">10</span>)</span>
+<span id="cb21-7"><a href="#cb21-7" aria-hidden="true" tabindex="-1"></a>    .uniform(<span class="op">-</span><span class="fl">0.12</span>, <span class="fl">0.12</span>,</span>
+<span id="cb21-8"><a href="#cb21-8" aria-hidden="true" tabindex="-1"></a>        size<span class="op">=</span>(<span class="dv">2</span>, <span class="dv">30</span>)))</span>
+<span id="cb21-9"><a href="#cb21-9" aria-hidden="true" tabindex="-1"></a>fileiras <span class="op">=</span> [</span>
+<span id="cb21-10"><a href="#cb21-10" aria-hidden="true" tabindex="-1"></a>    (erros_errados, <span class="dv">1</span>, <span class="st">"C1"</span>),</span>
+<span id="cb21-11"><a href="#cb21-11" aria-hidden="true" tabindex="-1"></a>    (erros_certos, <span class="dv">0</span>, <span class="st">"C0"</span>),</span>
+<span id="cb21-12"><a href="#cb21-12" aria-hidden="true" tabindex="-1"></a>]</span>
+<span id="cb21-13"><a href="#cb21-13" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb21-14"><a href="#cb21-14" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb21-15"><a href="#cb21-15" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> porcentagem(valor, posicao):</span>
+<span id="cb21-16"><a href="#cb21-16" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> <span class="ss">f"</span><span class="sc">{</span>valor<span class="sc">:.0%}</span><span class="ss">"</span></span>
+<span id="cb21-17"><a href="#cb21-17" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb21-18"><a href="#cb21-18" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb21-19"><a href="#cb21-19" aria-hidden="true" tabindex="-1"></a>fig, ax <span class="op">=</span> plt.subplots(</span>
+<span id="cb21-20"><a href="#cb21-20" aria-hidden="true" tabindex="-1"></a>    figsize<span class="op">=</span>(<span class="dv">6</span>, <span class="fl">3.2</span>))</span>
+<span id="cb21-21"><a href="#cb21-21" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> fileira <span class="kw">in</span> fileiras:</span>
+<span id="cb21-22"><a href="#cb21-22" aria-hidden="true" tabindex="-1"></a>    erros, altura, cor <span class="op">=</span> fileira</span>
+<span id="cb21-23"><a href="#cb21-23" aria-hidden="true" tabindex="-1"></a>    y_pontos <span class="op">=</span> (altura</span>
+<span id="cb21-24"><a href="#cb21-24" aria-hidden="true" tabindex="-1"></a>        <span class="op">+</span> deslocamento[altura])</span>
+<span id="cb21-25"><a href="#cb21-25" aria-hidden="true" tabindex="-1"></a>    ax.scatter(</span>
+<span id="cb21-26"><a href="#cb21-26" aria-hidden="true" tabindex="-1"></a>        erros, y_pontos,</span>
+<span id="cb21-27"><a href="#cb21-27" aria-hidden="true" tabindex="-1"></a>        s<span class="op">=</span><span class="dv">40</span>, alpha<span class="op">=</span><span class="fl">0.8</span>,</span>
+<span id="cb21-28"><a href="#cb21-28" aria-hidden="true" tabindex="-1"></a>        color<span class="op">=</span>cor)</span>
+<span id="cb21-29"><a href="#cb21-29" aria-hidden="true" tabindex="-1"></a>ax.axvline(</span>
+<span id="cb21-30"><a href="#cb21-30" aria-hidden="true" tabindex="-1"></a>    <span class="fl">0.5</span>, color<span class="op">=</span><span class="st">"0.45"</span>,</span>
+<span id="cb21-31"><a href="#cb21-31" aria-hidden="true" tabindex="-1"></a>    linestyle<span class="op">=</span><span class="st">"--"</span>, linewidth<span class="op">=</span><span class="fl">1.5</span>)</span>
+<span id="cb21-32"><a href="#cb21-32" aria-hidden="true" tabindex="-1"></a>ax.annotate(</span>
+<span id="cb21-33"><a href="#cb21-33" aria-hidden="true" tabindex="-1"></a>    <span class="st">"acaso"</span>, xy<span class="op">=</span>(<span class="fl">0.5</span>, <span class="fl">1.35</span>),</span>
+<span id="cb21-34"><a href="#cb21-34" aria-hidden="true" tabindex="-1"></a>    xytext<span class="op">=</span>(<span class="dv">6</span>, <span class="dv">0</span>),</span>
+<span id="cb21-35"><a href="#cb21-35" aria-hidden="true" tabindex="-1"></a>    textcoords<span class="op">=</span><span class="st">"offset points"</span>,</span>
+<span id="cb21-36"><a href="#cb21-36" aria-hidden="true" tabindex="-1"></a>    color<span class="op">=</span><span class="st">"0.45"</span>)</span>
+<span id="cb21-37"><a href="#cb21-37" aria-hidden="true" tabindex="-1"></a>ax.set_yticks(</span>
+<span id="cb21-38"><a href="#cb21-38" aria-hidden="true" tabindex="-1"></a>    [<span class="dv">0</span>, <span class="dv">1</span>],</span>
+<span id="cb21-39"><a href="#cb21-39" aria-hidden="true" tabindex="-1"></a>    [<span class="st">"seleção dentro</span><span class="ch">\n</span><span class="st">(certo)"</span>,</span>
+<span id="cb21-40"><a href="#cb21-40" aria-hidden="true" tabindex="-1"></a>        <span class="st">"seleção antes"</span></span>
+<span id="cb21-41"><a href="#cb21-41" aria-hidden="true" tabindex="-1"></a>        <span class="st">"</span><span class="ch">\n</span><span class="st">(errado)"</span>])</span>
+<span id="cb21-42"><a href="#cb21-42" aria-hidden="true" tabindex="-1"></a>ax.set_ylim(<span class="op">-</span><span class="fl">0.5</span>, <span class="fl">1.5</span>)</span>
+<span id="cb21-43"><a href="#cb21-43" aria-hidden="true" tabindex="-1"></a>ax.set_xlim(<span class="op">-</span><span class="fl">0.02</span>, <span class="fl">1.0</span>)</span>
+<span id="cb21-44"><a href="#cb21-44" aria-hidden="true" tabindex="-1"></a>ax.xaxis.set_major_formatter(</span>
+<span id="cb21-45"><a href="#cb21-45" aria-hidden="true" tabindex="-1"></a>    porcentagem)</span>
+<span id="cb21-46"><a href="#cb21-46" aria-hidden="true" tabindex="-1"></a>ax.set_xlabel(</span>
+<span id="cb21-47"><a href="#cb21-47" aria-hidden="true" tabindex="-1"></a>    <span class="st">"taxa de erro do 5-fold"</span>)</span>
+<span id="cb21-48"><a href="#cb21-48" aria-hidden="true" tabindex="-1"></a>plt.tight_layout()</span>
+<span id="cb21-49"><a href="#cb21-49" aria-hidden="true" tabindex="-1"></a>plt.show()</span></code></pre></div><button title="Copiar para a área de transferência" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-display">
-<div id="fig-vazamento-ruido" class="quarto-float quarto-figure quarto-figure-center anchored" alt="Duas fileiras horizontais de 30 pontos sobre um eixo de taxa de erro de 0% a 100%. A fileira laranja, da seleção antes, fica toda encostada à esquerda, entre 0% e 6%. A fileira azul, da seleção dentro, se espalha entre 38% e 72%, em volta de uma linha cinza tracejada vertical em 50% marcada como acaso.">
+<div id="fig-vazamento-ruido" class="quarto-float quarto-figure quarto-figure-center anchored" alt="Duas fileiras horizontais de 30 pontos sobre um eixo de taxa de erro de 0% a 100%. A fileira laranja, da seleção antes, fica toda encostada à esquerda, entre 0% e 6%. A fileira azul, da seleção dentro, se espalha entre 38% e 72%, dos dois lados de uma linha cinza tracejada vertical em 50% marcada como acaso.">
 <figure class="quarto-float quarto-float-fig figure">
 <div aria-describedby="fig-vazamento-ruido-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
-<img src="06-vazamento_files/figure-html/fig-vazamento-ruido-output-1.png" alt="Duas fileiras horizontais de 30 pontos sobre um eixo de taxa de erro de 0% a 100%. A fileira laranja, da seleção antes, fica toda encostada à esquerda, entre 0% e 6%. A fileira azul, da seleção dentro, se espalha entre 38% e 72%, em volta de uma linha cinza tracejada vertical em 50% marcada como acaso." width="1109" height="406" class="figure-img">
+<img src="06-vazamento_files/figure-html/fig-vazamento-ruido-output-1.png" alt="Duas fileiras horizontais de 30 pontos sobre um eixo de taxa de erro de 0% a 100%. A fileira laranja, da seleção antes, fica toda encostada à esquerda, entre 0% e 6%. A fileira azul, da seleção dentro, se espalha entre 38% e 72%, dos dois lados de uma linha cinza tracejada vertical em 50% marcada como acaso." width="829" height="434" class="figure-img">
 </div>
 <figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-fig" id="fig-vazamento-ruido-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
 Figura&nbsp;1: Taxa de erro do 5-fold em 30 conjuntos de ruído puro (50 observações, 5.000 colunas), com a seleção das 100 colunas feita antes da validação cruzada (laranja) e dentro do Pipeline (azul). Cada ponto é um conjunto; a altura dentro de cada fileira é sorteada só para os pontos não se sobreporem. A linha tracejada marca 50%, a taxa de erro de teste de qualquer classificador nesse dado.
@@ -1424,7 +1716,7 @@ Figura&nbsp;1: Taxa de erro do 5-fold em 30 conjuntos de ruído puro (50 observa
 <p><strong><code>ax.annotate(texto, xy, xytext, textcoords)</code></strong>: escreve <code>texto</code> junto ao ponto <code>xy</code>; com <code>textcoords="offset points"</code>, <code>xytext</code> é um deslocamento em pontos tipográficos.</p>
 <p><strong><code>ax.set_yticks(posicoes, rotulos)</code></strong>: põe marcas no eixo vertical só nas <code>posicoes</code> dadas, com os <code>rotulos</code> no lugar dos números.</p>
 </div>
-<p><code>todos_errados_abaixo_de_todos_certos</code> confirma que, nos 30 conjuntos, o maior erro estimado com a seleção antes fica abaixo do menor erro estimado com a seleção dentro. O jeito errado vai de 0% a 6%, com média de 1,60%; o certo, de 38% a 72%, com média de 55,47%. O certo não acerta 50% em cada conjunto, e nem deveria: com 50 observações e cinco grupos de 10, a estimativa da validação cruzada oscila muito de uma amostra para outra, como a seção 10.4 mediu. Ela oscila em volta de 50%, onde está o erro verdadeiro. O errado não oscila em volta de nada que exista: ele mede o quanto o acaso das 5.000 colunas consegue separar 50 observações, e esse acaso é grande.</p>
+<p>Na tabela, o maior erro estimado com a seleção antes, 6%, fica abaixo do menor erro estimado com a seleção dentro, 38%: nos 30 conjuntos, as duas fileiras da figura não se encostam. O jeito errado vai de 0% a 6%, com média de 1,60%; o certo, de 38% a 72%, com média de 55,47%. O certo não acerta 50% em cada conjunto, e nem deveria: com 50 observações e cinco grupos de 10, a estimativa da validação cruzada oscila muito de uma amostra para outra, como a seção 10.4 mediu. Ela fica do lado do acaso, de 38% a 72%, um pouco acima de 50% em média porque os grupos não são estratificados. O errado não fica perto de nada que exista: ele mede o quanto o acaso das 5.000 colunas consegue separar 50 observações, e esse acaso é grande.</p>
 <p>Os dois exemplos cometem o mesmo erro, uma etapa que aprende do dado ajustada fora da validação cruzada. O tamanho do estrago depende do quanto a etapa aprende. A padronização aprende uma média e um desvio por coluna, sem olhar a resposta; a seleção de colunas olha a resposta e escolhe, entre 5.000, as que melhor a acompanham naquelas 50 observações.</p>
 <div class="conceito">
 <p>Toda etapa que aprende do dado (padronizar, preencher valores faltantes, escolher colunas, reduzir a dimensão) entra no <code>Pipeline</code>, e o <code>Pipeline</code> inteiro entra no <code>cross_val_score</code>. Assim cada etapa é reajustada em cada grupo de treino, e o grupo de validação chega ao modelo como uma observação nova chegaria.</p>
