@@ -18,13 +18,10 @@ A função `numero_br` escreve os números com a pontuação brasileira:
 
 ```{python}
 #| label: numero-br
-numero_br = lambda v, casas=2: (
-    f"{v:,.{casas}f}"
-    .replace(",", "_")
-    .replace(".", ",")
-    .replace("_", ".")
-    .replace("-", "−")
-)
+def numero_br(valor, casas=2):
+    texto = f"{valor:,.{casas}f}"
+    texto = texto.replace(",", "_").replace(".", ",").replace("_", ".")
+    return texto.replace("-", "−")
 ```
 
 ## Padronizar ou não
@@ -35,28 +32,22 @@ Os 50 estados do `USArrests` têm quatro colunas: as prisões por homicídio, ag
 #| label: escala
 import numpy as np
 import pandas as pd
-from sklearn.cluster import (
-    AgglomerativeClustering)
-from sklearn.preprocessing \
-    import StandardScaler
+from sklearn.cluster import AgglomerativeClustering
+from sklearn.preprocessing import StandardScaler
 
-prisoes = pd.read_csv(
-    "dados/USArrests.csv",
-    index_col="estado")
+prisoes = pd.read_csv("dados/USArrests.csv", index_col="estado")
 padronizador = StandardScaler()
-padr = padronizador.fit_transform(
-    prisoes)
-print("forma:", padr.shape)
-ag = AgglomerativeClustering(
-    n_clusters=3,
-    linkage="complete")
+padr = padronizador.fit_transform(prisoes)
+print("estados:", padr.shape[0], "· colunas:", padr.shape[1])
+ag = AgglomerativeClustering(n_clusters=3, linkage="complete")
 g_cru = ag.fit_predict(prisoes)
 g_pad = ag.fit_predict(padr)
-print("tamanhos dos 3 grupos:")
-print("  sem padronizar:",
-    *np.sort(np.bincount(g_cru)))
-print("  padronizado:",
-    *np.sort(np.bincount(g_pad)))
+tamanhos = pd.DataFrame({"sem padronizar": np.sort(np.bincount(g_cru)),
+                         "padronizado": np.sort(np.bincount(g_pad))},
+                        index=["menor", "do meio", "maior"])
+tamanhos.index.name = "grupo"
+print("estados em cada grupo:")
+print(tamanhos.to_string())
 ```
 
 ::: {.funcao}
@@ -67,35 +58,24 @@ Os tamanhos já mostram que as divisões diferem. O índice de Rand ajustado, qu
 
 ```{python}
 #| label: faixas
-from sklearn.metrics import (
-    adjusted_rand_score)
+from sklearn.metrics import adjusted_rand_score
 
-ari = adjusted_rand_score(
-    g_cru, g_pad)
-print("ARI entre as duas:",
-    numero_br(ari, 3))
+print("ARI entre as duas:", numero_br(adjusted_rand_score(g_cru, g_pad), 3))
 agr = prisoes["agressao"]
-for nome, g in [("sem", g_cru),
-        ("com", g_pad)]:
-    fx = (agr.groupby(g)
-        .agg(["min", "max"])
-        .sort_values("min"))
-    lo = fx["min"].to_numpy()
-    hi = fx["max"].to_numpy()
-    sep = np.all(hi[:-1] < lo[1:])
-    print(f"{nome} padronizar:")
-    for a, b in zip(lo, hi):
-        print(f"  {a} a {b}")
-    print("  faixas separadas:",
-        bool(sep))
+for nome, g in [("sem padronizar", g_cru), ("padronizado", g_pad)]:
+    faixas = agr.groupby(g).agg(["min", "max"]).sort_values("min")
+    faixas.columns = ["de", "até"]
+    faixas.index.name = "grupo"
+    print()
+    print(f"agressao em cada grupo, {nome}:")
+    print(faixas.to_string())
 ```
 
 ::: {.funcao}
-- **`serie.groupby(g).agg(["min", "max"])`** — separa os valores da série pelo grupo `g` e calcula, em cada grupo, o menor e o maior: uma linha por grupo, com as colunas `min` e `max`. **`.sort_values("min")`** ordena as linhas pela coluna `min`.
-- **`hi[:-1] < lo[1:]`** — compara o máximo de cada faixa com o mínimo da faixa seguinte; tudo `True` quer dizer que nenhuma faixa invade a seguinte.
+- **`serie.groupby(g).agg(["min", "max"])`** — separa os valores da série pelo grupo `g` e calcula, em cada grupo, o menor e o maior: uma linha por grupo, com as colunas `min` e `max`. **`.sort_values("min")`** ordena as linhas pela coluna `min`, e **`faixas.columns = [...]`** dá nomes novos às duas colunas.
 :::
 
-O índice de Rand ajustado entre as duas divisões é 0,368, longe de 1. Sem padronizar, os três grupos são só três faixas de `agressao`, que não se tocam. Padronizadas as colunas, as faixas se sobrepõem, e as outras três colunas passam a pesar. A figura abaixo mostra os mesmos 50 estados duas vezes, com a cor do grupo de cada divisão:
+O índice de Rand ajustado entre as duas divisões é 0,368, longe de 1. Sem padronizar, os três grupos são só três faixas de `agressao`, que não se tocam: cada uma começa acima de onde a anterior termina. Padronizadas as colunas, as faixas se sobrepõem, e as outras três colunas passam a pesar. A figura abaixo mostra os mesmos 50 estados duas vezes, com a cor do grupo de cada divisão:
 
 ```{python}
 #| label: fig-escala
@@ -103,32 +83,20 @@ O índice de Rand ajustado entre as duas divisões é 0,368, longe de 1. Sem pad
 #| fig-alt: "Dois gráficos de dispersão empilhados, com os mesmos 50 pontos, a agressão no eixo horizontal, com os pontos de 45 a 337, e a população urbana no vertical. No de cima, sem padronizar, as três cores formam três faixas verticais que não se tocam: de 45 a 120, de 145 a 211 e de 236 a 337. No de baixo, padronizado, as cores se misturam ao longo do eixo da agressão, e um grupo vai de 45 a 238, enquanto os outros dois vão de 188 e de 201 até perto de 337."
 import matplotlib.pyplot as plt
 
-fig, eixos = plt.subplots(
-    2, 1, figsize=(3.8, 5.2),
-    sharex=True)
+fig, eixos = plt.subplots(2, 1, figsize=(3.8, 5.2), sharex=True)
 urb = prisoes["pop_urbana"]
 cores = ["C0", "C1", "C2"]
 marcas = ["o", "s", "^"]
-titulos = ["sem padronizar",
-    "padronizado"]
-for ax, g, tit in zip(eixos,
-        [g_cru, g_pad], titulos):
-    ordem = (agr.groupby(g).mean()
-        .sort_values().index)
-    for k, grupo in enumerate(
-            ordem):
+titulos = ["sem padronizar", "padronizado"]
+for ax, g, titulo in zip(eixos, [g_cru, g_pad], titulos):
+    ordem = agr.groupby(g).mean().sort_values().index
+    for k, grupo in enumerate(ordem):
         m = g == grupo
-        ax.scatter(agr[m], urb[m],
-            s=22,
-            marker=marcas[k],
-            facecolors="none",
-            edgecolors=cores[k],
-            linewidths=1.1)
-    ax.set_title(tit)
-    ax.set_ylabel(
-        "pop. urbana (%)")
-eixos[1].set_xlabel(
-    "agressão (por 100 mil)")
+        ax.scatter(agr[m], urb[m], s=22, marker=marcas[k],
+                   facecolors="none", edgecolors=cores[k], linewidths=1.1)
+    ax.set_title(titulo)
+    ax.set_ylabel("pop. urbana (%)")
+eixos[1].set_xlabel("agressão (por 100 mil)")
 plt.tight_layout()
 plt.show()
 ```
@@ -152,31 +120,24 @@ def fatias(A):
     v = A.var(axis=0)
     return v / v.sum()
 
-amplitude = (prisoes.max()
-    - prisoes.min())
-f_cru = fatias(prisoes)
-f_pad = fatias(padr)
-print("amplitude · fatia crua",
-    "· padr.")
-for c, amp, a, b in zip(
-        prisoes.columns,
-        amplitude, f_cru, f_pad):
-    print(f"  {c}:",
-        numero_br(amp, 1), "·",
-        numero_br(a), "·",
-        numero_br(b))
-outras = amplitude.drop(
-    "agressao")
-vezes = np.all(
-    amplitude["agressao"]
-    > 4 * outras)
-print("agressao > 4 × as outras:",
-    bool(vezes))
+
+def uma_casa(valor):
+    return numero_br(valor, 1)
+
+
+amplitude = prisoes.max() - prisoes.min()
+pesos = pd.DataFrame({"amplitude": amplitude,
+                      "agressao ÷ esta": amplitude["agressao"] / amplitude,
+                      "fatia, crua": fatias(prisoes),
+                      "fatia, padronizada": fatias(padr)})
+pesos.style.format({"amplitude": uma_casa, "agressao ÷ esta": numero_br,
+                    "fatia, crua": numero_br,
+                    "fatia, padronizada": numero_br})
 ```
 
 ::: {.funcao}
 - **`np.asarray(A, dtype=float)`** — `A` como array de números decimais, seja ela uma tabela do `pandas` ou já um array.
-- **`prisoes.max() - prisoes.min()`** — a amplitude de cada coluna: o maior valor menos o menor.
+- **`prisoes.max() - prisoes.min()`** — a amplitude de cada coluna: o maior valor menos o menor; `amplitude["agressao"] / amplitude` divide a de `agressao` pela de cada coluna.
 :::
 
 Sem padronizar, `agressao` responde por 0,96 da soma das distâncias ao quadrado. A amplitude dela, 292,0, passa de quatro vezes a de cada uma das outras três (homicídio, 16,6; população urbana, 59,0; estupro, 38,7), e a parcela de cada coluna cresce com o quadrado das diferenças: as diferenças em `agressao` abafam as das outras colunas. Padronizadas, as quatro colunas ficam com 0,25 cada, e pesam igual.
@@ -185,25 +146,21 @@ Padronizar é sempre o certo? Uma loja vende meias e computadores e quer agrupar
 
 ```{python}
 #| label: meias
-meias = np.array(
-    [8, 11, 7, 6, 5, 6, 7, 8])
-pcs = np.array(
-    [0, 0, 0, 0, 1, 1, 1, 1])
-qtd = np.column_stack(
-    [meias, pcs])
-# preço: 20 reais o par de meias
-# e 4.000 reais o computador
+def tres_casas(valor):
+    return numero_br(valor, 3)
+
+
+meias = np.array([8, 11, 7, 6, 5, 6, 7, 8])
+pcs = np.array([0, 0, 0, 0, 1, 1, 1, 1])
+qtd = np.column_stack([meias, pcs])
+# preço: 20 reais o par de meias e 4.000 reais o computador
 reais = qtd * [20, 4000]
-pad = StandardScaler() \
-    .fit_transform(qtd)
-versoes = {"quantidade": qtd,
-    "padronizada": pad,
-    "em reais": reais}
-print("fatia das meias:")
+pad = StandardScaler().fit_transform(qtd)
+versoes = {"quantidade": qtd, "padronizada": pad, "em reais": reais}
+linhas = []
 for nome, A in versoes.items():
-    f = fatias(A)[0]
-    print(f"  {nome}:",
-        numero_br(f, 3))
+    linhas.append({"versão": nome, "fatia das meias": fatias(A)[0]})
+pd.DataFrame(linhas).set_index("versão").style.format(tres_casas)
 ```
 
 ::: {.funcao}
@@ -219,66 +176,49 @@ Qual das três versões está certa depende do que a loja quer dos grupos. Se o 
 
 O *k*-means pede $K$ antes de começar. A inércia, a soma das distâncias ao quadrado de cada ponto ao centroide do seu grupo, serve para escolher $K$? Para comparar, a conta roda nos estados padronizados e em duas tabelas de 50 linhas e 4 colunas, com valores sorteados de uma distribuição normal e sem grupo nenhum. Na primeira, o ruído independente, as colunas não têm relação entre si. Na segunda, o ruído correlacionado, a normal tem a matriz de covariância dos estados padronizados, estimada por `np.cov`, e as colunas se correlacionam como as dos estados.
 
+As duas tabelas de ruído saem do mesmo sorteio. Com a mesma semente, `multivariate_normal` sorteia as mesmas normais independentes da primeira tabela e as transforma para que tenham a covariância dos estados. O acaso é o mesmo nas duas, e o que muda de uma para a outra é só a correlação entre as colunas. A conta, primeiro uma vez, para os estados com $K = 2$, e depois para cada tabela e cada $K$ de 1 a 8:
+
 ```{python}
 #| label: inercia-k
 from sklearn.cluster import KMeans
 
-ger_ind = (np.random
-    .default_rng(15))
-ruido = ger_ind.normal(
-    size=(50, 4))
+km = KMeans(n_clusters=2, n_init=50, random_state=15)
+km.fit(padr)
+print("estados, K = 2, inércia:", numero_br(km.inertia_))
+
+ger_ind = np.random.default_rng(15)
+ruido = ger_ind.normal(size=(50, 4))
 cov = np.cov(padr.T)
-ger_cor = (np.random
-    .default_rng(15))
-nuvem = (ger_cor
-    .multivariate_normal(
-        np.zeros(4), cov, 50))
-tabelas = {"estados": padr,
-    "independente": ruido,
-    "correlacionado": nuvem}
+ger_cor = np.random.default_rng(15)
+nuvem = ger_cor.multivariate_normal(np.zeros(4), cov, 50)
+tabelas = {"estados": padr, "independente": ruido, "correlacionado": nuvem}
 Ks = range(1, 9)
-iner = {}
+inercias = pd.DataFrame(index=Ks)
+inercias.index.name = "K"
 for nome, A in tabelas.items():
-    iner[nome] = np.array([
-        KMeans(n_clusters=K,
-            n_init=50,
-            random_state=15)
-        .fit(A).inertia_
-        for K in Ks])
+    valores = []
+    for K in Ks:
+        km = KMeans(n_clusters=K, n_init=50, random_state=15)
+        km.fit(A)
+        valores.append(km.inertia_)
+    inercias[nome] = valores
 print("inércia com K = 1:")
-for nome, v in iner.items():
-    print(f"  {nome}:",
-        numero_br(v[0]))
-    cai = np.all(np.diff(v) < 0)
-    print("    só cai:",
-        bool(cai))
-rel = {nome: v / v[0]
-    for nome, v in iner.items()}
-print("fração que resta:")
-print("K: estados · indep.",
-    "· correl.")
-for i, K in enumerate(Ks):
-    print(f"{K}:", *[numero_br(
-        rel[n][i]) for n in rel])
-ind = rel["independente"][1:]
-teto = np.maximum(
-    rel["estados"][1:],
-    rel["correlacionado"][1:])
-acima = np.all(ind > teto)
-print("independente acima das")
-print("  outras, em K > 1:",
-    bool(acima))
+for nome in tabelas:
+    print(f"  {nome}:", numero_br(inercias.loc[1, nome]))
+print("fração da inércia de K = 1 que resta:")
+fracao = inercias / inercias.loc[1]
+fracao.style.format(numero_br)
 ```
 
 ::: {.funcao}
 - **`np.cov(padr.T)`** — a matriz de covariância das colunas de `padr`: na diagonal, a variância de cada coluna; fora dela, a covariância de cada par. O `.T` transpõe a tabela, porque `np.cov` trata cada linha como uma variável. O divisor é $n - 1$, e não o $n$ do `StandardScaler`.
 - **`ger.multivariate_normal(media, cov, 50)`** — sorteia 50 linhas de uma normal com o vetor de médias e a matriz de covariância dados. Aqui o vetor de médias é **`np.zeros(4)`**, quatro médias iguais a 0.
-- **`np.maximum(a, b)`** — o maior de `a` e `b` em cada posição: aqui, a curva mais alta entre a dos estados e a do ruído correlacionado, em cada $K$.
+- **`pd.DataFrame(index=Ks)`** — uma tabela vazia, com uma linha para cada $K$; `inercias[nome] = valores` acrescenta a coluna de cada tabela. **`inercias / inercias.loc[1]`** divide cada coluna pelo valor dela em $K = 1$.
 :::
 
 Com $K = 1$, o centroide é a média de cada coluna. Nos estados padronizados, cada coluna tem média 0 e, com o divisor $n$ do `StandardScaler`, soma dos quadrados igual a $n$: a inércia é $np$, com $n = 50$ estados e $p = 4$ colunas, 200. Os dois ruídos não foram padronizados, e as inércias deles com $K = 1$ são 197,62 e 216,12.
 
-A inércia cai a cada grupo a mais, nas três tabelas. Como na seção 15.4, a melhor divisão com $K + 1$ grupos nunca tem inércia maior que a melhor com $K$, porque dá para partir um grupo em dois sem aumentar a soma; aqui, os valores que o *k*-means achou também caem. O menor valor fica no maior $K$ testado, e por isso a inércia não escolhe $K$ pelo menor valor.
+Na tabela, a inércia cai a cada grupo a mais, nas três colunas. Como na seção 15.4, a melhor divisão com $K + 1$ grupos nunca tem inércia maior que a melhor com $K$, porque dá para partir um grupo em dois sem aumentar a soma; aqui, os valores que o *k*-means achou também caem. O menor valor fica no maior $K$ testado, e por isso a inércia não escolhe $K$ pelo menor valor.
 
 Uma leitura comum é procurar um cotovelo, um $K$ a partir do qual a inércia passa a cair pouco. Na figura abaixo, as três curvas estão divididas pela inércia de $K = 1$, para ficarem na mesma escala:
 
@@ -286,23 +226,20 @@ Uma leitura comum é procurar um cotovelo, um $K$ a partir do qual a inércia pa
 #| label: fig-inercia
 #| fig-cap: "A inércia do *k*-means contra o número de grupos $K$, dividida pela inércia de $K = 1$, nos 50 estados padronizados do `USArrests` e em duas tabelas de ruído normal de 50 linhas e 4 colunas, sem grupo nenhum: uma com colunas independentes e outra com a matriz de covariância dos estados."
 #| fig-alt: "Gráfico de linhas com K, de 1 a 8, no eixo horizontal e a fração da inércia de K igual a 1, de 0 a 1, no vertical, com a legenda no canto de cima à direita. As três curvas começam em 1 e caem a cada K. A dos estados, azul com círculos, cai para 0,52 em K igual a 2 e 0,29 em K igual a 4. A do ruído correlacionado, laranja com triângulos, fica perto dela, com 0,57 em K igual a 2 e 0,35 em K igual a 4. A do ruído independente, cinza com quadrados, desce de modo mais uniforme, com 0,50 em K igual a 4, acima das outras duas em todo K maior que 1. As três curvas vão se achatando conforme K cresce, sem um ponto único a partir do qual a queda pare."
-fig, ax = plt.subplots(
-    figsize=(3.8, 3.0))
-estilos = {
-    "estados": ("C0", "o"),
-    "correlacionado": ("C1", "^"),
-    "independente": ("0.45", "s")}
-for nome, (cor, mk) in \
-        estilos.items():
-    ax.plot(Ks, rel[nome],
-        marker=mk, color=cor,
-        markersize=4, label=nome)
+def uma_casa_eixo(valor, posicao):
+    return f"{valor:.1f}".replace(".", ",")
+
+
+fig, ax = plt.subplots(figsize=(3.8, 3.0))
+estilos = {"estados": ("C0", "o"), "correlacionado": ("C1", "^"),
+           "independente": ("0.55", "s")}
+for nome, (cor, marca) in estilos.items():
+    ax.plot(Ks, fracao[nome], marker=marca, color=cor, markersize=4,
+            label=nome)
 ax.set_xlim(0.6, 8.4)
 ax.set_ylim(0, 1.05)
 ax.set_xticks(list(Ks))
-ax.yaxis.set_major_formatter(
-    lambda v, _: f"{v:.1f}"
-    .replace(".", ","))
+ax.yaxis.set_major_formatter(uma_casa_eixo)
 ax.set_xlabel("K")
 ax.set_ylabel("fração da inércia")
 ax.legend(loc="upper right")
@@ -312,24 +249,22 @@ plt.show()
 
 Com $K = 4$, restam 0,29 da inércia nos estados e 0,50 no ruído independente: a curva dos estados cai mais depressa. Isso não prova que há grupos nos estados.
 
-O ruído correlacionado, que também não tem grupo nenhum, deixa 0,35 com $K = 4$. Nestes dois sorteios, a correlação entre as colunas responde por 0,15, de 0,50 para 0,35, dos 0,21 que separam o ruído independente, com 0,50, dos estados, com 0,29. A queda rápida vem, em boa parte, de as colunas andarem juntas, e não de grupos. Os 0,06 que ainda separam o ruído correlacionado, com 0,35, dos estados, com 0,29, vêm de um sorteio só e não permitem afirmar que os estados têm grupos.
+O ruído correlacionado, que também não tem grupo nenhum, deixa 0,35 com $K = 4$. Como as duas tabelas de ruído vêm do mesmo sorteio, a correlação entre as colunas responde por 0,15, de 0,50 para 0,35, dos 0,21 que separam o ruído independente, com 0,50, dos estados, com 0,29. A queda rápida vem, em boa parte, de as colunas andarem juntas, e não de grupos. Os 0,06 que ainda separam o ruído correlacionado, com 0,35, dos estados, com 0,29, vêm de um sorteio só e não permitem afirmar que os estados têm grupos.
 
 Onde fica o cotovelo dos estados, em 2 ou em 4? A curva não responde. E o ruído independente, sem grupo nenhum, também aceita ser dividido:
 
 ```{python}
 #| label: ruido-tem-grupos
-km3 = KMeans(n_clusters=3,
-    n_init=50, random_state=15)
+km3 = KMeans(n_clusters=3, n_init=50, random_state=15)
 km3.fit(ruido)
-tam = np.sort(
-    np.bincount(km3.labels_))
-print("ruído, K = 3, tamanhos:",
-    *tam)
-print("pontos sem grupo:",
-    len(ruido) - tam.sum())
+pontos = pd.Series(np.sort(np.bincount(km3.labels_)),
+                   index=["menor", "do meio", "maior"], name="pontos")
+pontos.index.name = "grupo"
+print("ruído independente, K = 3:")
+print(pontos.to_frame().to_string())
 ```
 
-Com $K = 3$, o *k*-means divide o ruído em grupos de 15, 16 e 19 pontos, e todo ponto entra num deles. Pedidos três grupos, ele devolve três, haja ou não grupos no dado. A escolha de $K$, como o corte do dendrograma, é de quem analisa: vale olhar alguns valores e ficar com o que dá grupos que se interpretam e que se repetem.
+Com $K = 3$, o *k*-means divide o ruído em grupos de 15, 16 e 19 pontos, que somam os 50: todo ponto entra num deles. Pedidos três grupos, ele devolve três, haja ou não grupos no dado. A escolha de $K$, como o corte do dendrograma, é de quem analisa: vale olhar alguns valores e ficar com o que dá grupos que se interpretam e que se repetem.
 
 ## Rótulos e sementes
 
@@ -337,82 +272,89 @@ O *k*-means com $K = 4$ roda duas vezes nos estados padronizados, com as semente
 
 ```{python}
 #| label: rotulos
-km_a = KMeans(n_clusters=4,
-    n_init=50, random_state=15)
-km_b = KMeans(n_clusters=4,
-    n_init=50, random_state=16)
-rot_a = km_a.fit(padr).labels_
-rot_b = km_b.fit(padr).labels_
-iguais = np.mean(rot_a == rot_b)
-print("rótulos iguais:",
-    numero_br(iguais))
-print(pd.crosstab(rot_a, rot_b,
-    rownames=["semente 15"],
-    colnames=["semente 16"]))
-print("ARI:", numero_br(
-    adjusted_rand_score(
-        rot_a, rot_b)))
-mesma = np.isclose(km_a.inertia_,
-    km_b.inertia_)
-print("mesma inércia:",
-    bool(mesma))
+km_a = KMeans(n_clusters=4, n_init=50, random_state=15)
+km_a.fit(padr)
+rot_a = km_a.labels_
+km_b = KMeans(n_clusters=4, n_init=50, random_state=16)
+km_b.fit(padr)
+rot_b = km_b.labels_
+print("fração dos estados com o mesmo rótulo:", numero_br(np.mean(rot_a == rot_b)))
+print(pd.crosstab(rot_a, rot_b, rownames=["semente 15"],
+                  colnames=["semente 16"]).to_string())
+print("ARI:", numero_br(adjusted_rand_score(rot_a, rot_b)))
+print("inércia, semente 15:", numero_br(km_a.inertia_))
+print("inércia, semente 16:", numero_br(km_b.inertia_))
 ```
 
 ::: {.funcao}
 - **`np.mean(a == b)`** — a fração das posições em que `a` e `b` coincidem: cada `True` conta 1, e cada `False`, 0.
 :::
 
-Só 0,48 dos estados têm o mesmo rótulo nas duas execuções, e a divisão, ainda assim, é a mesma: cada linha da tabela cruzada tem uma só casa preenchida, o índice de Rand ajustado é 1,00, e a inércia é igual. As duas sementes acharam os mesmos quatro grupos e os numeraram em outra ordem. Os rótulos são nomes, e comparar dois agrupamentos rótulo a rótulo mede a numeração; a tabela cruzada e o índice de Rand ajustado comparam os grupos.
+Menos da metade dos estados têm o mesmo rótulo nas duas execuções, e a divisão, ainda assim, é a mesma: cada linha da tabela cruzada tem uma só casa preenchida, o índice de Rand ajustado é 1,00, e a inércia é a mesma nas duas. As duas sementes acharam os mesmos quatro grupos e os numeraram em outra ordem. Os rótulos são nomes, e comparar dois agrupamentos rótulo a rótulo mede a numeração; a tabela cruzada e o índice de Rand ajustado comparam os grupos.
 
 No `NCI60`, as 64 amostras de câncer têm 6.830 genes. Com os genes padronizados, $K = 4$ e 100 começos por semente, dez sementes chegam à mesma divisão?
 
+Primeiro, duas sementes só, a 0 e a 1, cada uma com os seus 100 começos:
+
 ```{python}
-#| label: nci-sementes
-nci = pd.read_csv(
-    "dados/NCI60.csv.gz")
+#| label: nci-duas-sementes
+nci = pd.read_csv("dados/NCI60.csv.gz")
 tipo = nci["tipo"]
 genes = nci.drop(columns="tipo")
-print("forma:", genes.shape)
-padr_nci = (padronizador
-    .fit_transform(genes))
+print("amostras:", genes.shape[0], "· genes:", numero_br(genes.shape[1], 0))
+padr_nci = padronizador.fit_transform(genes)
 
-def dez_sementes(A):
-    return [KMeans(n_clusters=4,
-        n_init=100,
-        random_state=s).fit(A)
-        for s in range(10)]
 
-def distintas(modelos):
-    unicas = []
-    for m in modelos:
-        r = m.labels_
-        nova = all(
-            adjusted_rand_score(
-                r, u) < 1
-            for u in unicas)
-        if nova:
-            unicas.append(r)
-    return len(unicas)
+def sem_casas(valor):
+    return numero_br(valor, 0)
 
-km_genes = dez_sementes(padr_nci)
-print("genes, 10 sementes:")
-print("  divisões distintas:",
-    distintas(km_genes))
-iner_nci = [m.inertia_
-    for m in km_genes]
-print("  inércia, menor:",
-    numero_br(min(iner_nci), 0))
-print("  inércia, maior:",
-    numero_br(max(iner_nci), 0))
-r0 = km_genes[0].labels_
-aris_0 = [adjusted_rand_score(
-    r0, m.labels_)
-    for m in km_genes[1:]]
-print("  menor ARI com a 0:",
-    numero_br(min(aris_0)))
+
+km_0 = KMeans(n_clusters=4, n_init=100, random_state=0)
+km_0.fit(padr_nci)
+km_1 = KMeans(n_clusters=4, n_init=100, random_state=1)
+km_1.fit(padr_nci)
+print("inércia, semente 0:", sem_casas(km_0.inertia_))
+print("inércia, semente 1:", sem_casas(km_1.inertia_))
+print("ARI entre as sementes 0 e 1:",
+      numero_br(adjusted_rand_score(km_0.labels_, km_1.labels_)))
 ```
 
-A função `distintas` guarda uma divisão como nova quando o índice de Rand ajustado dela com cada uma das já guardadas fica abaixo de 1, isto é, quando ela não repete nenhuma.
+As duas inércias, 351.298 e 351.028, ficam próximas, e o índice de Rand ajustado entre as duas divisões, 0,68, fica longe de 1: cada semente parou num ótimo local diferente. Para as dez sementes, a função `dez_sementes` repete essa conta com as sementes 0 a 9. Para cada uma, guarda a inércia e o índice de Rand ajustado com a semente 0, e marca a divisão como nova quando o índice dela com cada uma das já guardadas fica abaixo de 1, isto é, quando ela não repete nenhuma:
+
+```{python}
+#| label: nci-sementes
+def dez_sementes(A):
+    modelos = []
+    guardadas = []
+    linhas = []
+    for s in range(10):
+        km = KMeans(n_clusters=4, n_init=100, random_state=s)
+        km.fit(A)
+        modelos.append(km)
+        nova = True
+        for anterior in guardadas:
+            if adjusted_rand_score(anterior, km.labels_) >= 1:
+                nova = False
+        if nova:
+            guardadas.append(km.labels_)
+        linhas.append({"semente": s,
+                       "inércia": km.inertia_,
+                       "ARI com a semente 0":
+                           adjusted_rand_score(modelos[0].labels_, km.labels_),
+                       "divisão nova": "sim" if nova else "não"})
+    return modelos, pd.DataFrame(linhas).set_index("semente")
+
+
+km_genes, tabela_genes = dez_sementes(padr_nci)
+print("genes, 10 sementes, divisões distintas:",
+      (tabela_genes["divisão nova"] == "sim").sum())
+print("menor inércia:", sem_casas(tabela_genes["inércia"].min()))
+print("maior inércia:", sem_casas(tabela_genes["inércia"].max()))
+print("menor ARI com a semente 0, sementes 1 a 9:",
+      numero_br(tabela_genes.loc[1:, "ARI com a semente 0"].min()))
+tabela_genes.style.format({"inércia": sem_casas,
+                           "ARI com a semente 0": numero_br})
+```
 
 As dez sementes dão 9 divisões diferentes, com inércias entre 350.576 e 351.928. As inércias são próximas, e as divisões, não.
 
@@ -422,23 +364,18 @@ Os primeiros escores da `PCA` resumem a tabela e deixam de fora a variação peq
 
 ```{python}
 #| label: nci-escores
-from sklearn.decomposition \
-    import PCA
+from sklearn.decomposition import PCA
 
 pca = PCA()
-escores = pca.fit_transform(
-    padr_nci)
+escores = pca.fit_transform(padr_nci)
 cinco = escores[:, :5]
-print("forma:", cinco.shape)
-acum = (pca
-    .explained_variance_ratio_[:5]
-    .sum())
-print("variância nos 5:",
-    numero_br(acum))
-km_esc = dez_sementes(cinco)
-print("5 escores, 10 sementes:")
-print("  divisões distintas:",
-    distintas(km_esc))
+print("amostras:", cinco.shape[0], "· escores:", cinco.shape[1])
+print("variância nos 5:", numero_br(pca.explained_variance_ratio_[:5].sum()))
+km_esc, tabela_esc = dez_sementes(cinco)
+print("5 escores, 10 sementes, divisões distintas:",
+      (tabela_esc["divisão nova"] == "sim").sum())
+tabela_esc.style.format({"inércia": sem_casas,
+                         "ARI com a semente 0": numero_br})
 ```
 
 ::: {.funcao}
@@ -449,36 +386,36 @@ Sobre os 5 escores, as dez sementes dão uma divisão só. Os 5 escores guardam 
 
 ## Hierárquico, *k*-means e escores no `NCI60`
 
-A ligação completa, cortada em 4 grupos, e o *k*-means com $K = 4$ dividem as amostras do mesmo jeito? Os números dos grupos são nomes arbitrários, e a função `por_tamanho` troca cada um pelo tamanho do grupo, que tem significado: "o grupo de 8" é o mesmo, qualquer que seja o número que o método lhe deu.
+A ligação completa, cortada em 4 grupos, e o *k*-means com $K = 4$ dividem as amostras do mesmo jeito? A tabela cruzada, com os rótulos como os dois métodos os devolvem:
+
+```{python}
+#| label: comparar-rotulos
+ag4 = AgglomerativeClustering(n_clusters=4, linkage="complete")
+hc_rot = ag4.fit_predict(padr_nci)
+km15 = KMeans(n_clusters=4, n_init=100, random_state=15)
+km15.fit(padr_nci)
+print(pd.crosstab(hc_rot, km15.labels_, rownames=["hierárquico"],
+                  colnames=["k-means"]).to_string())
+```
+
+Os números 0 a 3 dos grupos são nomes arbitrários: o grupo 0 de um método não tem nada a ver com o grupo 0 do outro. A função `por_tamanho` troca cada rótulo pelo tamanho do grupo, que tem significado: "o grupo de 8" é o mesmo, qualquer que seja o número que o método lhe deu. Isso só funciona porque, em cada divisão, os quatro grupos têm tamanhos diferentes, e a tabela abaixo continua com quatro linhas e quatro colunas:
 
 ```{python}
 #| label: comparar
 def por_tamanho(rot):
     cont = np.bincount(rot)
-    distintos = len(set(cont))
-    assert distintos == len(cont)
     return cont[rot]
 
-ag4 = AgglomerativeClustering(
-    n_clusters=4,
-    linkage="complete")
-hc = por_tamanho(
-    ag4.fit_predict(padr_nci))
-km15 = KMeans(n_clusters=4,
-    n_init=100, random_state=15)
-km_tam = por_tamanho(
-    km15.fit(padr_nci).labels_)
-print(pd.crosstab(hc, km_tam,
-    rownames=["hierárquico"],
-    colnames=["k-means"]))
-ari_hk = adjusted_rand_score(
-    hc, km_tam)
-print("ARI:",
-    numero_br(ari_hk, 3))
+
+hc = por_tamanho(hc_rot)
+km_tam = por_tamanho(km15.labels_)
+print(pd.crosstab(hc, km_tam, rownames=["hierárquico"],
+                  colnames=["k-means"]).to_string())
+print("ARI:", tres_casas(adjusted_rand_score(hc, km_tam)))
 ```
 
 ::: {.funcao}
-- **`cont[rot]`** — troca cada rótulo pelo tamanho do seu grupo, como `centros[nuvem]` trocou cada nuvem pelo seu centro na seção 15.4. **`assert distintos == len(cont)`** interrompe a execução com um erro se dois grupos tiverem o mesmo tamanho, porque aí o tamanho não distinguiria um do outro.
+- **`cont[rot]`** — troca cada rótulo pelo tamanho do seu grupo, como `centros[nuvem]` trocou cada nuvem pelo seu centro na seção 15.4.
 :::
 
 As linhas são os grupos do hierárquico, e as colunas, os do *k*-means, cada um com o seu tamanho. O índice de Rand ajustado, 0,314, diz que as duas divisões diferem bastante. O grupo de 7 do hierárquico está inteiro no grupo de 32 do *k*-means, e o grupo de 40 se espalha por três grupos do *k*-means. E as amostras de leucemia?
@@ -486,47 +423,49 @@ As linhas são os grupos do hierárquico, e as colunas, os do *k*-means, cada um
 ```{python}
 #| label: leucemia
 e_leu = tipo == "leucemia"
-leu = np.unique(hc[e_leu])
-print("leucemia num grupo só:",
-    len(leu) == 1)
-g_leu = hc == leu[0]
-print("tamanho do grupo:", leu[0])
-print(tipo[g_leu].value_counts())
+grupos_leu = np.unique(hc[e_leu])
+print("grupos do hierárquico com leucemia:", len(grupos_leu))
+g_leu = hc == grupos_leu[0]
+print("tamanho do grupo:", grupos_leu[0])
+print(tipo[g_leu].value_counts().to_string())
 ```
 
-As amostras de leucemia ficam num grupo só do hierárquico, o de 8, que a seção 15.5 já descreveu: as de leucemia e as K562-repro, medições repetidas de uma linhagem também de leucemia. Outra divisão tem exatamente esse grupo quando as 8 amostras dele recebem o mesmo rótulo e nenhuma outra amostra recebe esse rótulo. É o que a função `tem_o_grupo` confere em três divisões: a do *k*-means com a semente 15, as das dez sementes de `km_genes` e a do hierárquico com a ligação média no lugar da completa, porque a ligação também é uma decisão:
+As amostras de leucemia ficam num grupo só do hierárquico, o de 8, que a seção 15.5 já descreveu: as de leucemia e as K562-repro, medições repetidas de uma linhagem também de leucemia. Outra divisão tem exatamente esse grupo quando as 8 amostras dele recebem o mesmo rótulo e nenhuma outra amostra recebe esse rótulo. A função `grupo_da_leucemia` procura, numa divisão, o grupo que leva mais das 8 amostras e conta quantas delas ele leva e quantas amostras tem ao todo: as duas contagens dão 8 quando a divisão forma o grupo. A conta roda no *k*-means com a semente 15, no hierárquico com a ligação média no lugar da completa, porque a ligação também é uma decisão, e nas dez sementes de `km_genes`:
 
 ```{python}
 #| label: tem-o-grupo
-def tem_o_grupo(rot):
-    r = rot[g_leu]
-    so_um = len(set(r)) == 1
-    n = (rot == r[0]).sum()
-    return bool(so_um
-        and n == g_leu.sum())
+def grupo_da_leucemia(rot):
+    rotulos_leu = rot[g_leu]
+    rotulo = pd.Series(rotulos_leu).value_counts().index[0]
+    return {"das 8, no grupo": (rotulos_leu == rotulo).sum(),
+            "amostras no grupo": (rot == rotulo).sum()}
 
-ag_med = AgglomerativeClustering(
-    n_clusters=4,
-    linkage="average")
-hc_media = ag_med.fit_predict(
-    padr_nci)
-n_tem = sum(tem_o_grupo(
-    m.labels_) for m in km_genes)
-print("k-means, semente 15:",
-    tem_o_grupo(km_tam))
-print("10 sementes:", n_tem)
-print("ligação média:",
-    tem_o_grupo(hc_media))
-print("  tamanhos:", *np.sort(
-    np.bincount(hc_media)))
-ari_lig = adjusted_rand_score(
-    hc, hc_media)
-print("  ARI com a completa:",
-    numero_br(ari_lig, 3))
+
+ag_med = AgglomerativeClustering(n_clusters=4, linkage="average")
+hc_media = ag_med.fit_predict(padr_nci)
+duas = pd.DataFrame([grupo_da_leucemia(km15.labels_),
+                     grupo_da_leucemia(hc_media)],
+                    index=["k-means, semente 15", "ligação média"])
+print(duas.to_string())
+print()
+formam = 0
+for km in km_genes:
+    conta = grupo_da_leucemia(km.labels_)
+    if conta["das 8, no grupo"] == 8 and conta["amostras no grupo"] == 8:
+        formam += 1
+print("sementes 0 a 9 que formam o grupo:", formam, "de", len(km_genes))
+print()
+tam_media = pd.Series(np.sort(np.bincount(hc_media)),
+                      index=["1.º", "2.º", "3.º", "4.º"], name="amostras")
+tam_media.index.name = "grupo"
+print("ligação média, grupos do menor ao maior:")
+print(tam_media.to_frame().to_string())
+print("ligação média, ARI com a completa:",
+      tres_casas(adjusted_rand_score(hc, hc_media)))
 ```
 
 ::: {.funcao}
-- **`rot[g_leu]`** — os rótulos só das 8 amostras do grupo da leucemia, porque `g_leu` é `True` nelas e `False` nas outras.
+- **`rot[g_leu]`** — os rótulos só das 8 amostras do grupo da leucemia, porque `g_leu` é `True` nelas e `False` nas outras; **`pd.Series(rotulos_leu).value_counts().index[0]`** é o rótulo mais comum entre elas.
 :::
 
 O *k*-means com a semente 15 forma exatamente esse grupo, e 7 das dez sementes o formam. A ligação média também o forma, mas divide o resto em grupos de 1, 1 e 54 amostras, e por isso o índice de Rand ajustado com a completa fica em 0,362.
@@ -535,20 +474,12 @@ O hierárquico também pode rodar sobre os 5 primeiros escores, em vez dos genes
 
 ```{python}
 #| label: sobre-escores
-esc = por_tamanho(
-    ag4.fit_predict(cinco))
-tab = pd.crosstab(tipo, esc,
-    colnames=["grupo"])
-print(tab)
-colon = (tab.loc["cólon"] > 0)
-print("cólon num grupo só:",
-    colon.sum() == 1)
-leuc = (tab.loc["leucemia"] > 0)
-print("grupos com leucemia:",
-    leuc.sum())
-print("ARI com o dos genes:",
-    numero_br(adjusted_rand_score(
-        hc, esc), 3))
+esc = por_tamanho(ag4.fit_predict(cinco))
+tab = pd.crosstab(tipo, esc, colnames=["grupo"])
+print(tab.to_string())
+print("grupos com cólon:", (tab.loc["cólon"] > 0).sum())
+print("grupos com leucemia:", (tab.loc["leucemia"] > 0).sum())
+print("ARI com o dos genes:", tres_casas(adjusted_rand_score(hc, esc)))
 ```
 
 Sobre os escores, os grupos têm 4, 6, 20 e 34 amostras, e a leucemia deixou de formar um grupo só: parte dela fica no grupo de 6, com as duas K562-repro, e parte no de 34.
@@ -563,26 +494,18 @@ A figura abaixo mostra as 64 amostras nas duas primeiras componentes, com a cor 
 #| label: fig-nci-escores
 #| fig-cap: "Os escores das 64 amostras do `NCI60` nas duas primeiras componentes principais, com a cor e a marca do grupo do agrupamento hierárquico, pela ligação completa, sobre os 5 primeiros escores. Na legenda, o tamanho de cada grupo. As cores são só nomes para os grupos."
 #| fig-alt: "Gráfico de dispersão com 64 pontos vazados, o escore na primeira componente no eixo horizontal e o da segunda no vertical, em quatro grupos, com a legenda acima: 4, 6, 20 e 34 amostras. Os 34 círculos azuis se concentram no meio da nuvem. Os 20 quadrados verdes se estendem para fora dela, numa região própria, com alguns misturados aos azuis. Os 6 triângulos roxos ficam juntos numa ponta, afastados de todos os outros, dois deles quase no mesmo lugar, e os 4 losangos laranja, perto da borda da massa azul, encostados nela."
-fig, ax = plt.subplots(
-    figsize=(3.8, 3.4))
-tams = np.unique(esc)
+fig, ax = plt.subplots(figsize=(3.8, 3.4))
+tamanhos = np.unique(esc)
 cores = ["C1", "C3", "C2", "C0"]
 marcas = ["D", "^", "s", "o"]
-for t, cor, mk in zip(
-        tams, cores, marcas):
+for t, cor, marca in zip(tamanhos, cores, marcas):
     m = esc == t
-    ax.scatter(escores[m, 0],
-        escores[m, 1], s=20,
-        marker=mk,
-        facecolors="none",
-        edgecolors=cor,
-        linewidths=1.1,
-        label=f"{t} amostras")
+    ax.scatter(escores[m, 0], escores[m, 1], s=20, marker=marca,
+               facecolors="none", edgecolors=cor, linewidths=1.1,
+               label=f"{t} amostras")
 ax.set_xlabel("escore na PC1")
 ax.set_ylabel("escore na PC2")
-ax.legend(ncol=2, fontsize=9,
-    loc="lower center",
-    bbox_to_anchor=(0.5, 1))
+ax.legend(ncol=2, fontsize=9, loc="lower center", bbox_to_anchor=(0.5, 1))
 plt.tight_layout()
 plt.show()
 ```
@@ -591,53 +514,62 @@ O grupo de 6, com 4 das amostras de leucemia e as duas K562-repro, é o dos tri�
 
 ## Os grupos resistem a perder dados?
 
-Se 10 dos 50 estados fossem deixados de fora, o *k*-means dividiria os outros 40 como na tabela inteira? Para cada $K$ de 2 a 4, o *k*-means roda nos 50 estados padronizados e em 20 subamostras de 40, cada uma sorteada com uma semente. Cada subamostra é padronizada só com os seus 40 estados, como se os outros 10 não existissem. Em cada uma, o índice de Rand ajustado compara a divisão dos 40 com a que eles tinham na tabela inteira:
+Se 10 dos 50 estados fossem deixados de fora, o *k*-means dividiria os outros 40 como na tabela inteira? Para cada $K$ de 2 a 4, o *k*-means roda nos 50 estados padronizados e em 20 subamostras de 40, cada uma sorteada com uma semente. Cada subamostra é padronizada só com os seus 40 estados, como se os outros 10 não existissem. Em cada uma, o índice de Rand ajustado compara a divisão dos 40 com a que eles tinham na tabela inteira. Primeiro, uma subamostra só, a da semente 0, com $K = 3$; depois, o laço com as 20 e os três valores de $K$:
 
 ```{python}
 #| label: subamostras
 Ks_sub = [2, 3, 4]
 completo = {}
 for K in Ks_sub:
-    km_c = KMeans(n_clusters=K,
-        n_init=50,
-        random_state=15)
-    rot = km_c.fit(padr).labels_
-    completo[K] = rot
+    km_c = KMeans(n_clusters=K, n_init=50, random_state=15)
+    km_c.fit(padr)
+    completo[K] = km_c.labels_
 X = prisoes.to_numpy()
-aris_sub = {K: [] for K in Ks_sub}
-for s in range(20):
-    ger_sub = np.random \
-        .default_rng(s)
-    fica = ger_sub.choice(50, 40,
-        replace=False)
-    Z = StandardScaler() \
-        .fit_transform(X[fica])
-    for K in Ks_sub:
-        km_s = KMeans(
-            n_clusters=K,
-            n_init=50,
-            random_state=15)
-        sub = km_s.fit(Z).labels_
-        antes = completo[K][fica]
-        aris_sub[K].append(
-            adjusted_rand_score(
-                antes, sub))
-print("K: menor · mediana ·",
-    "iguais · <0,5")
-for K in Ks_sub:
-    v = np.array(aris_sub[K])
-    igual = np.isclose(v, 1).sum()
-    baixo = (v < 0.5).sum()
-    print(f"{K}:",
-        numero_br(v.min()), "·",
-        numero_br(np.median(v)),
-        "·", igual, "·", baixo)
+
+ger_sub = np.random.default_rng(0)
+fica = ger_sub.choice(50, 40, replace=False)
+Z = StandardScaler().fit_transform(X[fica])
+km_s = KMeans(n_clusters=3, n_init=50, random_state=15)
+km_s.fit(Z)
+antes = completo[3][fica]
+print("semente 0, estados na subamostra:", len(fica))
+print("semente 0, K = 3, ARI com a tabela inteira:",
+      numero_br(adjusted_rand_score(antes, km_s.labels_)))
 ```
 
 ::: {.funcao}
 - **`ger.choice(50, 40, replace=False)`** — sorteia 40 inteiros distintos entre 0 e 49: as posições dos estados que ficam na subamostra. Com `replace=False`, nenhum se repete.
 - **`X[fica]`** e **`completo[K][fica]`** — só as linhas sorteadas, na ordem do sorteio, nos dados e nos rótulos da tabela inteira.
-- **`np.median(v)`** — a mediana dos valores de `v`.
+:::
+
+A mesma conta, agora para as 20 subamostras, com as sementes 0 a 19, e para cada $K$ de `Ks_sub`:
+
+```{python}
+#| label: subamostras-laco
+aris_sub = {}
+for K in Ks_sub:
+    aris_sub[K] = []
+for s in range(20):
+    ger_sub = np.random.default_rng(s)
+    fica = ger_sub.choice(50, 40, replace=False)
+    Z = StandardScaler().fit_transform(X[fica])
+    for K in Ks_sub:
+        km_s = KMeans(n_clusters=K, n_init=50, random_state=15)
+        km_s.fit(Z)
+        antes = completo[K][fica]
+        aris_sub[K].append(adjusted_rand_score(antes, km_s.labels_))
+resumo = []
+for K in Ks_sub:
+    v = np.array(aris_sub[K])
+    resumo.append({"K": K, "menor ARI": v.min(), "mediana": np.median(v),
+                   "iguais (ARI = 1)": np.isclose(v, 1).sum(),
+                   "abaixo de 0,5": (v < 0.5).sum()})
+resumo = pd.DataFrame(resumo).set_index("K")
+resumo.style.format({"menor ARI": numero_br, "mediana": numero_br})
+```
+
+::: {.funcao}
+- **`np.median(v)`** — a mediana dos valores de `v`. **`np.isclose(v, 1).sum()`** — quantos valores ficam em 1, a menos do arredondamento: as subamostras com a mesma divisão da tabela inteira.
 :::
 
 Com $K = 2$, as 20 subamostras dão a mesma divisão da tabela inteira.
@@ -650,24 +582,16 @@ As medianas de $K = 3$ e $K = 4$, 0,88 e 0,92, ficam próximas e altas: na subam
 #| label: fig-subamostras
 #| fig-cap: "O índice de Rand ajustado entre a divisão do *k*-means em cada uma de 20 subamostras de 40 estados, padronizadas só com os seus 40, e a divisão dos mesmos estados com a tabela inteira, para $K = 2$, $3$ e $4$. Cada ponto é uma subamostra; 1 quer dizer a mesma divisão. Em cada linha, os pontos estão em ordem de valor, espalhados na vertical só para não se esconderem uns atrás dos outros."
 #| fig-alt: "Gráfico com o índice de Rand ajustado, de 0,3 a 1, no eixo horizontal e três linhas de pontos azuis, uma para cada K. Na de K igual a 2, os 20 pontos estão em 1, formando uma coluna. Na de K igual a 3, os pontos se espalham de 0,38 até 1, com mediana 0,88 e só dois em 1. Na de K igual a 4, vão de 0,65 até 1, com mediana 0,92 e cinco em 1."
-fig, ax = plt.subplots(
-    figsize=(3.8, 2.6))
-desloc = np.linspace(
-    -0.3, 0.3, 20)
+fig, ax = plt.subplots(figsize=(3.8, 2.6))
+desloc = np.linspace(-0.3, 0.3, 20)
 for K in Ks_sub:
     v = np.sort(aris_sub[K])
-    ax.scatter(v, K + desloc,
-        s=12, color="C0",
-        linewidths=0)
+    ax.scatter(v, K + desloc, s=12, color="C0", linewidths=0)
 ax.set_yticks(Ks_sub)
-ax.set_yticklabels(
-    [f"K = {K}" for K in Ks_sub])
+ax.set_yticklabels([f"K = {K}" for K in Ks_sub])
 ax.set_xlim(0.3, 1.03)
-ax.xaxis.set_major_formatter(
-    lambda v, _: f"{v:.1f}"
-    .replace(".", ","))
-ax.set_xlabel(
-    "índice de Rand ajustado")
+ax.xaxis.set_major_formatter(uma_casa_eixo)
+ax.set_xlabel("índice de Rand ajustado")
 ax.invert_yaxis()
 plt.tight_layout()
 plt.show()

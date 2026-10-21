@@ -10,7 +10,6 @@ Uma tabela traz, para cada um dos 50 estados americanos, as prisões por três c
 #| label: setup
 #| include: false
 import matplotlib.pyplot as plt
-import pandas as pd
 
 plt.style.use("estilo-figuras.mplstyle")
 ```
@@ -19,13 +18,10 @@ A função `numero_br` escreve os números com a pontuação brasileira:
 
 ```{python}
 #| label: numero-br
-numero_br = lambda v, casas=2: (
-    f"{v:,.{casas}f}"
-    .replace(",", "_")
-    .replace(".", ",")
-    .replace("_", ".")
-    .replace("-", "−")
-)
+def numero_br(valor, casas=2):
+    texto = f"{valor:,.{casas}f}"
+    texto = texto.replace(",", "_").replace(".", ",").replace("_", ".")
+    return texto.replace("-", "−")
 ```
 
 ## Uma tabela sem resposta
@@ -34,22 +30,21 @@ A tabela `USArrests` é de 1973. Para cada estado, `homicidio`, `agressao` e `es
 
 ```{python}
 #| label: prisoes
-prisoes = pd.read_csv(
-    "dados/USArrests.csv",
-    index_col="estado")
+import pandas as pd
+
+prisoes = pd.read_csv("dados/USArrests.csv", index_col="estado")
 n, p = prisoes.shape
 print("estados:", n)
 print("colunas:", p)
-print("primeira linha:",
-    prisoes.index[0])
+print("primeira linha:", prisoes.index[0])
 linha = prisoes.iloc[0]
-for coluna, v in linha.items():
-    print(coluna, numero_br(v, 1))
+for coluna, valor in linha.items():
+    print(f"  {coluna}:", numero_br(valor, 1))
 ```
 
 ::: {.funcao}
 - **`pd.read_csv(caminho, index_col="estado")`** — lê o arquivo e usa a coluna `estado` como índice: os nomes dos estados passam a identificar as linhas e deixam de ser uma coluna de dados.
-- **`df.shape`** — a tupla `(linhas, colunas)` da tabela.
+- **`df.shape`** — o número de linhas e o de colunas da tabela; `n, p = prisoes.shape` guarda o primeiro em `n` e o segundo em `p`.
 - **`df.index`** — os rótulos das linhas; `df.index[0]` é o rótulo da primeira.
 - **`df.iloc[0]`** — a linha na posição 0, a primeira, como uma série com um valor por coluna.
 - **`serie.items()`** — percorre os pares (rótulo, valor) da série.
@@ -65,25 +60,23 @@ resumo = pd.DataFrame({
     "variância": prisoes.var(),
 })
 variancias = resumo["variância"]
-print("maior variância:",
-    variancias.idxmax())
-print("menor variância:",
-    variancias.idxmin())
-tabela = resumo.style
-tabela = tabela.set_uuid("resumo")
-tabela.format(decimal=",",
-    thousands=".", precision=2)
+print("maior variância:", variancias.idxmax())
+print("menor variância:", variancias.idxmin())
+resumo.style.format(numero_br)
 ```
 
 ::: {.funcao}
 - **`pd.DataFrame({nome: serie, ...})`** — monta uma tabela a partir de um dicionário: cada chave vira o nome de uma coluna, e cada série, os valores dela, alinhados pelo rótulo das linhas.
 - **`df.mean()`**, **`df.std()`** e **`df.var()`** — a média, o desvio padrão e a variância de cada coluna. A variância do `pandas` divide a soma dos quadrados dos desvios por $n - 1$, e não por $n$; o desvio padrão é a raiz quadrada dela.
 - **`serie.idxmax()`** e **`serie.idxmin()`** — o rótulo do maior e do menor valor da série.
-- **`df.style.format(...)`** — mostra a tabela com vírgula decimal, ponto de milhar e duas casas, sem mudar os números guardados.
-- **`set_uuid(nome)`** — fixa o identificador da tabela no HTML.
+- **`df.style.format(funcao)`** — mostra cada valor da tabela como o texto que `funcao` devolve para ele, aqui a `numero_br`, com duas casas; os números guardados não mudam.
 :::
 
-As três colunas de crime estão na mesma unidade, e mesmo assim a variância de `agressao`, 6.945,17, é a maior das quatro, e a de `homicidio`, 18,97, a menor: a primeira é cerca de 366 vezes a segunda. A média de `agressao`, 170,76, é quase 22 vezes a de `homicidio`, 7,79, e o desvio padrão de `agressao`, 83,34, é cerca de 19 vezes o de `homicidio`, 4,36; como a variância é o quadrado do desvio padrão, a razão entre as variâncias é exatamente o quadrado da razão entre os desvios. Já `pop_urbana` está em outra unidade, o percentual, e a variância muda quando a unidade muda; a seção 15.3 mostra o que essas diferenças de escala fazem com o resumo da tabela.
+As três colunas de crime estão na mesma unidade, e mesmo assim a variância de `agressao`, 6.945,17, é a maior das quatro, e a de `homicidio`, 18,97, a menor: a primeira é cerca de 366 vezes a segunda.
+
+A média de `agressao`, 170,76, é quase 22 vezes a de `homicidio`, 7,79, e o desvio padrão de `agressao`, 83,34, é cerca de 19 vezes o de `homicidio`, 4,36. Como a variância é o quadrado do desvio padrão, a razão entre as variâncias é o quadrado da razão entre os desvios.
+
+Já `pop_urbana` está em outra unidade, o percentual, e a variância muda quando a unidade muda; a seção 15.3 mostra o que essas diferenças de escala fazem com o resumo da tabela.
 
 Nenhuma dessas colunas é uma resposta. No aprendizado supervisionado, cada observação traz os preditores e uma resposta $y_i$, e a previsão se confere contra ela, como na seção 7.5. Aqui não há $y_i$: não se quer prever as prisões por estupro a partir das outras três colunas, nem a parcela urbana a partir das prisões por crime. As quatro colunas são tratadas do mesmo jeito.
 
@@ -100,57 +93,45 @@ Com $p$ variáveis, uma primeira forma de olhar é desenhar um gráfico de dispe
 
 ```{python}
 #| label: pares
-from itertools import (
-    combinations)
+from itertools import combinations
 
 correlacoes = prisoes.corr()
-colunas = prisoes.columns
-duplas = combinations(colunas, 2)
-pares = pd.Series({
-    (a, b): correlacoes.loc[a, b]
-    for a, b in duplas
-})
-pares = pares.sort_values(
-    ascending=False)
+linhas = []
+for a, b in combinations(prisoes.columns, 2):
+    linhas.append({"coluna 1": a, "coluna 2": b, "r": correlacoes.loc[a, b]})
+pares = pd.DataFrame(linhas)
+pares = pares.sort_values("r", ascending=False, ignore_index=True)
 print("pares:", len(pares))
-for dupla, r in pares.items():
-    a, b = dupla
-    print(f"{a} × {b}:",
-        numero_br(r))
+pares.style.format({"r": numero_br})
 ```
 
 ::: {.funcao}
 - **`df.corr()`** — a tabela das correlações entre as **colunas**, duas a duas; na linha `a` e na coluna `b` fica a correlação entre `a` e `b`.
 - **`df.columns`** — os nomes das colunas da tabela.
-- **`combinations(colunas, 2)`**, do módulo `itertools` — cada par de itens distintos, sem repetir o par na ordem inversa.
+- **`combinations(prisoes.columns, 2)`**, do módulo `itertools` — cada par de colunas distintas, sem repetir o par na ordem inversa; o `for a, b in ...` recebe os dois nomes de cada par.
 - **`df.loc[a, b]`** — o valor na linha de rótulo `a` e na coluna de rótulo `b`.
-- **`pd.Series({rotulo: valor, ...})`** — uma série a partir de um dicionário. Aqui cada rótulo é o par de colunas, e por isso `pares.items()` entrega o par, em `dupla`, e a correlação, em `r`; `a, b = dupla` separa os dois nomes do par.
-- **`serie.sort_values(...)`** — com `ascending=False`, a série em ordem decrescente de valor.
+- **`lista.append({...})`** e **`pd.DataFrame(lista)`** — cada dicionário da lista vira uma linha da tabela, com as chaves como nomes das colunas.
+- **`df.sort_values("r", ascending=False, ignore_index=True)`** — as linhas em ordem decrescente da coluna `r`, numeradas de novo a partir de 0.
+- **`df.style.format({"r": numero_br})`** — aplica a `numero_br` só à coluna `r`.
 :::
 
-Os seis gráficos, na ordem da lista, com o Alabama em destaque:
+Os seis gráficos, na ordem da tabela, com o Alabama em destaque:
 
 ```{python}
 #| label: fig-pares
 #| fig-cap: "Os 50 estados do `USArrests` em cada par das quatro colunas, um ponto por estado, com a correlação no título. `homicidio`, `agressao` e `estupro` estão em prisões por 100.000 habitantes, e `pop_urbana` em percentual. O ponto laranja, maior, é o Alabama. Os painéis seguem a ordem decrescente da correlação, da esquerda para a direita e de cima para baixo."
 #| fig-alt: "Seis gráficos de dispersão pequenos, em três linhas de dois, com um ponto azul por estado e um ponto laranja maior para o Alabama. Na ordem: homicidio contra agressao, r = 0,80, pontos numa faixa inclinada para cima; agressao contra estupro, r = 0,67; homicidio contra estupro, r = 0,56; pop_urbana contra estupro, r = 0,41; agressao contra pop_urbana, r = 0,26; e homicidio contra pop_urbana, r = 0,07, pontos espalhados sem inclinação visível. O ponto laranja aparece em lugar diferente em cada painel."
-fig, eixos = plt.subplots(
-    3, 2, figsize=(3.8, 5.4))
-for ax, dupla in zip(
-        eixos.flat, pares.index):
-    a, b = dupla
-    r = pares[dupla]
+import matplotlib.pyplot as plt
+
+fig, eixos = plt.subplots(3, 2, figsize=(3.8, 5.4))
+for ax, (_, par) in zip(eixos.flat, pares.iterrows()):
+    a, b = par["coluna 1"], par["coluna 2"]
     x, y = prisoes[a], prisoes[b]
-    ax.scatter(x, y, s=8,
-        color="C0", alpha=0.8,
-        linewidths=0)
-    ax.scatter(x["Alabama"],
-        y["Alabama"], s=28,
-        color="C1", zorder=3)
+    ax.scatter(x, y, s=8, color="C0", alpha=0.8, linewidths=0)
+    ax.scatter(x["Alabama"], y["Alabama"], s=28, color="C1", zorder=3)
     ax.set_xlabel(a)
     ax.set_ylabel(b)
-    titulo = "r = " + numero_br(r)
-    ax.set_title(titulo)
+    ax.set_title("r = " + numero_br(par["r"]))
     ax.locator_params(nbins=3)
     ax.set_xlim(left=0)
     ax.set_ylim(bottom=0)
@@ -159,7 +140,7 @@ plt.show()
 ```
 
 ::: {.funcao}
-- **`plt.subplots(3, 2, figsize=(3.8, 5.4))`** — uma figura com uma grade de 3 linhas e 2 colunas de gráficos, com 3,8 × 5,4 polegadas; **`eixos.flat`** percorre os seis gráficos da grade em ordem de leitura, e `pares.index`, os seis pares na ordem da lista; `pares[dupla]` é a correlação do par.
+- **`plt.subplots(3, 2, figsize=(3.8, 5.4))`** — uma figura com uma grade de 3 linhas e 2 colunas de gráficos, com 3,8 × 5,4 polegadas; **`eixos.flat`** percorre os seis gráficos da grade em ordem de leitura, e **`pares.iterrows()`**, as seis linhas da tabela, na ordem dela, cada uma como um par (rótulo, linha); o `_` descarta o rótulo.
 - **`ax.scatter(x, y, s, color, alpha)`** — um ponto por par $(x, y)$; `s` é o tamanho do ponto, `alpha`, a opacidade, e `linewidths=0` tira o contorno do ponto. O segundo `scatter` desenha só o Alabama, e `zorder=3` o põe por cima dos outros.
 - **`ax.set_xlabel(texto)`**, **`ax.set_ylabel(texto)`** e **`ax.set_title(texto)`** — o rótulo do eixo horizontal, o do vertical e o título do gráfico.
 - **`ax.locator_params(nbins=3)`** — deixa poucas marcas em cada eixo, para os números não se encostarem num gráfico pequeno; **`ax.set_xlim(left=0)`** e **`ax.set_ylim(bottom=0)`** começam os dois eixos no zero, já que nenhuma das quatro medidas é negativa.
@@ -176,22 +157,20 @@ Dentro de cada célula, cada gene está mais ou menos ativo, e a **expressão** 
 
 ```{python}
 #| label: nci
-arquivo = "dados/NCI60.csv.gz"
-nci = pd.read_csv(arquivo)
+nci = pd.read_csv("dados/NCI60.csv.gz")
 tipo = nci["tipo"]
 genes = nci.drop(columns="tipo")
 n, p = genes.shape
 print("amostras:", n)
 print("genes:", numero_br(p, 0))
 pares_nci = p * (p - 1) // 2
-print("pares de genes:",
-    numero_br(pares_nci, 0))
+print("pares de genes:", numero_br(pares_nci, 0))
 contagens = tipo.value_counts()
 print(contagens.to_string())
 ```
 
 ::: {.funcao}
-- **`pd.read_csv(arquivo)`** — com um arquivo terminado em `.gz`, descomprime antes de ler, pela extensão.
+- **`pd.read_csv("dados/NCI60.csv.gz")`** — com um arquivo terminado em `.gz`, descomprime antes de ler, pela extensão.
 - **`df.drop(columns="tipo")`** — a tabela sem a coluna `tipo`; a original não muda.
 - **`serie.value_counts()`** — quantas vezes cada valor aparece, do mais frequente ao menos frequente.
 - **`serie.to_string()`** — a série como texto, uma linha por rótulo.

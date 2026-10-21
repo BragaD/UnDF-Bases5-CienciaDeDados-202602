@@ -18,13 +18,10 @@ A função `numero_br` escreve os números com a pontuação brasileira:
 
 ```{python}
 #| label: numero-br
-numero_br = lambda v, casas=2: (
-    f"{v:,.{casas}f}"
-    .replace(",", "_")
-    .replace(".", ",")
-    .replace("_", ".")
-    .replace("-", "−")
-)
+def numero_br(valor, casas=2):
+    texto = f"{valor:,.{casas}f}"
+    texto = texto.replace(",", "_").replace(".", ",").replace("_", ".")
+    return texto.replace("-", "−")
 ```
 
 ## Lendo um dendrograma
@@ -37,12 +34,11 @@ import numpy as np
 import pandas as pd
 
 rng = np.random.default_rng(15)
-centros = np.array(
-    [[-4, 1], [0, -1], [1, 3]])
+centros = np.array([[-4, 1], [0, -1], [1, 3]])
 classe = np.repeat([0, 1, 2], 15)
 desvio = rng.normal(size=(45, 2))
 X = centros[classe] + desvio
-print("forma:", X.shape)
+print("pontos:", X.shape[0], "· coordenadas:", X.shape[1])
 ```
 
 Como no *k*-means, o array `classe` só constrói os pontos: o método recebe apenas `X`, e `classe` fica guardado para conferir o resultado.
@@ -53,41 +49,86 @@ Como no *k*-means, o array `classe` só constrói os pontos: o método recebe ap
 #| fig-alt: "Gráfico de dispersão com 45 pontos azuis, os dois eixos na mesma escala. Os pontos formam três nuvens: uma à esquerda, uma embaixo, no centro, e uma em cima, à direita."
 import matplotlib.pyplot as plt
 
-fig, ax = plt.subplots(
-    figsize=(3.4, 2.6))
-ax.scatter(X[:, 0], X[:, 1],
-    s=12, linewidths=0)
+fig, ax = plt.subplots(figsize=(3.4, 2.6))
+ax.scatter(X[:, 0], X[:, 1], s=12, linewidths=0)
 ax.set_aspect("equal")
 ax.set_xticks([-6, -3, 0, 3])
 ax.set_yticks([-3, 0, 3, 6])
 plt.show()
 ```
 
-O **agrupamento hierárquico** (*hierarchical clustering*) aglomerativo começa com cada observação num grupo só dela e, a cada passo, funde os dois grupos mais parecidos, até sobrar um grupo com todas as observações. A **dissimilaridade** mede quanto dois grupos diferem, e os mais parecidos são os de menor dissimilaridade. Entre duas observações, a dissimilaridade aqui é a distância euclidiana. O registro das fusões é uma árvore, o dendrograma. O `scipy` constrói as fusões com a função `linkage`:
+O **agrupamento hierárquico** (*hierarchical clustering*) aglomerativo começa com cada observação num grupo só dela e, a cada passo, funde os dois grupos mais parecidos, até sobrar um grupo com todas as observações. A **dissimilaridade** mede quanto dois grupos diferem, e os mais parecidos são os de menor dissimilaridade. Entre duas observações, a dissimilaridade aqui é a distância euclidiana. O registro das fusões é uma árvore, o dendrograma.
+
+A primeira fusão se acha à mão: entre os 45 pontos, os dois de menor distância. As linhas de `X` são numeradas de 0 a 44:
+
+```{python}
+#| label: primeira-fusao
+from sklearn.metrics import pairwise_distances
+
+d = pairwise_distances(X)
+np.fill_diagonal(d, np.inf)
+i, j = np.unravel_index(d.argmin(), d.shape)
+print("par mais próximo: linhas", i, "e", j)
+print("distância entre elas:", numero_br(d[i, j]))
+```
+
+::: {.funcao}
+- **`np.fill_diagonal(d, np.inf)`** — põe infinito na diagonal da tabela de distâncias, a distância de cada ponto a ele mesmo, para que ela não conte como a menor.
+- **`d.argmin()`** — a posição da menor distância, contada como se a tabela fosse uma fila só; **`np.unravel_index(posicao, d.shape)`** a converte em linha e coluna.
+:::
+
+O `scipy` constrói todas as fusões com a função `linkage`. A primeira linha do resultado é a fusão achada à mão:
 
 ```{python}
 #| label: ligacao
-from scipy.cluster.hierarchy \
-    import linkage
+from scipy.cluster.hierarchy import linkage
 
 Z = linkage(X, "complete")
 print("fusões:", len(Z))
-alturas = Z[:, 2]
-sobem = np.all(
-    np.diff(alturas) >= 0)
-print("alturas só sobem:",
-    bool(sobem))
-print("as 4 mais altas:")
-print(" ", *[numero_br(a)
-    for a in alturas[-4:]])
+print("1.ª fusão: linhas", int(Z[0, 0]), "e", int(Z[0, 1]),
+      "· altura", numero_br(Z[0, 2]))
 ```
 
 ::: {.funcao}
 - **`linkage(X, "complete")`**, do módulo `scipy.cluster.hierarchy` — o agrupamento hierárquico das linhas de `X`, com a distância euclidiana. O `"complete"` escolhe a regra que mede a dissimilaridade entre dois grupos, a ligação, definida adiante, em "A ligação". Devolve a **matriz de ligação**, uma linha por fusão, na ordem em que acontecem: as duas primeiras colunas dizem quais grupos se fundem, a terceira é a altura da fusão, e a quarta, quantas observações tem o grupo novo.
-- **`Z[:, 2]`** — a terceira coluna, a das alturas.
 :::
 
-Cada fusão junta dois grupos em um, e de 45 grupos até 1 são 44 fusões. A altura de uma fusão é a dissimilaridade entre os dois grupos que se juntam, e aqui ela só sobe de uma fusão para a seguinte: as quatro últimas são as mais altas. As duas últimas, a 7,89 e a 9,22, ficam bem acima das duas anteriores, a 3,93 e a 4,38.
+Cada fusão junta dois grupos em um, e de 45 grupos até 1 são 44 fusões. A altura de uma fusão é a dissimilaridade entre os dois grupos que se juntam. Como ela muda de uma fusão para a seguinte? A figura mostra as 44 alturas, na ordem das fusões:
+
+```{python}
+#| label: fig-alturas
+#| fig-cap: "A altura de cada uma das 44 fusões dos 45 pontos, com a ligação completa, na ordem em que acontecem."
+#| fig-alt: "Gráfico de pontos ligados por uma linha, com a fusão, de 1 a 44, no eixo horizontal e a altura, de 0 a 10, no vertical. A linha sobe devagar, de perto de 0 até perto de 4 na 42.ª fusão, e depois dá dois saltos, para perto de 8 e para perto de 9."
+alturas = Z[:, 2]
+fusao = np.arange(1, 45)
+fig, ax = plt.subplots(figsize=(3.8, 2.6))
+ax.plot(fusao, alturas, "o-", markersize=3, linewidth=1)
+ax.set_xlabel("fusão")
+ax.set_ylabel("altura")
+ax.set_xticks([1, 10, 20, 30, 44])
+ax.set_yticks([0, 5, 10])
+ax.set_ylim(-0.5, 10)
+plt.show()
+```
+
+A linha nunca desce. A diferença de cada altura para a anterior confirma, e as seis últimas fusões aparecem com os números:
+
+```{python}
+#| label: ultimas-alturas
+diferencas = np.diff(alturas)
+print("menor diferença entre uma fusão e a anterior:", numero_br(diferencas.min(), 4))
+ultimas = pd.DataFrame({"altura": alturas[-6:],
+                        "diferença para a anterior": diferencas[-6:]},
+                       index=range(39, 45))
+ultimas.index.name = "fusão"
+ultimas.style.format(numero_br)
+```
+
+::: {.funcao}
+- **`Z[:, 2]`** — a terceira coluna da matriz de ligação, a das alturas.
+:::
+
+A menor diferença, 0,0008, é positiva: a altura só sobe de uma fusão para a seguinte, e as quatro últimas fusões são as mais altas. As duas últimas, a 7,89 e a 9,22, ficam bem acima das duas anteriores, a 3,93 e a 4,38.
 
 Na figura, a árvore aparece três vezes; a segunda e a terceira têm uma linha tracejada, em 8,5 e em 6. Quantos galhos cada linha atravessa?
 
@@ -95,35 +136,22 @@ Na figura, a árvore aparece três vezes; a segunda e a terceira têm uma linha 
 #| label: fig-dendrograma
 #| fig-cap: "O dendrograma dos 45 pontos, com a ligação completa e a distância euclidiana. Em cima, sem corte. No meio, o corte na altura 8,5, a linha tracejada, e embaixo, o corte na altura 6; em cada um, os galhos abaixo do corte têm a cor do seu grupo. As cores não entram no agrupamento: só nomeiam os grupos."
 #| fig-alt: "Três dendrogramas iguais, empilhados, cada um com 45 folhas embaixo e a altura, de 0 a 10, no eixo vertical. No de cima, todos os galhos em cinza. A última fusão, no alto, junta um galho da esquerda e um da direita perto da altura 9; logo abaixo, perto da altura 8, o galho da direita se divide em dois. No do meio, uma linha tracejada cinza corta a altura 8,5, e os galhos abaixo dela ficam em duas cores, um grupo de 15 folhas, à esquerda, e um de 30. No de baixo, a linha corta a altura 6, e os galhos ficam em três cores, com 15 folhas cada."
-from scipy.cluster.hierarchy \
-    import dendrogram
+from scipy.cluster.hierarchy import dendrogram
 
 cortes = [None, 8.5, 6]
-# argumentos das três chamadas;
-# o ** os passa com seus nomes
-opcoes = dict(no_labels=True,
-    above_threshold_color="0.45")
-fig, eixos = plt.subplots(
-    3, 1, figsize=(3.8, 6.0),
-    sharex=True)
+fig, eixos = plt.subplots(3, 1, figsize=(3.8, 6.0), sharex=True)
 for ax, h in zip(eixos, cortes):
     limiar = 0 if h is None else h
-    dendrogram(Z, ax=ax,
-        color_threshold=limiar,
-        **opcoes)
+    dendrogram(Z, ax=ax, color_threshold=limiar, no_labels=True,
+               above_threshold_color="0.45")
     if h is not None:
-        ax.axhline(h, ls="--",
-            color="0.45", lw=1)
+        ax.axhline(h, ls="--", color="0.45", lw=1)
     ax.set_ylabel("altura")
     ax.set_yticks([0, 5, 10])
-    ax.grid(axis="x",
-        visible=False)
-eixos[0].set_title("sem corte",
-    fontsize=10)
-eixos[1].set_title("corte em 8,5",
-    fontsize=10)
-eixos[2].set_title("corte em 6",
-    fontsize=10)
+    ax.grid(axis="x", visible=False)
+eixos[0].set_title("sem corte", fontsize=10)
+eixos[1].set_title("corte em 8,5", fontsize=10)
+eixos[2].set_title("corte em 6", fontsize=10)
 plt.tight_layout()
 plt.show()
 ```
@@ -144,38 +172,31 @@ Um **corte** horizontal na altura $h$ divide as observações em grupos: os galh
 
 Por que cortar em 8,5 e em 6 (2 e 3 grupos)? Qualquer corte entre 7,89 e 9,22 atravessa os mesmos 2 galhos, e qualquer corte entre 4,38 e 7,89, os mesmos 3. O 8,5 e o 6 caem nesses dois intervalos. O de 3 grupos é largo porque a altura salta de 4,38 para 7,89, uma diferença de 3,51. Um salto grande entre fusões seguidas marca um corte natural: abaixo dele, os grupos se formam por fusões baixas, e acima só se juntam grupos bem diferentes.
 
-O corte faz o papel do $K$ do *k*-means: decide quantos grupos saem. A diferença é que o corte vem depois, sobre uma árvore já construída, e mudar de ideia não pede rodar nada de novo. O `fcluster` faz o corte e devolve o grupo de cada observação. Os grupos batem com as três classes da simulação?
+O corte faz o papel do $K$ do *k*-means: decide quantos grupos saem. A diferença é que o corte vem depois, sobre uma árvore já construída, e mudar de ideia não pede rodar nada de novo. O `fcluster` faz o corte e devolve o grupo de cada observação. Os grupos batem com as três classes da simulação? As duas primeiras tabelas cruzam cada corte com as classes, e a terceira cruza os dois cortes:
 
 ```{python}
 #| label: cortes
-from scipy.cluster.hierarchy \
-    import fcluster
+from scipy.cluster.hierarchy import fcluster
 
-g2 = fcluster(Z, 8.5,
-    criterion="distance")
-g3 = fcluster(Z, 6,
-    criterion="distance")
-print(pd.crosstab(classe, g2,
-    rownames=["classe"],
-    colnames=["corte 8,5"]))
-print(pd.crosstab(classe, g3,
-    rownames=["classe"],
-    colnames=["corte 6"]))
-ct = pd.crosstab(g3, g2)
-dentro = (ct > 0).sum(axis=1)
-print("grupos do 6 dentro do",
-    "8,5:",
-    bool((dentro == 1).all()))
+g2 = fcluster(Z, 8.5, criterion="distance")
+g3 = fcluster(Z, 6, criterion="distance")
+print(pd.crosstab(classe, g2, rownames=["classe"],
+                  colnames=["corte 8,5"]).to_string())
+print()
+print(pd.crosstab(classe, g3, rownames=["classe"],
+                  colnames=["corte 6"]).to_string())
+print()
+print(pd.crosstab(g3, g2, rownames=["corte 6"],
+                  colnames=["corte 8,5"]).to_string())
 ```
 
 ::: {.funcao}
 - **`fcluster(Z, h, criterion="distance")`** — corta a árvore na altura `h` e devolve, para cada observação, o número do grupo em que ela ficou, a partir de 1. Os números são só nomes, como os rótulos do *k*-means.
-- **`(ct > 0).sum(axis=1)`** — em cada linha da tabela cruzada, em quantas colunas há alguma observação: aqui, em quantos grupos do corte de cima caem as observações de cada grupo do corte de baixo.
 :::
 
 O corte em 8,5 dá dois grupos: um com toda a classe 2, a nuvem de cima, e outro, de 30, com as classes 0 e 1 juntas. O corte em 6 separa as três classes, uma por grupo. Por que a nuvem de cima se separa antes das outras duas? A resposta depende de como se mede a dissimilaridade entre dois grupos, e volta na parte "A ligação".
 
-Os grupos do corte mais baixo cabem, cada um, dentro de um grupo do corte mais alto: o corte em 6 só partiu em dois o grupo de 30. Esse encaixe vale para quaisquer dois cortes da mesma árvore, e é dele que vem o nome **hierárquico**. O encaixe é também um limite.
+Os grupos do corte mais baixo cabem, cada um, dentro de um grupo do corte mais alto: na terceira tabela, cada linha tem uma casa só preenchida, e o corte em 6 só partiu em dois o grupo de 30. Esse encaixe vale para quaisquer dois cortes da mesma árvore, e é dele que vem o nome **hierárquico**. O encaixe é também um limite.
 
 Imagine pessoas divididas igualmente entre homens e mulheres, e entre brasileiros, japoneses e franceses. A melhor divisão em dois grupos pode ser por sexo, e a melhor em três, por país. Os três grupos de país não cabem dentro dos dois de sexo, e nenhum corte de uma árvore dá as duas divisões. Num caso assim, a árvore acerta no máximo uma das duas, e o *k*-means, rodado uma vez com $K = 2$ e outra com $K = 3$, não tem essa amarra.
 
@@ -183,19 +204,14 @@ O `scikit-learn` tem o mesmo método, no `AgglomerativeClustering`. Ele não des
 
 ```{python}
 #| label: sklearn
-from sklearn.cluster import (
-    AgglomerativeClustering)
-from sklearn.metrics import (
-    adjusted_rand_score)
+from sklearn.cluster import AgglomerativeClustering
+from sklearn.metrics import adjusted_rand_score
 
-ag = AgglomerativeClustering(
-    n_clusters=3,
-    linkage="complete")
+ag = AgglomerativeClustering(n_clusters=3, linkage="complete")
 ag.fit(X)
-ari = adjusted_rand_score(
-    ag.labels_, g3)
-print("mesma divisão do corte 6:",
-    bool(ari == 1))
+print(pd.crosstab(ag.labels_, g3, rownames=["AgglomerativeClustering"],
+                  colnames=["corte 6"]).to_string())
+print("índice de Rand ajustado:", numero_br(adjusted_rand_score(ag.labels_, g3)))
 ```
 
 ::: {.funcao}
@@ -213,16 +229,11 @@ Numa árvore pequena dá para ver as fusões uma a uma. São nove pontos sortead
 ```{python}
 #| label: nove-pontos
 ger = np.random.default_rng(15)
-pontos = ger.uniform(
-    -1.5, 1, size=(9, 2))
+pontos = ger.uniform(-1.5, 1, size=(9, 2))
 Z9 = linkage(pontos, "complete")
-arvore = dendrogram(Z9,
-    no_plot=True)
-folhas = np.array(
-    arvore["leaves"]) + 1
-print("folhas, da esquerda à",
-    "direita:")
-print(" ", *folhas)
+arvore = dendrogram(Z9, no_plot=True)
+folhas = np.array(arvore["leaves"]) + 1
+print("folhas, da esquerda à direita:", " ".join(map(str, folhas)))
 ```
 
 ::: {.funcao}
@@ -235,23 +246,19 @@ As folhas 4 e 8 ficam lado a lado. Isso quer dizer que os pontos 4 e 8 são pare
 ```{python}
 #| label: lados-da-raiz
 raiz = Z9[-1, 2]
-print("altura da raiz:",
-    numero_br(raiz))
-lado = fcluster(Z9, 2,
-    criterion="maxclust")
+print("altura da raiz:", numero_br(raiz))
+lado = fcluster(Z9, 2, criterion="maxclust")
 for k in [4, 8]:
     mesmo = lado == lado[k - 1]
-    quem = np.flatnonzero(mesmo)
-    print(f"com o {k}:",
-        *quem + 1)
+    quem = np.flatnonzero(mesmo) + 1
+    print(f"no galho do {k}:", " ".join(map(str, quem)))
 fusoes = len(Z9)
 print("fusões:", fusoes)
-print("desenhos da mesma árvore:",
-    2 ** fusoes)
+print("desenhos da mesma árvore:", 2**fusoes)
 ```
 
 ::: {.funcao}
-- **`fcluster(Z9, 2, criterion="maxclust")`** — corta a árvore na altura que dá 2 grupos, em vez de numa altura dada: os dois galhos que a raiz junta.
+- **`criterion="maxclust"`** — no `fcluster`, o segundo argumento passa a ser o número de grupos, e não uma altura: com 2, os dois galhos que a raiz junta.
 - **`np.flatnonzero(arr)`** — as posições em que `arr` é `True`; o `+ 1` as numera de 1 a 9.
 :::
 
@@ -265,35 +272,24 @@ Em cada uma das 8 fusões, os dois galhos podem trocar de lado sem mudar a árvo
 #| fig-alt: "Dois gráficos empilhados. Em cima, um dendrograma com nove folhas, na ordem 2, 9, 3, 4, 8, 1, 6, 5 e 7, e a altura, de 0 a pouco mais de 2, no eixo vertical. As folhas 4 e 8 estão em laranja e lado a lado, mas o 4 fica no galho da esquerda e o 8 no da direita, que só se juntam na raiz, a fusão mais alta. Embaixo, os nove pontos no plano, numerados, com os eixos x1 e x2: o 8, em laranja, fica no alto à esquerda, e o 4, também em laranja, embaixo à direita, longe dele."
 cor_pt = np.array(["C0"] * 9)
 cor_pt[[3, 7]] = "C1"
-fig, (ax1, ax2) = plt.subplots(
-    2, 1, figsize=(3.8, 5.2),
-    height_ratios=[1, 1.3])
-dendrogram(Z9, ax=ax1,
-    labels=np.arange(1, 10),
-    color_threshold=0,
-    above_threshold_color="0.45",
-    leaf_font_size=10)
+fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(3.8, 5.2),
+                               height_ratios=[1, 1.3])
+dendrogram(Z9, ax=ax1, labels=np.arange(1, 10), color_threshold=0,
+           above_threshold_color="0.45", leaf_font_size=10)
 for rot in ax1.get_xticklabels():
     k = int(rot.get_text())
     rot.set_color(cor_pt[k - 1])
 ax1.set_ylabel("altura")
 ax1.grid(axis="x", visible=False)
-ax2.scatter(pontos[:, 0],
-    pontos[:, 1], s=30,
-    c=cor_pt, linewidths=0)
-desl = "offset points"
-# número acima e à direita do
-# ponto; o do 1 vai para baixo,
+ax2.scatter(pontos[:, 0], pontos[:, 1], s=30, c=cor_pt, linewidths=0)
+# número acima e à direita do ponto; o do 1 vai para baixo,
 # para não encostar no 6
 lugar = [(5, 3)] * 9
 lugar[0] = (-4, -13)
 for k in range(9):
     x, y = pontos[k]
-    ax2.annotate(str(k + 1),
-        (x, y), xytext=lugar[k],
-        textcoords=desl,
-        fontsize=10,
-        color=cor_pt[k])
+    ax2.annotate(str(k + 1), (x, y), xytext=lugar[k],
+                 textcoords="offset points", fontsize=10, color=cor_pt[k])
 ax2.set_aspect("equal")
 ax2.set_xlim(-1.7, 0.8)
 ax2.set_ylim(-1.6, 1.2)
@@ -325,18 +321,21 @@ Quais pontos se juntam nas primeiras fusões dos nove pontos, e a que altura? As
 
 ```{python}
 #| label: fusoes
-print("fusão: pontos · altura")
-for f in range(4):
-    a, b, h, _ = Z9[f]
-    i, j = int(a) + 1, int(b) + 1
-    print(f"{f + 1}.ª:", i, "e",
-        j, "·", numero_br(h))
-a, b = Z9[4, :2]
-print("5.ª, na matriz:", int(a),
-    "e", int(b))
+def nome(v):
+    v = int(v)
+    return f"ponto {v + 1}" if v < 9 else f"grupo {v}"
+
+
+linhas = []
+for f in range(5):
+    a, b, altura, tamanho = Z9[f]
+    linhas.append({"fusão": f + 1, "junta": nome(a), "com": nome(b),
+                   "altura": altura, "observações": int(tamanho)})
+primeiras = pd.DataFrame(linhas).set_index("fusão")
+primeiras.style.format({"altura": numero_br})
 ```
 
-Na matriz, as observações são numeradas de 0 a 8, e o `+ 1` as põe de 1 a 9. A partir de 9, um número indica um grupo formado antes: 9 é o grupo da 1.ª fusão, 10 o da 2.ª, e assim por diante.
+Na matriz, as observações são numeradas de 0 a 8, e a função `nome` soma 1 para escrevê-las de 1 a 9. A partir de 9, um número indica um grupo formado antes: 9 é o grupo da 1.ª fusão, 10 o da 2.ª, e assim por diante.
 
 As primeiras fusões juntam pares de pontos próximos, 1 e 6 primeiro e 5 e 7 logo depois. A quinta junta os grupos 9 e 10, isto é, $\{1, 6\}$ e $\{5, 7\}$, dois grupos de dois pontos.
 
@@ -353,31 +352,24 @@ A **ligação** (*linkage*) define a dissimilaridade entre dois grupos $A$ e $B$
 | média | distância média entre pares |
 | centroide | distância entre o centroide de $A$ e o de $B$ |
 
-Com $A = \{1, 6\}$ e $B = \{5, 7\}$, há quatro pares com um ponto de cada grupo. Quanto vale a dissimilaridade entre os dois grupos em cada ligação?
+Com $A = \{1, 6\}$ e $B = \{5, 7\}$, há quatro pares com um ponto de cada grupo. As quatro distâncias, e a dissimilaridade entre os dois grupos em cada ligação:
 
 ```{python}
 #| label: quatro-medidas
-from sklearn.metrics import (
-    pairwise_distances)
-
 A = pontos[[0, 5]]
 B = pontos[[4, 6]]
 d = pairwise_distances(A, B)
-print("completa:",
-    numero_br(d.max()))
-print("simples: ",
-    numero_br(d.min()))
-print("média:   ",
-    numero_br(d.mean()))
+pares = pd.DataFrame(d, index=["ponto 1", "ponto 6"],
+                     columns=["ponto 5", "ponto 7"])
+print(pares.map(numero_br).to_string())
 cA = A.mean(axis=0)
 cB = B.mean(axis=0)
 dc = np.sqrt(((cA - cB)**2).sum())
-print("centroide:",
-    numero_br(dc))
-igual = np.isclose(d.max(),
-    Z9[4, 2])
-print("completa = 5.ª fusão:",
-    bool(igual))
+medidas = pd.DataFrame(
+    {"dissimilaridade": [d.max(), d.min(), d.mean(), dc]},
+    index=["completa", "simples", "média", "centroide"])
+print("altura da 5.ª fusão da árvore:", numero_br(Z9[4, 2]))
+medidas.style.format(numero_br)
 ```
 
 ::: {.funcao}
@@ -386,61 +378,59 @@ print("completa = 5.ª fusão:",
 - **`np.sqrt(v)`** — a raiz quadrada de cada elemento de `v`; aqui, da soma dos quadrados das diferenças entre as coordenadas dos dois centroides, a distância euclidiana entre eles.
 :::
 
-Os dois grupos estão a 0,88 pela ligação completa, que olha o par mais afastado, e a 0,47 pela simples, que olha o mais próximo; a média e a centroide ficam no meio. A ligação completa dá a altura da quinta fusão da árvore, porque foi com ela que a árvore foi construída.
+Os dois grupos estão a 0,88 pela ligação completa, que olha o par mais afastado, e a 0,47 pela simples, que olha o mais próximo; a média e a centroide ficam no meio. A ligação completa dá a altura da quinta fusão da árvore, 0,88, porque foi com ela que a árvore foi construída.
 
 A ligação explica o corte em 8,5 dos 45 pontos, que deixou a classe 2 sozinha. Entre cada par de classes, a que distância ficam os pontos mais afastados, e os centroides?
 
 ```{python}
 #| label: classes
-pares = [(0, 1), (1, 2), (0, 2)]
-print("classes: completa",
-    "· centroide")
-for a, b in pares:
+linhas = []
+for a, b in [(0, 1), (1, 2), (0, 2)]:
     Xa = X[classe == a]
     Xb = X[classe == b]
-    dab = pairwise_distances(
-        Xa, Xb)
+    dab = pairwise_distances(Xa, Xb)
     ca = Xa.mean(axis=0)
     cb = Xb.mean(axis=0)
-    dc = np.sqrt(
-        ((ca - cb)**2).sum())
-    print(f"{a} e {b}:",
-        numero_br(dab.max()), "·",
-        numero_br(dc))
+    linhas.append({"classes": f"{a} e {b}",
+                   "completa": dab.max(),
+                   "centroide": np.sqrt(((ca - cb)**2).sum())})
+pd.DataFrame(linhas).set_index("classes").style.format(numero_br)
 ```
 
 Pelos centroides, as classes 1 e 2 estão mais perto uma da outra, a 4,15, do que as classes 0 e 1, a 4,73. Pelo par mais afastado, que é o que a ligação completa olha, a ordem se inverte: 7,89 entre 0 e 1 e 8,15 entre 1 e 2. Por isso a árvore junta primeiro as classes 0 e 1, na fusão de altura 7,89, e o corte em 8,5 deixa a classe 2 sozinha. O 9,22 entre as classes 0 e 2 é a altura da raiz.
 
-Com outra ligação, as distâncias entre grupos mudam, e as fusões e a árvore também. Nos 45 pontos, com o corte em três grupos, as quatro ligações dão os mesmos tamanhos?
+Com outra ligação, as distâncias entre grupos mudam, e as fusões e a árvore também. Nos 45 pontos, com o corte em três grupos, as quatro ligações dão os mesmos tamanhos? E as alturas da centroide, sobem sempre?
 
 ```{python}
 #| label: quatro-ligacoes
-ligacoes = ["complete",
-    "average", "single",
-    "centroid"]
-print("ligação: tamanhos")
+ligacoes = ["complete", "average", "single", "centroid"]
+linhas = []
 for m in ligacoes:
     Zm = linkage(X, m)
-    g = fcluster(Zm, 3,
-        criterion="maxclust")
-    cont = np.bincount(g)[1:]
-    tam = np.sort(cont)
-    print(f"  {m}:", *tam)
+    g = fcluster(Zm, 3, criterion="maxclust")
+    # tamanhos dos 3 grupos, do menor para o maior
+    tamanhos = np.sort(np.bincount(g)[1:])
+    linhas.append({"ligação": m, "menor": tamanhos[0],
+                   "do meio": tamanhos[1], "maior": tamanhos[2]})
+print(pd.DataFrame(linhas).set_index("ligação").to_string())
 Zc = linkage(X, "centroid")
-sobe = np.all(
-    np.diff(Zc[:, 2]) >= 0)
-print("centroide, alturas só",
-    "sobem:", bool(sobe))
+desce = np.flatnonzero(np.diff(Zc[:, 2]) < 0)
+print()
+print("centroide, fusões mais baixas que a anterior:", len(desce))
+k = desce[0] + 1
+print(f"a primeira delas, a {k + 1}.ª fusão: altura",
+      numero_br(Zc[k, 2]), "depois de", numero_br(Zc[k - 1, 2]))
 ```
 
 ::: {.funcao}
 - **`linkage(X, m)`** — o segundo argumento escolhe a ligação: `"complete"` (completa), `"average"` (média), `"single"` (simples) ou `"centroid"` (centroide).
 - **`np.bincount(g)[1:]`** — o `[1:]` descarta a contagem do 0, que o `fcluster` não usa como nome de grupo.
+- **`desce`** — as posições das diferenças negativas entre alturas vizinhas; a diferença na posição `k − 1` compara a fusão `k` com a anterior, contadas a partir de 0.
 :::
 
 A completa, a média e a centroide dão três grupos de 15. A simples dá um grupo de 41, um de 3 e um de 1. Ela junta os grupos pelo par mais próximo, e, quanto mais pontos um grupo tem, mais chance de um deles estar perto de alguém de fora: o grupo grande cresce **encadeado** (*chaining*), e o corte deixa de fora só uns poucos pontos.
 
-A centroide tem outro defeito. Numa fusão, o centroide do grupo novo pode ficar mais perto de um terceiro grupo do que os dois grupos estavam um do outro, e a fusão seguinte sai **mais baixa** que a anterior: é uma **inversão**, e o `False` impresso acima mostra que ela acontece nos 45 pontos. Num dendrograma, uma fusão assim fica abaixo de uma das fusões que ela junta, e a leitura pela altura deixa de valer. Por isso a centroide exige cuidado na leitura da árvore, embora seja comum em genômica. Entre as outras, preferem-se a completa e a média, que evitam o encadeamento extremo da simples e tendem a dar grupos de tamanhos mais parecidos.
+A centroide tem outro defeito. Numa fusão, o centroide do grupo novo pode ficar mais perto de um terceiro grupo do que os dois grupos estavam um do outro, e a fusão seguinte sai **mais baixa** que a anterior: é uma **inversão**, e a contagem impressa acima mostra que ela acontece nos 45 pontos. Num dendrograma, uma fusão assim fica abaixo de uma das fusões que ela junta, e a leitura pela altura deixa de valer. Por isso a centroide exige cuidado na leitura da árvore, embora seja comum em genômica. Entre as outras, preferem-se a completa e a média, que evitam o encadeamento extremo da simples e tendem a dar grupos de tamanhos mais parecidos.
 
 ## As amostras do `NCI60`
 
@@ -448,26 +438,23 @@ A tabela `NCI60` tem a expressão de milhares de genes em amostras de células d
 
 ```{python}
 #| label: nci-ligacoes
-from sklearn.preprocessing \
-    import StandardScaler
+from sklearn.preprocessing import StandardScaler
 
-nci = pd.read_csv(
-    "dados/NCI60.csv.gz")
+nci = pd.read_csv("dados/NCI60.csv.gz")
 tipo = nci["tipo"]
 genes = nci.drop(columns="tipo")
-print("forma:", genes.shape)
-padronizador = StandardScaler()
-padr = padronizador.fit_transform(
-    genes)
+print("amostras:", genes.shape[0], "· genes:", numero_br(genes.shape[1], 0))
+padr = StandardScaler().fit_transform(genes)
 arvores = {}
-print("ligação: tamanhos")
+linhas = []
 for m in ligacoes[:3]:
     arvores[m] = linkage(padr, m)
-    g = fcluster(arvores[m], 4,
-        criterion="maxclust")
-    cont = np.bincount(g)[1:]
-    tam = np.sort(cont)
-    print(f"  {m}:", *tam)
+    g = fcluster(arvores[m], 4, criterion="maxclust")
+    # tamanhos dos 4 grupos, do menor para o maior
+    tamanhos = np.sort(np.bincount(g)[1:])
+    linhas.append({"ligação": m, "menor": tamanhos[0], "2.º": tamanhos[1],
+                   "3.º": tamanhos[2], "maior": tamanhos[3]})
+print(pd.DataFrame(linhas).set_index("ligação").to_string())
 ```
 
 São 64 amostras e 6.830 genes. As três árvores dividem as mesmas amostras de jeitos bem diferentes. O maior grupo tem 40 amostras na completa, 54 na média e 61 na simples.
@@ -479,27 +466,27 @@ O encadeamento se vê nas fusões. Quando uma amostra sozinha se junta ao maior 
 ```{python}
 #| label: nci-encadeamento
 n = len(padr)
-print("maior grupo cresce · com")
-print("uma amostra sozinha:")
+linhas = []
 for m in ligacoes[:3]:
-    Zm = arvores[m]
-    # tamanho do maior grupo
-    # depois de cada fusão
-    maior = np.maximum.accumulate(
-        Zm[:, 3])
-    cresce = np.diff(maior,
-        prepend=1) > 0
-    # números < n: amostra sozinha
-    lados = Zm[:, :2] < n
-    sos = lados.sum(axis=1)
-    uma = cresce & (sos == 1)
-    print(f"  {m}:", cresce.sum(),
-        "·", uma.sum())
+    maior = 1           # antes da 1.ª fusão, todo grupo tem 1 amostra
+    cresce = 0          # fusões em que o maior grupo cresce
+    cresce_por_uma = 0  # delas, as que juntam uma amostra sozinha
+    for a, b, altura, tamanho in arvores[m]:
+        if tamanho > maior:
+            maior = tamanho
+            cresce = cresce + 1
+            # números menores que n são amostras sozinhas
+            sozinhas = int(a < n) + int(b < n)
+            if sozinhas == 1:
+                cresce_por_uma = cresce_por_uma + 1
+    linhas.append({"ligação": m,
+                   "fusões em que o maior grupo cresce": cresce,
+                   "delas, com uma amostra sozinha": cresce_por_uma})
+pd.DataFrame(linhas).set_index("ligação")
 ```
 
-::: {.funcao}
-- **`np.maximum.accumulate(v)`** — em cada posição, o maior valor de `v` até ali. **`np.diff(maior, prepend=1)`** põe um 1, o tamanho de todo grupo antes da primeira fusão, antes de tirar as diferenças.
-:::
+O laço percorre as linhas da matriz de ligação, uma por fusão, e guarda o tamanho do maior grupo até ali. Quando o grupo novo passa desse tamanho, o maior grupo cresceu; se só um dos dois números da fusão é menor que $n$, uma amostra sozinha entrou nele.
+
 
 Na simples, o maior grupo cresce em 39 fusões, 30 delas por uma amostra sozinha: o grupo grande se forma, na maior parte das vezes, uma amostra por vez. Na média, uma amostra sozinha faz o maior grupo crescer em 8 fusões, e na completa, em 2. Nos dendrogramas, com o corte em 4 grupos:
 
@@ -507,33 +494,21 @@ Na simples, o maior grupo cresce em 39 fusões, 30 delas por uma amostra sozinha
 #| label: fig-nci-ligacoes
 #| fig-cap: "Os dendrogramas das 64 amostras do `NCI60`, com os genes padronizados e a distância euclidiana, pelas ligações completa, média e simples. A linha tracejada corta cada árvore em 4 grupos; os galhos abaixo dela têm a cor do seu grupo, e os de cima, em cinza esmaecido, ficam atrás da linha. As alturas não se comparam de um gráfico para outro: cada ligação mede a distância entre grupos de um jeito."
 #| fig-alt: "Três dendrogramas empilhados, com uma linha tracejada cinza-escura em cada um, desenhada por cima dos galhos; acima da linha, os galhos são de um cinza esmaecido, e abaixo dela, coloridos por grupo. No de cima, da ligação completa, há quatro grupos coloridos, cada um com várias folhas. No do meio, da ligação média, um grupo colorido grande, um menor e duas folhas sozinhas, presas direto a galhos esmaecidos. No de baixo, da ligação simples, um grupo colorido com quase todas as folhas e três folhas sozinhas, presas a galhos esmaecidos."
-nomes = {"complete": "completa",
-    "average": "média",
-    "single": "simples"}
+nomes = {"complete": "completa", "average": "média", "single": "simples"}
 # cinza com 55% de opacidade
 claro = "#7373738C"
-apagado = dict(opcoes,
-    above_threshold_color=claro)
-fig, eixos = plt.subplots(
-    3, 1, figsize=(3.8, 6.6))
-for ax, m in zip(eixos,
-        ligacoes[:3]):
+fig, eixos = plt.subplots(3, 1, figsize=(3.8, 6.6))
+for ax, m in zip(eixos, ligacoes[:3]):
     Zm = arvores[m]
-    corte = (Zm[-4, 2]
-        + Zm[-3, 2]) / 2
-    dendrogram(Zm, ax=ax,
-        color_threshold=corte,
-        **apagado)
+    corte = (Zm[-4, 2] + Zm[-3, 2]) / 2
+    dendrogram(Zm, ax=ax, color_threshold=corte, no_labels=True,
+               above_threshold_color=claro)
     for traco in ax.collections:
         traco.set_linewidth(0.8)
-    ax.axhline(corte, ls="--",
-        color="0.45", lw=1.2,
-        zorder=3)
-    ax.set_title(nomes[m],
-        fontsize=10)
+    ax.axhline(corte, ls="--", color="0.45", lw=1.2, zorder=3)
+    ax.set_title(nomes[m], fontsize=10)
     ax.set_ylabel("altura")
-    ax.grid(axis="x",
-        visible=False)
+    ax.grid(axis="x", visible=False)
 plt.tight_layout()
 plt.show()
 ```
@@ -541,77 +516,58 @@ plt.show()
 ::: {.funcao}
 - **`(Zm[-4, 2] + Zm[-3, 2]) / 2`** — a altura no meio entre a quarta e a terceira fusões mais altas. Depois das fusões até a quarta mais alta, sobram 4 grupos; o corte nessa altura os separa.
 - **`ax.collections`** — os conjuntos de traços do gráfico: o `dendrogram` desenha os galhos de cada cor como um conjunto. **`traco.set_linewidth(0.8)`** afina os traços, que com 64 folhas se amontoariam.
-- **`"#7373738C"`** — uma cor em hexadecimal: os seis primeiros dígitos são o cinza, e os dois últimos, a opacidade, 55%. **`dict(opcoes, ...)`** copia `opcoes` com a cor dos galhos acima do corte trocada por essa.
+- **`"#7373738C"`** — uma cor em hexadecimal: os seis primeiros dígitos são o cinza, e os dois últimos, a opacidade, 55%.
 :::
 
-Os grupos da ligação completa têm relação com o tipo de câncer? Na coluna `tipo`, que não entrou no agrupamento, os rótulos terminados em `-repro` são medições repetidas de duas linhagens, a K562, de leucemia, e a MCF7, de mama, e `desconhecido` é uma amostra de origem não identificada. As seis fusões mais altas, e os saltos entre cada uma e a de baixo, mostram onde a árvore sugere cortar; o corte em 140 dá 4 grupos, e a tabela cruzada os compara com `tipo`.
+Os grupos da ligação completa têm relação com o tipo de câncer? Na coluna `tipo`, que não entrou no agrupamento, os rótulos terminados em `-repro` são medições repetidas de duas linhagens, a K562, de leucemia, e a MCF7, de mama, e `desconhecido` é uma amostra de origem não identificada. As seis fusões mais altas, e o salto entre cada uma e a de baixo, mostram onde a árvore sugere cortar; o corte em 140 dá 4 grupos, e a tabela cruzada os compara com `tipo`.
 
 ```{python}
 #| label: nci-corte
+def uma_casa(valor):
+    return numero_br(valor, 1)
+
+
 completa = arvores["complete"]
-print("fusões mais altas:")
-for k in range(1, 7):
-    h = completa[-k, 2]
-    print(f"  {k}.ª:",
-        numero_br(h, 1))
-# salto k: altura da k.ª menos
-# a da (k + 1).ª
-# alturas como impressas
-altas = completa[-6:, 2].round(1)
-saltos = np.diff(altas)[::-1]
-print("saltos, da 1.ª à 5.ª:")
-print(" ", *[numero_br(s, 1)
-    for s in saltos])
-em_ordem = np.sort(saltos)[::-1]
-print("em ordem:",
-    *[numero_br(s, 1)
-    for s in em_ordem])
-g4 = fcluster(completa, 140,
-    criterion="distance")
-print("grupos no corte 140:",
-    len(np.unique(g4)))
-g_max = fcluster(completa, 4,
-    criterion="maxclust")
-mesma = adjusted_rand_score(
-    g4, g_max) == 1
-print("os do corte em 4 grupos:",
-    bool(mesma))
-tab = pd.crosstab(tipo, g4,
-    colnames=["grupo"])
-print(tab)
+# as 7 mais altas, da mais alta para baixo, arredondadas como impressas
+altas = completa[-7:, 2][::-1].round(1)
+fusoes_altas = pd.DataFrame({"altura": altas[:6],
+                             "salto para a de baixo": altas[:6] - altas[1:]},
+                            index=["1.ª", "2.ª", "3.ª", "4.ª", "5.ª", "6.ª"])
+print(fusoes_altas.to_string(formatters=[uma_casa, uma_casa]))
+g4 = fcluster(completa, 140, criterion="distance")
+print("grupos no corte 140:", len(np.unique(g4)))
+g_max = fcluster(completa, 4, criterion="maxclust")
+print("índice de Rand ajustado com o corte em 4 grupos:",
+      numero_br(adjusted_rand_score(g4, g_max)))
+print()
+tab = pd.crosstab(tipo, g4, colnames=["grupo"])
+print(tab.to_string())
 ```
 
-O 140 cai entre a 4.ª e a 3.ª fusões mais altas, a 138,7 e a 142,4, e dá os mesmos 4 grupos do corte em 4. O maior salto, 19,4, três vezes o seguinte, é o da última fusão, de 144,1 para 163,5, e um corte nele dá 2 grupos. O seguinte, 6,4, entre a 5.ª e a 4.ª, daria 5. O 4 não cai num salto: entre a 4.ª e a 3.ª, a diferença é de 3,7. Ele é uma escolha de quem analisa, feita aqui para comparar os grupos com `tipo`.
+O 140 cai entre a 4.ª e a 3.ª fusões mais altas, a 138,7 e a 142,4, e dá os mesmos 4 grupos do corte em 4. Entre as seis fusões mais altas, o maior salto, 19,4, três vezes o seguinte, é o da última fusão, de 144,1 para 163,5, e um corte nele dá 2 grupos. O seguinte, 6,4, entre a 5.ª e a 4.ª, daria 5. O 4 não cai num salto: entre a 4.ª e a 3.ª, a diferença é de 3,7. Ele é uma escolha de quem analisa, feita aqui para comparar os grupos com `tipo`.
 
 A tabela tem uma linha por tipo, e os números das colunas são só nomes. Onde caem a leucemia, o melanoma e a mama?
 
 ```{python}
 #| label: nci-leituras
-leu = tab.loc["leucemia"]
-g_leu = leu.idxmax()
-col = tab[g_leu]
-print("leucemia no mesmo grupo:",
-    leu.max(), "de", leu.sum())
-print("o grupo tem:",
-    col.sum(), "amostras")
-outros = col[col > 0].index
-print(" ", *outros)
-mel = tab.loc["melanoma"]
-g_mel = mel.idxmax()
-col = tab[g_mel]
-print("melanoma no mesmo grupo:",
-    mel.max(), "de", mel.sum())
-print("  tamanho do grupo:",
-    col.sum())
-print("  tipos no grupo:",
-    (col > 0).sum())
-mama = tab.loc["mama"]
-print("grupos com mama:",
-    (mama > 0).sum())
+linhas = []
+for t in ["leucemia", "melanoma", "mama"]:
+    contagem = tab.loc[t]          # quantas amostras do tipo em cada grupo
+    grupo = contagem.idxmax()      # o grupo com mais amostras do tipo
+    coluna = tab[grupo]            # quantas de cada tipo há nesse grupo
+    linhas.append({"tipo": t,
+                   "amostras do tipo": contagem.sum(),
+                   "grupos com o tipo": (contagem > 0).sum(),
+                   "no grupo com mais delas": contagem.max(),
+                   "amostras nesse grupo": coluna.sum(),
+                   "tipos nesse grupo": (coluna > 0).sum()})
+coluna = tab[tab.loc["leucemia"].idxmax()]
+print("tipos no grupo da leucemia:", ", ".join(coluna[coluna > 0].index))
+pd.DataFrame(linhas).set_index("tipo")
 ```
 
 ::: {.funcao}
-- **`tab[g_leu]`** — a coluna desse grupo, com quantas amostras de cada tipo ele tem; **`col[col > 0].index`**, os tipos que aparecem nele.
+- **`tab[grupo]`** — a coluna desse grupo, com quantas amostras de cada tipo ele tem; **`coluna[coluna > 0].index`**, os tipos que aparecem nele.
 :::
 
 As 6 amostras de leucemia ficam num grupo de 8, com apenas mais duas: as medições repetidas da K562, também de leucemia.
@@ -633,7 +589,7 @@ obs1 = 5 + base
 obs2 = 12 + 2 * base + 0.3 * ruido
 obs3 = 5 + ger.normal(size=20)
 P = np.vstack([obs1, obs2, obs3])
-print("forma:", P.shape)
+print("perfis:", P.shape[0], "· variáveis:", P.shape[1])
 ```
 
 ::: {.funcao}
@@ -645,23 +601,17 @@ print("forma:", P.shape)
 #| fig-cap: "Os três perfis simulados, com o valor de cada uma das 20 variáveis. Os perfis 1 e 3 estão no mesmo nível, e os perfis 1 e 2 sobem e descem juntos."
 #| fig-alt: "Gráfico de linhas com a variável, de 1 a 20, no eixo horizontal e o valor no vertical. O perfil 2, laranja, com oscilações maiores, fica em cima, perto de 12, e sobe e desce nos mesmos pontos que o perfil 1, azul, perto de 5. O perfil 3, verde, fica no nível do 1, mas sobe e desce em outros pontos."
 var = np.arange(1, 21)
-fig, ax = plt.subplots(
-    figsize=(3.8, 2.8))
-for k, cor in enumerate(
-        ["C0", "C1", "C2"]):
-    ax.plot(var, P[k], "o-",
-        color=cor, markersize=3,
-        linewidth=1,
-        label=f"perfil {k + 1}")
+fig, ax = plt.subplots(figsize=(3.8, 2.8))
+for k, cor in enumerate(["C0", "C1", "C2"]):
+    ax.plot(var, P[k], "o-", color=cor, markersize=3, linewidth=1,
+            label=f"perfil {k + 1}")
 ax.set_xlabel("variável")
 ax.set_ylabel("valor")
 ax.set_xticks([1, 5, 10, 15, 20])
 ax.set_yticks([5, 10, 15])
 ax.set_xlim(0, 21)
-ax.legend(ncol=3, fontsize=9,
-    loc="lower center",
-    bbox_to_anchor=(0.5, 1),
-    frameon=False)
+ax.legend(ncol=3, fontsize=9, loc="lower center", bbox_to_anchor=(0.5, 1),
+          frameon=False)
 plt.tight_layout()
 plt.show()
 ```
@@ -674,16 +624,19 @@ A resposta depende do que se quer que "parecido" signifique. A **distância base
 
 ```{python}
 #| label: perfis-distancias
+def tres_casas(valor):
+    return numero_br(valor, 3)
+
+
 d_eu = pairwise_distances(P)
-d_co = pairwise_distances(P,
-    metric="correlation")
-print("par: euclidiana · 1 − r")
-for a, b in [(0, 1), (0, 2),
-        (1, 2)]:
-    e = numero_br(d_eu[a, b])
-    c = numero_br(d_co[a, b], 3)
-    print(f"{a + 1} e {b + 1}:",
-        e, "·", c)
+d_co = pairwise_distances(P, metric="correlation")
+linhas = []
+for a, b in [(0, 1), (0, 2), (1, 2)]:
+    linhas.append({"perfis": f"{a + 1} e {b + 1}",
+                   "euclidiana": d_eu[a, b],
+                   "1 − r": d_co[a, b]})
+distancias = pd.DataFrame(linhas).set_index("perfis")
+distancias.style.format({"euclidiana": numero_br, "1 − r": tres_casas})
 ```
 
 ::: {.funcao}
@@ -696,48 +649,47 @@ As duas medidas se ligam. Se o perfil de cada observação for padronizado, com 
 
 ```{python}
 #| label: correlacao-euclidiana
-prisoes = pd.read_csv(
-    "dados/USArrests.csv",
-    index_col="estado")
+prisoes = pd.read_csv("dados/USArrests.csv", index_col="estado")
 T = prisoes.to_numpy()
-print("forma:", T.shape)
-media = T.mean(axis=1,
-    keepdims=True)
-dp = T.std(axis=1,
-    keepdims=True)
+n_estados, p = T.shape
+print("estados:", n_estados, "· variáveis:", p)
+media = T.mean(axis=1, keepdims=True)
+dp = T.std(axis=1, keepdims=True)
 Tp = (T - media) / dp
 d2 = pairwise_distances(Tp)**2
-um_r = pairwise_distances(Tp,
-    metric="correlation")
-p = T.shape[1]
-print("1 − r = d² / (2p):",
-    bool(np.allclose(um_r,
-        d2 / (2 * p))))
+um_r = pairwise_distances(Tp, metric="correlation")
+linhas = []
+for a, b in [(0, 1), (0, 2), (1, 2)]:
+    linhas.append({"estados": f"{prisoes.index[a]} e {prisoes.index[b]}",
+                   "1 − r": um_r[a, b],
+                   "d² / (2p)": d2[a, b] / (2 * p)})
+pd.DataFrame(linhas).set_index("estados").style.format(tres_casas)
 ```
 
 ::: {.funcao}
 - **`T.mean(axis=1, keepdims=True)`** — a média de cada **linha**, e não de cada coluna; `keepdims=True` a mantém como coluna, 50 × 1, para a subtração valer linha a linha. **`T.std(axis=1, ...)`**, do mesmo jeito, o desvio padrão de cada linha, com divisor $p$.
 :::
 
-São 50 estados e $p = 4$ variáveis. A distância baseada em correlação é o quadrado da distância euclidiana dividido por $2p$, depois de tirar de cada perfil o seu nível e a sua amplitude. É o que ela ignora nos perfis 1 e 2.
+São 50 estados e $p = 4$ variáveis. Nos três pares, as duas colunas da tabela dão o mesmo número. A distância baseada em correlação é o quadrado da distância euclidiana dividido por $2p$, depois de tirar de cada perfil o seu nível e a sua amplitude. É o que ela ignora nos perfis 1 e 2.
 
 No `NCI60`, a ligação completa com a distância baseada em correlação, cortada em 4 grupos, divide as amostras como a distância euclidiana?
 
 ```{python}
 #| label: nci-correlacao
-Zr = linkage(padr, "complete",
-    metric="correlation")
-g4r = fcluster(Zr, 4,
-    criterion="maxclust")
-cont = np.bincount(g4r)[1:]
-print("tamanhos:", *np.sort(cont))
-ari = adjusted_rand_score(g4,
-    g4r)
-print("comparada à euclidiana:",
-    numero_br(ari, 3))
+Zr = linkage(padr, "complete", metric="correlation")
+g4r = fcluster(Zr, 4, criterion="maxclust")
+linhas = []
+for medida, g in [("euclidiana", g4), ("correlação", g4r)]:
+    # tamanhos dos 4 grupos, do menor para o maior
+    tamanhos = np.sort(np.bincount(g)[1:])
+    linhas.append({"medida": medida, "menor": tamanhos[0], "2.º": tamanhos[1],
+                   "3.º": tamanhos[2], "maior": tamanhos[3]})
+print(pd.DataFrame(linhas).set_index("medida").to_string())
+print()
+print("índice de Rand ajustado com a euclidiana:",
+      tres_casas(adjusted_rand_score(g4, g4r)))
 leu = g4r[tipo == "leucemia"]
-print("leucemia num grupo só:",
-    len(np.unique(leu)) == 1)
+print("grupos com leucemia:", len(np.unique(leu)))
 ```
 
 ::: {.funcao}
