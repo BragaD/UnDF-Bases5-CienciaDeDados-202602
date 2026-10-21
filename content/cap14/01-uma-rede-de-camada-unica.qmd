@@ -10,13 +10,6 @@ O salário de um jogador de beisebol cresce com os anos de carreira, mas não em
 #| label: setup
 #| include: false
 import matplotlib.pyplot as plt
-import numpy as np
-import pandas as pd
-from sklearn.linear_model import LinearRegression
-from sklearn.metrics import mean_squared_error
-from sklearn.neural_network import MLPRegressor
-from sklearn.pipeline import make_pipeline
-from sklearn.preprocessing import StandardScaler
 
 plt.style.use("estilo-figuras.mplstyle")
 ```
@@ -25,10 +18,10 @@ A função `numero_br` escreve os números com a pontuação brasileira:
 
 ```{python}
 #| label: numero-br
-numero_br = lambda valor, casas=2: (
-    f"{valor:,.{casas}f}".replace(",", "_").replace(".", ",").replace("_", ".")
-    .replace("-", "−")
-)
+def numero_br(valor, casas=2):
+    texto = f"{valor:,.{casas}f}"
+    texto = texto.replace(",", "_").replace(".", ",").replace("_", ".")
+    return texto.replace("-", "−")
 ```
 
 ## Os anos de carreira
@@ -39,6 +32,9 @@ O código lê a tabela, descarta os jogadores sem salário e calcula a média do
 
 ```{python}
 #| label: dados
+import numpy as np
+import pandas as pd
+
 hitters = pd.read_csv("dados/Hitters.csv")
 print("jogadores na tabela:", len(hitters))
 hitters = hitters.dropna()
@@ -69,6 +65,13 @@ Dos 322 jogadores, 263 têm salário, com carreiras de 1 a 24 anos e salários d
 #| label: fig-dados
 #| fig-cap: "Log do salário contra os anos de carreira dos 263 jogadores (pontos cinza, deslocados um pouco na horizontal para não se sobreporem) e a média do log do salário em cada faixa de anos (segmentos azuis)."
 #| fig-alt: "Gráfico de dispersão com os anos de carreira, de 1 a 24, no eixo horizontal e o log do salário no vertical. Cinco segmentos horizontais azuis marcam a média de cada faixa: perto de 4,9 de 1 a 3 anos, perto de 6,0 de 4 a 6, perto de 6,5 de 7 a 9, e perto de 6,4 e 6,5 nas faixas de 10 a 12 e de 13 a 24 anos. Os pontos sobem nos primeiros anos e depois se espalham sem subir."
+import matplotlib.pyplot as plt
+
+
+def decimal_br(valor, posicao):
+    return f"{valor:g}".replace(".", ",").replace("-", "−")
+
+
 rng = np.random.default_rng(14)
 tremor = rng.uniform(-0.25, 0.25, size=len(X))
 fig, ax = plt.subplots(figsize=(3.8, 3.2))
@@ -80,20 +83,24 @@ for inicio, fim, media in zip(limites[:-1], limites[1:], medias):
 ax.set_xlim(0, 25)
 ax.set_xlabel("anos de carreira")
 ax.set_ylabel("log do salário")
-ax.yaxis.set_major_formatter(lambda v, _: f"{v:g}".replace(".", ","))
+ax.yaxis.set_major_formatter(decimal_br)
 plt.tight_layout()
 plt.show()
 ```
 
 ::: {.funcao}
-**`np.random.default_rng(14)`** — um gerador de números aleatórios com semente 14; **`rng.uniform(a, b, size)`** sorteia `size` números uniformes entre `a` e `b`, aqui só para afastar na horizontal os pontos de jogadores com os mesmos anos. **`plt.subplots(figsize=(largura, altura))`** — cria uma figura, com o tamanho em polegadas, e devolve a figura e o eixo `ax` em que se desenha. **`ax.scatter(x, y, s, color, alpha, linewidths)`** — um ponto por par `(x, y)`, de área `s`, com transparência `alpha` e sem contorno (`linewidths=0`). **`ax.plot(x, y, color, linewidth)`** — uma linha pelos pontos dados, aqui um segmento de dois pontos. **`ax.set_xlim(a, b)`** — os limites do eixo horizontal; `set_ylim` faz o mesmo no vertical. **`ax.set_xlabel(texto)`**, **`ax.set_ylabel(texto)`** — os nomes dos eixos. **`ax.yaxis.set_major_formatter(f)`** — escreve cada marca do eixo vertical com a função `f`, aqui trocando o ponto decimal pela vírgula. **`plt.tight_layout()`** — ajusta as margens para nada ficar cortado. **`plt.show()`** — mostra a figura.
+**`np.random.default_rng(14)`** — um gerador de números aleatórios com semente 14; **`rng.uniform(a, b, size)`** sorteia `size` números uniformes entre `a` e `b`, aqui só para afastar na horizontal os pontos de jogadores com os mesmos anos. **`plt.subplots(figsize=(largura, altura))`** — cria uma figura, com o tamanho em polegadas, e devolve a figura e o eixo `ax` em que se desenha. **`ax.scatter(x, y, s, color, alpha, linewidths)`** — um ponto por par `(x, y)`, de área `s`, com transparência `alpha` e sem contorno (`linewidths=0`). **`ax.plot(x, y, color, linewidth)`** — uma linha pelos pontos dados, aqui um segmento de dois pontos. **`ax.set_xlim(a, b)`** — os limites do eixo horizontal; `set_ylim` faz o mesmo no vertical. **`ax.set_xlabel(texto)`**, **`ax.set_ylabel(texto)`** — os nomes dos eixos. **`ax.yaxis.set_major_formatter(funcao)`** — escreve cada marca do eixo vertical com a função dada, que recebe o valor e a posição da marca; aqui, `decimal_br`, que troca o ponto decimal pela vírgula e o hífen pelo sinal de menos. **`plt.tight_layout()`** — ajusta as margens para nada ficar cortado. **`plt.show()`** — mostra a figura.
 :::
 
 O crescimento dos primeiros anos não continua, e é essa forma que uma reta não descreve.
 
 ## A rede como soma de transformações
 
-Uma rede neural monta uma função não linear $f(X)$ dos preditores $X = (X_1, \dots, X_p)$ a partir de $K$ variáveis novas. Cada uma sai de uma combinação linear dos preditores, passada por uma função $g$ fixada de antemão, e $f(X)$ é uma combinação linear dessas $K$ variáveis. O diagrama mostra o caminho, com $p = 4$ preditores e $K = 5$ variáveis novas:
+Uma rede neural monta uma função não linear $f(X)$ dos preditores $X = (X_1, \dots, X_p)$ em dois passos.
+
+Primeiro, ela calcula $K$ variáveis novas. Cada uma é uma combinação linear dos preditores, passada por uma função $g$ fixada de antemão. Depois, $f(X)$ é uma combinação linear dessas $K$ variáveis.
+
+O diagrama mostra o caminho, com $p = 4$ preditores e $K = 5$ variáveis novas:
 
 ```{python}
 #| label: fig-diagrama
@@ -137,13 +144,13 @@ plt.show()
 A coluna da esquerda é a ***camada de entrada***, com os preditores. A do meio é a ***camada escondida***, e cada círculo dela é uma ***unidade escondida*** (*hidden unit*): as unidades não são observadas nos dados, são calculadas pela rede. A da direita é a ***camada de saída***, com a previsão. Cada seta leva um peso.
 
 ::: {.conceito}
-Uma ***rede neural de camada única*** com $K$ unidades escondidas prevê a resposta por
+Uma ***rede neural de camada única*** com $K$ unidades escondidas faz os dois passos. Cada unidade calcula
 $$
-f(X) = \beta_0 + \sum_{k=1}^{K} \beta_k A_k,
+A_k = g\Big(w_{k0} + \sum_{j=1}^{p} w_{kj} X_j\Big),
 $$
-em que cada unidade calcula
+e a saída soma as unidades:
 $$
-A_k = g\Big(w_{k0} + \sum_{j=1}^{p} w_{kj} X_j\Big).
+f(X) = \beta_0 + \sum_{k=1}^{K} \beta_k A_k.
 $$
 
 Os $A_k$ são as ***ativações*** das unidades, e $g$ é a ***função de ativação***. Os números $w_{k0}, \dots, w_{kp}$ e $\beta_0, \dots, \beta_K$ são os ***pesos*** da rede; $w_{k0}$ e $\beta_0$ são os interceptos. Todos são estimados juntos, a partir dos dados.
@@ -153,18 +160,20 @@ Uma unidade de cada vez. Com um preditor só, os anos de carreira, tome a unidad
 
 ```{python}
 #| label: uma-unidade
-ativacao = lambda z: np.maximum(0, z)
-w_0, w_1 = -5, 1
+w_0 = -5
+w_1 = 1
 for jogador, anos in hitters["anos"].iloc[:3].items():
+    z = w_0 + w_1 * anos
+    A = np.maximum(0, z)
     print(f"jogador {jogador}: {anos} anos,",
-          f"A = {ativacao(w_0 + w_1 * anos)}")
+          "z =", numero_br(z, 0) + ",", "A =", numero_br(A, 0))
 ```
 
 ::: {.funcao}
 **`serie.iloc[:3]`** — as três primeiras posições da série, qualquer que seja o rótulo delas. **`np.maximum(0, v)`** — o maior entre 0 e cada valor de `v`.
 :::
 
-O jogador de 3 anos tem $A_1 = 0$: para ele, a unidade está desligada. Os de 14 e de 11 anos têm $A_1 = 9$ e $A_1 = 6$, os anos que passam de 5. A unidade mede quanto a carreira passa de 5 anos, e o ponto 5 vem dos pesos $w_{10}$ e $w_{11}$. Outra unidade, com outros pesos, liga noutro ponto, e a saída soma as unidades, cada uma multiplicada pelo seu $\beta_k$.
+O jogador de 3 anos tem $z = -2$ e $A_1 = 0$: para ele, a unidade está desligada. Os de 14 e de 11 anos têm $A_1 = 9$ e $A_1 = 6$, os anos que passam de 5. A unidade mede quanto a carreira passa de 5 anos, e o ponto 5 vem dos pesos $w_{10}$ e $w_{11}$. Outra unidade, com outros pesos, liga noutro ponto, e a saída soma as unidades, cada uma multiplicada pelo seu $\beta_k$.
 
 Com os $w$ fixados, $f(X)$ é uma regressão linear nas ativações; a diferença para uma regressão em variáveis transformadas, como $X$ e $X^2$, é que quem ajusta não escolhe as transformações: os $w$, e com eles os pontos de dobra, também são estimados a partir dos dados. O nome "neural" vem de uma analogia com o cérebro: cada unidade faria o papel de um neurônio, que "dispara" quando a ativação é grande.
 
@@ -200,10 +209,8 @@ ax_r.set_xlim(-4.2, 4.2)
 ax_s.set_ylim(-0.05, 1.05)
 ax_r.set_ylim(-0.2, 4.2)
 for ax in (ax_s, ax_r):
-    ax.yaxis.set_major_formatter(
-        lambda v, _: f"{v:g}".replace(".", ",").replace("-", "−"))
-ax_r.xaxis.set_major_formatter(
-    lambda v, _: f"{v:g}".replace("-", "−"))
+    ax.yaxis.set_major_formatter(decimal_br)
+ax_r.xaxis.set_major_formatter(decimal_br)
 plt.tight_layout()
 plt.show()
 ```
@@ -222,14 +229,25 @@ O motivo da padronização está no começo da busca pelos pesos: os pesos inici
 
 ```{python}
 #| label: rede-anos
+from sklearn.linear_model import LinearRegression
+from sklearn.metrics import mean_squared_error
+from sklearn.neural_network import MLPRegressor
+from sklearn.pipeline import make_pipeline
+from sklearn.preprocessing import StandardScaler
+
 rede = make_pipeline(
     StandardScaler(),
     MLPRegressor(hidden_layer_sizes=(5,), solver="lbfgs",
                  max_iter=5000, random_state=14))
 rede.fit(X, y)
-reta = LinearRegression().fit(X, y)
-mse_reta = mean_squared_error(y, reta.predict(X))
-mse_rede = mean_squared_error(y, rede.predict(X))
+previsto_rede = rede.predict(X)
+mse_rede = mean_squared_error(y, previsto_rede)
+
+reta = LinearRegression()
+reta.fit(X, y)
+previsto_reta = reta.predict(X)
+mse_reta = mean_squared_error(y, previsto_reta)
+
 print("MSE de treino, reta:", numero_br(mse_reta, 4))
 print("MSE de treino, rede:", numero_br(mse_rede, 4))
 inclinacao = reta.coef_[0]
@@ -267,38 +285,106 @@ print("alpha:", numero_br(mlp.alpha, 4))
 
 A rede tem 16 pesos: cada uma das $K = 5$ unidades tem um intercepto e um peso para o único preditor, $p = 1$, e a saída tem um intercepto e um peso por unidade, isto é, $K(p + 1) + K + 1 = 5 \times 2 + 5 + 1 = 16$. A reta tem dois: o intercepto e a inclinação.
 
-A rede ajustada é a fórmula da definição, com os pesos de `coefs_` e `intercepts_`. O código abaixo refaz a previsão à mão, com `np.maximum` no lugar de $g$, e confere que ela é igual à do `predict`. Depois calcula, para cada unidade, o ponto de dobra em anos de carreira, o lado em que ela liga, o sinal de $\beta_k$ e se ela está ligada para algum dos 263 jogadores:
+A rede ajustada é a fórmula da definição, com os pesos de `coefs_` e `intercepts_`. O código abaixo refaz à mão a previsão para o primeiro jogador da tabela, com `np.maximum` no lugar de $g$: padroniza os anos dele, calcula a entrada $z$ e a ativação $A_k$ de cada unidade, multiplica cada ativação pelo seu $\beta_k$ e soma tudo ao $\beta_0$. Ao lado, a previsão do `predict`:
 
 ```{python}
 #| label: reconstrucao
 escala = rede[0]
 W1, W2 = mlp.coefs_
 b1, b2 = mlp.intercepts_
-x_til = escala.transform(X)
-A = np.maximum(0, x_til @ W1 + b1)
-f_mao = (A @ W2 + b2).ravel()
-print("à mão = predict:", np.allclose(f_mao, rede.predict(X)))
-dobra_til = -b1 / W1[0]
-coluna = dobra_til.reshape(-1, 1)
-dobra = escala.inverse_transform(coluna)
-dobra = dobra.ravel()
+primeiro = X.iloc[[0]]
+x_til = escala.transform(primeiro)[0, 0]
+print("anos do primeiro jogador:", primeiro["anos"].iloc[0])
+print("anos padronizados:", numero_br(x_til))
+z = b1 + W1[0] * x_til
+A = np.maximum(0, z)
+conta = pd.DataFrame({
+    "w_k0": b1,
+    "w_k1": W1[0],
+    "z": z,
+    "A": A,
+    "β": W2[:, 0],
+    "β·A": W2[:, 0] * A + 0.0,
+}, index=pd.RangeIndex(1, 6, name="unidade"))
+print(conta.map(numero_br).to_string())
+print("β0:", numero_br(b2[0]))
+f_mao = b2[0] + (W2[:, 0] * A).sum()
+print("f̂ à mão (β0 + soma de β·A):", numero_br(f_mao))
+print("f̂ do predict:", numero_br(rede.predict(primeiro)[0]))
+```
+
+::: {.funcao}
+**`escala.transform(X)`** — aplica a padronização aprendida no `fit`; devolve uma tabela do `numpy`, e `[0, 0]` é o valor da primeira linha e da primeira coluna. **`X.iloc[[0]]`** — a primeira linha, ainda como tabela, a forma que o `predict` recebe. **`W1[0]`** — a primeira linha de `coefs_[0]`, com os pesos $w_{k1}$ das cinco unidades; **`W2[:, 0]`**, a única coluna de `coefs_[1]`, com os $\beta_k$. **`pd.DataFrame({nome: valores}, index)`** — monta uma tabela com uma coluna por entrada do dicionário. **`pd.RangeIndex(1, 6, name="unidade")`** — o índice de 1 a 5, com nome. **`df.map(f)`** — aplica `f` a cada valor da tabela. **`df.to_string()`** — a tabela inteira como texto. **`+ 0.0`** — transforma em `0.0` o `-0.0` que sai de multiplicar zero por um número negativo, para a tabela não imprimir "−0,00".
+:::
+
+O primeiro jogador tem 14 anos de carreira. As unidades 4 e 5 têm $z$ negativo, $A = 0$, e não entram na soma; as outras três entram com $\beta_k A_k$, e $\beta_0$ mais a soma da última coluna dá 6,43, a mesma previsão do `predict`.
+
+A mesma conta vale para todos os jogadores de uma vez, com o produto de matrizes `@`. Em `x_todos @ W1`, cada linha multiplica os anos padronizados de um jogador pelos pesos $w_{k1}$ das cinco unidades, e cada coluna é uma unidade. Em `A_todos @ W2`, cada linha multiplica as cinco ativações do jogador pelos seus $\beta_k$ e soma os produtos. O código faz as duas contas e põe cinco jogadores ao lado do `predict`:
+
+```{python}
+#| label: todos
+x_todos = escala.transform(X)
+A_todos = np.maximum(0, x_todos @ W1 + b1)
+f_todos = (A_todos @ W2 + b2).ravel()
+cinco = pd.DataFrame({
+    "anos": X["anos"].iloc[:5].to_numpy(),
+    "f̂ à mão": f_todos[:5],
+    "f̂ do predict": previsto_rede[:5],
+})
+print(cinco.to_string(index=False, formatters={
+    "f̂ à mão": numero_br, "f̂ do predict": numero_br}))
+diferenca = np.abs(f_todos - previsto_rede).max()
+print("maior diferença nos 263, com quatro casas:",
+      numero_br(diferenca, 4))
+```
+
+::: {.funcao}
+**`a @ b`** — o produto de matrizes: o valor da linha $i$ e da coluna $k$ é a soma dos produtos da linha $i$ de `a` pela coluna $k$ de `b`. **`v.ravel()`** — a tabela como um vetor de uma dimensão. **`v.to_numpy()`** — os valores de uma coluna do `pandas` como uma tabela do `numpy`, sem os rótulos das linhas. **`np.abs(v).max()`** — o maior valor absoluto. **`df.to_string(index=False, formatters)`** — a tabela como texto, sem a coluna dos rótulos das linhas; `formatters` diz, coluna a coluna, a função que escreve cada valor.
+:::
+
+Nos cinco jogadores as duas colunas coincidem, e nos 263 a maior diferença nem chega à quarta casa: a soma refeita à mão é a previsão da rede.
+
+Onde fica a dobra de cada unidade? Seja $\tilde x$ o número de anos padronizado, que é o que a rede recebe. A dobra está onde $w_{k0} + w_{k1} \tilde x = 0$, isto é, em $\tilde x = -w_{k0}/w_{k1}$. Para voltar aos anos, desfaz-se a padronização: multiplica-se pelo desvio padrão dos anos e soma-se a média. A conta para a unidade 2, que fica na posição 1 das tabelas do `numpy`:
+
+```{python}
+#| label: uma-dobra
+k = 1
+print("w_20:", numero_br(b1[k]), " w_21:", numero_br(W1[0, k]))
+dobra_padronizada = -b1[k] / W1[0, k]
+print("dobra em anos padronizados:", numero_br(dobra_padronizada))
+media_anos = escala.mean_[0]
+desvio_anos = escala.scale_[0]
+print("média dos anos:", numero_br(media_anos),
+      " desvio padrão:", numero_br(desvio_anos))
+dobra_anos = media_anos + desvio_anos * dobra_padronizada
+print("dobra em anos de carreira:", numero_br(dobra_anos))
+```
+
+::: {.funcao}
+**`escala.mean_`**, **`escala.scale_`** — a média e o desvio padrão de cada coluna, guardados pelo `StandardScaler` no `fit`; `[0]` é a única coluna, `anos`. **`W1[0, k]`** — o valor da linha 0 e da coluna `k` de `coefs_[0]`: o peso $w_{k1}$ da unidade da posição `k`.
+:::
+
+A unidade 2 dobra em 7 anos de carreira. Se $w_{k1}$ é positivo, como aqui, a unidade está desligada abaixo da dobra e ligada acima dela; se é negativo, o contrário. A mesma conta, para as cinco unidades de uma vez, junto com o lado em que cada uma liga, o sinal de $\beta_k$ e para quantos jogadores ela está ligada:
+
+```{python}
+#| label: dobras
+dobra = media_anos + desvio_anos * (-b1 / W1[0])
 unidades = pd.DataFrame({
     "dobra": [numero_br(d, 0) for d in dobra],
     "liga": np.where(W1[0] > 0, "acima", "abaixo"),
     "β": np.where(W2[:, 0] > 0, "+", "−"),
-    "ativa": (A > 0).any(axis=0),
+    "jogadores ligados": (A_todos > 0).sum(axis=0),
 }, index=pd.RangeIndex(1, 6, name="unidade"))
 print(unidades.to_string())
-print("unidades ativas:", unidades["ativa"].sum())
+ativas = np.flatnonzero(unidades["jogadores ligados"] > 0)
+print("unidades ligadas para algum jogador:", len(ativas))
 ```
 
 ::: {.funcao}
-**`escala.transform(X)`** — aplica a padronização aprendida no `fit`. **`escala.inverse_transform(v)`** — desfaz a padronização, levando valores da escala da rede de volta para anos; pede uma tabela de uma coluna, e `reshape(-1, 1)` põe `v` nesse formato. **`a @ b`** — o produto de matrizes. **`v.ravel()`** — a tabela como um vetor de uma dimensão. **`np.allclose(a, b)`** — `True` se `a` e `b` são iguais posição a posição, a menos de uma diferença muito pequena. **`np.where(condicao, a, b)`** — `a` onde a condição vale `True`, `b` onde vale `False`. **`(A > 0).any(axis=0)`** — para cada coluna, `True` se algum valor dela é `True`. **`pd.DataFrame({nome: valores}, index)`** — monta uma tabela com uma coluna por entrada do dicionário. **`pd.RangeIndex(1, 6, name="unidade")`** — o índice de 1 a 5, com nome. **`df.to_string()`** — a tabela inteira como texto. **`serie.sum()`** — a soma dos valores; numa série de `True` e `False`, conta os `True`.
+**`np.where(condicao, a, b)`** — `a` onde a condição vale `True`, `b` onde vale `False`. **`(A_todos > 0).sum(axis=0)`** — em cada coluna, uma por unidade, quantos jogadores têm ativação positiva. **`np.flatnonzero(m)`** — as posições em que `m` vale `True`, contadas a partir de 0.
 :::
 
-A soma refeita à mão é a previsão da rede. Seja $\tilde x$ o número de anos padronizado, que é o que a rede recebe. A dobra de cada unidade está onde $w_{k0} + w_{k1} \tilde x = 0$, isto é, em $\tilde x = -w_{k0}/w_{k1}$, levado de volta para anos. Se $w_{k1}$ é positivo, a unidade está desligada abaixo da dobra e ligada acima dela; se é negativo, o contrário.
-
-Os pesos dependem do sorteio inicial, fixado por `random_state`: com outra semente, a numeração das unidades e a posição das dobras podem mudar, e o que se mantém é a forma linear por partes. Nesta semente, a tabela mostra quatro unidades ativas. A unidade 1 dobra em −20 anos e liga acima: para todos os jogadores ela está no trecho ligado, e é uma reta que sobe, com $\beta_1$ positivo. As unidades 2 e 3 ligam acima de 7 e de 9 anos, com $\beta$ negativo: a partir dali, tiram inclinação da curva. A unidade 4 liga abaixo de 5 anos, também com $\beta$ negativo; a figura mais adiante mostra o que ela faz. A unidade 5 dobra perto de 0 e liga abaixo, e nenhum jogador tem menos de um ano de carreira: ela nunca liga, e o peso $\beta_5$ não entra em nenhuma previsão.
+Os pesos dependem do sorteio inicial, fixado por `random_state`: com outra semente, a numeração das unidades e a posição das dobras podem mudar, e o que se mantém é a forma linear por partes. Nesta semente, a tabela mostra quatro unidades ligadas para algum jogador. A unidade 1 dobra em −20 anos e liga acima: os 263 jogadores estão no trecho ligado dela, e é uma reta que sobe, com $\beta_1$ positivo. As unidades 2 e 3 ligam acima de 7 e de 9 anos, com $\beta$ negativo: a partir dali, tiram inclinação da curva. A unidade 4 liga abaixo de 5 anos, também com $\beta$ negativo; a figura mais adiante mostra o que ela faz. A unidade 5 dobra perto de 0 e liga abaixo, e nenhum jogador tem menos de um ano de carreira: ela nunca liga, e o peso $\beta_5$ não entra em nenhuma previsão.
 
 A curva da rede e a reta, sobre os jogadores:
 
@@ -313,10 +399,13 @@ anos_inteiros = pd.DataFrame({"anos": np.arange(1, 25)})
 f_inteiros = rede.predict(anos_inteiros)
 maior = np.argmax(f_inteiros)
 print("anos do maior f̂:", maior + 1)
-for i in (0, maior, 23):
-    anos = "1 ano" if i == 0 else f"{i + 1} anos"
-    print(f"f̂ em {anos}: {numero_br(f_inteiros[i])}"
-          f" ({numero_br(np.exp(f_inteiros[i]), 0)})")
+tres = [0, maior, 23]
+pontos = pd.DataFrame({
+    "anos": anos_inteiros["anos"].iloc[tres].to_numpy(),
+    "f̂": [numero_br(f_inteiros[i]) for i in tres],
+    "e^f̂": [numero_br(np.exp(f_inteiros[i]), 0) for i in tres],
+})
+print(pontos.to_string(index=False))
 fig, ax = plt.subplots(figsize=(3.8, 3.2))
 ax.scatter(X["anos"] + tremor, y, s=10, color="0.45", alpha=0.4,
            linewidths=0, label="jogadores")
@@ -327,14 +416,14 @@ ax.plot(grade["anos"], f_reta, color="0.45", linestyle="--",
 ax.set_xlim(0, 25)
 ax.set_xlabel("anos de carreira")
 ax.set_ylabel("log do salário")
-ax.yaxis.set_major_formatter(lambda v, _: f"{v:g}".replace(".", ","))
+ax.yaxis.set_major_formatter(decimal_br)
 ax.legend(loc="lower center", bbox_to_anchor=(0.5, 1.0), ncol=3)
 plt.tight_layout()
 plt.show()
 ```
 
 ::: {.funcao}
-**`np.arange(1, 25)`** — os inteiros de 1 a 24. **`np.argmax(v)`** — a posição do maior valor de `v`, contada a partir de 0. **`ax.plot(..., linestyle="--", label)`** — `linestyle` escolhe o traço, e `label` é o nome da linha na legenda. **`ax.legend(loc, bbox_to_anchor, ncol)`** — a legenda com os `label` das linhas e pontos; aqui ela é presa pela borda de baixo (`loc`) no topo do gráfico (`bbox_to_anchor`), em `ncol` colunas.
+**`np.arange(1, 25)`** — os inteiros de 1 a 24. **`np.argmax(v)`** — a posição do maior valor de `v`, contada a partir de 0. **`serie.iloc[posicoes]`** — os valores nas posições da lista. **`ax.plot(..., linestyle="--", label)`** — `linestyle` escolhe o traço, e `label` é o nome da linha na legenda. **`ax.legend(loc, bbox_to_anchor, ncol)`** — a legenda com os `label` das linhas e pontos; aqui ela é presa pela borda de baixo (`loc`) no topo do gráfico (`bbox_to_anchor`), em `ncol` colunas.
 :::
 
 A rede prevê 4,53 para um jogador de 1 ano, um salário típico de cerca de 93 mil dólares, sobe até 6,51 em 9 anos (672 mil) e termina em 6,26 em 24 anos (521 mil). A reta não tem como fazer esse movimento: sobe 0,10 no log do salário a cada ano de carreira, do primeiro ao último. Como $e$ elevado à inclinação vale 1,105, isso é um salário 10,5% maior a cada ano.
@@ -348,7 +437,6 @@ Onde está cada dobra na curva? A curva é $\hat f(x) = \beta_0 + \sum_k \beta_k
 anos_grade = grade[["anos"]]
 A_grade = np.maximum(0, escala.transform(anos_grade) @ W1 + b1)
 parcelas = A_grade * W2[:, 0]
-ativas = np.flatnonzero(unidades["ativa"])
 fig, ax = plt.subplots(figsize=(3.8, 3.4))
 ax.axhline(0, color="0.45", linewidth=0.5, alpha=0.6, zorder=0)
 for k in ativas:
@@ -368,15 +456,14 @@ ax.plot(grade["anos"], parcelas.sum(axis=1), color="C1", linewidth=2.5,
 ax.set_xlim(-1.5, 26.5)
 ax.set_xlabel("anos de carreira")
 ax.set_ylabel("parcela no log do salário")
-ax.yaxis.set_major_formatter(
-    lambda v, _: f"{v:g}".replace(".", ",").replace("-", "−"))
+ax.yaxis.set_major_formatter(decimal_br)
 ax.legend(loc="lower center", bbox_to_anchor=(0.5, 1.0), ncol=2)
 plt.tight_layout()
 plt.show()
 ```
 
 ::: {.funcao}
-**`np.flatnonzero(m)`** — as posições em que `m` vale `True`, contadas a partir de 0. **`ax.axhline(y)`** — uma linha horizontal na altura `y`; `zorder=0` a põe atrás das outras. **`ax.axvline(x, ymax)`** — uma linha vertical na posição `x`, que sobe até a fração `ymax` da altura do gráfico. **`transform=ax.get_xaxis_transform()`** — no `ax.text`, lê `x` em anos e `y` como fração da altura do gráfico. **`ax.annotate(texto, (x, y), ...)`** — com texto, escreve `texto` perto do ponto `(x, y)`; `textcoords="offset points"` lê `xytext` como deslocamento em pontos de tipografia. Em `iloc`, a posição `-1` é a última.
+**`ax.axhline(y)`** — uma linha horizontal na altura `y`; `zorder=0` a põe atrás das outras. **`ax.axvline(x, ymax)`** — uma linha vertical na posição `x`, que sobe até a fração `ymax` da altura do gráfico. **`transform=ax.get_xaxis_transform()`** — no `ax.text`, lê `x` em anos e `y` como fração da altura do gráfico. **`ax.annotate(texto, (x, y), ...)`** — com texto, escreve `texto` perto do ponto `(x, y)`; `textcoords="offset points"` lê `xytext` como deslocamento em pontos de tipografia. Em `iloc`, a posição `-1` é a última.
 :::
 
 A parcela 1 é a reta que sobe em todo o eixo. A parcela 4 é negativa nos primeiros anos e sobe até zero na dobra dela: rebaixa o nível da curva nos primeiros anos e, ao mesmo tempo, soma inclinação, de modo que, até ali, a soma sobe mais depressa que a parcela 1 sozinha. A partir das dobras das unidades 2 e 3, as duas parcelas negativas vão tirando inclinação da soma. Entre duas dobras vizinhas, todas as parcelas são retas, e a soma também; em cada dobra, a inclinação da soma muda.
@@ -401,16 +488,30 @@ identidade = make_pipeline(
                  solver="lbfgs", max_iter=5000, tol=1e-10,
                  random_state=14))
 identidade.fit(X, y)
-iguais = np.allclose(identidade.predict(X), reta.predict(X),
-                     atol=1e-4)
-print("rede identidade = reta:", iguais)
+previsao_identidade = identidade.predict(X)
+lado_a_lado = pd.DataFrame({
+    "anos": X["anos"].iloc[:5].to_numpy(),
+    "rede identidade": previsao_identidade[:5],
+    "reta": previsto_reta[:5],
+})
+
+
+def quatro_casas(valor):
+    return numero_br(valor, 4)
+
+
+print(lado_a_lado.to_string(index=False, formatters={
+    "rede identidade": quatro_casas, "reta": quatro_casas}))
+maior_diferenca = np.abs(previsao_identidade - previsto_reta).max()
+print("maior diferença nos 263, com quatro casas:",
+      quatro_casas(maior_diferenca))
 ```
 
 ::: {.funcao}
-Dois parâmetros novos do **`MLPRegressor`**: `activation` é a função $g$, com `"relu"` como padrão e `"identity"` para $g(z) = z$; `tol` é a tolerância da parada. Com `"lbfgs"`, o método para quando o gradiente da perda fica abaixo de `tol`, ou antes, por critérios próprios do método, como a perda deixar de cair de um passo para o outro. **`np.allclose(a, b, atol)`** — com `atol`, `True` se `a` e `b` diferem, posição a posição, em no máximo `atol` (mais uma pequena parcela relativa).
+Dois parâmetros novos do **`MLPRegressor`**: `activation` é a função $g$, com `"relu"` como padrão e `"identity"` para $g(z) = z$; `tol` é a tolerância da parada. Com `"lbfgs"`, o método para quando o gradiente da perda fica abaixo de `tol`, ou antes, por critérios próprios do método, como a perda deixar de cair de um passo para o outro.
 :::
 
-A rede de cinco unidades com a ativação identidade prevê, nos 263 jogadores, o mesmo que a reta, a menos de 0,0002.
+Nos cinco primeiros jogadores, as duas previsões coincidem nas quatro casas, e nos 263 a maior diferença entre elas, com quatro casas, é zero: a rede de cinco unidades com a ativação identidade prevê o mesmo que a reta.
 
 A não linearidade também cria interações. Tome $p = 2$ preditores, $K = 2$ unidades e $g(z) = z^2$, com os pesos
 $$
@@ -424,20 +525,26 @@ A primeira unidade calcula $A_1 = (X_1 + X_2)^2$, e a segunda, $A_2 = (X_1 - X_2
 
 ```{python}
 #| label: interacao
-x1, x2 = np.meshgrid(np.linspace(-2, 2, 5), np.linspace(-2, 2, 5))
-g = lambda z: z ** 2
-A1 = g(0 + 1 * x1 + 1 * x2)
-A2 = g(0 + 1 * x1 - 1 * x2)
+valores = np.linspace(-2, 2, 5)
+x1, x2 = np.meshgrid(valores, valores)
+A1 = (0 + 1 * x1 + 1 * x2) ** 2
+A2 = (0 + 1 * x1 - 1 * x2) ** 2
 f = 0 + 0.25 * A1 - 0.25 * A2
 print("pontos da grade:", f.size)
-print("f = X1 · X2 em todos:", np.allclose(f, x1 * x2))
+rotulos = [numero_br(v, 0) for v in valores]
+print("f(X), uma linha por X2 e uma coluna por X1:")
+print(pd.DataFrame(f + 0.0, index=rotulos, columns=rotulos)
+      .map(numero_br).to_string())
+print("X1 · X2, na mesma grade:")
+print(pd.DataFrame(x1 * x2 + 0.0, index=rotulos, columns=rotulos)
+      .map(numero_br).to_string())
 ```
 
 ::: {.funcao}
-**`np.meshgrid(a, b)`** — duas tabelas com todas as combinações de um valor de `a` com um valor de `b`: a primeira repete `a` em cada linha, a segunda repete `b` em cada coluna.
+**`np.meshgrid(a, b)`** — duas tabelas com todas as combinações de um valor de `a` com um valor de `b`: a primeira repete `a` em cada linha, a segunda repete `b` em cada coluna. **`pd.DataFrame(matriz, index, columns)`** — uma tabela a partir de uma matriz do `numpy`, com os rótulos das linhas e das colunas dados.
 :::
 
-Nos 25 pontos, $f$ é o produto $X_1 X_2$. A conta explica: abrindo os quadrados,
+As duas tabelas são iguais, posição a posição: nos 25 pontos, $f$ é o produto $X_1 X_2$. A conta explica: abrindo os quadrados,
 $$
 \begin{aligned}
 f(X) &= \tfrac14 (X_1 + X_2)^2\\
@@ -450,7 +557,7 @@ porque os termos $X_1^2$ e $X_2^2$ se cancelam. O quadrado serve para o exemplo,
 
 ## A curva que a rede montou
 
-A pergunta do começo tem resposta: a rede de cinco unidades ReLU montou, para o log do salário, uma curva linear por partes, com dobras em cerca de 5, 7 e 9 anos de carreira, e as dobras e as inclinações saíram dos dados. O número de unidades, $K = 5$, não saiu: foi escolhido. Com mais unidades cabem mais dobras, e o MSE de treino não tem como mostrar se elas descrevem o salário ou só os 263 jogadores do ajuste; $K$ se escolhe e se julga pelo erro em dados de fora do ajuste.
+Somar retas dobradas funciona: a rede de cinco unidades ReLU montou, para o log do salário, uma curva linear por partes, com dobras em cerca de 5, 7 e 9 anos de carreira, e as dobras e as inclinações saíram dos dados. O número de unidades, $K = 5$, não saiu: foi escolhido. Com mais unidades cabem mais dobras, e o MSE de treino não tem como mostrar se elas descrevem o salário ou só os 263 jogadores do ajuste; $K$ se escolhe e se julga pelo erro em dados de fora do ajuste.
 
 Os pesos foram estimados para que a rede acerte os jogadores do treino: o ajuste procura os $w$ e os $\beta$ que tornam pequena a soma dos quadrados dos resíduos (RSS),
 $$

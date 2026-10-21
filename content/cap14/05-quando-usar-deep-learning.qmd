@@ -12,32 +12,22 @@ O *profundo* de *deep learning*, aprendizado profundo, se refere ao número de c
 #| label: setup
 #| include: false
 import matplotlib.pyplot as plt
-import numpy as np
-import pandas as pd
-from sklearn.compose import TransformedTargetRegressor
-from sklearn.ensemble import (RandomForestClassifier,
-                              RandomForestRegressor)
-from sklearn.linear_model import (Lasso, LinearRegression,
-                                  LogisticRegression)
-from sklearn.metrics import mean_absolute_error, r2_score
-from sklearn.model_selection import (GridSearchCV, KFold,
-                                     train_test_split)
-from sklearn.neural_network import MLPClassifier, MLPRegressor
-from sklearn.pipeline import Pipeline
-from sklearn.preprocessing import StandardScaler
 
 plt.style.use("estilo-figuras.mplstyle")
 ```
 
-A função `numero_br` escreve os números com a pontuação brasileira:
+A função `numero_br` escreve os números com a pontuação brasileira, e `sem_casas` os escreve sem casas decimais:
 
 ```{python}
 #| label: numero-br
-numero_br = lambda valor, casas=2: (
-    f"{valor:,.{casas}f}"
-    .replace(",", "_").replace(".", ",")
-    .replace("_", ".").replace("-", "−")
-)
+def numero_br(valor, casas=2):
+    texto = f"{valor:,.{casas}f}"
+    texto = texto.replace(",", "_").replace(".", ",").replace("_", ".")
+    return texto.replace("-", "−")
+
+
+def sem_casas(valor, posicao=None):
+    return numero_br(valor, 0)
 ```
 
 ## Quatro modelos numa divisão
@@ -46,18 +36,16 @@ A tabela `Hitters` traz as estatísticas de 1986 dos jogadores das grandes ligas
 
 ```{python}
 #| label: dados
-hitters = pd.read_csv(
-    "dados/Hitters.csv").dropna()
+import pandas as pd
+from sklearn.model_selection import train_test_split
+
+hitters = pd.read_csv("dados/Hitters.csv").dropna()
 y = hitters["salario"]
-X = pd.get_dummies(
-    hitters.drop(columns="salario"),
-    drop_first=True, dtype=float)
+X = pd.get_dummies(hitters.drop(columns="salario"), drop_first=True, dtype=float)
 print("jogadores:", len(X))
 print("colunas:", X.shape[1])
-treino_X, teste_X, treino_y, teste_y = (
-    train_test_split(
-        X, y, test_size=1/3,
-        random_state=14))
+treino_X, teste_X, treino_y, teste_y = train_test_split(
+    X, y, test_size=1/3, random_state=14)
 print("treino:", len(treino_X))
 print("teste:", len(teste_X))
 ```
@@ -69,167 +57,167 @@ São 175 jogadores de treino e 88 de teste. Quatro modelos disputam a previsão 
 - a **rede** de uma camada escondida da seção 14.4, com preditores e resposta padronizados, e o número de unidades e o `alpha` escolhidos por validação cruzada na mesma grade de lá: 16 ou 64 unidades e sete valores de `alpha`, de 0,1 a 100;
 - a **floresta aleatória** da seção 13.3, com 200 árvores e $m = 4$ colunas sorteadas por divisão, perto de $\sqrt{19}$, a escolha usual, e as colunas como estão, sem padronizar nem buscar nada.
 
-As duas buscas usam os mesmos cinco grupos e o MAE como critério, e cada modelo vira uma função, para que os quatro possam ser ajustados de novo em outras divisões:
+A rede, com centenas de pesos, erra menos que o lasso, que fica com poucos coeficientes? E a floresta, que não pediu padronização nem busca? Cada modelo se ajusta no treino, prevê os 88 jogadores de teste e tem o seu MAE medido. Primeiro, a regressão linear:
 
 ```{python}
-#| label: modelos
-grupos = KFold(5, shuffle=True,
-    random_state=14)
+#| label: linear
+from sklearn.linear_model import LinearRegression
+from sklearn.metrics import mean_absolute_error
+
+linear = LinearRegression()
+linear.fit(treino_X, treino_y)
+previsto_linear = linear.predict(teste_X)
+print("MAE da linear:", sem_casas(mean_absolute_error(teste_y, previsto_linear)))
+print("coeficientes, com o intercepto:", linear.coef_.size + 1)
+```
+
+O lasso e a rede escolhem a configuração por validação cruzada. As duas buscas usam os mesmos cinco grupos e o MAE como critério; o `GridSearchCV` faz a busca quando recebe o `fit` e depois prevê com o melhor candidato, reajustado com todo o treino:
+
+```{python}
+#| label: lasso
+import numpy as np
+from sklearn.linear_model import Lasso
+from sklearn.model_selection import GridSearchCV, KFold
+from sklearn.pipeline import Pipeline
+from sklearn.preprocessing import StandardScaler
+
+grupos = KFold(5, shuffle=True, random_state=14)
 metrica = "neg_mean_absolute_error"
-
-def busca(modelo, grade, X, y):
-    cv = GridSearchCV(modelo, grade,
-        cv=grupos, scoring=metrica)
-    return cv.fit(X, y)
-
 grade_lasso = np.logspace(-3, 3, 61)
-grade_rede = np.logspace(-1, 2, 7)
-
-def lasso_por_cv(X, y):
-    modelo = Pipeline([
-        ("escala", StandardScaler()),
-        ("lasso", Lasso(max_iter=100_000)),
-    ])
-    grade = {"lasso__alpha": grade_lasso}
-    return busca(modelo, grade, X, y)
-
-caminho = "rede__regressor__"
-
-def rede_por_cv(X, y):
-    mlp = MLPRegressor(
-        hidden_layer_sizes=(16,),
-        max_iter=2000, random_state=14)
-    alvo = TransformedTargetRegressor(
-        mlp, transformer=StandardScaler())
-    modelo = Pipeline([
-        ("escala", StandardScaler()),
-        ("rede", alvo),
-    ])
-    grade = {
-        caminho + "alpha": grade_rede,
-        caminho + "hidden_layer_sizes":
-            [(16,), (64,)]}
-    return busca(modelo, grade, X, y)
-
-def ajusta_os_quatro(X, y):
-    floresta = RandomForestRegressor(
-        n_estimators=200, max_features=4,
-        random_state=14)
-    return {
-        "linear": LinearRegression().fit(X, y),
-        "lasso": lasso_por_cv(X, y),
-        "rede": rede_por_cv(X, y),
-        "floresta": floresta.fit(X, y),
-    }
+lasso = Pipeline([
+    ("escala", StandardScaler()),
+    ("lasso", Lasso(max_iter=100_000)),
+])
+busca_lasso = GridSearchCV(lasso, {"lasso__alpha": grade_lasso}, cv=grupos,
+                           scoring=metrica)
+busca_lasso.fit(treino_X, treino_y)
+previsto_lasso = busca_lasso.predict(teste_X)
+print("MAE do lasso:", sem_casas(mean_absolute_error(teste_y, previsto_lasso)))
+coeficientes = busca_lasso.best_estimator_[-1].coef_
+print("colunas com coeficiente diferente de zero:", (coeficientes != 0).sum(),
+      "de", coeficientes.size)
 ```
 
 ::: {.funcao}
-- **`Lasso(max_iter=100_000)`** — o lasso; o `alpha` dele é $\lambda/(2n)$, na forma da seção 11.4, e `max_iter` é o limite de iterações do método de ajuste.
-- **`RandomForestRegressor(n_estimators, max_features, random_state)`** — a floresta aleatória de regressão: `n_estimators` árvores, cada uma numa amostra bootstrap, com `max_features` colunas sorteadas como candidatas em cada divisão; `random_state` fixa os sorteios.
+**`Lasso(max_iter=100_000)`** — o lasso; o `alpha` dele é $\lambda/(2n)$, na forma da seção 11.4, e `max_iter` é o limite de iterações do método de ajuste.
 :::
 
-A rede, com centenas de pesos, erra menos que o lasso, que fica com poucos coeficientes? E a floresta, que não pediu padronização nem busca? A tabela traz, para cada modelo, o MAE e o $R^2$ nos 88 jogadores de teste e o número de pesos do modelo, com o intercepto (na rede, os vieses) e, no lasso, só os coeficientes que não são zero:
+A rede é a da seção 14.4, com as duas escalas no `Pipeline` e a busca nas 16 ou 64 unidades e nos sete valores de `alpha`:
+
+```{python}
+#| label: rede
+from sklearn.compose import TransformedTargetRegressor
+from sklearn.neural_network import MLPRegressor
+
+mlp = MLPRegressor(hidden_layer_sizes=(16,), max_iter=2000, random_state=14)
+rede = Pipeline([
+    ("escala", StandardScaler()),
+    ("rede", TransformedTargetRegressor(mlp, transformer=StandardScaler())),
+])
+grade_rede = {
+    "rede__regressor__alpha": np.logspace(-1, 2, 7),
+    "rede__regressor__hidden_layer_sizes": [(16,), (64,)],
+}
+busca_rede = GridSearchCV(rede, grade_rede, cv=grupos, scoring=metrica)
+busca_rede.fit(treino_X, treino_y)
+previsto_rede = busca_rede.predict(teste_X)
+print("MAE da rede:", sem_casas(mean_absolute_error(teste_y, previsto_rede)))
+escolha = busca_rede.best_params_
+print("unidades escolhidas:", escolha["rede__regressor__hidden_layer_sizes"][0])
+print("alpha escolhido:", numero_br(escolha["rede__regressor__alpha"]))
+ajustada = busca_rede.best_estimator_[-1].regressor_
+pesos_rede = 0
+for camada in ajustada.coefs_ + ajustada.intercepts_:
+    pesos_rede = pesos_rede + camada.size
+print("pesos da rede, com os vieses:", pesos_rede)
+```
+
+A floresta não passa por busca nem por padronização:
+
+```{python}
+#| label: floresta
+from sklearn.ensemble import RandomForestRegressor
+
+floresta = RandomForestRegressor(n_estimators=200, max_features=4,
+                                 random_state=14)
+floresta.fit(treino_X, treino_y)
+previsto_floresta = floresta.predict(teste_X)
+print("MAE da floresta:",
+      sem_casas(mean_absolute_error(teste_y, previsto_floresta)))
+```
+
+::: {.funcao}
+**`RandomForestRegressor(n_estimators, max_features, random_state)`** — a floresta aleatória de regressão: `n_estimators` árvores, cada uma numa amostra bootstrap, com `max_features` colunas sorteadas como candidatas em cada divisão; `random_state` fixa os sorteios.
+:::
+
+Os quatro lado a lado, com o MAE e o $R^2$ de teste:
 
 ```{python}
 #| label: uma-divisao
-modelos = ajusta_os_quatro(
-    treino_X, treino_y)
-escolha = modelos["rede"].best_params_
-camada = escolha[
-    caminho + "hidden_layer_sizes"]
-alpha_rede = escolha[caminho + "alpha"]
-print("rede escolhida:", camada, "e",
-    numero_br(alpha_rede))
-lasso = modelos["lasso"].best_estimator_[-1]
-mlp = modelos["rede"].best_estimator_[-1]
-mlp = mlp.regressor_
-pesos = {
-    "linear": modelos["linear"].coef_.size + 1,
-    "lasso": int((lasso.coef_ != 0).sum()) + 1,
-    "rede": sum(c.size for c in mlp.coefs_)
-        + sum(v.size for v in mlp.intercepts_),
-    "floresta": "—",
-}
-linhas = {}
-for nome, modelo in modelos.items():
-    prev = modelo.predict(teste_X)
-    linhas[nome] = {
-        "MAE": mean_absolute_error(teste_y, prev),
-        "R²": r2_score(teste_y, prev)}
-tabela = pd.DataFrame(linhas).T
-mostra = pd.DataFrame({
-    "MAE": tabela["MAE"].map(
-        lambda v: numero_br(v, 0)),
-    "R²": tabela["R²"].map(numero_br),
-    "pesos": pd.Series(pesos)})
-print(mostra.to_string())
-print("menor MAE:", tabela["MAE"].idxmin())
-mae_floresta = tabela.loc["floresta", "MAE"]
-print("floresta abaixo de 160:",
-    mae_floresta < 160)
-r2 = tabela["R²"]
-dif = abs(r2["rede"] - r2["floresta"])
-print("R² da rede e da floresta")
-print("  a menos de 0,01:", dif < 0.01)
-```
+from sklearn.metrics import r2_score
 
-::: {.funcao}
-- **`pd.DataFrame(linhas).T`** — a tabela com uma coluna por modelo; o `.T` a transpõe, e cada modelo vira uma linha.
-:::
+previstos = {
+    "linear": previsto_linear,
+    "lasso": previsto_lasso,
+    "rede": previsto_rede,
+    "floresta": previsto_floresta,
+}
+maes_teste = {}
+r2_teste = {}
+for nome, previsto in previstos.items():
+    maes_teste[nome] = mean_absolute_error(teste_y, previsto)
+    r2_teste[nome] = r2_score(teste_y, previsto)
+tabela = pd.DataFrame({"MAE": maes_teste, "R²": r2_teste})
+print(tabela.to_string(formatters={"MAE": sem_casas, "R²": numero_br}))
+print("menor MAE:", tabela["MAE"].idxmin())
+```
 
 Nesta divisão, a busca escolhe a mesma rede da seção 14.4, com 16 unidades e `alpha` 3,16. Ela erra menos que a regressão linear e que o lasso: 178 mil dólares em média, contra 232 e 236. A floresta tem o menor MAE de teste, abaixo de 160. No $R^2$, rede e floresta ficam a menos de 0,01 uma da outra.
 
-O lasso ficou com 8 das 19 colunas, 9 pesos com o intercepto, e a rede tem 337, contra os 20 da regressão linear. A floresta não se resume a uma lista de pesos: são 200 árvores, cada uma com as suas divisões.
+O lasso ficou com 8 das 19 colunas, 9 pesos contando o intercepto (8 + 1), e a rede tem 337, contra os 20 da regressão linear. A floresta não se resume a uma lista de pesos: são 200 árvores, cada uma com as suas divisões.
 
 ## Vinte divisões
 
-São 88 jogadores de teste numa divisão só. Com outro sorteio de treino e teste, a ordem dos quatro muda? Com `random_state` de 0 a 19, tudo se repete em 20 divisões. Em cada uma, o lasso e a rede fazem a sua busca por validação cruzada só com os jogadores de treino dela, e os jogadores de teste não entram em nenhuma escolha. São 20 buscas da rede, e este chunk demora a rodar:
+São 88 jogadores de teste numa divisão só. Com outro sorteio de treino e teste, a ordem dos quatro muda? Com `random_state` de 0 a 19, a conta da divisão acima se repete em 20 divisões: dividir, ajustar os quatro no treino, prever o teste e medir o MAE. O `clone` copia cada modelo da divisão acima com os mesmos parâmetros e sem o ajuste; o lasso e a rede refazem a sua busca por validação cruzada só com os jogadores de treino de cada divisão, e os jogadores de teste não entram em nenhuma escolha:
 
 ```{python}
 #| label: vinte-divisoes
+from sklearn.base import clone
+
+modelos = {
+    "linear": linear,
+    "lasso": busca_lasso,
+    "rede": busca_rede,
+    "floresta": floresta,
+}
 maes = {}
 alphas = {}
-alphas_rede = {}
 for semente in range(20):
-    partes = train_test_split(
-        X, y, test_size=1/3,
-        random_state=semente)
-    tr_X, te_X, tr_y, te_y = partes
-    ajustados = ajusta_os_quatro(tr_X, tr_y)
-    maes[semente] = {
-        nome: mean_absolute_error(
-            te_y, m.predict(te_X))
-        for nome, m in ajustados.items()}
-    lasso_cv = ajustados["lasso"]
-    alphas[semente] = lasso_cv.best_params_[
-        "lasso__alpha"]
-    rede_cv = ajustados["rede"]
-    alphas_rede[semente] = (
-        rede_cv.best_params_[
-            caminho + "alpha"])
+    tr_X, te_X, tr_y, te_y = train_test_split(X, y, test_size=1/3,
+                                              random_state=semente)
+    maes_da_divisao = {}
+    for nome, modelo in modelos.items():
+        novo = clone(modelo)
+        novo.fit(tr_X, tr_y)
+        previsto = novo.predict(te_X)
+        maes_da_divisao[nome] = mean_absolute_error(te_y, previsto)
+        if nome == "lasso":
+            alphas[semente] = novo.best_params_["lasso__alpha"]
+    maes[semente] = maes_da_divisao
 maes = pd.DataFrame(maes).T
+maes.index.name = "divisão"
 alphas = pd.Series(alphas)
-alphas_rede = pd.Series(alphas_rede)
 print("divisões:", len(maes))
-em_cima = alphas == grade_lasso.max()
-em_baixo = alphas == grade_lasso.min()
-print("alpha do lasso na ponta")
-print("  de cima da grade:", em_cima.sum())
-print("  de baixo da grade:", em_baixo.sum())
-dif = maes["lasso"] - maes["linear"]
-print("nelas, MAE do lasso e da linear")
-print("  a menos de 2:",
-    (dif[em_baixo].abs() < 2).all())
-print("alpha da rede na ponta")
-print("  de cima da grade:",
-    (alphas_rede == grade_rede.max()).sum())
-print("  de baixo da grade:",
-    (alphas_rede == grade_rede.min()).sum())
+print("alpha do lasso: menor da grade,", numero_br(grade_lasso.min(), 3),
+      "· escolhido em", (alphas == grade_lasso.min()).sum(), "de 20 divisões")
+print("alpha do lasso: maior da grade,", numero_br(grade_lasso.max(), 0),
+      "· escolhido em", (alphas == grade_lasso.max()).sum(), "de 20 divisões")
+na_ponta = alphas.idxmin()
+print(f"divisão {na_ponta}: MAE do lasso", numero_br(maes.loc[na_ponta, "lasso"]),
+      "· da linear", numero_br(maes.loc[na_ponta, "linear"]))
 ```
 
-Na ponta de cima da grade, a das penalidades mais fortes, o `alpha` do lasso não cai em nenhuma divisão. Na de baixo, cai em uma: nela, a validação cruzada prefere a menor penalidade da grade, e o lasso fica a menos de 2 mil dólares de MAE da regressão linear, que é o lasso sem penalidade nenhuma.
-
-A grade da rede também tem pontas. O `alpha` dela não cai na de cima em nenhuma divisão e cai na de baixo em uma: nessa divisão, uma grade que descesse mais poderia escolher uma penalidade ainda menor.
+Na ponta de cima da grade, a das penalidades mais fortes, o `alpha` do lasso não cai em nenhuma divisão. Na de baixo, cai em uma, a divisão 11: nela, a validação cruzada prefere a menor penalidade da grade, e o lasso tem praticamente o mesmo MAE da regressão linear, que é o lasso sem penalidade nenhuma: 304,53 contra 304,54.
 
 A figura mostra os quatro MAE de teste de cada divisão numa linha. O que olhar é a ordem das cores dentro de cada linha, e se ela se repete de uma linha para a outra:
 
@@ -237,31 +225,25 @@ A figura mostra os quatro MAE de teste de cada divisão numa linha. O que olhar 
 #| label: fig-vinte
 #| fig-cap: "MAE de teste (em milhares de dólares) dos quatro modelos em cada uma das 20 divisões do `Hitters`, uma divisão por linha, ordenadas de cima para baixo pelo MAE da rede: floresta aleatória (azul), rede (laranja), lasso (verde) e regressão linear (círculo cinza vazado, que deixa ver o verde quando os dois quase coincidem). O traço cinza liga o menor ao maior MAE de cada divisão."
 #| fig-alt: "Gráfico de pontos com 20 linhas horizontais, uma por divisão, e o MAE de teste no eixo horizontal, de cerca de 140 a 325 mil dólares. Em cada linha, o ponto azul da floresta fica à esquerda do laranja da rede, e o verde do lasso e o círculo cinza da regressão linear ficam à direita da rede, a mais de 10 mil dólares dela. Entre o verde e o cinza, a ordem varia de uma linha para outra."
-cores = {"floresta": "C0", "rede": "C1",
-    "lasso": "C2"}
+import matplotlib.pyplot as plt
+
+cores = {"floresta": "C0", "rede": "C1", "lasso": "C2"}
 ordem = maes.sort_values("rede").index
-posicao = pd.Series(
-    range(len(ordem), 0, -1), index=ordem)
+posicao = pd.Series(range(len(ordem), 0, -1), index=ordem)
 fig, ax = plt.subplots(figsize=(3.8, 4.8))
 altura = posicao[maes.index]
-ax.hlines(altura, maes.min(axis=1),
-    maes.max(axis=1), color="0.45",
-    linewidth=0.8, alpha=0.5, zorder=1)
+ax.hlines(altura, maes.min(axis=1), maes.max(axis=1), color="0.45",
+          linewidth=0.8, alpha=0.5, zorder=1)
 for nome, cor in cores.items():
-    ax.scatter(maes[nome], altura,
-        s=22, color=cor, label=nome,
-        zorder=2, linewidths=0)
-ax.scatter(maes["linear"], altura,
-    s=40, facecolors="none",
-    edgecolors="0.45", linewidths=1.2,
-    label="linear", zorder=3)
+    ax.scatter(maes[nome], altura, s=22, color=cor, label=nome, zorder=2,
+               linewidths=0)
+ax.scatter(maes["linear"], altura, s=40, facecolors="none", edgecolors="0.45",
+           linewidths=1.2, label="linear", zorder=3)
 ax.set_yticks([])
 ax.set_ylabel("divisão (pelo MAE da rede)")
 ax.set_xlabel("MAE de teste (mil US$)")
-ax.xaxis.set_major_formatter(
-    lambda v, _: numero_br(v, 0))
-ax.legend(loc="lower center",
-    bbox_to_anchor=(0.5, 1.0), ncol=2)
+ax.xaxis.set_major_formatter(sem_casas)
+ax.legend(loc="lower center", bbox_to_anchor=(0.5, 1.0), ncol=2)
 plt.tight_layout()
 plt.show()
 ```
@@ -272,40 +254,47 @@ plt.show()
 - **`ax.hlines(y, x0, x1)`** — um traço horizontal na altura `y`, de `x0` a `x1`, um por divisão.
 :::
 
-Os números confirmam a figura: o MAE médio das 20 divisões e, para quatro pares de modelos, em quantas divisões o primeiro erra menos:
+Os números da figura, uma divisão por linha, com três distâncias: a do lasso à regressão linear, a da rede à floresta e a do melhor dos dois lineares à rede. Depois, o MAE médio das 20 divisões e, para quatro pares de modelos, em quantas divisões o primeiro erra menos:
 
 ```{python}
 #| label: contagens
-print("MAE médio de teste:")
-medias = maes.mean()
-for nome, media in medias.items():
-    print(f"  {nome}: {numero_br(media, 0)}")
-print("menor média:", medias.idxmin())
-print("floresta abaixo de 170:",
-    medias["floresta"] < 170)
-pares = [("rede", "linear"),
-    ("rede", "lasso"),
-    ("floresta", "rede"),
-    ("lasso", "linear")]
+lineares = maes[["lasso", "linear"]].min(axis=1)
+por_divisao = pd.DataFrame({
+    "linear": maes["linear"],
+    "lasso": maes["lasso"],
+    "rede": maes["rede"],
+    "floresta": maes["floresta"],
+    "lasso − linear": maes["lasso"] - maes["linear"],
+    "rede − floresta": maes["rede"] - maes["floresta"],
+    "lineares − rede": lineares - maes["rede"],
+})
+mostra = por_divisao.map(sem_casas)
+mostra["lasso − linear"] = por_divisao["lasso − linear"].map(numero_br)
+print("MAE de teste:")
+print(mostra.to_string())
+print("menor distância da rede à floresta:",
+      sem_casas(por_divisao["rede − floresta"].min()))
+print("menor distância dos lineares à rede:",
+      sem_casas(por_divisao["lineares − rede"].min()))
+print("menor MAE:", sem_casas(maes.min().min()))
+print("maior MAE:", sem_casas(maes.max().max()))
+medias = pd.DataFrame({"MAE médio": maes.mean()})
+print(medias.map(sem_casas).to_string())
+print("menor média:", medias["MAE médio"].idxmin())
+pares = [("rede", "linear"), ("rede", "lasso"), ("floresta", "rede"),
+         ("lasso", "linear")]
 for a, b in pares:
     n = (maes[a] < maes[b]).sum()
-    print(f"{a} < {b}: {n} de {len(maes)}")
-folga = maes["rede"] - maes["floresta"]
-print("floresta mais de 5 abaixo")
-print("  da rede em todas:", (folga > 5).all())
-lineares = maes[["lasso", "linear"]]
-dist = lineares.min(axis=1) - maes["rede"]
-print("lineares mais de 10 acima")
-print("  da rede em todas:", (dist > 10).all())
-menor = maes.min().min()
-maior = maes.max().max()
-print("menor MAE:", numero_br(menor, 0))
-print("maior MAE:", numero_br(maior, 0))
+    print(f"divisões em que {a} erra menos que {b}: {n} de {len(maes)}")
 ```
 
-Nas 20 divisões, a rede erra menos que a regressão linear e que o lasso em todas, por mais de 10 mil dólares em cada uma, e a floresta erra menos que a rede em todas, por mais de 5 mil dólares em cada uma. Entre os lineares, o lasso erra menos que a regressão linear em 17 das 20.
+::: {.funcao}
+- **`maes[["lasso", "linear"]].min(axis=1)`** — em cada divisão, o menor MAE entre os dois lineares.
+:::
 
-Em média, a floresta erra menos de 170 mil dólares, a rede 196, o lasso 244 e a regressão linear 260. A ordem floresta, rede, modelos lineares se repetiu em todas as divisões; a ordem entre o lasso e a regressão linear, não.
+Na tabela, a rede erra menos que a regressão linear e que o lasso nas 20 divisões, por pelo menos 15 mil dólares em cada uma, e a floresta erra menos que a rede em todas, por mais de 5 mil dólares em cada uma. Entre os lineares, a coluna `lasso − linear` é negativa em 17 das 20 divisões: nelas, o lasso erra menos que a regressão linear.
+
+Em média, a floresta erra menos de 175 mil dólares, a rede 196, o lasso 244 e a regressão linear 260. A ordem floresta, rede, modelos lineares se repetiu em todas as divisões; a ordem entre o lasso e a regressão linear, não.
 
 Nestes dados, então, a rede ganha dos modelos lineares e perde para a floresta. O trabalho que a rede pediu compensou contra os lineares, mas não contra a floresta, que, sem padronização e sem busca, errou menos que ela nas 20 divisões.
 
@@ -317,102 +306,94 @@ O treino dos jogadores tem 175 linhas, com colunas de naturezas diferentes: reba
 
 ```{python}
 #| label: digitos
-treino = pd.read_csv(
-    "dados/mnist_treino.csv.gz")
-teste = pd.read_csv(
-    "dados/mnist_teste.csv.gz")
+treino = pd.read_csv("dados/mnist_treino.csv.gz")
+teste = pd.read_csv("dados/mnist_teste.csv.gz")
 dig_X = treino.drop(columns="digito") / 255
 dig_y = treino["digito"]
-dig_teste_X = teste.drop(
-    columns="digito") / 255
+dig_teste_X = teste.drop(columns="digito") / 255
 dig_teste_y = teste["digito"]
-print("imagens de treino:", len(dig_X))
+print("imagens de treino:", numero_br(len(dig_X), 0))
 print("colunas:", dig_X.shape[1])
-print("imagens de teste:", len(dig_teste_y))
+print("imagens de teste:", numero_br(len(dig_teste_y), 0))
 ```
 
 São 6.000 imagens de treino, com 784 colunas, e 2.000 de teste. Nelas, a floresta também ganha da rede, ou a ordem se inverte? E o número de imagens de treino importa? A comparação da seção 14.2 se refaz com as primeiras $n$ imagens de treino, de 150 a 6.000, com a logística e a arquitetura da rede de lá, e agora também com uma floresta de 200 árvores. Uma rede, com uma semente só, pode ter sorte ou azar no sorteio dos pesos iniciais e da ordem em que as imagens passam pelo treino; por isso entram cinco redes, com as sementes de 0 a 4. As configurações não são reescolhidas para cada $n$. O que se conta são os erros nas mesmas imagens de teste:
 
 ```{python}
 #| label: digitos-por-n
-tamanhos = (150, 300, 600,
-    1500, 3000, 6000)
+tamanhos = (150, 300, 600, 1500, 3000, 6000)
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.linear_model import LogisticRegression
+from sklearn.neural_network import MLPClassifier
+
 erros = {}
 for n in tamanhos:
     parte_X = dig_X.iloc[:n]
     parte_y = dig_y.iloc[:n]
     dig_modelos = {
-        "logística": LogisticRegression(
-            C=0.1, max_iter=1000),
-        "floresta": RandomForestClassifier(
-            n_estimators=200,
-            random_state=14)}
+        "logística": LogisticRegression(C=0.1, max_iter=1000),
+        "floresta": RandomForestClassifier(n_estimators=200, random_state=14),
+    }
     for s in range(5):
-        rede = MLPClassifier(
-            hidden_layer_sizes=(256, 128),
-            random_state=s)
-        dig_modelos[f"rede {s}"] = rede
+        dig_modelos[f"rede {s}"] = MLPClassifier(hidden_layer_sizes=(256, 128),
+                                                 random_state=s)
     erros[n] = {}
-    for nome, m in dig_modelos.items():
-        m.fit(parte_X, parte_y)
-        prev = m.predict(dig_teste_X)
-        errados = prev != dig_teste_y
-        erros[n][nome] = int(errados.sum())
+    for nome, modelo in dig_modelos.items():
+        modelo.fit(parte_X, parte_y)
+        previsto = modelo.predict(dig_teste_X)
+        erros[n][nome] = int((previsto != dig_teste_y).sum())
 erros = pd.DataFrame(erros).T
+erros.index.name = "n"
 redes = erros.filter(like="rede ")
 resumo = pd.DataFrame({
     "logística": erros["logística"],
     "floresta": erros["floresta"],
-    "rede": redes.mean(axis=1)})
-um = lambda v: numero_br(v, 1)
-print(resumo.to_string(
-    formatters={"rede": um}))
+    "rede": redes.mean(axis=1),
+})
+
+
+def uma_casa(valor):
+    return numero_br(valor, 1)
+
+
+print("erros nas 2.000 imagens de teste:")
+print(resumo.to_string(formatters={"rede": uma_casa}))
+quedas = (resumo.diff() < 0).sum()
+for nome in resumo.columns:
+    print(f"quedas de um n ao seguinte, {nome}: {quedas[nome]} de {len(resumo) - 1}")
 ```
 
 ::: {.funcao}
 - **`RandomForestClassifier(n_estimators, random_state)`** — a floresta aleatória de classificação; cada árvore vota numa classe, e a floresta fica com a mais votada. Sem `max_features`, sorteia $\sqrt{p}$ colunas por divisão, a escolha usual para classificação.
-- **`erros.filter(like="rede ")`** — as colunas cujo nome contém `"rede "`, aqui as cinco redes; **`.mean(axis=1)`** tira a média de cada linha, isto é, de cada $n$.
-- **`df.to_string(formatters={"rede": um})`** — a tabela como texto, com a coluna `rede` escrita pela função `um`, com uma casa decimal.
+- **`redes.mean(axis=1)`** — a média de cada linha, isto é, de cada $n$, entre as cinco redes.
+- **`erros.filter(like="rede ")`** — só as colunas cujo nome contém o texto dado, aqui as das cinco redes.
 :::
 
-A coluna `rede` é a média dos erros das cinco redes. As perguntas se respondem com comparações linha a linha, e a última delas com a razão entre os erros da rede e os da logística:
+A coluna `rede` é a média dos erros das cinco redes. As perguntas se respondem com comparações linha a linha: a distância da logística e a da floresta à rede, a razão entre os erros da rede e os da logística, e a distância entre a rede de cinco que mais erra e a que menos erra:
 
 ```{python}
 #| label: digitos-comparacoes
 media_redes = resumo["rede"]
-outras = resumo[["logística", "floresta"]]
-menor_outra = outras.min(axis=1)
-print("rede abaixo das outras duas")
-print("  em todo n:",
-    (media_redes < menor_outra).all())
-folga_dig = (resumo["floresta"]
-    - media_redes)
-print("floresta mais de 5 erros")
-print("  acima da rede em todo n:",
-    (folga_dig > 5).all())
-largura = (redes.max(axis=1)
-    - redes.min(axis=1))
-print("maior distância entre as redes:",
-    int(largura.max()))
-quedas = resumo.diff().dropna() < 0
-print("as três caem a cada n:",
-    quedas.all().all())
-razao = media_redes / resumo["logística"]
-print("razão rede/logística:")
-texto = razao.map(numero_br)
-print(texto.to_string())
-print("razão > 0,8 (n ≤ 600):",
-    (razao.loc[:600] > 0.8).all())
-print("razão < 0,8 (n ≥ 1.500):",
-    (razao.loc[1500:] < 0.8).all())
-vantagem = (resumo["logística"]
-    - media_redes)
-print("erros a menos que a logística:")
-print(vantagem.map(um).to_string())
+por_n = pd.DataFrame({
+    "logística − rede": resumo["logística"] - media_redes,
+    "floresta − rede": resumo["floresta"] - media_redes,
+    "rede / logística": media_redes / resumo["logística"],
+    "entre as redes": redes.max(axis=1) - redes.min(axis=1),
+})
+print(por_n.to_string(formatters={
+    "logística − rede": uma_casa,
+    "floresta − rede": uma_casa,
+    "rede / logística": numero_br,
+    "entre as redes": sem_casas}))
+print("menor distância da logística à rede:",
+      uma_casa(por_n["logística − rede"].min()))
+print("menor distância da floresta à rede:",
+      uma_casa(por_n["floresta − rede"].min()))
+print("maior distância entre as redes:", sem_casas(por_n["entre as redes"].max()))
 ```
 
 ::: {.funcao}
-- **`serie.loc[:600]`**, **`serie.loc[1500:]`** — as linhas com rótulo até 600 e de 1.500 em diante. Com `.loc`, o rótulo da ponta entra no resultado, ao contrário do `iloc`, em que o fim do intervalo fica de fora.
+**`redes.max(axis=1) - redes.min(axis=1)`** — em cada $n$, a distância entre a rede que mais erra e a que menos erra.
 :::
 
 Na figura, o que olhar é se a linha laranja, da rede, fica abaixo das outras duas em todo $n$, e como a distância entre ela e a cinza, da logística, muda com $n$:
@@ -424,12 +405,10 @@ Na figura, o que olhar é se a linha laranja, da rede, fica abaixo das outras du
 n_teste = len(dig_teste_y)
 taxas = resumo / n_teste
 fig, ax = plt.subplots(figsize=(3.8, 3.0))
-cores = {"logística": "0.45",
-    "floresta": "C0", "rede": "C1"}
+cores = {"logística": "0.45", "floresta": "C0", "rede": "C1"}
 for nome, cor in cores.items():
-    ax.plot(taxas.index, taxas[nome],
-        color=cor, marker="o",
-        markersize=5, label=nome)
+    ax.plot(taxas.index, taxas[nome], color=cor, marker="o", markersize=5,
+            label=nome)
 ax.set_xscale("log")
 marcas = [150, 600, 1500, 6000]
 rotulos = [numero_br(n, 0) for n in marcas]
@@ -437,8 +416,13 @@ ax.set_xticks(marcas, rotulos)
 ax.minorticks_off()
 ax.set_xlabel("imagens de treino (n)")
 ax.set_ylabel("taxa de erro de teste")
-ax.yaxis.set_major_formatter(
-    lambda v, _: numero_br(v, 2))
+
+
+def duas_casas(valor, posicao):
+    return numero_br(valor, 2)
+
+
+ax.yaxis.set_major_formatter(duas_casas)
 ax.set_ylim(bottom=0)
 ax.legend(loc="upper right")
 plt.tight_layout()
@@ -446,17 +430,21 @@ plt.show()
 ```
 
 ::: {.funcao}
-- **`ax.set_xticks(posicoes, rotulos)`** — marca o eixo horizontal só nas posições dadas, com os rótulos dados; **`ax.minorticks_off()`** tira as marcas menores que a escala log acrescenta.
+**`ax.minorticks_off()`** — tira as marcas menores que a escala log acrescenta ao eixo.
 :::
 
-As três curvas caem a cada passo. Com 150 imagens de treino, menos que as 175 linhas de treino dos jogadores, a rede já erra menos que a floresta e que a logística, e isso vale em todo $n$, com a floresta mais de 5 erros acima da média das redes. As cinco redes ficam perto umas das outras: em nenhum $n$ a que mais erra passa a que menos erra por mais de 35 erros.
+Na tabela dos erros, as três colunas caem a cada passo, nas cinco passagens de um $n$ ao seguinte. Com 150 imagens de treino, menos que as 175 linhas de treino dos jogadores, a rede já erra menos que a floresta e que a logística, e isso vale em todo $n$: a logística fica pelo menos 40 erros acima da média das redes, e a floresta, mais de 5. As cinco redes ficam perto umas das outras: em nenhum $n$ a que mais erra passa a que menos erra por mais de 35 erros.
 
 Nos jogadores, a floresta ganhou da rede nas 20 divisões. O número de linhas, sozinho, não explica essa troca de posição: com menos linhas de treino que nos jogadores, a rede ganhou nas imagens. Os dois problemas, porém, diferem em outras coisas: o tipo das colunas, quantas são (19 e 784), a resposta e a medida de erro, as próprias redes e o $m$ da floresta. Dois conjuntos de dados não dizem qual dessas diferenças pesa.
 
-Se o número de imagens pesa na distância entre a rede e a logística depende de como ela se mede. Em número de imagens, a rede erra 81,2 imagens a menos que a logística com 150 imagens de treino e 94,8 com 6.000, e só 40,2 com 600; na figura, a distância vertical entre a linha laranja e a cinza é parecida nas duas pontas. Em proporção dos erros da logística, a razão entre os erros das duas é 0,88 com 150 imagens e 0,59 com 6.000: fica acima de 0,8 até 600 imagens e abaixo de 0,8 de 1.500 em diante. Nessa medida, a vantagem da rede é pequena com poucas centenas de imagens e maior com milhares.
+A distância entre a rede e a logística muda com o número de imagens? A resposta depende de como a distância se mede.
+
+Em número de imagens, a rede erra 81,2 imagens a menos que a logística com 150 imagens de treino e 94,8 com 6.000, e só 40,2 com 600; na figura, a distância vertical entre a linha laranja e a cinza é parecida nas duas pontas.
+
+Em proporção dos erros da logística, a razão entre os erros das duas é 0,88 com 150 imagens e 0,59 com 6.000: fica acima de 0,8 até 600 imagens e abaixo de 0,8 de 1.500 em diante. Nessa medida, a vantagem da rede é pequena com poucas centenas de imagens e maior com milhares.
 
 ::: {.callout-note}
-**O que as comparações entre modelos desta seção mostram.** Nos jogadores, uma tabela pequena com colunas de naturezas diferentes, a floresta errou menos que a rede em todas as divisões, e a rede, menos que os modelos lineares. Ali, a rede e o lasso foram escolhidos por validação cruzada, e a floresta ficou com a configuração usual, sem busca. Nas imagens, a rede errou menos que a floresta e que a logística em todo $n$, e a razão entre os erros dela e os da logística ficou acima de 0,8 até 600 imagens e abaixo de 0,8 de 1.500 em diante. Ali, nenhum dos três modelos passou por busca: a rede e a logística usam a configuração da seção 14.2, a mesma em todo $n$, e a floresta, a usual.
+**O que as comparações entre modelos desta seção mostram.** Nos jogadores, uma tabela pequena com colunas de naturezas diferentes, a floresta errou menos que a rede em todas as divisões, e a rede, menos que os modelos lineares. Ali, a rede e o lasso foram escolhidos por validação cruzada, e a floresta ficou com a configuração usual, sem busca. Nas imagens, a rede errou menos que a floresta e que a logística em todo $n$, e a vantagem dela sobre a logística, medida em proporção, cresceu com o número de imagens. Ali, nenhum dos três modelos passou por busca: a rede e a logística usam a configuração da seção 14.2, a mesma em todo $n$, e a floresta, a usual.
 
 **A orientação geral, que dois conjuntos de dados não bastam para provar.** Uma rede neural tende a compensar quando a resposta depende de combinações de muitas colunas do mesmo tipo, como os pixels de uma imagem, sobretudo com muitos dados de treino. Em tabelas com colunas de naturezas diferentes, a comparação começa pelos modelos lineares e pelas florestas, que são mais fáceis de ajustar, e os lineares se deixam ler coeficiente a coeficiente.
 :::
@@ -467,25 +455,14 @@ A rede densa desta seção não usa a vizinhança dos pixels: cada pixel é uma 
 #| label: pixels-embaralhados
 rng = np.random.default_rng(14)
 ordem = rng.permutation(dig_X.shape[1])
-embaralhada = MLPClassifier(
-    hidden_layer_sizes=(256, 128),
-    random_state=0)
-embaralhada.fit(
-    dig_X.iloc[:, ordem], dig_y)
-prev = embaralhada.predict(
-    dig_teste_X.iloc[:, ordem])
-erros_emb = int(
-    (prev != dig_teste_y).sum())
+embaralhada = MLPClassifier(hidden_layer_sizes=(256, 128), random_state=0)
+embaralhada.fit(dig_X.iloc[:, ordem], dig_y)
+previsto = embaralhada.predict(dig_teste_X.iloc[:, ordem])
+erros_emb = int((previsto != dig_teste_y).sum())
 na_ordem = redes.loc[6000]
-print("rede 0, pixels na ordem:",
-    na_ordem["rede 0"])
+print("rede 0, pixels na ordem:", na_ordem["rede 0"])
 print("rede 0, embaralhados:", erros_emb)
-print("5 redes, pixels na ordem:")
-print("  de", na_ordem.min(),
-    "a", na_ordem.max())
-dentro = (na_ordem.min() <= erros_emb
-    <= na_ordem.max())
-print("dentro dessa faixa:", dentro)
+print("5 redes, pixels na ordem: de", na_ordem.min(), "a", na_ordem.max())
 ```
 
 ::: {.funcao}

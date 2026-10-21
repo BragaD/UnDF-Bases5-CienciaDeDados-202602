@@ -10,25 +10,26 @@ Uma imagem de 28 × 28 pixels de um dígito escrito à mão é feita de 784 núm
 #| label: setup
 #| include: false
 import matplotlib.pyplot as plt
-import numpy as np
-import pandas as pd
-from matplotlib.colors import LinearSegmentedColormap, to_rgba
-from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
-from sklearn.linear_model import LogisticRegression
-from sklearn.metrics import log_loss
-from sklearn.neural_network import MLPClassifier
 
 plt.style.use("estilo-figuras.mplstyle")
 ```
 
-A função `numero_br` escreve os números com a pontuação brasileira:
+A função `numero_br` escreve os números com a pontuação brasileira; `sem_casas` e `tres_casas` a chamam com zero e com três casas decimais:
 
 ```{python}
 #| label: numero-br
-numero_br = lambda valor, casas=2: (
-    f"{valor:,.{casas}f}".replace(",", "_").replace(".", ",").replace("_", ".")
-    .replace("-", "−")
-)
+def numero_br(valor, casas=2):
+    texto = f"{valor:,.{casas}f}"
+    texto = texto.replace(",", "_").replace(".", ",").replace("_", ".")
+    return texto.replace("-", "−")
+
+
+def sem_casas(valor):
+    return numero_br(valor, 0)
+
+
+def tres_casas(valor):
+    return numero_br(valor, 3)
 ```
 
 ## As imagens
@@ -39,10 +40,15 @@ O código lê as duas tabelas, separa o rótulo dos pixels e divide os pixels po
 
 ```{python}
 #| label: dados
+import numpy as np
+import pandas as pd
+
 treino = pd.read_csv("dados/mnist_treino.csv.gz")
 teste = pd.read_csv("dados/mnist_teste.csv.gz")
-print("treino:", treino.shape)
-print("teste:", teste.shape)
+print("treino — linhas:", sem_casas(treino.shape[0]),
+      "· colunas:", treino.shape[1])
+print("teste — linhas:", sem_casas(teste.shape[0]),
+      "· colunas:", teste.shape[1])
 pixels = treino.drop(columns="digito")
 print("pixels: de", pixels.min().min(), "a", pixels.max().max())
 treino_X = pixels / 255
@@ -52,26 +58,34 @@ teste_y = teste["digito"]
 print("depois de dividir: de", numero_br(treino_X.min().min(), 0),
       "a", numero_br(treino_X.max().max(), 0))
 contagem = treino_y.value_counts().sort_index()
-print("imagens por dígito no treino:")
-print("  menos:", contagem.idxmin(), f"({contagem.min()})")
-print("  mais:", contagem.idxmax(), f"({contagem.max()})")
+por_digito = pd.DataFrame({"imagens no treino": contagem}).T
+por_digito.columns.name = "dígito"
+print(por_digito.to_string())
+print("dígito com menos imagens:", contagem.idxmin(),
+      f"({contagem.min()})")
+print("dígito com mais imagens:", contagem.idxmax(),
+      f"({contagem.max()})")
 ```
 
 ::: {.funcao}
-- **`df.shape`** — o número de linhas e de colunas da tabela.
+- **`df.shape`** — o número de linhas e de colunas da tabela; **`df.shape[0]`** é o de linhas e **`df.shape[1]`**, o de colunas.
 - **`df.drop(columns="digito")`** — a tabela sem a coluna dada.
 - **`df.min().min()`** — o primeiro `min()` dá o menor valor de cada coluna, e o segundo, o menor entre eles; o mesmo com `max()`.
 - **`df / 255`** — divide todos os valores da tabela por 255.
 - **`serie.value_counts()`** — quantas vezes aparece cada valor; **`.sort_index()`** ordena o resultado pelo valor, aqui de 0 a 9.
 - **`serie.idxmin()`**, **`serie.idxmax()`** — o rótulo da posição com o menor e com o maior valor, aqui o dígito.
+- **`pd.DataFrame({nome: serie}).T`** — a série como uma tabela de uma coluna, transposta pelo `.T` numa linha só, com um dígito por coluna; **`df.columns.name`** dá nome ao conjunto das colunas.
 :::
 
-Cada tabela tem 785 colunas: o rótulo e os 784 pixels. No treino, o dígito com menos imagens é o 5, com 514, e o que tem mais é o 1, com 671; os dez dígitos aparecem em quantidades da mesma ordem. A figura mostra a primeira imagem de cada dígito no treino, com os 784 pixels de volta à grade de 28 × 28:
+Cada tabela tem 785 colunas: o rótulo e os 784 pixels. No treino, o dígito com menos imagens é o 5, com 514, e o que tem mais é o 1, com 671; os outros oito ficam entre esses dois, e os dez aparecem em quantidades da mesma ordem. A figura mostra a primeira imagem de cada dígito no treino, com os 784 pixels de volta à grade de 28 × 28:
 
 ```{python}
 #| label: fig-digitos
 #| fig-cap: "A primeira imagem de cada dígito, de 0 a 9, na tabela de treino. Cada quadro tem 28 × 28 pixels; quanto maior o valor do pixel, mais opaco o azul, e os pixels de valor 0 ficam transparentes."
 #| fig-alt: "Grade de duas linhas por cinco colunas com dez dígitos escritos à mão, em traço azul dentro de quadros com moldura cinza. Na primeira linha, os dígitos 0, 1, 2, 3 e 4; na segunda, 5, 6, 7, 8 e 9, cada um com o dígito como título. Os traços têm espessuras e inclinações diferentes, como na escrita de pessoas diferentes."
+import matplotlib.pyplot as plt
+from matplotlib.colors import LinearSegmentedColormap, to_rgba
+
 tinta = LinearSegmentedColormap.from_list(
     "tinta", [to_rgba("C0", 0), to_rgba("C0", 1)])
 fig, eixos = plt.subplots(2, 5, figsize=(3.8, 2.0))
@@ -91,8 +105,8 @@ plt.show()
 
 ::: {.funcao}
 - **`LinearSegmentedColormap.from_list(nome, [cor0, cor1])`** — uma escala de cores que vai de `cor0`, no valor mínimo, a `cor1`, no máximo. **`to_rgba("C0", opacidade)`** dá o azul `C0` do estilo com a opacidade dada, de 0 (transparente) a 1.
-- **`(treino_y == digito).idxmax()`** — o rótulo da primeira linha em que a comparação dá `True`, isto é, a primeira imagem do dígito; **`df.loc[linha]`** é a linha da tabela com esse rótulo.
-- **`serie.to_numpy().reshape(28, 28)`** — os 784 valores numa grade de 28 linhas por 28 colunas, na ordem em que foram lidos.
+- **`(treino_y == digito).idxmax()`** — o rótulo da primeira linha em que a comparação dá `True`, isto é, a primeira imagem do dígito; **`df.loc[linha]`** é a linha da tabela com esse rótulo, e **`df.loc[linha, coluna]`**, o valor na linha e na coluna dadas; com uma lista de rótulos no lugar de `linha`, as linhas na ordem pedida.
+- **`vetor.reshape(28, 28)`** — os 784 valores do vetor do `numpy` numa grade de 28 linhas por 28 colunas, na ordem em que foram lidos.
 - **`ax.imshow(grade, cmap, vmin, vmax)`** — desenha a grade como imagem, um quadradinho por valor, com a cor dada pela escala `cmap` entre `vmin` e `vmax`.
 - **`ax.set_xticks([])`**, **`ax.set_yticks([])`**, **`ax.grid(False)`** — tiram as marcas dos eixos e a malha; **`ax.spines`** são as quatro bordas, que `set_visible(True)` mostra, para desenhar a moldura.
 :::
@@ -103,18 +117,23 @@ Para o modelo, cada imagem é um vetor $X = (X_1, \dots, X_p)$, com $p = 784$, e
 #| label: one-hot
 quatro = treino_y.iloc[:4].to_numpy()
 indicadoras = np.eye(10, dtype=int)[quatro]
-print(pd.DataFrame(indicadoras, index=quatro).to_string())
+one_hot = pd.DataFrame(
+    indicadoras,
+    index=pd.Index(quatro, name="dígito"),
+    columns=[f"Y_{m}" for m in range(10)],
+)
+print(one_hot.to_string())
 ```
 
 ::: {.funcao}
-**`np.eye(10, dtype=int)`** — a matriz identidade 10 × 10, com 1 na diagonal e 0 fora dela; a linha $m$ tem um único 1, na coluna $m$. **`matriz[quatro]`** — as linhas da matriz nas posições dadas por `quatro`, uma por imagem.
+**`np.eye(10, dtype=int)`** — a matriz identidade 10 × 10, com 1 na diagonal e 0 fora dela; a linha $m$ tem um único 1, na coluna $m$. **`matriz[quatro]`** — as linhas da matriz nas posições dadas por `quatro`, uma por imagem. **`pd.Index(valores, name)`** — rótulos de linhas ou de colunas, com um nome que aparece no canto da tabela.
 :::
 
-Cada linha é uma imagem, com o dígito à esquerda, e o único 1 da linha fica na coluna do dígito.
+Cada linha é uma imagem, com o dígito dela à esquerda, e as colunas são as indicadoras $Y_0$ a $Y_9$: o único 1 da linha fica na coluna do dígito.
 
 ## Duas camadas escondidas
 
-Uma rede de camada única, como a da seção 14.1, com unidades suficientes, consegue aproximar quase qualquer função dos preditores; esse é um resultado teórico, que não diz quantas unidades seriam necessárias nem como achar os pesos. Na prática, achar bons pesos costuma ser mais fácil com várias camadas de tamanho moderado, em que cada camada recebe as ativações da anterior [@james2023]. A rede abaixo tem duas camadas escondidas, $L_1$ com $K_1 = 256$ unidades e $L_2$ com $K_2 = 128$, e dez saídas, uma por dígito:
+Uma rede de camada única, como a da seção 14.1, com unidades suficientes, consegue aproximar quase qualquer função dos preditores; esse é um resultado teórico, que não diz quantas unidades seriam necessárias nem como achar os pesos. Na prática, achar bons pesos costuma ser mais fácil com várias camadas de tamanho moderado, em que cada camada recebe as ativações da anterior. A rede abaixo tem duas camadas escondidas, $L_1$ com $K_1 = 256$ unidades e $L_2$ com $K_2 = 128$, e dez saídas, uma por dígito:
 
 ```{python}
 #| label: fig-camadas
@@ -185,52 +204,95 @@ O `MLPClassifier` ajusta a rede das duas camadas às 6.000 imagens de treino, co
 
 ```{python}
 #| label: rede
+from sklearn.neural_network import MLPClassifier
+
 rede = MLPClassifier(hidden_layer_sizes=(256, 128),
                      random_state=14)
 rede.fit(treino_X, treino_y)
 print("épocas:", rede.n_iter_)
 print("saída:", rede.out_activation_)
-for camada, (W, b) in enumerate(
-        zip(rede.coefs_, rede.intercepts_), start=1):
-    print(f"camada {camada}: {W.shape},",
-          numero_br(W.size + b.size, 0), "pesos")
-pesos = (sum(W.size for W in rede.coefs_)
-         + sum(b.size for b in rede.intercepts_))
-print("pesos da rede:", numero_br(pesos, 0))
+W1, W2, W3 = rede.coefs_
+b1, b2, b3 = rede.intercepts_
+camadas = pd.DataFrame({
+    "entradas": [W1.shape[0], W2.shape[0], W3.shape[0]],
+    "unidades": [W1.shape[1], W2.shape[1], W3.shape[1]],
+    "pesos": [W1.size + b1.size, W2.size + b2.size, W3.size + b3.size],
+}, index=pd.Index(["L1", "L2", "saída"], name="camada"))
+print(camadas.map(sem_casas).to_string())
+pesos = camadas["pesos"].sum()
+print("pesos da rede:", sem_casas(pesos))
 ```
 
 ::: {.funcao}
-**`MLPClassifier(hidden_layer_sizes, random_state)`** — a rede neural de classificação do `scikit-learn`. `hidden_layer_sizes=(256, 128)` pede duas camadas escondidas, com 256 e 128 unidades; a ativação padrão é a ReLU. Os pesos iniciais são sorteados, e as imagens são embaralhadas a cada passada pelo treino; `random_state` fixa os dois sorteios. **`rede.n_iter_`** — quantas vezes o ajuste percorreu todas as imagens de treino, as ***épocas*** da seção 14.3. O ajuste para sozinho quando a perda de treino passa 10 épocas seguidas sem cair mais que uma pequena tolerância, ou quando chega ao limite `max_iter`, de 200 épocas no padrão. **`rede.out_activation_`** — a função aplicada na saída: `"softmax"` quando há mais de duas classes.
+**`MLPClassifier(hidden_layer_sizes, random_state)`** — a rede neural de classificação do `scikit-learn`. `hidden_layer_sizes=(256, 128)` pede duas camadas escondidas, com 256 e 128 unidades; a ativação padrão é a ReLU. Os pesos iniciais são sorteados, e as imagens são embaralhadas a cada passada pelo treino; `random_state` fixa os dois sorteios. **`rede.n_iter_`** — quantas vezes o ajuste percorreu todas as imagens de treino, as ***épocas*** da seção 14.3. O ajuste para sozinho quando a perda de treino passa mais de 10 épocas seguidas sem cair mais que uma pequena tolerância, ou quando chega ao limite `max_iter`, de 200 épocas no padrão. **`rede.out_activation_`** — a função aplicada na saída: `"softmax"` quando há mais de duas classes. **`W1, W2, W3 = rede.coefs_`** — dá um nome a cada uma das três tabelas de pesos da lista, na ordem das camadas; o mesmo com os vieses de `intercepts_`.
 :::
 
-O ajuste parou em 47 épocas, antes do limite de 200, e a saída é a softmax. Todos os números da rede, os $w$ e os $\beta$, são chamados de ***pesos***, e os interceptos, como $w^{(1)}_{k0}$ e $\beta_{m0}$, de ***vieses*** (*biases*); esse viés não tem relação com o da decomposição em viés e variância da seção 7.6. Na figura, $w^{(1)}$ reúne todos os $w^{(1)}_{kj}$ da camada 1, vieses incluídos, $w^{(2)}$ todos os $w^{(2)}_{\ell k}$ e $\beta$ todos os $\beta_{m\ell}$. `coefs_[0]` é a tabela dos $w^{(1)}_{kj}$, com uma linha por pixel e uma coluna por unidade de $L_1$, e a camada 1 soma a esses $784 \times 256$ pesos os seus 256 vieses: $784 \times 256 + 256 = 785 \times 256 = 200.960$. Do mesmo jeito, a camada 2 tem $(256 + 1) \times 128 = 32.896$, e a de saída, $(128 + 1) \times 10 = 1.290$. O total é $200.960 + 32.896 + 1.290 = 235.146$ pesos.
+O ajuste parou em 47 épocas, antes do limite de 200, e a saída é a softmax. Todos os números da rede, os $w$ e os $\beta$, são chamados de ***pesos***, e os interceptos, como $w^{(1)}_{k0}$ e $\beta_{m0}$, de ***vieses*** (*biases*); esse viés não tem relação com o da decomposição em viés e variância da seção 7.6. Na figura, $w^{(1)}$ reúne todos os $w^{(1)}_{kj}$ da camada 1, vieses incluídos, $w^{(2)}$ todos os $w^{(2)}_{\ell k}$ e $\beta$ todos os $\beta_{m\ell}$.
+
+`W1`, o primeiro elemento de `coefs_`, é a tabela dos $w^{(1)}_{kj}$, com uma linha por pixel e uma coluna por unidade de $L_1$, e a camada 1 soma a esses $784 \times 256$ pesos os seus 256 vieses: $784 \times 256 + 256 = 785 \times 256 = 200.960$. Do mesmo jeito, a camada 2 tem $(256 + 1) \times 128 = 32.896$, e a de saída, $(128 + 1) \times 10 = 1.290$. O total é $200.960 + 32.896 + 1.290 = 235.146$ pesos.
 
 Para cada imagem, a rede devolve dez probabilidades, uma por dígito. O código mostra as da primeira imagem de teste e as da primeira imagem de teste que a rede classifica errado:
 
 ```{python}
 #| label: uma-imagem
 proba = rede.predict_proba(teste_X)
-print("probabilidades:", proba.shape)
+print("probabilidades:", sem_casas(proba.shape[0]), "imagens ×",
+      proba.shape[1], "dígitos")
 previsto = rede.predict(teste_X)
-errada = int((previsto != teste_y).to_numpy().argmax())
+errou = (previsto != teste_y).to_numpy()
+errada = int(errou.argmax())
 duas = [0, errada]
-print("imagens de teste:", [i + 1 for i in duas])
-print("dígito certo:", teste_y.iloc[duas].tolist())
-print("dígito previsto:", previsto[duas].tolist())
-tabela = pd.DataFrame(
-    {f"{i + 1}ª": proba[i] for i in duas},
-    index=rede.classes_)
-print(tabela.map(lambda p: numero_br(p, 3)).to_string())
-print("todas somam 1:", np.allclose(proba.sum(axis=1), 1))
-print("predict = a maior:",
-      (proba.argmax(axis=1) == previsto).all())
+as_duas = pd.DataFrame({
+    "dígito certo": teste_y.iloc[duas].to_numpy(),
+    "maior probabilidade": proba[duas].argmax(axis=1),
+    "predict": previsto[duas],
+}, index=pd.Index([1, errada + 1], name="imagem"))
+print(as_duas.to_string())
+tabela = pd.DataFrame({
+    "1ª": proba[0],
+    f"{errada + 1}ª": proba[errada],
+}, index=pd.Index(rede.classes_, name="dígito"))
+tabela.loc["soma"] = tabela.sum()
+print(tabela.map(tres_casas).to_string())
+afastamento = np.abs(proba.sum(axis=1) - 1).max()
+print("nas 2.000, a soma fica a menos de um milionésimo de 1:",
+      afastamento < 1e-6)
+maior = proba.argmax(axis=1)
+print("imagens em que o predict não é o dígito de maior probabilidade:",
+      (maior != previsto).sum(), "de", sem_casas(len(previsto)))
 ```
 
 ::: {.funcao}
-**`rede.predict_proba(X)`** — as probabilidades de cada classe, uma linha por imagem e uma coluna por classe, na ordem de `rede.classes_` (aqui, de 0 a 9). **`(previsto != teste_y).to_numpy().argmax()`** — a posição do primeiro `True`, isto é, a primeira imagem classificada errado; `int` a escreve como número comum. As posições começam em 0, e por isso o código soma 1 ao escrevê-las. **`serie.iloc[posicoes]`** — os valores nas posições dadas; **`.tolist()`** os escreve como lista. **`df.map(f)`** — aplica `f` a cada valor da tabela, aqui para escrevê-lo com a vírgula. **`proba.sum(axis=1)`** — a soma de cada linha. **`proba.argmax(axis=1)`** — a posição do maior valor de cada linha; como as classes vão de 0 a 9, a posição é o próprio dígito. **`(a == b).all()`** — `True` se as duas sequências são iguais em todas as posições.
+**`rede.predict_proba(X)`** — as probabilidades de cada classe, uma linha por imagem e uma coluna por classe, na ordem de `rede.classes_` (aqui, de 0 a 9). **`errou.argmax()`** — a posição do primeiro `True`, isto é, a primeira imagem classificada errado; `int` a escreve como número comum. As posições começam em 0, e por isso o código soma 1 ao escrevê-las. **`proba[duas]`** — as linhas de `proba` nas posições da lista `duas`. **`proba.argmax(axis=1)`** — a posição do maior valor de cada linha; como as classes vão de 0 a 9, a posição é o próprio dígito. **`df.loc["soma"] = df.sum()`** — acrescenta uma linha com a soma de cada coluna. **`proba.sum(axis=1)`** — a soma de cada linha. **`(maior != previsto).sum()`** — em quantas imagens os dois diferem.
 :::
 
-A primeira imagem de teste é um 7, e a rede dá ao 7 probabilidade 1,000 e aos outros nove dígitos 0,000, em três casas. A 9ª imagem de teste é a primeira que a rede erra: é um 5, e a rede reparte quase toda a probabilidade entre cinco dígitos, com 0,891 no 6, 0,065 no 4, 0,022 no 5, 0,018 no 0 e 0,003 no 2; o 6 tem a maior, e é ele o previsto. As 2.000 linhas somam 1, e o `predict` é sempre o dígito de maior probabilidade.
+A primeira imagem de teste é um 7, e a rede dá ao 7 probabilidade 1,000 e aos outros nove dígitos 0,000, em três casas. A 9ª imagem de teste é a primeira que a rede erra: é um 5, e a rede reparte quase toda a probabilidade entre cinco dígitos, com 0,891 no 6, 0,065 no 4, 0,022 no 5, 0,018 no 0 e 0,003 no 2; o 6 tem a maior, e é ele o previsto. As duas colunas somam 1, como as 2.000 linhas de `proba`, e não há imagem em que o `predict` não seja o dígito de maior probabilidade.
+
+As dez probabilidades da 9ª imagem saem da conta da definição. O código abaixo passa os 784 pixels dela pelas duas camadas escondidas, com os pesos de `coefs_` e `intercepts_` e a ReLU, calcula os dez $Z_m$ da saída e aplica a softmax: $e^{Z_m}$, a soma dos dez, e a divisão de cada um pela soma. A última coluna é a do `predict_proba`:
+
+```{python}
+#| label: softmax-a-mao
+pixels_9 = teste_X.iloc[[errada]].to_numpy()
+A1 = np.maximum(0, pixels_9 @ W1 + b1)
+A2 = np.maximum(0, A1 @ W2 + b2)
+print("unidades de L1 ligadas:", (A1 > 0).sum(), "de", A1.size)
+print("unidades de L2 ligadas:", (A2 > 0).sum(), "de", A2.size)
+Z = (A2 @ W3 + b3).ravel()
+exp_Z = np.exp(Z)
+print("soma dos e^Z:", numero_br(exp_Z.sum()))
+softmax = exp_Z / exp_Z.sum()
+conta = pd.DataFrame({
+    "Z": Z,
+    "e^Z": exp_Z,
+    "softmax": softmax,
+    "predict_proba": proba[errada],
+}, index=pd.Index(rede.classes_, name="dígito"))
+print(conta.map(tres_casas).to_string())
+```
+
+O produto `pixels_9 @ W1` dá, para cada uma das 256 unidades de $L_1$, a soma $\sum_j w^{(1)}_{kj} x_j$; somar `b1` acrescenta os vieses, e `np.maximum(0, ...)` aplica a ReLU. As duas linhas seguintes fazem o mesmo com $L_2$ e com a saída.
+
+O 6 tem o maior $Z_m$, 4,342, e com ele o maior $e^{Z_m}$, 76,848; dividido pela soma dos dez, 86,22, ele vira a probabilidade 0,891. Os $Z_m$ negativos dão $e^{Z_m}$ entre 0 e 1, e os muito negativos, como o do 3, quase zero. A softmax refeita à mão é, nas três casas, a coluna do `predict_proba`.
 
 ### A perda que o ajuste minimiza
 
@@ -242,6 +304,8 @@ Em cada imagem, só a parcela do dígito certo tem $y_{im} = 1$, e a soma de den
 
 ```{python}
 #| label: entropia
+from sklearn.metrics import log_loss
+
 certa = proba[np.arange(len(teste_y)), teste_y]
 for i in duas:
     print(f"imagem {i + 1}:",
@@ -251,7 +315,6 @@ media_treino = log_loss(treino_y, rede.predict_proba(treino_X))
 print("média no treino:", numero_br(media_treino, 4))
 print("alpha:", numero_br(rede.alpha, 4))
 print("perda do ajuste:", numero_br(rede.loss_, 4))
-print("perda acima da média:", rede.loss_ > media_treino)
 ```
 
 ::: {.funcao}
@@ -270,8 +333,8 @@ erros_treino = (rede.predict(treino_X) != treino_y).sum()
 erros_rede = (rede.predict(teste_X) != teste_y).sum()
 print("pesos por imagem de treino:",
       numero_br(pesos / len(treino_y), 1))
-print("erros no treino:", erros_treino, "de", len(treino_y))
-print("erros no teste:", erros_rede, "de", len(teste_y))
+print("erros no treino:", erros_treino, "de", sem_casas(len(treino_y)))
+print("erros no teste:", erros_rede, "de", sem_casas(len(teste_y)))
 print("entropia média no teste:",
       numero_br(log_loss(teste_y, proba), 3))
 ```
@@ -287,44 +350,57 @@ São 39,2 pesos por imagem de treino, e a rede não erra nenhuma das 6.000. No t
 Dois modelos do capítulo 9 separam as classes com fronteiras lineares nos pixels: a LDA, da seção 9.7, e a logística multinomial, da seção 9.3. A logística vai aqui com uma penalidade ridge nos coeficientes, como a da seção 11.3, controlada pelo parâmetro `C`. O valor `C=0.1` é fixo, não foi escolhido com o teste; a escolha por validação cruzada seria a da seção 11.5. A logística tem uma combinação linear dos 784 pixels por dígito. Antes de rodar o código, um palpite: ela erra mais ou menos que a rede nas 2.000 imagens de teste? E a LDA? E, no treino, qual dos três erra menos?
 
 ```{python}
-#| label: comparacao
-lda = LinearDiscriminantAnalysis().fit(treino_X, treino_y)
+#| label: lineares
+from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
+from sklearn.linear_model import LogisticRegression
+
+lda = LinearDiscriminantAnalysis()
+lda.fit(treino_X, treino_y)
 logistica = LogisticRegression(C=0.1, max_iter=1000)
 logistica.fit(treino_X, treino_y)
-print("logística parou antes do limite:",
-      logistica.n_iter_[0] < 1000)
-print("pixels sempre 0 no treino:",
-      (treino_X.max() == 0).sum())
-print("coef_ da logística:", logistica.coef_.shape)
+print("passos da logística:", logistica.n_iter_[0], "(limite: 1.000)")
+print("coeficientes da logística:", logistica.coef_.shape[0],
+      "classes ×", logistica.coef_.shape[1], "pixels")
 pesos_log = logistica.coef_.size + logistica.intercept_.size
-print("pesos da logística:", numero_br(pesos_log, 0))
-modelos = {"LDA": lda, "logística": logistica, "rede": rede}
-conta = lambda m, X, y: (m.predict(X) != y).sum()
-erros = pd.DataFrame({
-    "teste": {nome: conta(m, teste_X, teste_y)
-              for nome, m in modelos.items()},
-    "treino": {nome: conta(m, treino_X, treino_y)
-               for nome, m in modelos.items()},
-})
-taxas = erros / pd.Series({"teste": len(teste_y),
-                           "treino": len(treino_y)})
-print("erros:")
-print(erros.to_string())
-print("taxas de erro:")
-print(taxas.map(lambda v: numero_br(v, 3)).to_string())
-e = erros["teste"]
-print("rede < logística < LDA:",
-      e["rede"] < e["logística"] < e["LDA"])
-print("rede / logística:", numero_br(e["rede"] / e["logística"]))
-print("treino abaixo do teste:",
-      (taxas["treino"] < taxas["teste"]).all())
+print("pesos da logística:", sem_casas(pesos_log))
 ```
 
 ::: {.funcao}
-**`LinearDiscriminantAnalysis()`** — a LDA da seção 9.7. **`LogisticRegression(C, max_iter)`** — a regressão logística; com mais de duas classes, a multinomial, na forma softmax. `C` é o inverso da força da penalidade ridge sobre os coeficientes: quanto menor o `C`, mais os coeficientes são puxados para zero; o padrão é `C=1`. `max_iter` é o número máximo de passos do método que procura os coeficientes (o padrão é 100); os 1.000 daqui são uma folga, para que o ajuste pare por convergência e não pelo limite, e **`logistica.n_iter_`** diz quantos passos ele deu. **`logistica.coef_`** — os coeficientes, uma linha por classe e uma coluna por preditor; **`logistica.intercept_`**, um intercepto por classe. **`pd.DataFrame({coluna: {linha: valor}})`** — uma tabela a partir de dicionários, com as chaves de dentro como rótulos das linhas. **`pd.Series({rotulo: valor})`** — uma série a partir de um dicionário, com as chaves como rótulos. **`erros / pd.Series({coluna: n})`** — divide cada coluna da tabela pelo valor de mesmo nome na série. **`treino_X.max() == 0`** — `True` nas colunas cujo maior valor é 0, isto é, nos pixels que valem 0 em todas as imagens de treino; `.sum()` conta esses `True`.
+**`LinearDiscriminantAnalysis()`** — a LDA da seção 9.7. **`LogisticRegression(C, max_iter)`** — a regressão logística; com mais de duas classes, a multinomial, na forma softmax. `C` é o inverso da força da penalidade ridge sobre os coeficientes: quanto menor o `C`, mais os coeficientes são puxados para zero; o padrão é `C=1`. `max_iter` é o número máximo de passos do método que procura os coeficientes (o padrão é 100); os 1.000 daqui são uma folga, para que o ajuste pare por convergência e não pelo limite, e **`logistica.n_iter_`** diz quantos passos ele deu. **`logistica.coef_`** — os coeficientes, uma linha por classe e uma coluna por preditor; **`logistica.intercept_`**, um intercepto por classe.
 :::
 
-A logística parou antes do limite de passos. Os pixels entram nela sem padronizar, ao contrário da regra da seção 11.3 para a ridge: a padronização põe na mesma escala colunas medidas em unidades diferentes, e aqui os 784 pixels já estão na mesma unidade, a intensidade de 0 a 1 (120 deles valem 0 em todas as imagens de treino). O mesmo vale para a penalidade `alpha` da rede, que também recebe os pixels de 0 a 1. A logística tem 10 linhas de 784 coeficientes e 10 interceptos, 7.850 pesos, uma combinação linear dos pixels por dígito.
+A logística parou antes do limite de passos. Os pixels entram nela sem padronizar, ao contrário da regra da seção 11.3 para a ridge: a padronização põe na mesma escala colunas medidas em unidades diferentes, e aqui os 784 pixels já estão na mesma unidade, a intensidade de 0 a 1. O mesmo vale para a penalidade `alpha` da rede, que também recebe os pixels de 0 a 1. A logística tem 10 linhas de 784 coeficientes e 10 interceptos, 7.850 pesos, uma combinação linear dos pixels por dígito.
+
+O código conta os erros de teste e de treino dos três modelos:
+
+```{python}
+#| label: comparacao
+modelos = {"LDA": lda, "logística": logistica, "rede": rede}
+linhas = {}
+for nome, modelo in modelos.items():
+    erros_teste = (modelo.predict(teste_X) != teste_y).sum()
+    erros_treino = (modelo.predict(treino_X) != treino_y).sum()
+    linhas[nome] = {
+        "erros de teste": erros_teste,
+        "erros de treino": erros_treino,
+        "taxa de teste": erros_teste / len(teste_y),
+        "taxa de treino": erros_treino / len(treino_y),
+    }
+erros = pd.DataFrame(linhas).T
+print(erros.to_string(formatters={
+    "erros de teste": "{:.0f}".format,
+    "erros de treino": "{:.0f}".format,
+    "taxa de teste": tres_casas,
+    "taxa de treino": tres_casas}))
+erros_rede_teste = erros.loc["rede", "erros de teste"]
+erros_log_teste = erros.loc["logística", "erros de teste"]
+razao = erros_rede_teste / erros_log_teste
+print("erros de teste, rede / logística:", numero_br(razao))
+```
+
+::: {.funcao}
+**`pd.DataFrame(linhas).T`** — `linhas` é um dicionário de dicionários, um por modelo; a tabela sai com uma coluna por modelo, e o `.T` a transpõe, com um modelo por linha. **`"{:.0f}".format`** — escreve o número sem casas decimais.
+:::
 
 No teste, a LDA erra 400 das 2.000 imagens, a logística 232 e a rede 127: a rede erra menos que a logística, e a logística menos que a LDA. A razão entre os erros da rede e os da logística é 0,55, pouco mais que a metade. No treino, a LDA erra 519 das 6.000 imagens, a logística 290 e a rede nenhuma, e nos três modelos a taxa de treino fica abaixo da de teste:
 
@@ -335,11 +411,11 @@ No teste, a LDA erra 400 das 2.000 imagens, a logística 232 e a rede 127: a red
 ordem = ["rede", "logística", "LDA"]
 posicoes = np.arange(len(ordem))
 fig, ax = plt.subplots(figsize=(3.8, 2.8))
-for coluna, cor, desvio in [("treino", "C0", 0.19),
-                            ("teste", "C1", -0.19)]:
-    valores = taxas.loc[ordem, coluna]
+for parte, cor, desvio in [("treino", "C0", 0.19),
+                           ("teste", "C1", -0.19)]:
+    valores = erros.loc[ordem, f"taxa de {parte}"]
     ax.barh(posicoes + desvio, valores, height=0.36,
-            color=cor, label=coluna)
+            color=cor, label=parte)
     for y, valor in zip(posicoes + desvio, valores):
         ax.text(valor + 0.004, y, numero_br(valor, 3),
                 va="center", fontsize=8)
@@ -347,15 +423,20 @@ ax.set_yticks(posicoes, ordem)
 ax.set_xlim(0, 0.25)
 ax.set_xlabel("taxa de erro")
 ax.grid(axis="y", visible=False)
-ax.xaxis.set_major_formatter(
-    lambda v, _: numero_br(v, 2))
+
+
+def duas_casas(valor, posicao):
+    return numero_br(valor, 2)
+
+
+ax.xaxis.set_major_formatter(duas_casas)
 ax.legend(loc="lower left", bbox_to_anchor=(0, 1.0), ncol=2)
 plt.tight_layout()
 plt.show()
 ```
 
 ::: {.funcao}
-**`ax.barh(posicoes, valores, height, color, label)`** — uma barra horizontal em cada posição vertical, com o comprimento dado pelo valor; `height` é a espessura da barra. Deslocar as posições para cima e para baixo põe as duas barras de cada modelo lado a lado. **`ax.set_yticks(posicoes, rotulos)`** — escreve os nomes dos modelos nas posições dadas. **`df.loc[linhas, coluna]`** — os valores da coluna nas linhas dadas, na ordem pedida. **`ax.grid(axis="y", visible=False)`** — tira só as linhas da malha que acompanham o eixo vertical.
+**`ax.barh(posicoes, valores, height, color, label)`** — uma barra horizontal em cada posição vertical, com o comprimento dado pelo valor; `height` é a espessura da barra. Deslocar as posições para cima e para baixo põe as duas barras de cada modelo lado a lado. **`ax.set_yticks(posicoes, rotulos)`** — escreve os nomes dos modelos nas posições dadas. **`ax.grid(axis="y", visible=False)`** — tira só as linhas da malha que acompanham o eixo vertical.
 :::
 
-A pergunta do começo tem resposta nestes dados: a rede de duas camadas escondidas erra menos imagens de teste que os dois modelos lineares, a LDA e a logística com `C=0.1`. A rede não recebeu nenhuma variável além dos pixels: a saída dela combina 128 variáveis que as duas camadas montaram a partir deles, com pesos estimados nas imagens de treino. A diferença medida é a destes três ajustes, nesta divisão (6.000 imagens de treino e 2.000 de teste), com `C` fixo para a logística e uma semente para a rede. Outra semente sorteia outros pesos iniciais e outra ordem das imagens, e, como outro `C`, pode mudar as contagens; a seção 14.3 volta a isso.
+Nestas 2.000 imagens de teste, a rede de duas camadas escondidas erra menos que os dois modelos lineares, a LDA e a logística com `C=0.1`. A rede não recebeu nenhuma variável além dos pixels: a saída dela combina 128 variáveis que as duas camadas montaram a partir deles, com pesos estimados nas imagens de treino. A diferença medida é a destes três ajustes, nesta divisão (6.000 imagens de treino e 2.000 de teste), com `C` fixo para a logística e uma semente para a rede. Outra semente sorteia outros pesos iniciais e outra ordem das imagens, e, como outro `C`, pode mudar as contagens; a seção 14.3 volta a isso.
