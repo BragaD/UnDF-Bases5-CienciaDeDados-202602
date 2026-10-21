@@ -9,16 +9,7 @@ O dirigente de um clube de beisebol quer saber por que o modelo prevê um salár
 ```{python}
 #| label: setup
 #| include: false
-from itertools import combinations
-
 import matplotlib.pyplot as plt
-import numpy as np
-import pandas as pd
-from sklearn.linear_model import LinearRegression
-from sklearn.model_selection import (GridSearchCV, StratifiedKFold,
-                                     train_test_split)
-from sklearn.tree import (DecisionTreeClassifier, DecisionTreeRegressor,
-                          plot_tree)
 
 plt.style.use("estilo-figuras.mplstyle")
 ```
@@ -27,10 +18,10 @@ A função `numero_br` escreve os números com a pontuação brasileira:
 
 ```{python}
 #| label: numero-br
-numero_br = lambda valor, casas=2: (
-    f"{valor:,.{casas}f}".replace(",", "_").replace(".", ",").replace("_", ".")
-    .replace("-", "−")
-)
+def numero_br(valor, casas=2):
+    texto = f"{valor:,.{casas}f}"
+    texto = texto.replace(",", "_").replace(".", ",").replace("_", ".")
+    return texto.replace("-", "−")
 ```
 
 ## O que as árvores têm a favor
@@ -43,60 +34,88 @@ A terceira vantagem é de método. Uma coluna de texto com $K$ categorias pode s
 
 ```{python}
 #| label: categoricas
+from itertools import combinations
+
+import numpy as np
+import pandas as pd
+
 coracao = pd.read_csv("dados/Heart.csv").dropna()
 tipos = sorted(coracao["dor_no_peito"].unique())
 K = len(tipos)
 print("categorias:", K)
 print("2^(K−1) − 1 =", 2 ** (K - 1) - 1)
-divisoes = [set(grupo) for tamanho in range(1, K)
-            for grupo in combinations(tipos, tamanho)
-            if tipos[0] in grupo]
+
+primeira = tipos[0]
+outras = tipos[1:]
+divisoes = []
+for quantas in range(K - 1):
+    for companheiras in combinations(outras, quantas):
+        um_lado = [primeira] + list(companheiras)
+        outro_lado = [tipo for tipo in tipos if tipo not in um_lado]
+        divisoes.append({"um lado": ", ".join(um_lado),
+                         "outro lado": ", ".join(outro_lado),
+                         "menor lado": min(len(um_lado), len(outro_lado))})
+divisoes = pd.DataFrame(divisoes)
 print("divisões listadas:", len(divisoes))
-curto = {"assintomática": "ass", "atípica": "atí",
-         "não anginosa": "não", "típica": "típ"}
-for d in divisoes:
-    fora = [t for t in tipos if t not in d]
-    print(" ", " ".join(curto[t] for t in sorted(d)), "|",
-          " ".join(curto[t] for t in fora))
-sozinha = [d for d in divisoes if len(d) in (1, K - 1)]
-print("uma categoria contra as outras:", len(sozinha))
-print("duas contra duas:", len(divisoes) - len(sozinha))
+print("uma categoria contra as outras:", (divisoes["menor lado"] == 1).sum())
+print("duas contra duas:", (divisoes["menor lado"] == 2).sum())
+divisoes.style.hide(axis="index")
 ```
 
 ::: {.funcao}
-**`combinations(itens, tamanho)`**, do módulo `itertools` — todos os grupos de `tamanho` itens, sem repetir e sem importar a ordem. Um grupo e o seu complemento são a mesma divisão, por isso a lista fica só com os grupos que contêm a primeira categoria.
+**`combinations(itens, quantos)`**, do módulo `itertools` — todos os grupos de `quantos` itens, sem repetir e sem importar a ordem; com `quantos=0`, um grupo vazio. Um grupo e o seu complemento são a mesma divisão, por isso a primeira categoria em ordem alfabética, a assintomática, fica sempre em "um lado", e o laço escolhe só quais das outras três vão com ela. A coluna "menor lado" conta as categorias do lado menor: 1 quando uma fica sozinha, 2 quando vão duas para cada lado.
 :::
 
-Na lista, cada categoria aparece pelas três primeiras letras (`ass` é a assintomática, `atí` a atípica, `não` a não anginosa e `típ` a típica), e a barra separa os dois lados do corte. As 4 categorias dão 7 divisões: em 4 delas, uma categoria fica sozinha contra as outras três; nas outras 3, as categorias vão duas para cada lado. O `DecisionTreeClassifier` não recebe texto, e as colunas de texto entram como indicadoras, uma por categoria. Um corte numa indicadora, como `dor_no_peito_assintomática ≤ 0,5`, separa uma categoria das demais. Das 7 divisões, só as 4 de uma categoria contra as outras três cabem num corte; as 3 de duas contra duas, não. Com o `scikit-learn`, portanto, a vantagem vale só em parte.
+Na tabela, cada linha é uma divisão, com as categorias de cada lado do corte. As 4 categorias dão 7 divisões: em 4 delas, uma categoria fica sozinha contra as outras três; nas outras 3, as categorias vão duas para cada lado. O `DecisionTreeClassifier` não recebe texto, e as colunas de texto entram como indicadoras, uma por categoria. Um corte numa indicadora, como `dor_no_peito_assintomática ≤ 0,5`, separa uma categoria das demais. Das 7 divisões, só as 4 de uma categoria contra as outras três cabem num corte; as 3 de duas contra duas, não. Com o `scikit-learn`, portanto, a vantagem vale só em parte.
 
-O chunk abaixo refaz a escolha da seção 12.3, com a mesma grade de `ccp_alpha` e a mesma validação cruzada, chega à árvore de 6 folhas e lista os cortes dela em indicadoras de `dor_no_peito`, com o ramo da raiz em que cada um está:
+A célula abaixo refaz a escolha da seção 12.3, com a mesma grade de `ccp_alpha` e a mesma validação cruzada, e chega à árvore de 6 folhas:
 
 ```{python}
 #| label: dor-na-arvore
+from sklearn.model_selection import GridSearchCV, StratifiedKFold
+from sklearn.tree import DecisionTreeClassifier
+
 y_c = coracao["doenca_cardiaca"]
 X_c = pd.get_dummies(coracao.drop(columns="doenca_cardiaca"), dtype=float)
-grande = DecisionTreeClassifier(random_state=12).fit(X_c, y_c)
-a = grande.cost_complexity_pruning_path(X_c, y_c).ccp_alphas
-grade = np.r_[0.0, np.sqrt(a[1:-1] * a[2:])]
+grande = DecisionTreeClassifier(random_state=12)
+grande.fit(X_c, y_c)
+alfas = grande.cost_complexity_pruning_path(X_c, y_c).ccp_alphas
+grade = np.r_[0.0, np.sqrt(alfas[1:-1] * alfas[2:])]
 busca = GridSearchCV(DecisionTreeClassifier(random_state=12),
                      {"ccp_alpha": grade[::-1]},
                      cv=StratifiedKFold(10, shuffle=True, random_state=12),
-                     scoring="accuracy").fit(X_c, y_c)
+                     scoring="accuracy")
+busca.fit(X_c, y_c)
 seis = busca.best_estimator_
 print("folhas:", seis.get_n_leaves())
-no = seis.tree_
-print("raiz:", X_c.columns[no.feature[0]], "≤",
-      numero_br(no.threshold[0], 1))
-for i in np.flatnonzero(no.feature >= 0):
-    coluna = X_c.columns[no.feature[i]]
-    if coluna.startswith("dor_no_peito"):
-        ramo = "sim" if i < no.children_right[0] else "não"
-        categoria = coluna.removeprefix("dor_no_peito_")
-        print(f"  nó {i}: …_{categoria}, ramo {ramo}")
+```
+
+Quais perguntas ela faz, e em que ramo da raiz está cada uma? A árvore numera os nós a partir da raiz, o nó 0, descendo primeiro pelo ramo "sim" até o fim, e só depois passa ao ramo "não". O primeiro nó do ramo "não" é o filho da direita da raiz: os nós de número menor que ele estão no ramo "sim", e os outros, no ramo "não". A tabela tem uma linha por nó interno, com a pergunta e o ramo:
+
+```{python}
+#| label: perguntas-do-coracao
+estrutura = seis.tree_
+primeiro_do_nao = estrutura.children_right[0]
+print("primeiro nó do ramo não da raiz:", primeiro_do_nao)
+
+linhas = []
+for no in range(estrutura.node_count):
+    if estrutura.feature[no] >= 0:  # as folhas têm feature negativo
+        if no == 0:
+            ramo = "é a raiz"
+        elif no < primeiro_do_nao:
+            ramo = "sim"
+        else:
+            ramo = "não"
+        linhas.append({"nó": no,
+                       "coluna": X_c.columns[estrutura.feature[no]],
+                       "limiar": numero_br(estrutura.threshold[no], 1),
+                       "ramo da raiz": ramo})
+pd.DataFrame(linhas).style.hide(axis="index")
 ```
 
 ::: {.funcao}
-**`arvore.tree_.children_right`** — para cada nó, o número do filho do ramo "não", o da direita. A árvore numera os nós a partir da raiz, descendo primeiro pelo ramo "sim" até o fim; por isso os nós de número menor que `children_right[0]` são os do ramo "sim" da raiz, e os outros, os do ramo "não".
+**`arvore.tree_.children_right`** — para cada nó, o número do filho do ramo "não", o da direita; `children_right[0]` é o filho da direita da raiz.
 :::
 
 A raiz pergunta pela indicadora do tálio normal, e o ramo "sim" é o dos pacientes cujo exame de tálio não deu normal. Os dois cortes em `dor_no_peito` são na mesma indicadora, a da dor assintomática, um em cada ramo da raiz: entre os pacientes com tálio normal e entre os outros, a árvore separa essa categoria das outras três. Uma árvore que recebesse a coluna de texto inteira poderia também, num corte só, mandar a dor típica e a atípica para um lado e a assintomática e a não anginosa para o outro. Com indicadoras, esse corte não existe: dois cortes seguidos deixam sempre três grupos e quebram um dos dois pares. Cortando na típica e depois na atípica, as duas ficam separadas uma da outra; cortando na assintomática e depois na não anginosa, são essas duas que se separam.
@@ -105,79 +124,131 @@ A raiz pergunta pela indicadora do tálio normal, e o ramo "sim" é o dos pacien
 
 A primeira desvantagem é a precisão. Uma árvore prevê bem quando a relação entre os preditores e a resposta se parece com caixas, e em muitos problemas outros métodos de regressão e de classificação erram menos. Na seção 12.4, a árvore podada venceu a regressão linear sem penalização nos jogadores de `Hitters` e a regressão logística no simulado de fronteira em L, mas perdeu para a logística nos pacientes de `Heart` e no simulado de fronteira diagonal, que ela só imitava em escada.
 
-A segunda é a **instabilidade**: a árvore ajustada depende muito da amostra de treino, e duas amostras do mesmo grupo de jogadores podem dar árvores bem diferentes. O chunk abaixo divide os 263 jogadores de `Hitters` em duas metades sorteadas, a metade A com 132 jogadores e a B com os 131 restantes, e cresce em cada uma uma árvore de 6 folhas, com as mesmas 19 colunas e a mesma semente. Antes de rodá-lo: as duas metades saem do mesmo grupo de jogadores e passam pela mesma receita. Quantas das colunas usadas pelas duas árvores você espera que sejam as mesmas?
+A segunda é a **instabilidade**: a árvore ajustada depende muito da amostra de treino, e duas amostras do mesmo grupo de jogadores podem dar árvores bem diferentes. A célula abaixo divide os 263 jogadores de `Hitters` em duas metades sorteadas, a metade A com 132 jogadores e a B com os 131 restantes, e cresce em cada uma delas uma árvore de 6 folhas, com as mesmas 19 colunas e a mesma semente. Antes de rodá-la: as duas metades saem do mesmo grupo de jogadores e passam pela mesma receita. Quantas das colunas usadas pelas duas árvores você espera que sejam as mesmas?
 
 ```{python}
 #| label: duas-metades
+from sklearn.model_selection import train_test_split
+from sklearn.tree import DecisionTreeRegressor
+
 hitters = pd.read_csv("dados/Hitters.csv").dropna()
 y = np.log(hitters["salario"])
 X = pd.get_dummies(hitters.drop(columns="salario"), drop_first=True,
                    dtype=float)
-A_X, B_X, A_y, B_y = train_test_split(X, y, train_size=132,
-                                      random_state=12)
-print("jogadores:", len(X), "  colunas:", X.shape[1])
-arvores, usadas, perguntas = {}, {}, {}
-for nome, X_m, y_m in [("A", A_X, A_y), ("B", B_X, B_y)]:
-    arvore = DecisionTreeRegressor(max_leaf_nodes=6, random_state=12)
-    arvores[nome] = arvore.fit(X_m, y_m)
-    no = arvore.tree_
-    print(f"metade {nome}: {len(y_m)} jogadores, raiz em")
-    print(" ", X.columns[no.feature[0]], "≤",
-          numero_br(no.threshold[0], 1))
-    internos = no.feature >= 0
-    usadas[nome] = set(X.columns[no.feature[internos]])
-    perguntas[nome] = set(zip(X.columns[no.feature[internos]],
-                              no.threshold[internos]))
-    print("  colunas usadas:", len(usadas[nome]))
-print("usadas pelas duas:")
-for coluna in sorted(usadas["A"] & usadas["B"]):
-    print(" ", coluna)
-print("coluna e limiar iguais:",
-      len(perguntas["A"] & perguntas["B"]))
+X_A, X_B, y_A, y_B = train_test_split(X, y, train_size=132, random_state=12)
+print("jogadores:", len(X))
+print("colunas:", X.shape[1])
+print("jogadores na metade A:", len(y_A))
+print("jogadores na metade B:", len(y_B))
 ```
 
-A metade A é o conjunto de treino da seção 12.2, e a árvore dela começa por `vezes_ao_bastao_carreira`, com corte em 1.452,0. A da metade B começa por `corridas_carreira`, com corte em 204,5. A árvore A usa 5 colunas, a B usa 4, e só `impulsionadas_carreira` aparece nas duas, com limiares diferentes: nenhum par de coluna e limiar se repete. As colunas `impulsionadas` e `rebatidas`, sem o sufixo, contam só a temporada, e são colunas diferentes de `impulsionadas_carreira` e `rebatidas_carreira`.
+A metade A primeiro, passo a passo. A árvore é ajustada nos 132 jogadores dela, e a tabela lista as perguntas que ela faz, uma por nó interno, na ordem em que a árvore numera os nós, a raiz primeiro:
 
-Para desenhar cada árvore de seis folhas na largura da página, a função `em_portugues` reescreve o texto das caixas, como na seção 12.3. Nos nós internos ficam a pergunta, com o limiar na linha de baixo (o `split(" <= ")` separa a coluna do limiar), e o número de jogadores; nas folhas, o número de jogadores e a média do logaritmo do salário. Os números saem com a pontuação brasileira, pela `numero_br`, e os rótulos "sim" e "não" são afastados da caixa da raiz, para o lado de fora de cada ramo.
+```{python}
+#| label: arvore-a
+arvore_A = DecisionTreeRegressor(max_leaf_nodes=6, random_state=12)
+arvore_A.fit(X_A, y_A)
+print("folhas da árvore A:", arvore_A.get_n_leaves())
+
+estrutura_A = arvore_A.tree_
+internos_A = np.flatnonzero(estrutura_A.feature >= 0)
+perguntas_A = pd.DataFrame({
+    "coluna": X.columns[estrutura_A.feature[internos_A]],
+    "limiar": estrutura_A.threshold[internos_A],
+})
+print("colunas distintas na árvore A:", perguntas_A["coluna"].nunique())
+perguntas_A.style.hide(axis="index").format(precision=1, decimal=",", thousands=".")
+```
+
+E as previsões da árvore A para os três primeiros jogadores da tabela, ao lado do logaritmo do salário deles:
+
+```{python}
+#| label: previsao-a
+previsto_A = arvore_A.predict(X)
+pd.DataFrame({"log do salário": y.to_numpy()[:3],
+              "árvore A": previsto_A[:3]}).style.format(precision=3, decimal=",")
+```
+
+A metade B repete os mesmos passos, com os outros 131 jogadores:
+
+```{python}
+#| label: arvore-b
+arvore_B = DecisionTreeRegressor(max_leaf_nodes=6, random_state=12)
+arvore_B.fit(X_B, y_B)
+print("folhas da árvore B:", arvore_B.get_n_leaves())
+
+estrutura_B = arvore_B.tree_
+internos_B = np.flatnonzero(estrutura_B.feature >= 0)
+perguntas_B = pd.DataFrame({
+    "coluna": X.columns[estrutura_B.feature[internos_B]],
+    "limiar": estrutura_B.threshold[internos_B],
+})
+print("colunas distintas na árvore B:", perguntas_B["coluna"].nunique())
+previsto_B = arvore_B.predict(X)
+```
+
+As previsões das duas árvores para os mesmos três jogadores:
+
+```{python}
+#| label: previsao-b
+pd.DataFrame({"log do salário": y.to_numpy()[:3],
+              "árvore A": previsto_A[:3],
+              "árvore B": previsto_B[:3]}).style.format(precision=3, decimal=",")
+```
+
+E as perguntas das duas árvores lado a lado, na mesma ordem, com a raiz na primeira linha:
+
+```{python}
+#| label: lado-a-lado
+pergunta_A = [f"{coluna} ≤ {numero_br(limiar, 1)}"
+              for coluna, limiar in zip(perguntas_A["coluna"], perguntas_A["limiar"])]
+pergunta_B = [f"{coluna} ≤ {numero_br(limiar, 1)}"
+              for coluna, limiar in zip(perguntas_B["coluna"], perguntas_B["limiar"])]
+pd.DataFrame({"árvore A": pergunta_A, "árvore B": pergunta_B},
+             index=pd.RangeIndex(1, len(pergunta_A) + 1, name="pergunta"))
+```
+
+A metade A é o conjunto de treino da seção 12.2, e a árvore dela começa por `vezes_ao_bastao_carreira`, com corte em 1.452,0. A da metade B começa por `corridas_carreira`, com corte em 204,5. A árvore A usa 5 colunas, e a B usa 4. Na tabela lado a lado, só `impulsionadas_carreira` aparece nas duas colunas, com limiares diferentes, e nenhuma pergunta da árvore A se repete na B. As colunas `impulsionadas` e `rebatidas`, sem o sufixo, contam só a temporada, e são colunas diferentes de `impulsionadas_carreira` e `rebatidas_carreira`.
+
+Para desenhar as duas árvores, a função `em_portugues` traduz o texto das caixas do `plot_tree`, como nas seções 12.1 e 12.3, e a `numero_da_caixa` reescreve cada número com a pontuação brasileira, com as casas decimais que ele já tinha. As colunas de carreira têm nome longo, e o `_carreira` vai para a linha de baixo, para que as caixas vizinhas não se encostem:
 
 ```{python}
 #| label: em-portugues
-def em_portugues(anotacoes):
-    """Traduz e ajusta as caixas que o plot_tree desenha."""
-    for anotacao in anotacoes:
-        linhas = (anotacao.get_text().replace("samples = ", "n=")
-                  .replace("True", "sim").replace("False", "não")
-                  .split("\n"))
-        if " <= " in linhas[0]:  # nó interno
-            coluna, limiar = linhas[0].split(" <= ")
-            coluna = coluna.replace("_carreira", "_\ncarreira")
-            limiar = numero_br(float(limiar), 1)
-            texto = f"{coluna}\n≤ {limiar}\n{linhas[1]}"
-        elif len(linhas) > 1:  # folha
-            media = float(linhas[1].replace("value = ", ""))
-            texto = f"{linhas[0]}\n{numero_br(media, 2)}"
-        else:  # rótulo "sim" ou "não", afastado para fora do ramo
-            texto = linhas[0].strip()
-            x, y_texto = anotacao.get_position()
-            lado = -1 if texto == "sim" else 1
-            anotacao.set_position((x + lado * 0.07, y_texto))
-        anotacao.set_text(texto)
-        caixa = anotacao.get_bbox_patch()
-        if caixa is not None:
-            caixa.set(facecolor="white", edgecolor="0.45",
-                      boxstyle="round,pad=0.2")
-```
+import re
 
-::: {.funcao}
-**`anotacao.get_position()`** e **`anotacao.set_position((x, y))`** — leem e mudam a posição de um texto da figura; nas caixas do `plot_tree`, em fração do painel, de 0 a 1. Na `em_portugues`, levam o "sim" 7% da largura do painel para a esquerda e o "não" 7% para a direita, longe da caixa da raiz.
-:::
+
+def numero_da_caixa(achado):
+    """Reescreve um número do texto do plot_tree com a pontuação brasileira."""
+    texto = achado.group()
+    casas = len(texto.split(".")[1])
+    return numero_br(float(texto), casas)
+
+
+def em_portugues(caixas):
+    """Traduz o texto das caixas que o plot_tree desenha."""
+    for caixa in caixas:
+        texto = caixa.get_text()
+        texto = texto.replace("samples", "n").replace("value", "média")
+        texto = texto.replace("<=", "≤").replace("True", "sim").replace("False", "não")
+        texto = texto.replace("_carreira", "_\ncarreira")
+        texto = re.sub(r"\d+\.\d+", numero_da_caixa, texto)
+        caixa.set_text(texto)
+        fundo = caixa.get_bbox_patch()
+        if fundo is None:  # os rótulos "sim" e "não" não têm caixa
+            caixa.set_zorder(200)
+        else:
+            fundo.set(facecolor="white", edgecolor="0.45")
+```
 
 ```{python}
 #| label: fig-metade-a
-#| fig-cap: "A árvore de 6 folhas ajustada na metade A, com 132 jogadores, para o logaritmo do salário. Nos nós internos, a pergunta e o número de jogadores (n); nas folhas, o número de jogadores e, embaixo, a média do logaritmo do salário deles. O ramo \"sim\", à esquerda, é o da condição verdadeira."
+#| fig-cap: "A árvore de 6 folhas ajustada na metade A, com 132 jogadores, para o logaritmo do salário. Cada caixa mostra a pergunta, o número de jogadores (n) e a média do logaritmo do salário deles. O ramo \"sim\", à esquerda, é o da condição verdadeira."
 #| fig-alt: "Árvore da metade A, com 132 jogadores. A raiz pergunta se vezes_ao_bastao_carreira é menor ou igual a 1.452,0. Do lado sim, com 54 jogadores, pergunta se impulsionadas_carreira é menor ou igual a 70,5 e chega a duas folhas, de 23 jogadores com média 4,64 e de 31 com média 5,46. Do lado não, com 78 jogadores, pergunta se rebatidas é menor ou igual a 122,5; abaixo, pergunta se eliminacoes é menor ou igual a 215,5, com folhas de 28 e 14 jogadores e médias 5,99 e 6,47, e se bases_por_bolas é menor ou igual a 66,0, com folhas de 26 e 10 jogadores e médias 6,67 e 7,24."
-fig, ax = plt.subplots(figsize=(4.4, 4.4))
-caixas = plot_tree(arvores["A"], feature_names=list(X.columns),
+import matplotlib.pyplot as plt
+from sklearn.tree import plot_tree
+
+fig, ax = plt.subplots(figsize=(9.0, 5.2))
+caixas = plot_tree(arvore_A, feature_names=list(X.columns),
                    impurity=False, rounded=True, precision=2,
                    fontsize=9, ax=ax)
 em_portugues(caixas)
@@ -190,9 +261,9 @@ A árvore da metade B, desenhada da mesma forma:
 ```{python}
 #| label: fig-metade-b
 #| fig-cap: "A árvore de 6 folhas ajustada na metade B, com os outros 131 jogadores, as mesmas 19 colunas e a mesma semente. O texto das caixas segue a figura da metade A."
-#| fig-alt: "Árvore da metade B, com 131 jogadores. A raiz pergunta se corridas_carreira é menor ou igual a 204,5. Do lado sim, com 52 jogadores, pergunta se impulsionadas é menor ou igual a 5,5, com uma folha de 2 jogadores e média 7,24 e, do outro lado, uma pergunta sobre rebatidas_carreira menor ou igual a 207,5, com folhas de 31 e 19 jogadores e médias 4,70 e 5,54. Do lado não, com 79 jogadores, pergunta se impulsionadas é menor ou igual a 59,0, com uma folha de 39 jogadores e média 6,20 e uma pergunta sobre impulsionadas_carreira menor ou igual a 358,5, com folhas de 12 e 28 jogadores e médias 6,34 e 6,98. Só impulsionadas_carreira aparece também na árvore da metade A."
-fig, ax = plt.subplots(figsize=(4.2, 4.4))
-caixas = plot_tree(arvores["B"], feature_names=list(X.columns),
+#| fig-alt: "Árvore da metade B, com 131 jogadores. A raiz pergunta se corridas_carreira é menor ou igual a 204,5. Do lado sim, com 52 jogadores, pergunta se impulsionadas é menor ou igual a 5,5, com uma folha de 2 jogadores e média 7,24 e, do outro lado, uma pergunta sobre rebatidas_carreira menor ou igual a 207,5, com folhas de 31 e 19 jogadores e médias 4,7 e 5,54. Do lado não, com 79 jogadores, pergunta se impulsionadas é menor ou igual a 59,0, com uma folha de 39 jogadores e média 6,2 e uma pergunta sobre impulsionadas_carreira menor ou igual a 358,5, com folhas de 12 e 28 jogadores e médias 6,34 e 6,98. Só impulsionadas_carreira aparece também na árvore da metade A."
+fig, ax = plt.subplots(figsize=(9.0, 5.2))
+caixas = plot_tree(arvore_B, feature_names=list(X.columns),
                    impurity=False, rounded=True, precision=2,
                    fontsize=9, ax=ax)
 em_portugues(caixas)
@@ -200,40 +271,67 @@ ax.set_title("metade B")
 plt.show()
 ```
 
-As duas árvores começam por colunas diferentes e seguem por caminhos diferentes. De onde vem tanta diferença, se as duas metades saem do mesmo grupo de jogadores? A raiz é o corte que mais reduz o RSS, e o chunk abaixo mede, em cada metade, a fração do RSS da árvore sem cortes, a que prevê a média para todos, que o melhor corte de cada coluna, sozinho, remove. Na tabela, a coluna A traz as frações da metade A, e a coluna B, as da metade B:
+As duas árvores começam por colunas diferentes e seguem por caminhos diferentes. De onde vem tanta diferença, se as duas metades saem do mesmo grupo de jogadores? A raiz é o corte que mais reduz o RSS. Para comparar as colunas, a medida é a fração do RSS da média, o da árvore sem cortes, que prevê a média para todos, removida pelo melhor corte de cada coluna sozinha.
+
+A conta para uma coluna, `vezes_ao_bastao_carreira`, na metade A: uma árvore com `max_depth=1` faz uma pergunta só, a raiz e duas folhas, e, ajustada com uma coluna, acha o melhor corte nela. O `predict` dá as médias das duas folhas, e o RSS sai delas:
+
+```{python}
+#| label: um-toco
+rss_media_A = ((y_A - y_A.mean()) ** 2).sum()
+coluna = ["vezes_ao_bastao_carreira"]
+toco = DecisionTreeRegressor(max_depth=1, random_state=12)
+toco.fit(X_A[coluna], y_A)
+previsto = toco.predict(X_A[coluna])
+rss_toco = ((y_A - previsto) ** 2).sum()
+print("RSS da média, metade A:", numero_br(rss_media_A))
+print("RSS depois do corte em vezes_ao_bastao_carreira:", numero_br(rss_toco))
+print("fração do RSS removida:", numero_br(1 - rss_toco / rss_media_A, 3))
+```
+
+A função `fracao_removida` repete essa conta para cada coluna de uma metade. Na tabela, a coluna A traz as frações da metade A, e a coluna B, as da metade B, para as cinco colunas de maior fração em A (`nlargest(5)`, os cinco maiores valores da série):
 
 ```{python}
 #| label: melhor-corte
-def fracao_removida(X_m, y_m):
+def fracao_removida(X_metade, y_metade):
     """Fração do RSS da média que o melhor corte de cada coluna remove."""
-    tss = ((y_m - y_m.mean()) ** 2).sum()
+    rss_media = ((y_metade - y_metade.mean()) ** 2).sum()
     fracao = {}
-    for coluna in X_m.columns:
+    for coluna in X_metade.columns:
         toco = DecisionTreeRegressor(max_depth=1, random_state=12)
-        previsto = toco.fit(X_m[[coluna]], y_m).predict(X_m[[coluna]])
-        fracao[coluna] = 1 - ((y_m - previsto) ** 2).sum() / tss
+        toco.fit(X_metade[[coluna]], y_metade)
+        previsto = toco.predict(X_metade[[coluna]])
+        fracao[coluna] = 1 - ((y_metade - previsto) ** 2).sum() / rss_media
     return pd.Series(fracao)
 
-cortes = pd.DataFrame({"A": fracao_removida(A_X, A_y),
-                       "B": fracao_removida(B_X, B_y)})
-for nome in ["A", "B"]:
-    print(nome, "melhor é a raiz:", cortes[nome].idxmax()
-          == X.columns[arvores[nome].tree_.feature[0]])
-cinco = {m: set(cortes[m].nlargest(5).index) for m in ["A", "B"]}
-print("5 primeiras iguais nas duas:", cinco["A"] == cinco["B"])
-(cortes.loc[sorted(cinco["A"])].sort_values("A", ascending=False)
- .style.format(lambda v: numero_br(v, 3)))
+
+cortes = pd.DataFrame({"A": fracao_removida(X_A, y_A),
+                       "B": fracao_removida(X_B, y_B)})
+posicao = cortes.rank(ascending=False).astype(int)
+cortes["posição em A"] = posicao["A"]
+cortes["posição em B"] = posicao["B"]
+cinco_A = cortes["A"].nlargest(5).index
+cortes.loc[cinco_A].style.format(precision=3, decimal=",", subset=["A", "B"])
 ```
 
 ::: {.funcao}
-**`DecisionTreeRegressor(max_depth)`** — `max_depth=1` limita a árvore a uma pergunta só, a raiz e duas folhas; ajustada com uma coluna, faz o melhor corte naquela coluna. **`s.nlargest(5)`** — os cinco maiores valores da série. **`df.sort_values(coluna, ascending=False)`** — as linhas em ordem decrescente da coluna.
+**`df.rank(ascending=False)`** — a posição de cada valor na sua coluna, do maior (1) para o menor.
 :::
 
-Nas duas metades, a raiz da árvore é a coluna do melhor corte isolado, e as cinco colunas com os melhores cortes são as mesmas: cinco contagens acumuladas na carreira. No topo da tabela, a disputa é apertada. Na metade B, o corte em `corridas_carreira` remove 0,556 do RSS e o em `vezes_ao_bastao_carreira`, 0,554, uma diferença de 0,002; na A, a ordem se inverte: 0,578 para `corridas_carreira` e 0,602 para `vezes_ao_bastao_carreira`. As cinco colunas medem quase a mesma coisa, o tempo e o volume de jogo de cada jogador:
+A raiz de cada árvore ao lado da coluna do melhor corte isolado da sua metade:
+
+```{python}
+#| label: raiz-e-melhor-corte
+pd.DataFrame({
+    "melhor corte isolado": [cortes["A"].idxmax(), cortes["B"].idxmax()],
+    "raiz da árvore": [perguntas_A.loc[0, "coluna"], perguntas_B.loc[0, "coluna"]],
+}, index=["metade A", "metade B"])
+```
+
+Nas duas metades, a raiz da árvore é a coluna do melhor corte isolado, e as cinco colunas com os melhores cortes são as mesmas: as cinco da primeira tabela ocupam as posições de 1 a 5 em A e em B, e são cinco contagens acumuladas na carreira. No topo da tabela, a disputa é apertada. Na metade B, o corte em `corridas_carreira` remove 0,556 do RSS e o em `vezes_ao_bastao_carreira`, 0,554, uma diferença de 0,002; na A, a ordem se inverte: 0,578 para `corridas_carreira` e 0,602 para `vezes_ao_bastao_carreira`. As cinco colunas medem quase a mesma coisa, o tempo e o volume de jogo de cada jogador. A matriz de correlações das cinco, que o `corr` calcula para cada par de colunas da tabela, mostra quanto:
 
 ```{python}
 #| label: carreira
-correlacoes = hitters[sorted(cinco["A"])].corr()
+correlacoes = hitters[sorted(cinco_A)].corr()
 pares = correlacoes.to_numpy()[np.triu_indices(5, 1)]
 print("pares de colunas:", len(pares))
 print("menor correlação:", numero_br(pares.min(), 3))
@@ -241,92 +339,116 @@ print("maior correlação:", numero_br(pares.max(), 3))
 ```
 
 ::: {.funcao}
-**`df.corr()`** — a matriz de correlações entre todas as colunas numéricas da tabela, uma linha e uma coluna para cada. **`np.triu_indices(n, 1)`** — as posições acima da diagonal de uma matriz $n \times n$; aqui, cada par de colunas uma vez só.
+**`np.triu_indices(n, 1)`** — as posições acima da diagonal de uma matriz $n \times n$; aqui, cada par de colunas uma vez só.
 :::
 
-As correlações entre as cinco, nos 10 pares, vão de 0,889 a 0,995. Com colunas quase repetidas, a coluna escrita na raiz pode trocar de uma amostra para outra sem que a divisão dos jogadores mude muito. O chunk abaixo aplica as duas perguntas da raiz aos 263 jogadores e conta quantos elas mandam para o mesmo lado:
+As correlações entre as cinco, nos 10 pares, vão de 0,889 a 0,995. Com colunas quase repetidas, a coluna escrita na raiz pode trocar de uma amostra para outra sem que a divisão dos jogadores mude muito. A célula abaixo aplica as duas perguntas da raiz aos 263 jogadores e conta quantos elas mandam para o mesmo lado:
 
 ```{python}
 #| label: raizes
-lado = {}
-for nome in ["A", "B"]:
-    no = arvores[nome].tree_
-    coluna = X.columns[no.feature[0]]
-    lado[nome] = X[coluna] <= no.threshold[0]
-iguais = (lado["A"] == lado["B"]).sum()
+raiz_A = X[perguntas_A.loc[0, "coluna"]] <= perguntas_A.loc[0, "limiar"]
+raiz_B = X[perguntas_B.loc[0, "coluna"]] <= perguntas_B.loc[0, "limiar"]
+iguais = (raiz_A == raiz_B).sum()
 print("mesmo lado:", iguais, "de", len(X))
 print("fração:", numero_br(iguais / len(X), 3))
 ```
 
 As duas perguntas mandam 253 dos 263 jogadores para o mesmo lado: a raiz trocou de coluna, mas separou quase os mesmos jogadores. A diferença entre as árvores está abaixo da raiz. O corte que vence em cada nó depende só dos jogadores que chegam a ele, e as metades A e B não têm nenhum jogador em comum. E a divisão gulosa da seção 12.1 decide cada nó sem voltar atrás.
 
-Estrutura diferente, sozinha, não quer dizer previsão diferente: duas árvores com perguntas diferentes podem prever quase o mesmo salário para cada jogador. A variância da seção 7.6 é o quanto a previsão $\hat f(x_0)$ muda de um conjunto de treino para outro. O chunk abaixo a mede: sorteia 200 amostras de 132 jogadores, ajusta em cada uma a árvore de 6 folhas e uma regressão linear sem penalização, com as mesmas 19 colunas, e prevê os 263 jogadores com cada modelo. Para cada jogador, calcula a variância das 200 previsões e no fim tira a média entre os jogadores:
+Estrutura diferente, sozinha, não quer dizer previsão diferente: duas árvores com perguntas diferentes podem prever quase o mesmo salário para cada jogador. A variância da seção 7.6 é o quanto a previsão $\hat f(x_0)$ muda de um conjunto de treino para outro. A célula abaixo a estima com subamostras do mesmo grupo de jogadores: sorteia 200 amostras de 132 jogadores, ajusta em cada uma a árvore de 6 folhas e uma regressão linear sem penalização, com as mesmas 19 colunas, e prevê os 263 jogadores com cada modelo. As previsões de cada modelo ficam numa tabela com uma linha por amostra e uma coluna por jogador. Para cada jogador, a célula calcula a variância das 200 previsões e no fim tira a média entre os jogadores:
 
 ```{python}
 #| label: variancia
-previsoes = {"árvore": [], "linear": []}
+from sklearn.linear_model import LinearRegression
+
+linhas_arvore = []
+linhas_linear = []
 for semente in range(200):
-    X_t, _, y_t, _ = train_test_split(X, y, train_size=132,
-                                      random_state=semente)
+    X_amostra, X_fora, y_amostra, y_fora = train_test_split(
+        X, y, train_size=132, random_state=semente)
     arvore = DecisionTreeRegressor(max_leaf_nodes=6, random_state=12)
-    previsoes["árvore"].append(arvore.fit(X_t, y_t).predict(X))
-    linear = LinearRegression().fit(X_t, y_t)
-    previsoes["linear"].append(linear.predict(X))
-variancia = {modelo: np.var(np.array(p), axis=0).mean()
-             for modelo, p in previsoes.items()}
-for modelo, v in variancia.items():
-    print(f"{modelo}: {numero_br(v, 3)}")
-print("árvore varia mais:", variancia["árvore"] > variancia["linear"])
+    arvore.fit(X_amostra, y_amostra)
+    linhas_arvore.append(arvore.predict(X))
+    linear = LinearRegression()
+    linear.fit(X_amostra, y_amostra)
+    linhas_linear.append(linear.predict(X))
+
+previsoes = {"árvore": pd.DataFrame(linhas_arvore, columns=X.index),
+             "linear": pd.DataFrame(linhas_linear, columns=X.index)}
+print("amostras (linhas):", previsoes["árvore"].shape[0])
+print("jogadores (colunas):", previsoes["árvore"].shape[1])
+pd.DataFrame({
+    "variância média da previsão": [previsoes["árvore"].var(ddof=0).mean(),
+                                    previsoes["linear"].var(ddof=0).mean()],
+}, index=["árvore", "linear"]).style.format(precision=3, decimal=",")
 ```
 
 ::: {.funcao}
-**`np.var(matriz, axis=0)`** — a variância de cada coluna da matriz. Aqui, cada linha são as previsões de uma amostra e cada coluna é um jogador, e `.mean()` tira a média das 263 variâncias.
+**`pd.DataFrame(lista_de_arrays, columns)`** — uma tabela com uma linha por array da lista; `columns=X.index` dá a cada coluna o rótulo do jogador. **`df.var(ddof=0)`** — a variância de cada coluna, aqui das 200 previsões de cada jogador; `ddof=0` divide pelo número de valores, como a variância da seção 7.6. O `.mean()` tira a média das 263 variâncias.
 :::
 
-A previsão da árvore para um mesmo jogador tem variância média de 0,077 entre as 200 amostras, e a da regressão linear, de 0,041. Neste problema, a árvore tem variância maior que a da regressão linear: ela muda de estrutura e também de previsão quando a amostra muda. Para ver o que essa média resume, o chunk abaixo escolhe um jogador só, o primeiro da tabela entre os de salário igual à mediana, e separa as 200 previsões de cada modelo para ele:
+A previsão da árvore para um mesmo jogador tem variância média de 0,077 entre as 200 amostras, e a da regressão linear, de 0,041. Neste problema, a árvore tem variância maior que a da regressão linear: ela muda de estrutura e também de previsão quando a amostra muda. Para ver o que essa média resume, a célula abaixo escolhe um jogador só, o primeiro da tabela entre os de salário igual à mediana, e separa as 200 previsões de cada modelo para ele:
 
 ```{python}
 #| label: jogador-mediano
-mediano = (hitters["salario"] - hitters["salario"].median()).abs().idxmin()
-j = hitters.index.get_loc(mediano)
-print("salário mediano:", numero_br(hitters["salario"].median(), 1))
-print("salário do jogador:", numero_br(hitters.loc[mediano, "salario"], 1))
+salario_mediano = hitters["salario"].median()
+distancia = (hitters["salario"] - salario_mediano).abs()
+mediano = distancia.idxmin()
+log_real = y.loc[mediano]
+print("salário mediano, em mil dólares:", numero_br(salario_mediano, 1))
+print("salário do jogador, em mil dólares:",
+      numero_br(hitters.loc[mediano, "salario"], 1))
 print("jogadores com esse salário:",
       (hitters["salario"] == hitters.loc[mediano, "salario"]).sum())
-print("log do salário:", numero_br(y.iloc[j]))
-do_jogador = {m: np.array(p)[:, j] for m, p in previsoes.items()}
-for modelo, prev in do_jogador.items():
-    print(f"{modelo}: de {numero_br(prev.min())} a {numero_br(prev.max())}")
-    print("  variância:", numero_br(prev.var(), 3))
-    print("  abaixo do real:", (prev < y.iloc[j]).sum(), "de 200")
+print("log do salário:", numero_br(log_real))
+
+linhas = []
+for modelo in ["árvore", "linear"]:
+    do_jogador = previsoes[modelo][mediano]
+    linhas.append({"modelo": modelo,
+                   "menor": do_jogador.min(),
+                   "maior": do_jogador.max(),
+                   "variância": do_jogador.var(ddof=0),
+                   "abaixo do real, de 200": (do_jogador < log_real).sum()})
+(pd.DataFrame(linhas).set_index("modelo").style
+ .format(precision=2, decimal=",", subset=["menor", "maior"])
+ .format(precision=3, decimal=",", subset=["variância"]))
 ```
 
 ::: {.funcao}
-**`indice.get_loc(rotulo)`** — a posição, contada de zero, da linha que tem aquele rótulo no índice. As previsões guardadas em `previsoes` estão em ordem de linha, e é a posição que as indexa.
+**`s.median()`** — a mediana da série. **`s.abs()`** — o valor absoluto de cada elemento; com o `idxmin` da seção 12.1, dá o rótulo do jogador de salário mais perto da mediana. **`previsoes[modelo][mediano]`** — a coluna desse jogador, com as 200 previsões dele.
 :::
 
 ```{python}
 #| label: fig-previsoes-jogador
 #| fig-cap: "As 200 previsões do logaritmo do salário para um jogador de salário igual à mediana, uma por amostra de 132 jogadores. Em cima, a regressão linear; embaixo, a árvore de 6 folhas. A linha tracejada é o logaritmo do salário real dele."
 #| fig-alt: "Dois histogramas empilhados, na mesma escala horizontal, das 200 previsões do logaritmo do salário para um jogador. As previsões da regressão linear, em azul, formam um monte estreito entre 4,98 e 5,80, todo à esquerda da linha tracejada cinza que marca o valor real, 6,05. As da árvore, em laranja, se espalham de 4,61 a 7,06 em grupos separados, com o pico perto do valor real."
-fig, eixos = plt.subplots(2, 1, figsize=(4.4, 4.0), sharex=True,
-                          sharey=True)
-fig.subplots_adjust(hspace=0.45)
-todas = np.concatenate(list(do_jogador.values()))
+def virgula(valor, posicao):
+    return f"{valor:.1f}".replace(".", ",")
+
+
+linear_do_jogador = previsoes["linear"][mediano]
+arvore_do_jogador = previsoes["árvore"][mediano]
+todas = np.concatenate([linear_do_jogador, arvore_do_jogador])
 faixas = np.linspace(todas.min(), todas.max(), 31)
-for ax, modelo, cor, titulo in [
-        (eixos[0], "linear", "C0", "regressão linear"),
-        (eixos[1], "árvore", "C1", "árvore de 6 folhas")]:
-    ax.hist(do_jogador[modelo], bins=faixas, color=cor,
-            edgecolor="none")
-    ax.axvline(y.iloc[j], color="0.45", linestyle="--", linewidth=1.2)
-    ax.set_title(titulo, loc="left")
+
+fig, eixos = plt.subplots(2, 1, figsize=(5.6, 4.0), sharex=True, sharey=True)
+fig.subplots_adjust(hspace=0.45)
+eixos[0].hist(linear_do_jogador, bins=faixas, color="C0", edgecolor="none")
+eixos[0].set_title("regressão linear", loc="left")
+eixos[1].hist(arvore_do_jogador, bins=faixas, color="C1", edgecolor="none")
+eixos[1].set_title("árvore de 6 folhas", loc="left")
+for ax in eixos:
+    ax.axvline(log_real, color="0.45", linestyle="--", linewidth=1.2)
     ax.set_ylabel("amostras")
 eixos[1].set_xlabel("logaritmo do salário previsto")
+eixos[1].xaxis.set_major_formatter(virgula)
 plt.show()
 ```
 
 ::: {.funcao}
+**`np.concatenate([a, b])`** — junta os dois arrays num só, um depois do outro; aqui, para achar a menor e a maior previsão dos dois modelos e usar as mesmas faixas nos dois histogramas. **`fig.subplots_adjust(hspace=0.45)`** — o espaço vertical entre os dois painéis, em fração da altura de um painel, para que o título de baixo não encoste no eixo de cima.
+
 **`ax.hist(valores, bins)`** — o histograma dos valores; `bins` recebe as bordas das faixas, as mesmas nos dois painéis para que as barras se comparem.
 :::
 
@@ -334,4 +456,4 @@ O jogador ganha 425,0 mil dólares, a mediana, como outros dois. As previsões d
 
 Variância maior não quer dizer erro maior: o erro de teste esperado soma a variância, o viés ao quadrado e o erro irredutível (seção 7.6), e na seção 12.4 a árvore podada errou menos que a linear nesses jogadores.
 
-Na prática, a árvore é uma boa escolha quando é preciso explicar a previsão a quem não é técnico, ou quando a relação tem limiares e interações, como no simulado em L da seção 12.4. Quando só o erro de teste conta, ela entra na comparação por validação cruzada, como na seção 12.4, e perde quando outro modelo erra menos. Juntar muitas árvores, cada uma ajustada numa amostra diferente dos dados, e combinar as previsões delas ataca justamente a variância; é o assunto do capítulo 13.
+Na prática, a árvore é uma boa escolha quando é preciso explicar a previsão a quem não é técnico, ou quando a relação tem limiares e interações, como no simulado em L da seção 12.4. Quando só o erro de teste conta, ela entra na comparação por validação cruzada e perde quando outro modelo erra menos. Juntar muitas árvores, cada uma ajustada numa amostra diferente dos dados, e combinar as previsões delas ataca justamente a variância; é o assunto do capítulo 13.

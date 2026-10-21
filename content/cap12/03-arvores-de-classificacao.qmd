@@ -9,15 +9,7 @@ Um paciente chega com dor no peito, e um exame de angiografia vai dizer se ele t
 ```{python}
 #| label: setup
 #| include: false
-import re
-
 import matplotlib.pyplot as plt
-import numpy as np
-import pandas as pd
-from sklearn.metrics import confusion_matrix
-from sklearn.model_selection import (GridSearchCV, StratifiedKFold,
-                                     cross_val_predict)
-from sklearn.tree import DecisionTreeClassifier, plot_tree
 
 plt.style.use("estilo-figuras.mplstyle")
 ```
@@ -26,10 +18,10 @@ A função `numero_br` escreve os números com a pontuação brasileira:
 
 ```{python}
 #| label: numero-br
-numero_br = lambda valor, casas=2: (
-    f"{valor:,.{casas}f}".replace(",", "_").replace(".", ",").replace("_", ".")
-    .replace("-", "−")
-)
+def numero_br(valor, casas=2):
+    texto = f"{valor:,.{casas}f}"
+    texto = texto.replace(",", "_").replace(".", ",").replace("_", ".")
+    return texto.replace("-", "−")
 ```
 
 ## Os pacientes
@@ -38,14 +30,20 @@ O conjunto `Heart` tem 13 medidas de pacientes que chegaram a um hospital com do
 
 ```{python}
 #| label: dados
+import numpy as np
+import pandas as pd
+
 coracao = pd.read_csv("dados/Heart.csv")
 print("pacientes:", len(coracao))
 vazios = coracao.isna().sum()
-print(vazios[vazios > 0])
+for coluna in vazios[vazios > 0].index:
+    print(f"vazios em {coluna}:", vazios[coluna])
 coracao = coracao.dropna()
 print("depois do dropna:", len(coracao))
 y = coracao["doenca_cardiaca"]
-print(y.value_counts())
+contagem = y.value_counts()
+print("sem doença:", contagem["não"])
+print("com doença:", contagem["sim"])
 print("erro de prever sempre 'não':",
       numero_br((y != "não").mean(), 4))
 ```
@@ -88,23 +86,26 @@ $$
 D = -\sum_{k=1}^{K} \hat p_{mk} \log \hat p_{mk}, \tag{8.7}
 $$
 
-com $\log$ o logaritmo natural e $0 \log 0 = 0$. Os três valem zero numa região **pura**, em que todos os pacientes são da mesma classe, e crescem à medida que as classes se misturam. Por isso se chamam medidas de **impureza**. O chunk abaixo calcula as três medidas na raiz do `Heart` e numa região meio a meio, que é a mistura máxima com duas classes:
+com $\log$ o logaritmo natural e $0 \log 0 = 0$. Os três valem zero numa região **pura**, em que todos os pacientes são da mesma classe, e crescem à medida que as classes se misturam. Por isso se chamam medidas de **impureza**. A célula abaixo calcula as três medidas na raiz do `Heart` e numa região meio a meio, que é a mistura máxima com duas classes. Com `normalize=True`, o `value_counts` dá a fração de cada classe em vez da contagem:
 
 ```{python}
 #| label: impureza-raiz
 p = y.value_counts(normalize=True).to_numpy()
-print("p̂:", numero_br(p[0], 4), "e", numero_br(p[1], 4))
-print("E:", numero_br(1 - p.max(), 4))
-print("G:", numero_br((p * (1 - p)).sum(), 4))
-print("D:", numero_br(-(p * np.log(p)).sum(), 4))
-meio = np.array([0.5, 0.5])
-print("G meio a meio:", numero_br((meio * (1 - meio)).sum(), 4))
-print("D meio a meio:", numero_br(-(meio * np.log(meio)).sum(), 4))
-```
+E_raiz = 1 - p.max()
+G_raiz = (p * (1 - p)).sum()
+D_raiz = -(p * np.log(p)).sum()
+print("p̂ de 'não' e de 'sim' na raiz:", numero_br(p[0], 4), "e", numero_br(p[1], 4))
 
-::: {.funcao}
-**`s.value_counts(normalize=True)`** — a fração de cada valor da série, em vez da contagem.
-:::
+meio = np.array([0.5, 0.5])
+E_meio = 1 - meio.max()
+G_meio = (meio * (1 - meio)).sum()
+D_meio = -(meio * np.log(meio)).sum()
+
+impurezas = pd.DataFrame({"E": [E_raiz, E_meio], "G": [G_raiz, G_meio],
+                          "D": [D_raiz, D_meio]},
+                         index=["raiz do Heart", "meio a meio"])
+impurezas.style.format(precision=4, decimal=",")
+```
 
 Na raiz, $G$ = 0,4970 e $D$ = 0,6901 ficam logo abaixo dos valores de uma região meio a meio, 0,5000 e 0,6931: com 160 pacientes de um lado e 137 do outro, a raiz é quase tão misturada quanto pode ser.
 
@@ -114,6 +115,13 @@ Com duas classes, $\hat p$ de uma determina o da outra, e as três medidas são 
 #| label: fig-impureza
 #| fig-cap: "As três medidas de impureza de uma região com duas classes, contra a proporção $\\hat p$ de uma delas: erro de classificação (cinza), índice de Gini (azul) e entropia (verde). As três valem zero numa região pura e têm o máximo em $\\hat p = 0{,}5$."
 #| fig-alt: "Gráfico de linhas com a proporção p-chapéu de 0 a 1 no eixo horizontal e a impureza no vertical. A linha cinza do erro é um triângulo: sobe em linha reta de 0 a 0,5 e desce em linha reta até 1, com pico 0,5. A curva azul do Gini é arredondada, com o mesmo pico 0,5, acima do triângulo, que ela só toca nas pontas e no pico. A curva verde da entropia também é arredondada, mais alta, com pico perto de 0,69."
+import matplotlib.pyplot as plt
+
+
+def virgula(valor, posicao):
+    return f"{valor:.1f}".replace(".", ",")
+
+
 p_grade = np.linspace(0.001, 0.999, 500)
 duas = np.column_stack([p_grade, 1 - p_grade])
 medidas = {
@@ -127,7 +135,6 @@ for nome, valores in medidas.items():
     ax.plot(p_grade, valores, color=cores[nome], linewidth=2, label=nome)
 ax.set_xlim(0, 1)
 ax.set_ylim(0, 0.75)
-virgula = lambda valor, _: f"{valor:.1f}".replace(".", ",")
 ax.xaxis.set_major_formatter(virgula)
 ax.yaxis.set_major_formatter(virgula)
 ax.set_xlabel("$\\hat p$")
@@ -135,31 +142,17 @@ ax.set_ylabel("impureza")
 ax.legend(loc="upper right", fontsize=9)
 plt.tight_layout()
 plt.show()
-print("máximo da entropia:", numero_br(medidas["entropia"].max(), 4))
-for nome in ["Gini", "entropia"]:
-    print(nome, "acima do erro na grade:",
-          bool((medidas[nome] > medidas["erro"]).all()))
-print("0,5 na grade:", bool(np.isin(0.5, p_grade)))
-print("em p̂ = 0,5, Gini e erro:", numero_br(2 * 0.5 * 0.5, 1),
-      "e", numero_br(1 - 0.5, 1))
 ```
 
 ::: {.funcao}
-**`np.linspace(inicio, fim, n)`** — `n` números igualmente espaçados de `inicio` a `fim`. Aqui a grade termina a um milésimo das pontas, porque $\log 0$ não existe. **`np.column_stack([a, b])`** — junta os arrays como colunas de uma matriz. **`duas.max(axis=1)`**, **`.sum(axis=1)`** — o maior valor e a soma de cada linha. **`np.isin(valor, array)`** — se o valor aparece no array.
+**`np.linspace(inicio, fim, n)`** — `n` números igualmente espaçados de `inicio` a `fim`. Aqui a grade termina a um milésimo das pontas, porque $\log 0$ não existe. **`np.column_stack([a, b])`** — junta os arrays como colunas de uma matriz. **`duas.max(axis=1)`**, **`.sum(axis=1)`** — o maior valor e a soma de cada linha.
 :::
 
-O erro é feito de dois segmentos de reta, e o Gini e a entropia são curvas arredondadas, que ficam acima do erro em toda a grade. A grade não passa por 0,5, e ali o Gini encontra o erro: os dois valem 0,5. Nas pontas, as três medidas valem zero. A entropia tem outra escala, com o máximo em 0,6931, e uma forma parecida com a do Gini: as duas são arredondadas, sem trecho reto. Para escolher o corte, é essa diferença de forma que decide, mais que a altura das curvas.
+O erro é feito de dois segmentos de reta, e o Gini e a entropia são curvas arredondadas, que ficam acima dele. O Gini só toca o erro nas pontas, onde as três medidas valem zero, e no meio, onde os dois valem 0,5000, como na linha "meio a meio" da tabela acima. A entropia tem outra escala, com o máximo no meio a meio, 0,6931, e uma forma parecida com a do Gini: as duas são arredondadas, sem trecho reto. Para escolher o corte, é essa diferença de forma que decide, mais que a altura das curvas.
 
 ## Um corte, a mesma classe
 
-Um corte troca um nó, o **pai**, por dois **filhos**, e a impureza depois do corte é a média das impurezas dos filhos, ponderada pelo número de pacientes de cada um. O que acontece com essa média depende da forma da curva, em quatro passos:
-
-1. O $\hat p$ do pai é a média ponderada dos $\hat p$ dos filhos: os doentes do pai são os doentes de um filho somados aos do outro.
-2. No gráfico de uma impureza contra $\hat p$, cada filho é um ponto da curva. A impureza depois do corte fica no segmento que liga esses dois pontos, a **corda**, na altura do $\hat p$ do pai. A figura depois do exemplo abaixo desenha isso com os pacientes do `Heart`.
-3. Se os dois filhos ficam do mesmo lado de 0,5, isto é, têm a mesma classe mais comum que o pai, os dois estão no mesmo trecho reto do erro, e a corda coincide com ele: o erro depois do corte é igual ao do pai, por mais que um dos filhos fique quase puro.
-4. O Gini e a entropia não têm trecho reto: se os $\hat p$ dos filhos são diferentes, a corda passa abaixo da curva, e a impureza depois do corte é menor que a do pai. Com $\hat p$ iguais, os dois filhos caem no mesmo ponto, e o corte não muda nenhuma das três medidas.
-
-Com duas classes e $\hat p$ a fração de doentes, as três medidas ficam $E = \min(\hat p, 1 - \hat p)$, $G = 2\hat p(1 - \hat p)$ e $D = -\hat p \log \hat p - (1 - \hat p)\log(1 - \hat p)$. Um exemplo com o `Heart`: os pacientes com o exame de tálio alterado e dor no peito assintomática, divididos pela `depressao_st`, a depressão do segmento ST do eletrocardiograma durante o esforço, em até 0,5 e acima de 0,5.
+Um corte troca um nó, o **pai**, por dois **filhos**, e a impureza depois do corte é a média das impurezas dos filhos, ponderada pelo número de pacientes de cada um. Com duas classes e $\hat p$ a fração de doentes, as três medidas ficam $E = \min(\hat p, 1 - \hat p)$, $G = 2\hat p(1 - \hat p)$ e $D = -\hat p \log \hat p - (1 - \hat p)\log(1 - \hat p)$. Um exemplo com o `Heart`: os pacientes com o exame de tálio alterado e dor no peito assintomática, divididos pela `depressao_st`, a depressão do segmento ST do eletrocardiograma durante o esforço, em até 0,5 e acima de 0,5.
 
 ```{python}
 #| label: corda
@@ -172,32 +165,52 @@ def no(pacientes):
             "G": 2 * p * (1 - p),
             "D": -(p * np.log(p) + (1 - p) * np.log(1 - p))}
 
-grupo = coracao[(coracao["talio"] != "normal")
+
+grupo =coracao[(coracao["talio"] != "normal")
                 & (coracao["dor_no_peito"] == "assintomática")]
 baixa = grupo["depressao_st"] <= 0.5
 corte = pd.DataFrame([no(grupo), no(grupo[baixa]), no(grupo[~baixa])],
                      index=["pai", "ST ≤ 0,5", "ST > 0,5"])
+corte.style.format(precision=3, decimal=",")
+```
+
+Depois do corte, cada medida é a média ponderada das dos dois filhos, com o número de pacientes de cada um como peso. A tabela põe essa média ao lado do valor do pai:
+
+```{python}
+#| label: media-dos-filhos
 filhos = corte.iloc[1:]
-for medida in ["p̂", "E", "G", "D"]:
-    depois = np.average(filhos[medida], weights=filhos["n"])
-    print(f"{medida}: pai {numero_br(corte.loc['pai', medida], 4)},",
-          f"filhos {numero_br(depois, 4)}")
-(corte.style.format("{:.0f}", subset=["n", "doentes"])
- .format(lambda v: numero_br(v, 3), subset=["p̂", "E", "G", "D"]))
+medidas_do_no = ["p̂", "E", "G", "D"]
+media_dos_filhos = []
+for medida in medidas_do_no:
+    media_dos_filhos.append(np.average(filhos[medida], weights=filhos["n"]))
+pai_e_filhos = pd.DataFrame({
+    "pai": corte.loc["pai", medidas_do_no].to_numpy(dtype=float),
+    "filhos, média ponderada": media_dos_filhos,
+}, index=medidas_do_no)
+pai_e_filhos.style.format(precision=4, decimal=",")
 ```
 
 ::: {.funcao}
-**`df[mascara]`** e **`df[~mascara]`** — as linhas em que a máscara vale `True` e as em que vale `False`; `~` troca um pelo outro. **`np.average(valores, weights)`** — a média ponderada dos `valores`, com os pesos dados; aqui, o número de pacientes de cada filho. **`df.style.format(formato, subset)`** — como na seção 12.2, escreve os números das colunas em `subset` com o formato dado.
+**`np.average(valores, weights)`** — a média ponderada dos `valores`, com os pesos dados; aqui, o número de pacientes de cada filho.
 :::
 
-O pai tem 79 doentes em 89 pacientes, e os filhos, 13 em 21 e 66 em 68. Os três ficam acima de 0,5 e preveem "sim". A média ponderada dos $\hat p$ dos filhos dá o $\hat p$ do pai, 0,8876, como o passo 1 diz. O erro depois do corte é igual ao do pai, 0,1124: os 10 sem doença do pai (89 − 79) continuam errados, 8 de um lado (21 − 13) e 2 do outro (68 − 66). O Gini cai de 0,1995 para 0,1549, e a entropia, de 0,3514 para 0,2582. A figura abaixo desenha as cordas do erro e do Gini com esses números:
+O pai tem 79 doentes em 89 pacientes, e os filhos, 13 em 21 e 66 em 68. Os três ficam acima de 0,5 e preveem "sim". A média ponderada dos $\hat p$ dos filhos dá o $\hat p$ do pai, 0,8876, porque os doentes do pai são os doentes de um filho somados aos do outro. O erro depois do corte é igual ao do pai, 0,1124: os 10 sem doença do pai (89 − 79) continuam errados, 8 de um lado (21 − 13) e 2 do outro (68 − 66). O Gini cai de 0,1995 para 0,1549, e a entropia, de 0,3514 para 0,2582.
+
+No gráfico de uma impureza contra $\hat p$, cada filho é um ponto da curva, e a impureza depois do corte fica no segmento que liga esses dois pontos, a **corda**, na altura do $\hat p$ do pai. A figura abaixo desenha as cordas do erro e do Gini com esses números, em dois painéis com o mesmo eixo horizontal (`sharex=True`):
 
 ```{python}
 #| label: fig-corda
 #| fig-cap: "O corte dos 89 pacientes com tálio alterado e dor assintomática pela depressão do ST, visto no erro de classificação (em cima) e no índice de Gini (embaixo), contra a fração $\\hat p$ de doentes, de 0,5 a 1. Os pontos laranja são os dois filhos, ligados pela corda tracejada; o círculo é o pai, sobre a curva; o x é a impureza depois do corte, sobre a corda, no $\\hat p$ do pai. No erro, o x cai dentro do círculo; no Gini, cai abaixo dele."
 #| fig-alt: "Dois painéis empilhados, com p-chapéu de 0,5 a 1 no eixo horizontal. Em cima, a reta cinza do erro desce de 0,5 a 0; os dois filhos, em 0,62 e 0,97, estão sobre ela, a corda laranja tracejada coincide com a reta, e o círculo do pai e o x de depois do corte ficam no mesmo ponto, perto de 0,11. Embaixo, a curva azul do Gini desce arredondada de 0,5 a 0; os dois filhos estão sobre ela, a corda tracejada passa abaixo da curva, e o x de depois do corte, perto de 0,15, fica abaixo do círculo do pai, perto de 0,20."
-curva = {"E": lambda q: np.minimum(q, 1 - q),
-         "G": lambda q: 2 * q * (1 - q)}
+def erro(q):
+    return np.minimum(q, 1 - q)
+
+
+def gini(q):
+    return 2 * q * (1 - q)
+
+
+curva = {"E": erro, "G": gini}
 nome_curva = {"E": "erro", "G": "Gini"}
 cor_curva = {"E": "0.45", "G": "C0"}
 q = np.linspace(0.5, 1, 200)
@@ -225,7 +238,6 @@ for ax, medida in zip(eixos, ["E", "G"]):
     ax.set_ylabel(nome_curva[medida])
 eixos[1].annotate("depois", (p_pai, depois), xytext=(-46, -14),
                   textcoords="offset points")
-virgula = lambda valor, _: f"{valor:.1f}".replace(".", ",")
 for ax in eixos:
     ax.xaxis.set_major_formatter(virgula)
     ax.yaxis.set_major_formatter(virgula)
@@ -236,10 +248,17 @@ plt.show()
 ```
 
 ::: {.funcao}
-**`np.minimum(a, b)`** — o menor dos dois, elemento a elemento; aqui, $\min(\hat p, 1 - \hat p)$ ao longo da grade. **`plt.subplots(2, 1, figsize, sharex=True)`** — dois painéis empilhados com o mesmo eixo horizontal. **`ax.annotate(texto, ponto, xytext, textcoords)`** — escreve `texto` perto de `ponto`; com `textcoords="offset points"`, `xytext` é o deslocamento em pontos tipográficos a partir dele. **`plt.rcParams["text.color"]`** — a cor do texto definida pelo estilo; aqui, para o círculo acompanhar o tema claro ou escuro.
+**`np.minimum(a, b)`** — o menor dos dois, elemento a elemento; aqui, $\min(\hat p, 1 - \hat p)$ ao longo da grade. **`ax.annotate(texto, ponto, xytext, textcoords)`** — escreve `texto` perto de `ponto`; com `textcoords="offset points"`, `xytext` é o deslocamento em pontos tipográficos a partir dele. **`plt.rcParams["text.color"]`** — a cor do texto definida pelo estilo; aqui, para o círculo acompanhar o tema claro ou escuro.
 :::
 
 No erro, a corda é o próprio segmento de reta, e o corte não muda nada. No Gini, a corda passa por baixo da curva, e a distância entre o círculo e o x, de 0,1995 a 0,1549, é o quanto o corte melhora. Um filho com 66 doentes em 68 é um grupo em que a previsão "sim" é quase certa, e o Gini registra isso; o erro só muda quando a classe mais comum de um dos filhos troca.
+
+O que aconteceu com esses 89 pacientes vale para qualquer corte, e depende só da forma da curva:
+
+1. O $\hat p$ do pai é sempre a média ponderada dos $\hat p$ dos filhos, e a impureza depois do corte fica sobre a corda, na altura do $\hat p$ do pai.
+2. Se os dois filhos ficam do mesmo lado de 0,5, isto é, têm a mesma classe mais comum que o pai, os dois estão no mesmo trecho reto do erro, e a corda coincide com ele: o erro depois do corte é igual ao do pai, por mais que um dos filhos fique quase puro.
+3. O Gini e a entropia não têm trecho reto: se os $\hat p$ dos filhos são diferentes, a corda passa abaixo da curva, e a impureza depois do corte é menor que a do pai.
+4. Com $\hat p$ iguais, os dois filhos caem no mesmo ponto, e o corte não muda nenhuma das três medidas.
 
 ::: {.conceito}
 Uma **árvore de classificação** divide o espaço dos preditores em regiões retangulares, como a de regressão, e prevê para toda observação de $R_m$ a classe mais comum entre as observações de treino de $R_m$. Para escolher os cortes, usa o índice de Gini (8.6) ou a entropia (8.7), que são mais sensíveis à pureza dos nós que o erro de classificação (8.5).
@@ -251,76 +270,92 @@ O `DecisionTreeClassifier` cresce a árvore com o índice de Gini por padrão. S
 
 ```{python}
 #| label: grande
-grande = DecisionTreeClassifier(random_state=12).fit(X, y)
-print("classes:", list(grande.classes_))
+from sklearn.tree import DecisionTreeClassifier
+
+grande = DecisionTreeClassifier(random_state=12)
+grande.fit(X, y)
+print("classes, em ordem:", ", ".join(grande.classes_))
 print("folhas:", grande.get_n_leaves())
 print("profundidade:", grande.get_depth())
-print("erro de treino:", numero_br(1 - grande.score(X, y), 4))
+previsto_treino = grande.predict(X)
+print("erro de treino:", numero_br((previsto_treino != y).mean(), 4))
 ```
 
 ::: {.funcao}
 **`DecisionTreeClassifier(criterion, random_state, ccp_alpha)`** — a árvore de classificação. `criterion` é a medida de impureza que escolhe os cortes: `"gini"`, o padrão, ou `"entropy"`, a entropia com logaritmo na base 2, o que só muda a escala. `random_state` e `ccp_alpha` fazem o mesmo que no `DecisionTreeRegressor`. O `predict` devolve a classe mais comum da folha.
 
-**`arvore.classes_`** — as classes que a árvore conhece, em ordem alfabética; é a ordem das contagens e das proporções que ela guarda. **`arvore.score(X, y)`** — a fração de acertos, a **acurácia**; o erro de classificação é 1 menos ela.
+**`arvore.classes_`** — as classes que a árvore conhece, em ordem alfabética; é a ordem das contagens e das proporções que ela guarda. **`(previsto != y).mean()`** — a fração de pacientes com a classe prevista errada, o erro de classificação.
 :::
 
-Com erro de treino zero, a árvore grande decorou os 297 pacientes, e o remédio é o da seção 12.2: o caminho de poda, uma grade com um ponto dentro de cada intervalo, e a validação cruzada para escolher o `ccp_alpha`. No classificador, o custo que o `ccp_alpha` equilibra com o número de folhas é a impureza das folhas pelo critério da árvore, ponderada pelo número de pacientes de cada uma; com o critério padrão, é o índice de Gini, e não o erro de classificação. O último valor do caminho, a raiz sozinha, mostra isso:
+Com erro de treino zero, a árvore grande decorou os 297 pacientes, e o remédio é o da seção 12.2: o caminho de poda, uma grade com um ponto dentro de cada intervalo, e a validação cruzada para escolher o `ccp_alpha`. No classificador, o custo que o `ccp_alpha` equilibra com o número de folhas é a média da impureza das folhas pelo critério da árvore, ponderada pela fração de pacientes de cada uma; com o critério padrão, é o índice de Gini, e não o erro de classificação. O último valor do caminho, a raiz sozinha, mostra isso:
 
 ```{python}
 #| label: caminho
 caminho = grande.cost_complexity_pruning_path(X, y)
 alfas = caminho.ccp_alphas
-print("valores no caminho:", len(alfas))
-print("impureza da raiz sozinha:", numero_br(caminho.impurities[-1], 4))
-print("igual ao Gini da raiz:",
-      bool(np.isclose(caminho.impurities[-1], (p * (1 - p)).sum())))
 grade = np.r_[0.0, np.sqrt(alfas[1:-1] * alfas[2:])]
+print("valores no caminho:", len(alfas))
 print("pontos na grade:", len(grade))
+raiz_sozinha = pd.DataFrame({"impureza da raiz sozinha": [caminho.impurities[-1]],
+                             "Gini da raiz": [G_raiz],
+                             "erro da raiz": [E_raiz]})
+raiz_sozinha.style.hide(axis="index").format(precision=4, decimal=",")
 ```
 
-A impureza da raiz sozinha é o Gini da raiz, e não o 0,4613 do erro. Para escolher o tamanho da árvore, quando o que se quer é acertar a classe, a medida natural é o erro de classificação, e é ele que a validação cruzada mede: `scoring="accuracy"` pontua cada `ccp_alpha` pela acurácia nos pacientes deixados de fora, e o erro é 1 menos ela. Os grupos são **estratificados**: cada um tem aproximadamente a mesma proporção de doentes que os 297. Como na seção 12.2, a grade vai em ordem decrescente de `ccp_alpha`, para que um empate no erro se resolva a favor da árvore menor.
+A impureza da raiz sozinha é o Gini da raiz, 0,4970, e não o 0,4613 do erro: as duas primeiras colunas da tabela têm o mesmo número. Para escolher o tamanho da árvore, quando o que se quer é acertar a classe, a medida natural é o erro de classificação, e é ele que a validação cruzada mede: `scoring="accuracy"` pontua cada `ccp_alpha` pela **acurácia**, a fração de acertos nos pacientes deixados de fora, e o erro é 1 menos ela. Os grupos são **estratificados**: cada um tem aproximadamente a mesma proporção de doentes que os 297. Como na seção 12.2, a grade vai em ordem decrescente de `ccp_alpha`, para que um empate no erro se resolva a favor da árvore menor.
 
 ```{python}
 #| label: poda
+from sklearn.model_selection import GridSearchCV, StratifiedKFold
+
 grupos = StratifiedKFold(10, shuffle=True, random_state=12)
+grade_decrescente = grade[::-1]
 busca = GridSearchCV(DecisionTreeClassifier(random_state=12),
-                     {"ccp_alpha": grade[::-1]}, cv=grupos,
-                     scoring="accuracy")
+                     {"ccp_alpha": grade_decrescente}, cv=grupos, scoring="accuracy")
 busca.fit(X, y)
-res = busca.cv_results_
-erros = 1 - np.array([res[f"split{k}_test_score"] for k in range(10)])
-curvas = pd.DataFrame({"ccp_alpha": grade[::-1]})
-for i, a in enumerate(curvas["ccp_alpha"]):
-    podada = DecisionTreeClassifier(ccp_alpha=a, random_state=12).fit(X, y)
-    curvas.loc[i, "folhas"] = podada.get_n_leaves()
-    curvas.loc[i, "treino"] = 1 - podada.score(X, y)
-curvas["cv"] = erros.mean(axis=0)
-curvas["desvio"] = erros.std(axis=0, ddof=1) / np.sqrt(10)
-curvas["folhas"] = curvas["folhas"].astype(int)
-curvas = curvas.drop_duplicates("folhas").set_index("folhas")
 escolhida = busca.best_estimator_
 k_min = escolhida.get_n_leaves()
 print("escolhida:", k_min, "folhas")
-print("CV da escolhida:", numero_br(curvas.loc[k_min, "cv"], 4))
-print("menor CV da grade:", numero_br(curvas["cv"].min(), 4))
-iguais = curvas.loc[[6, 7], ["treino", "cv"]]
-print("6 e 7 folhas empatam:",
-      bool((iguais.iloc[0] == iguais.iloc[1]).all()))
-ate_12 = curvas.loc[curvas.index <= 12, ["treino", "cv", "desvio"]]
-ate_12.sort_index().style.format(lambda v: numero_br(v, 4))
 ```
 
 ::: {.funcao}
 **`StratifiedKFold(k, shuffle, random_state)`** — como o `KFold`, divide as linhas em `k` grupos, mas sorteia de modo que cada grupo tenha aproximadamente a mesma proporção de cada classe que o conjunto inteiro.
-
-**`scoring="accuracy"`** — no `GridSearchCV`, pontua cada valor da grade pela fração de acertos no grupo deixado de fora. **`s.astype(int)`** — converte os valores da série para inteiros.
 :::
 
-O `desvio` é $s/\sqrt{10}$, com $s$ o desvio padrão dos erros dos 10 grupos, como na seção 12.2.
+A tabela abaixo junta, para cada tamanho de árvore, o erro de treino da subárvore ajustada com os 297 pacientes, o erro de validação cruzada, que é a média dos erros dos 10 grupos, e o `desvio`, $s/\sqrt{10}$, com $s$ o desvio padrão dos erros dos 10 grupos, como na seção 12.2:
 
-A validação cruzada escolhe a árvore de 6 folhas, com erro de 0,1951, bem abaixo do 0,4613 de prever sempre "não". O 0,1951 é o menor de muitos erros estimados com os mesmos 297 pacientes, e por isso tende a ser otimista. As árvores de 6 e de 7 folhas empatam no erro de treino e no de validação cruzada, e é a grade decrescente que desempata a favor da de 6. O empate tem explicação, que a subseção "O empate entre 6 e 7 folhas", no fim, mostra.
+```{python}
+#| label: curvas
+erros = []
+for k in range(10):
+    erros.append(1 - busca.cv_results_[f"split{k}_test_score"])
+erros = np.array(erros)
 
-Com mais folhas, o erro de treino não sobe. O de validação cruzada também cai sempre?
+folhas = []
+erro_treino = []
+for ccp_alpha in grade_decrescente:
+    podada = DecisionTreeClassifier(ccp_alpha=ccp_alpha, random_state=12)
+    podada.fit(X, y)
+    folhas.append(podada.get_n_leaves())
+    erro_treino.append((podada.predict(X) != y).mean())
+
+curvas = pd.DataFrame({
+    "ccp_alpha": grade_decrescente,
+    "folhas": folhas,
+    "treino": erro_treino,
+    "cv": erros.mean(axis=0),
+    "desvio": erros.std(axis=0, ddof=1) / np.sqrt(10),
+})
+curvas = curvas.drop_duplicates("folhas").set_index("folhas")
+print("CV da escolhida:", numero_br(curvas.loc[k_min, "cv"], 4))
+print("menor CV da grade:", numero_br(curvas["cv"].min(), 4))
+ate_12 = curvas.loc[curvas.index <= 12, ["treino", "cv", "desvio"]].sort_index()
+ate_12.style.format(precision=4, decimal=",")
+```
+
+A validação cruzada escolhe a árvore de 6 folhas, com erro de 0,1951, bem abaixo do 0,4613 de prever sempre "não". O 0,1951 é o menor de muitos erros estimados com os mesmos 297 pacientes, e por isso tende a ser otimista. As árvores de 6 e de 7 folhas empatam no erro de treino e no de validação cruzada, as duas linhas da tabela com os mesmos números, e é a grade decrescente que desempata a favor da de 6. O empate tem explicação, que a subseção "O empate entre 6 e 7 folhas", no fim, mostra.
+
+Na coluna `treino` da tabela, o erro de treino desce ou fica igual a cada linha, isto é, a cada árvore maior. O de validação cruzada também cai sempre? A figura segue as duas curvas até 25 folhas:
 
 ```{python}
 #| label: fig-curvas
@@ -340,7 +375,7 @@ ax.scatter(k_min, curvas.loc[k_min, "cv"], marker="x", s=80, color="C0",
 ax.set_xlim(2, 25)
 ax.set_ylim(0, 0.35)
 ax.set_yticks([0, 0.1, 0.2, 0.3])
-ax.yaxis.set_major_formatter(lambda valor, _: f"{valor:.1f}".replace(".", ","))
+ax.yaxis.set_major_formatter(virgula)
 ax.set_xlabel("folhas")
 ax.set_ylabel("erro de classificação")
 ax.legend(loc="lower left")
@@ -350,36 +385,35 @@ plt.show()
 
 ```{python}
 #| label: curva-cv
-de_2_a_25 = curvas.loc[curvas.index <= 25].sort_index()
-print("treino nunca sobe:",
-      de_2_a_25["treino"].is_monotonic_decreasing)
-print("menor CV em:", de_2_a_25["cv"].idxmin(), "folhas")
-cauda = de_2_a_25.loc[de_2_a_25.index >= 18, "cv"]
-print("CV de 18 a 25 folhas:", numero_br(cauda.iloc[0], 4))
-print("igual em todas:", bool((cauda == cauda.iloc[0]).all()))
-print("acima da de 2 folhas:",
-      bool(cauda.iloc[0] > de_2_a_25.loc[2, "cv"]))
+print("menor CV em:", ate_25["cv"].idxmin(), "folhas")
+cauda = ate_25.loc[ate_25.index >= 18, "cv"]
+pontos_da_curva = pd.DataFrame(
+    {"CV": [ate_25.loc[2, "cv"], cauda.min(), cauda.max()]},
+    index=["2 folhas", "18 a 25 folhas, menor", "18 a 25 folhas, maior"],
+)
+pontos_da_curva.style.format(precision=4, decimal=",")
 ```
 
-O de validação cruzada tem o mínimo em 6 folhas, empatado com 7, e volta a subir: de 18 a 25 folhas, fica em 0,2756, acima até do 0,2725 da árvore de 2 folhas. É o desenho da seção 12.2, com o erro de classificação no lugar do MSE.
+Na linha cinza da figura, o erro de treino continua descendo aos degraus até 25 folhas, sem subir em nenhum. O de validação cruzada tem o mínimo em 6 folhas, empatado com 7, e volta a subir: de 18 a 25 folhas, o menor e o maior valor são o mesmo, 0,2756, acima até do 0,2725 da árvore de 2 folhas. É o desenho da seção 12.2, com o erro de classificação no lugar do MSE.
 
-O critério de impureza é mais uma escolha do modelo, e a validação cruzada pode fazê-la como faz a do `ccp_alpha`. O chunk abaixo repete o caminho, a grade e a busca com `criterion="entropy"`, nos mesmos grupos:
+O critério de impureza é mais uma escolha do modelo, e a validação cruzada pode fazê-la como faz a do `ccp_alpha`. A célula abaixo repete o caminho, a grade e a busca com `criterion="entropy"`, nos mesmos grupos:
 
 ```{python}
 #| label: criterio
+linhas = []
 for criterio in ["gini", "entropy"]:
     arvore = DecisionTreeClassifier(criterion=criterio, random_state=12)
-    a = arvore.fit(X, y).cost_complexity_pruning_path(X, y).ccp_alphas
-    g = np.r_[0.0, np.sqrt(a[1:-1] * a[2:])]
-    b = GridSearchCV(arvore, {"ccp_alpha": g[::-1]}, cv=grupos,
-                     scoring="accuracy").fit(X, y)
-    print(f"{criterio}: CV {numero_br(1 - b.best_score_, 4)},",
-          b.best_estimator_.get_n_leaves(), "folhas")
+    arvore.fit(X, y)
+    alfas_do_criterio = arvore.cost_complexity_pruning_path(X, y).ccp_alphas
+    medias_geometricas = np.sqrt(alfas_do_criterio[1:-1] * alfas_do_criterio[2:])
+    grade_do_criterio = np.r_[0.0, medias_geometricas]
+    busca_do_criterio = GridSearchCV(arvore, {"ccp_alpha": grade_do_criterio[::-1]},
+                                     cv=grupos, scoring="accuracy")
+    busca_do_criterio.fit(X, y)
+    linhas.append({"critério": criterio, "CV": 1 - busca_do_criterio.best_score_,
+                   "folhas": busca_do_criterio.best_estimator_.get_n_leaves()})
+pd.DataFrame(linhas).style.hide(axis="index").format(precision=4, decimal=",")
 ```
-
-::: {.funcao}
-**`busca.best_score_`** — a pontuação média de validação cruzada do valor escolhido; aqui, a acurácia, e 1 menos ela é o erro.
-:::
 
 Com a entropia, a validação cruzada fica com 8 folhas e erro de 0,2153, acima do 0,1951 do Gini. Nestes pacientes e nestes grupos, o Gini ganha; em outro conjunto de dados, pode ser o contrário, e escolher entre os dois pela validação cruzada soma mais uma escolha às que tornam o mínimo otimista.
 
@@ -387,6 +421,9 @@ Uma taxa de erro junta dois erros de custo muito diferente num exame cardíaco: 
 
 ```{python}
 #| label: confusao
+from sklearn.metrics import confusion_matrix
+from sklearn.model_selection import cross_val_predict
+
 previsto = cross_val_predict(
     DecisionTreeClassifier(ccp_alpha=busca.best_params_["ccp_alpha"],
                            random_state=12), X, y, cv=grupos)
@@ -397,103 +434,105 @@ pd.DataFrame(confusion_matrix(y, previsto, labels=["não", "sim"]),
 ```
 
 ::: {.funcao}
-**`cross_val_predict(modelo, X, y, cv)`** — ajusta o `modelo` uma vez para cada grupo de `cv`, sem as linhas do grupo, e devolve a previsão de cada linha feita pela árvore que não a viu. **`confusion_matrix(verdadeiro, previsto, labels)`** — conta, para cada par de classes, quantas linhas da classe da linha foram previstas como a classe da coluna. **`busca.best_params_`** — o valor da grade escolhido.
+**`cross_val_predict(modelo, X, y, cv)`** — ajusta o `modelo` uma vez para cada grupo de `cv`, sem as linhas do grupo, e devolve a previsão de cada linha feita pela árvore que não a viu. **`confusion_matrix(verdadeiro, previsto, labels)`** — conta, para cada par de classes, quantas linhas da classe da linha foram previstas como a classe da coluna. **`pd.Index(rotulos, name)`** — uma lista de rótulos com um nome; como índice e como colunas da tabela, o nome aparece no cabeçalho e diz qual eixo é o verdadeiro e qual é o previsto.
 :::
 
 Dos 137 doentes, 39 recebem "não" e 98 recebem "sim"; dos 160 sem doença, 19 recebem "sim". Somados, os erros da matriz dão 0,1953, e não o 0,1951 da validação cruzada, que é a média dos erros dos 10 grupos: 297 pacientes não se dividem em 10 grupos do mesmo tamanho, e a média dos grupos não pesa cada paciente igual. O `ccp_alpha` foi escolhido com esses mesmos grupos, e a matriz carrega o mesmo otimismo. Mesmo assim, 39 dos 137 doentes, mais de um em cada quatro, sairiam sem diagnóstico. Mandar para casa um doente é o mais grave dos dois erros. Baixar o limiar da probabilidade, como na seção 9.5, troca parte desses erros por alarmes falsos.
 
 ## A árvore escolhida
 
-A figura adiante desenha a árvore escolhida. Com seis folhas lado a lado, as caixas precisam ser estreitas, e a função `em_portugues` da seção 12.2 muda para caber: nos nós internos, fica só a pergunta e o número de pacientes, com o limiar na linha de baixo da pergunta e os nomes `dor_no_peito_…` e `vasos_coloridos` quebrados em duas linhas; nas folhas, ficam as contagens das duas classes, uma por linha, e a classe que a folha prevê.
+A figura adiante desenha a árvore escolhida, com a mesma tradução das caixas da seção 12.1. Num classificador, cada caixa mostra também, entre colchetes, as contagens das duas classes, na ordem de `classes_` (primeiro "não", depois "sim"), e a classe que o nó prevê; `class_names` dá ao `plot_tree` o nome de cada classe, nessa ordem. A função `numero_da_caixa` reescreve cada número com ponto decimal na pontuação brasileira:
 
 ```{python}
 #| label: em-portugues
-def em_portugues(anotacoes):
-    """Traduz e ajusta as caixas que o plot_tree desenha."""
-    for anotacao in anotacoes:
-        texto = anotacao.get_text()
-        contagem = re.search(r"value = \[(\d+), (\d+)\]", texto)
-        if "<=" not in texto and contagem:  # folha
-            nao, sim = contagem.groups()
-            classe = "sim" if int(sim) > int(nao) else "não"
-            texto = f"{nao} não\n{sim} sim\nprevê {classe}"
+import re
+
+
+def numero_da_caixa(achado):
+    """Reescreve um número da caixa, como 0.5, com a pontuação brasileira."""
+    texto = achado.group()
+    casas = len(texto.split(".")[1])
+    return numero_br(float(texto), casas)
+
+
+def em_portugues(caixas):
+    """Traduz o texto das caixas que o plot_tree desenha."""
+    for caixa in caixas:
+        texto = caixa.get_text()
+        texto = texto.replace("samples", "n").replace("value = ", "")
+        texto = texto.replace("class", "prevê").replace("<=", "≤")
+        texto = texto.replace("True", "sim").replace("False", "não")
+        texto = re.sub(r"\d+\.\d+", numero_da_caixa, texto)
+        caixa.set_text(texto)
+        moldura = caixa.get_bbox_patch()
+        if moldura is None:
+            # os rótulos "sim" e "não" dos ramos, por cima das caixas
+            caixa.set_zorder(200)
         else:
-            texto = ("\n".join(texto.split("\n")[:2])
-                     .replace("samples", "n").replace(" <= ", "\n≤ ")
-                     .replace("True", "sim").replace("False", "não")
-                     .replace("peito_", "peito_\n")
-                     .replace("vasos_", "vasos_\n"))
-            texto = re.sub(r"(\d)\.(\d)", r"\1,\2", texto)
-        anotacao.set_text(texto)
-        caixa = anotacao.get_bbox_patch()
-        if caixa is not None:
-            caixa.set(facecolor="white", edgecolor="0.45",
-                      boxstyle="round,pad=0.2")
-            if "prevê" in texto:
-                cor = "C1" if texto.endswith("sim") else "C0"
-                caixa.set(edgecolor=cor, linewidth=2)
+            moldura.set(facecolor="white", edgecolor="0.45")
 ```
 
-::: {.funcao}
-**`re.search(padrao, texto)`** — procura o `padrao` no texto e devolve o trecho encontrado, ou `None` se não acha; os parênteses do padrão marcam as partes a guardar, e **`.groups()`** as devolve, aqui as duas contagens. **`texto.split("\n")`** e **`"\n".join(linhas[:2])`** — separam o texto da caixa em linhas e juntam de volta só as duas primeiras, a pergunta e o `n`. **`boxstyle="round,pad=0.2"`** — cantos arredondados e uma margem menor entre o texto e a borda.
-:::
-
-As folhas ganham borda azul quando preveem "não" e laranja quando preveem "sim", além do texto "prevê", para que a classe não dependa só da cor.
+Depois da tradução, o laço da célula da figura percorre as caixas e, nas que têm moldura e nenhuma pergunta, isto é, nas folhas, acrescenta "folha 1", "folha 2" e assim por diante, da esquerda para a direita, para que a tabela que vem depois possa citá-las.
 
 ```{python}
 #| label: fig-arvore
-#| fig-cap: "A árvore de 6 folhas escolhida por validação cruzada. Nos nós internos, a pergunta e o número de pacientes (n); nas folhas, quantos pacientes sem e com doença caem ali e a classe prevista, com a borda azul quando a folha prevê \"não\" e laranja quando prevê \"sim\". O ramo \"sim\", à esquerda, é o da condição verdadeira: numa indicadora, \"≤ 0,5\" quer dizer que o paciente não tem aquela categoria."
-#| fig-alt: "Diagrama de árvore. A raiz pergunta se talio_normal é menor ou igual a 0,5, com 297 pacientes. O ramo sim, dos pacientes com tálio alterado, pergunta se dor_no_peito_assintomática é menor ou igual a 0,5, com 133 pacientes; se sim, pergunta se vasos_coloridos é menor ou igual a 0,5, com folhas de 19 não e 8 sim, que prevê não, borda azul, e de 4 não e 13 sim, que prevê sim, borda laranja; se não, vai a uma folha de 10 não e 79 sim, que prevê sim, borda laranja. O ramo não da raiz, dos pacientes com tálio normal, pergunta se vasos_coloridos é menor ou igual a 0,5, com 164 pacientes; se sim, folha de 102 não e 13 sim, que prevê não, borda azul; se não, pergunta se dor_no_peito_assintomática é menor ou igual a 0,5, com folhas de 22 não e 7 sim, que prevê não, borda azul, e de 3 não e 17 sim, que prevê sim, borda laranja."
-fig, ax = plt.subplots(figsize=(4.2, 4.6))
-ax.set_position([0, 0, 1, 1])
+#| fig-cap: "A árvore de 6 folhas escolhida por validação cruzada, com as folhas numeradas da esquerda para a direita. Cada caixa mostra a pergunta (nos nós internos), o número de pacientes (n), entre colchetes os pacientes sem e com doença, e a classe que o nó prevê. O ramo \"sim\", à esquerda, é o da condição verdadeira: numa indicadora, \"≤ 0,5\" quer dizer que o paciente não tem aquela categoria."
+#| fig-alt: "Diagrama de árvore. A raiz pergunta se talio_normal é menor ou igual a 0,5, com 297 pacientes. O ramo sim, dos pacientes com tálio alterado, pergunta se dor_no_peito_assintomática é menor ou igual a 0,5, com 133 pacientes; se sim, pergunta se vasos_coloridos é menor ou igual a 0,5, com a folha 1, de 19 não e 8 sim, que prevê não, e a folha 2, de 4 não e 13 sim, que prevê sim; se não, vai à folha 3, de 10 não e 79 sim, que prevê sim. O ramo não da raiz, dos pacientes com tálio normal, pergunta se vasos_coloridos é menor ou igual a 0,5, com 164 pacientes; se sim, vai à folha 4, de 102 não e 13 sim, que prevê não; se não, pergunta se dor_no_peito_assintomática é menor ou igual a 0,5, com a folha 5, de 22 não e 7 sim, que prevê não, e a folha 6, de 3 não e 17 sim, que prevê sim."
+from sklearn.tree import plot_tree
+
+fig, ax = plt.subplots(figsize=(10.5, 4.8))
 caixas = plot_tree(escolhida, feature_names=list(X.columns),
                    class_names=list(escolhida.classes_), impurity=False,
                    rounded=True, precision=2, fontsize=9, ax=ax)
 em_portugues(caixas)
+numero_da_folha = 0
+for caixa in caixas:
+    eh_folha = caixa.get_bbox_patch() is not None and "≤" not in caixa.get_text()
+    if eh_folha:
+        numero_da_folha += 1
+        caixa.set_text(f"folha {numero_da_folha}\n" + caixa.get_text())
 plt.show()
 ```
 
-::: {.funcao}
-**`plot_tree(..., class_names)`** — num classificador, `class_names` dá o nome de cada classe, na ordem de `classes_`. **`ax.set_position([0, 0, 1, 1])`** — faz o painel ocupar a figura inteira, sem margens, para as caixas terem mais espaço.
-:::
-
-O chunk abaixo conta os pacientes de cada folha, numeradas da esquerda para a direita, e lista as colunas que a árvore usa:
+A célula abaixo conta os pacientes de cada folha, com a mesma numeração da figura, e lista as colunas que a árvore usa:
 
 ```{python}
 #| label: folhas
-tabela = pd.crosstab(escolhida.apply(X), y).reset_index(drop=True)
-tabela.index += 1
+tabela = pd.crosstab(escolhida.apply(X), y)
+tabela.index = range(1, len(tabela) + 1)
+tabela.index.name = "folha"
+tabela["fração de doentes"] = tabela["sim"] / (tabela["não"] + tabela["sim"])
 tabela["prevê"] = tabela[["não", "sim"]].idxmax(axis=1)
-fracao = tabela["sim"] / (tabela["não"] + tabela["sim"])
 print("mais doentes: folha", tabela["sim"].idxmax())
-print("maior fração de doentes: folha", fracao.idxmax())
+print("maior fração de doentes: folha", tabela["fração de doentes"].idxmax())
 print("colunas usadas:")
 for coluna in X.columns[escolhida.feature_importances_ > 0]:
     print(" ", coluna)
-tabela
+tabela.style.format(precision=3, subset=["fração de doentes"], decimal=",")
 ```
 
 ::: {.funcao}
-**`pd.crosstab(linhas, colunas)`** — conta quantas vezes cada par de valores aparece; aqui, a folha de cada paciente (`apply`, da seção 12.1) contra a classe dele. **`df.reset_index(drop=True)`** — troca os rótulos das linhas por 0, 1, 2…, descartando os antigos, que eram os números dos nós. **`df.idxmax(axis=1)`** — o nome da coluna com o maior valor em cada linha, aqui a classe mais comum da folha. **`arvore.feature_importances_`** — um número por coluna, positivo só nas que aparecem em algum corte da árvore.
+**`pd.crosstab(linhas, colunas)`** — conta quantas vezes cada par de valores aparece; aqui, a folha de cada paciente (`apply`, da seção 12.1) contra a classe dele. Os nós são numerados da raiz para baixo, sempre o ramo da esquerda primeiro, e por isso as folhas saem na ordem da figura; `tabela.index = range(1, ...)` troca os números dos nós por 1 a 6. **`df.idxmax(axis=1)`** — o nome da coluna com o maior valor em cada linha, aqui a classe mais comum da folha. **`arvore.feature_importances_`** — um número por coluna, positivo só nas que aparecem em algum corte da árvore.
 :::
 
-A primeira pergunta é sobre o exame de tálio. Como `talio_normal` vale 1 para quem teve o exame normal, o ramo "sim" de `talio_normal ≤ 0,5`, à esquerda, é o dos pacientes com algum defeito no exame. Entre eles, os que têm dor no peito assintomática formam a folha 3, com 79 doentes em 89, a folha com mais doentes e com a maior fração deles. São os 89 pacientes da figura das cordas, na subseção "Um corte, a mesma classe". Do outro lado, os pacientes com tálio normal e nenhum vaso colorido no exame (`vasos_coloridos ≤ 0,5`) formam a folha com 102 sem doença em 115. As mesmas perguntas voltam em lugares diferentes da árvore: `vasos_coloridos` e `dor_no_peito_assintomática` aparecem nos dois lados, em ordens diferentes.
+A primeira pergunta é sobre o exame de tálio. Como `talio_normal` vale 1 para quem teve o exame normal, o ramo "sim" de `talio_normal ≤ 0,5`, à esquerda, é o dos pacientes com algum defeito no exame. Entre eles, os que têm dor no peito assintomática formam a folha 3, com 79 doentes em 89; na tabela, é a linha com mais doentes e com a maior fração deles. São os 89 pacientes da figura das cordas, na subseção "Um corte, a mesma classe". Do outro lado, os pacientes com tálio normal e nenhum vaso colorido no exame (`vasos_coloridos ≤ 0,5`) formam a folha com 102 sem doença em 115. As mesmas perguntas voltam em lugares diferentes da árvore: `vasos_coloridos` e `dor_no_peito_assintomática` aparecem nos dois lados, em ordens diferentes.
 
 Três das 13 medidas bastaram, e nenhuma das outras dez aparece na árvore, nem `idade` nem `colesterol`. Isso quer dizer que a idade não tem relação com a doença cardíaca? Não necessariamente: em cada nó, a árvore fica com a pergunta que mais reduz a impureza naquele passo, e uma coluna que carrega parte da informação de outra já usada pode nunca ser a melhor.
 
 ## O empate entre 6 e 7 folhas
 
-A árvore de 7 folhas tem uma folha a mais que a de 6, e as duas empataram no erro de treino e no de validação cruzada. O chunk abaixo segue os 89 pacientes do corte das cordas nas duas árvores e conta, entre eles, de que lado de 0,5 fica a depressão do ST em cada folha da árvore de 7:
+A árvore de 7 folhas tem uma folha a mais que a de 6, e as duas empataram no erro de treino e no de validação cruzada. A célula abaixo segue os 89 pacientes do corte das cordas nas duas árvores e conta, entre eles, de que lado de 0,5 fica a depressão do ST em cada folha da árvore de 7:
 
 ```{python}
 #| label: empate
 sete = DecisionTreeClassifier(ccp_alpha=curvas.loc[7, "ccp_alpha"],
-                              random_state=12).fit(X, y)
+                              random_state=12)
+sete.fit(X, y)
 no_grupo = X.loc[grupo.index]
 print("folhas deles na de 6:", len(set(escolhida.apply(no_grupo))))
 print("folhas deles na de 7:", len(set(sete.apply(no_grupo))))
-print("mesmas previsões nos 297:",
-      bool((sete.predict(X) == escolhida.predict(X)).all()))
+diferentes = (sete.predict(X) != escolhida.predict(X)).sum()
+print("pacientes com previsões diferentes nas duas árvores:", diferentes, "de", len(X))
 st_baixa = grupo["depressao_st"] <= 0.5
 pd.crosstab(sete.apply(no_grupo),
             st_baixa.map({True: "≤ 0,5", False: "> 0,5"}),
@@ -501,42 +540,43 @@ pd.crosstab(sete.apply(no_grupo),
 ```
 
 ::: {.funcao}
-**`pd.crosstab(..., rownames, colnames)`** — os nomes que aparecem nos cabeçalhos das linhas e das colunas. **`s.map(dicionario)`** — troca cada valor da série pelo que o dicionário associa a ele.
+**`s.map(dicionario)`** — troca cada valor da série pelo que o dicionário associa a ele; aqui, `True` e `False` pelos rótulos dos dois lados do corte. `rownames` e `colnames` dão ao `crosstab` os nomes dos cabeçalhos.
 :::
 
 Na árvore de 6 folhas, os 89 pacientes com tálio alterado e dor assintomática formam uma folha só, a folha 3, que também tem 89. Na de 7, eles se espalham por duas folhas, e a tabela mostra que cada uma recebe só pacientes de um lado do corte: 21 com ST até 0,5 e 68 acima. É a folha a mais, e o corte é o da figura das cordas. Os dois filhos preveem "sim", como o pai, e as duas árvores dão a mesma classe para todos os 297 pacientes; por isso empatam no erro de treino.
 
-A validação cruzada não usa essas duas árvores: em cada grupo, cresce e poda uma árvore com os outros nove grupos, uma para cada `ccp_alpha`. O empate ali precisa de outra conta, grupo a grupo:
+A validação cruzada não usa essas duas árvores: em cada grupo, cresce e poda uma árvore com os outros nove grupos, uma para cada `ccp_alpha`. O empate ali precisa de outra conta, grupo a grupo, com os grupos na mesma ordem que o `GridSearchCV` usa; com o `StratifiedKFold`, o `grupos.split` recebe também `y`, para sortear os grupos com a proporção de cada classe:
 
 ```{python}
 #| label: empate-cv
-alfa_6, alfa_7 = curvas.loc[[6, 7], "ccp_alpha"]
-iguais = 0
-for treino, fora in grupos.split(X, y):
-    X_t, y_t, X_f = X.iloc[treino], y.iloc[treino], X.iloc[fora]
+alfa_6 = curvas.loc[6, "ccp_alpha"]
+alfa_7 = curvas.loc[7, "ccp_alpha"]
+linhas = []
+for k, (treino, fora) in enumerate(grupos.split(X, y)):
     seis_g = DecisionTreeClassifier(ccp_alpha=alfa_6, random_state=12)
+    seis_g.fit(X.iloc[treino], y.iloc[treino])
     sete_g = DecisionTreeClassifier(ccp_alpha=alfa_7, random_state=12)
-    previsoes_6 = seis_g.fit(X_t, y_t).predict(X_f)
-    previsoes_7 = sete_g.fit(X_t, y_t).predict(X_f)
-    iguais += int((previsoes_6 == previsoes_7).all())
-print("grupos com previsões iguais:", iguais, "de 10")
+    sete_g.fit(X.iloc[treino], y.iloc[treino])
+    previsoes_6 = seis_g.predict(X.iloc[fora])
+    previsoes_7 = sete_g.predict(X.iloc[fora])
+    linhas.append({"grupo": k, "deixados de fora": len(fora),
+                   "previsões diferentes": (previsoes_6 != previsoes_7).sum()})
+pd.DataFrame(linhas).set_index("grupo")
 ```
 
-::: {.funcao}
-**`grupos.split(X, y)`** — os pares (linhas de treino, linhas deixadas de fora) de cada grupo, na mesma ordem que o `GridSearchCV` usa. **`X.iloc[linhas]`** — as linhas nas posições dadas.
-:::
-
-Nos 10 grupos, os dois valores de `ccp_alpha` dão as mesmas previsões para os pacientes deixados de fora, e o erro de cada grupo é o mesmo nos dois. Se o corte a mais não muda nenhuma classe, para que ele serve? Para prever a classe, para nada. Para dizer quanta certeza se tem, o `predict_proba` mostra a diferença, num paciente de cada lado do corte:
+Nos 10 grupos, a coluna das previsões diferentes é zero: os dois valores de `ccp_alpha` dão as mesmas previsões para os pacientes deixados de fora, e o erro de cada grupo é o mesmo nos dois. Se o corte a mais não muda nenhuma classe, para que ele serve? Para prever a classe, para nada. Para dizer quanta certeza se tem, o `predict_proba` mostra a diferença, num paciente de cada lado do corte:
 
 ```{python}
 #| label: probabilidades
 dois = [st_baixa[st_baixa].index[0], st_baixa[~st_baixa].index[0]]
-print("ST:", numero_br(coracao.loc[dois[0], "depressao_st"], 1),
-      "e", numero_br(coracao.loc[dois[1], "depressao_st"], 1))
-print("classes:", list(sete.classes_))
-for nome, arvore in [("6 folhas", escolhida), ("7 folhas", sete)]:
-    sim = arvore.predict_proba(X.loc[dois])[:, 1]
-    print(f"{nome}: {numero_br(sim[0], 3)} e {numero_br(sim[1], 3)}")
+print("classes, em ordem:", ", ".join(sete.classes_))
+probabilidades = pd.DataFrame({
+    "ST": coracao.loc[dois, "depressao_st"].to_numpy(),
+    "P(sim), 6 folhas": escolhida.predict_proba(X.loc[dois])[:, 1],
+    "P(sim), 7 folhas": sete.predict_proba(X.loc[dois])[:, 1],
+}, index=["ST ≤ 0,5", "ST > 0,5"])
+probabilidades.style.format(precision=3, decimal=",").format(
+    precision=1, subset=["ST"], decimal=",")
 ```
 
 ::: {.funcao}
