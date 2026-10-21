@@ -4,25 +4,29 @@
 Esta seção corresponde à seção 6.2.2 de @james2023.
 :::
 
-A ridge aproxima os coeficientes de zero, mas não põe nenhum deles em zero: para qualquer $\lambda$ finito, todas as colunas continuam no modelo, cada uma com o seu peso. Com as 11 colunas de `Credit`, dá para ler a lista inteira. Com centenas de colunas, uma lista de centenas de coeficientes pequenos, nenhum igual a zero, não diz quais colunas importam. A seleção de subconjuntos diz, mas compara $2^p$ modelos, e esse número cresce exponencialmente com $p$. Existe uma penalidade que encolhe os coeficientes, como a ridge, e também escolhe colunas, zerando as outras?
+Com centenas de colunas, quais delas importam? A ridge não responde: para qualquer $\lambda$ finito, ela encolhe todos os coeficientes sem pôr nenhum em zero, e devolve centenas de pesos pequenos, todas as colunas ainda no modelo. A seleção de subconjuntos responde, mas compara $2^p$ modelos, e esse número cresce exponencialmente com $p$. Existe uma penalidade que encolhe os coeficientes, como a ridge, e também escolhe colunas, zerando as outras?
 
 ```{python}
 #| label: setup
 #| include: false
 import matplotlib.pyplot as plt
-import numpy as np
-import pandas as pd
-from matplotlib.lines import Line2D
-from sklearn.linear_model import Lasso, LinearRegression, Ridge
-from sklearn.pipeline import make_pipeline
-from sklearn.preprocessing import StandardScaler
 
 plt.style.use("estilo-figuras.mplstyle")
+```
+
+As colunas de `Credit` são as da seção 11.1, com as categóricas trocadas por indicadoras:
+
+```{python}
+#| label: dados
+import numpy as np
+import pandas as pd
 
 credit = pd.read_csv("dados/Credit.csv")
 X = pd.get_dummies(credit.drop(columns="saldo"), drop_first=True, dtype=float)
 y = credit["saldo"]
 n = len(X)
+print("clientes:", n)
+print("colunas:", X.shape[1])
 ```
 
 ## Trocar o quadrado pelo módulo
@@ -41,7 +45,31 @@ com $\lambda \ge 0$ o parâmetro de ajuste. A soma $\sum_j|\beta_j|$ é a **norm
 
 Com $\lambda = 0$, o lasso devolve os mínimos quadrados, como a ridge. A diferença aparece com $\lambda > 0$: com o módulo, um $\lambda$ grande o bastante põe alguns coeficientes **exatamente** em zero, e a coluna sai do modelo. O lasso faz seleção de variáveis, e os modelos que ele produz são **esparsos**: usam só parte das colunas. Na outra ponta, um $\lambda$ finito já zera todos os coeficientes e dá o modelo nulo, de que a ridge só se aproxima quando $\lambda$ cresce sem limite.
 
-A função `lasso` abaixo monta o lasso, nas colunas padronizadas, a partir do $\lambda$ da fórmula. O chunk ajusta três valores de $\lambda$ em `Credit` e conta, em cada $\lambda$, quantos coeficientes saíram iguais a zero; a coluna $\lambda = 0$ traz os mínimos quadrados, também nas colunas padronizadas.
+Um lasso com $\lambda = 10.000$, em `Credit`, nas colunas padronizadas. O `Lasso` do `scikit-learn` recebe o $\lambda$ da fórmula dividido por $2n$, como explica o quadro abaixo da célula:
+
+```{python}
+#| label: um-lasso
+from sklearn.linear_model import Lasso, LinearRegression, Ridge
+from sklearn.pipeline import make_pipeline
+from sklearn.preprocessing import StandardScaler
+
+lam = 10_000
+lasso_10000 = make_pipeline(
+    StandardScaler(),
+    Lasso(alpha=lam / (2 * n), max_iter=100_000, tol=1e-8),
+)
+lasso_10000.fit(X, y)
+coef_10000 = pd.Series(lasso_10000[-1].coef_, index=X.columns)
+print("alpha do Lasso:", lam / (2 * n))
+print("coeficientes iguais a zero:", (coef_10000 == 0).sum())
+```
+
+::: {.funcao}
+- **`Lasso(alpha, max_iter, tol)`**: o lasso. O `alpha` do `scikit-learn` **não** é o $\lambda$ da fórmula: o `Lasso` minimiza $\frac{1}{2n}\mathrm{RSS} + \alpha\lVert\beta\rVert_1$, que é a fórmula acima dividida por $2n$, e por isso `alpha=lam / (2 * n)`. `max_iter` e `tol` dizem quando o algoritmo para de refinar os coeficientes; com os padrões (1.000 e $10^{-4}$), ele pode parar antes de chegar à solução quando duas colunas quase se repetem, como `limite` e `pontuacao` (seção 8.6).
+- **`(serie == 0).sum()`**: quantos valores são iguais a zero; cada `True` conta 1.
+:::
+
+A função `lasso` guarda essa montagem para qualquer $\lambda$ e qualquer número de linhas. A célula abaixo ajusta mais dois valores de $\lambda$ e põe tudo numa tabela; a coluna $\lambda = 0$ traz os mínimos quadrados, também nas colunas padronizadas.
 
 ```{python}
 #| label: tres-lambdas
@@ -53,28 +81,33 @@ def lasso(lam, n_linhas):
     )
 
 
-mq_padr = make_pipeline(StandardScaler(), LinearRegression()).fit(X, y)
+mq_padr = make_pipeline(StandardScaler(), LinearRegression())
+mq_padr.fit(X, y)
 coeficientes = pd.DataFrame({"0": mq_padr[-1].coef_}, index=X.columns)
 for lam in [1_000, 10_000, 100_000]:
-    nome = f"{lam:,}".replace(",", ".")
-    coeficientes[nome] = lasso(lam, n).fit(X, y)[-1].coef_
+    modelo = lasso(lam, n)
+    modelo.fit(X, y)
+    coeficientes[f"{lam:,}".replace(",", ".")] = modelo[-1].coef_
 coeficientes = coeficientes + 0.0  # troca −0,0 por 0,0
 coeficientes.columns.name = "λ"
-print("zeros por λ:", (coeficientes == 0).sum().tolist())
+print("coeficientes iguais a zero, por λ:")
+print((coeficientes == 0).sum().to_string())
 maior = coeficientes["0"].abs().idxmax()
-print("maior |coeficiente| com λ = 0:")
-print(" ", maior, f"{coeficientes.loc[maior, '0']:.1f}".replace(".", ","))
-numero_br = lambda valor: f"{valor:.1f}".replace(".", ",").replace("-", "−")
-coeficientes.style.set_uuid("coef").set_table_styles(
-    [{"selector": "th, td", "props": "padding: 0.2em 0.15em; font-size: 0.85em"}]
-).format(numero_br)
+print("maior |coeficiente| com λ = 0:", maior,
+      f"{coeficientes.loc[maior, '0']:.1f}".replace(".", ","))
+
+
+def numero_br(valor):
+    return f"{valor:.1f}".replace(".", ",").replace("-", "−")
+
+
+coeficientes.style.format(numero_br)
 ```
 
 ::: {.funcao}
-- **`Lasso(alpha, max_iter, tol)`**: o lasso. O `alpha` do `scikit-learn` **não** é o $\lambda$ da fórmula: o `Lasso` minimiza $\frac{1}{2n}\mathrm{RSS} + \alpha\lVert\beta\rVert_1$, que é a fórmula acima dividida por $2n$, e por isso `alpha=lam / (2 * n)`. `max_iter` e `tol` dizem quando o algoritmo para de refinar os coeficientes; com os padrões (1.000 e $10^{-4}$), ele pode parar antes de chegar à solução quando duas colunas quase se repetem, como `limite` e `pontuacao` (seção 8.6).
-- **`(df == 0).sum()`**: quantos valores de cada coluna são iguais a zero; cada `True` conta 1.
+- **`(df == 0).sum()`**: numa tabela, a mesma contagem, uma por coluna.
 - **`df + 0.0`**: o lasso às vezes devolve `-0.0`, que é igual a zero mas apareceria na tabela com sinal; somar `0.0` o troca por `0.0`.
-- **`.set_table_styles(regras)`**: acrescenta regras de CSS à tabela; aqui, um espaçamento e uma letra menores, para a tabela caber numa tela estreita. **`.format(funcao)`** aplica `funcao` a cada célula; `numero_br` escreve o número com vírgula e com o sinal de menos tipográfico.
+- **`numero_br(valor)`**: escreve o número com uma casa, vírgula decimal e o sinal de menos tipográfico; passada a `.style.format`, vale para cada valor da tabela.
 :::
 
 Com $\lambda = 1.000$, nenhum coeficiente é zero. Com $\lambda = 10.000$, cinco são exatamente zero: `escolaridade`, `imovel_proprio_sim`, `casado_sim` e as duas indicadoras de região; o modelo fica com as outras seis colunas. Com $\lambda = 100.000$, dez são zero, e sobra só `pontuacao`, com 271,6.
@@ -83,56 +116,75 @@ Com $\lambda = 1.000$, nenhum coeficiente é zero. Com $\lambda = 10.000$, cinco
 
 ## O caminho do lasso em `Credit`
 
-Como na ridge, ajustar uma grade de valores de $\lambda$ mostra o caminho de cada coeficiente. A grade tem 100 valores, de 10 a $10^{5{,}6}$. O tamanho do vetor de coeficientes agora se resume pela norma $\ell_1$: a razão $\lVert\hat\beta^L_\lambda\rVert_1/\lVert\hat\beta\rVert_1$, com $\hat\beta$ os mínimos quadrados nas colunas padronizadas, vale 1 nos mínimos quadrados e 0 no modelo nulo. O chunk conta também, em cada $\lambda$, quantos coeficientes não são zero.
+Como na ridge, ajustar uma grade de valores de $\lambda$ mostra o caminho de cada coeficiente. A grade tem 100 valores, de 10 a $10^{5{,}6}$. O tamanho do vetor de coeficientes agora se resume pela norma $\ell_1$: a razão $\lVert\hat\beta^L_\lambda\rVert_1/\lVert\hat\beta\rVert_1$, com $\hat\beta$ os mínimos quadrados nas colunas padronizadas, vale 1 nos mínimos quadrados e 0 no modelo nulo. A célula conta também, em cada $\lambda$, quantos coeficientes não são zero, e quantos pontos da grade dão cada tamanho de modelo.
 
 ```{python}
 #| label: caminho-lasso
 lams = np.logspace(1, 5.6, 100)
-caminho = pd.DataFrame(
-    [lasso(lam, n).fit(X, y)[-1].coef_ for lam in lams],
-    index=lams, columns=X.columns,
-)
+caminho = pd.DataFrame(index=lams, columns=X.columns, dtype=float)
+for lam in lams:
+    modelo = lasso(lam, n)
+    modelo.fit(X, y)
+    caminho.loc[lam] = modelo[-1].coef_
+
 coef_mq = mq_padr[-1].coef_
 razao = caminho.abs().sum(axis=1) / np.abs(coef_mq).sum()
 nao_nulos = (caminho != 0).sum(axis=1)
-print("não nulos não caem com λ caindo:", bool(np.all(np.diff(nao_nulos) <= 0)))
 print("razão no menor λ:", f"{razao.iloc[0]:.3f}".replace(".", ","))
 print("razão no maior λ:", f"{razao.iloc[-1]:.3f}".replace(".", ","))
-print("tamanhos na grade:")
-print(" ", sorted(set(nao_nulos.tolist())))
+nao_nulos.value_counts().sort_index().rename_axis("não nulos").to_frame("pontos da grade")
 ```
 
 ::: {.funcao}
 - **`df.sum(axis=1)`**: soma cada linha, em vez de cada coluna; aqui, uma soma por $\lambda$. Com `caminho.abs()`, é a norma $\ell_1$ dos coeficientes em cada $\lambda$; com `caminho != 0`, o número de coeficientes não nulos.
+- **`serie.value_counts()`**: quantas vezes cada valor aparece; **`.sort_index()`** põe os valores em ordem crescente.
 :::
 
-Da direita para a esquerda da grade, isto é, com $\lambda$ caindo, o número de coeficientes não nulos nunca diminui, e a razão vai de 0,000 a 1,000. Os tamanhos de modelo que aparecem na grade vão de 0 a 11 colunas, com uma exceção: não há modelo de duas colunas. O ponto da grade em que cada coluna entra, o maior $\lambda$ em que o coeficiente dela não é zero, explica a falta:
+A tabela conta quantos pontos da grade dão cada tamanho de modelo: aparecem de 0 a 11 colunas, com uma exceção, não há modelo de duas colunas. A razão vai de 1,000 no menor $\lambda$ a 0,000 no maior. E o tamanho do modelo, de um ponto da grade para o seguinte, com $\lambda$ crescendo, sobe alguma vez?
+
+```{python}
+#| label: passos
+variacao = nao_nulos.diff().dropna()  # não nulos num λ menos os do λ anterior
+passos = pd.Series(
+    [(variacao < 0).sum(), (variacao == 0).sum(), (variacao > 0).sum()],
+    index=pd.Index(["cai", "fica igual", "sobe"], name="não nulos, com λ crescendo"),
+)
+passos.to_frame("passos da grade")
+```
+
+::: {.funcao}
+**`serie.dropna()`**: a série sem os valores ausentes; aqui, sem a variação do primeiro ponto da grade, que não tem anterior.
+:::
+
+Em nenhum passo da grade o número de coeficientes não nulos sobe com $\lambda$ crescendo. Lida da direita para a esquerda, isto é, com $\lambda$ caindo, a contagem nunca diminui: as colunas entram uma a uma ou em grupo. O ponto da grade em que cada coluna entra, o maior $\lambda$ em que o coeficiente dela não é zero, explica a falta do modelo de duas colunas:
 
 ```{python}
 #| label: entrada
-entrada = pd.Series(
-    {coluna: caminho.index[caminho[coluna] != 0].max() for coluna in X.columns}
-).sort_values(ascending=False)
-fica = [bool((caminho.loc[:entrada[c], c] != 0).all()) for c in X.columns]
-print("nenhuma volta a zero:", all(fica))
+entrada, volta, anterior = {}, {}, {}
+for coluna in X.columns:
+    lam_entrada = caminho.index[caminho[coluna] != 0].max()
+    entrada[coluna] = lam_entrada
+    # zeros abaixo do λ de entrada: a coluna teria voltado a zero
+    volta[coluna] = int((caminho.loc[:lam_entrada, coluna] == 0).sum())
+    anterior[coluna] = lams[lams > lam_entrada].min()  # o ponto anterior da grade
+entrada = pd.Series(entrada).sort_values(ascending=False)
 entrada.index.name = "coluna"
-anterior = [lams[lams > lam].min() for lam in entrada.values]  # ponto anterior
 tabela_entrada = pd.DataFrame({
     "λ de entrada": entrada,
     "razão nesse λ": razao.loc[entrada.values].values,
-    "razão no ponto anterior": razao.loc[anterior].values,
+    "razão no ponto anterior": razao.loc[pd.Series(anterior)[entrada.index]].values,
+    "zeros depois de entrar": pd.Series(volta)[entrada.index],
 })
-tabela_entrada.style.set_uuid("entrada").set_table_attributes(
-    'style="width: auto"'
-).set_table_styles(
-    [{"selector": "th, td", "props": "padding: 0.2em 0.3em; font-size: 0.85em"}]
-).format({"λ de entrada": "{:,.0f}", "razão nesse λ": "{:.2f}",
-          "razão no ponto anterior": "{:.2f}"}, decimal=",", thousands=".")
+tabela_entrada.style.format(
+    {"λ de entrada": "{:,.0f}", "razão nesse λ": "{:.2f}",
+     "razão no ponto anterior": "{:.2f}", "zeros depois de entrar": "{:d}"},
+    decimal=",", thousands=".",
+)
 ```
 
-`pontuacao` entra sozinha, em $\lambda = 288.806$. `limite` e `estudante_sim` entram no mesmo ponto da grade, $\lambda = 89.022$, com a razão das normas em 0,27, e por isso o modelo passa de uma coluna para três; uma grade mais fina poderia separar as duas. Depois vêm `renda`, em 42.096, `cartoes` e `idade`, e por último as cinco que já eram zero com $\lambda = 10.000$. Nesta grade, nenhuma coluna volta a zero depois de entrar.
+`pontuacao` entra sozinha, em $\lambda = 288.806$. `limite` e `estudante_sim` entram no mesmo ponto da grade, $\lambda = 89.022$, com a razão das normas em 0,27, e por isso o modelo passa de uma coluna para três; uma grade mais fina poderia separar as duas. Depois vêm `renda`, em 42.096, `cartoes` e `idade`, e por último as cinco que já eram zero com $\lambda = 10.000$. A última coluna da tabela conta, para cada coluna, os pontos da grade abaixo do $\lambda$ de entrada em que o coeficiente volta a zero: são todos zero, e nesta grade nenhuma coluna volta a zero depois de entrar.
 
-Cada coluna entra entre o ponto anterior da grade, em que o coeficiente dela ainda é zero, e o $\lambda$ de entrada. Por isso, no gráfico contra a razão das normas, a curva de uma coluna começa a sair do zero na razão da última coluna da tabela: a de `renda`, por exemplo, sai do zero em 0,37 e já está fora dele em 0,42.
+Cada coluna entra entre o ponto anterior da grade, em que o coeficiente dela ainda é zero, e o $\lambda$ de entrada. Por isso, no gráfico contra a razão das normas, a curva de uma coluna começa a sair do zero no valor da coluna "razão no ponto anterior": a de `renda`, por exemplo, sai do zero em 0,37 e já está fora dele em 0,42.
 
 Uma pergunta para a figura abaixo: a curva de `limite`, que entra depois de `pontuacao`, chega a passar por cima dela?
 
@@ -140,7 +192,15 @@ Uma pergunta para a figura abaixo: a curva de `limite`, que entra depois de `pon
 #| label: fig-caminho-lasso
 #| fig-cap: 'Coeficientes do lasso em `Credit`, com as 11 colunas padronizadas. Em cima, contra $\lambda$ em escala logarítmica; embaixo, contra $\lVert\hat\beta^L_\lambda\rVert_1/\lVert\hat\beta\rVert_1$, o tamanho do vetor de coeficientes, medido pela norma $\ell_1$, como fração do dos mínimos quadrados. As cores e a escala vertical são as da figura dos caminhos da ridge, na seção 11.3.'
 #| fig-alt: "Dois painéis empilhados com os mesmos onze coeficientes, de cerca de −275 a 440 no eixo vertical. No de cima, contra lambda de 10 a cerca de 400 mil em escala log: à esquerda, os coeficientes estão perto dos valores dos mínimos quadrados, limite perto de 440, pontuacao perto de 176, estudante_sim perto de 128 e renda perto de −275. Da direita para a esquerda, pontuacao sai de zero sozinha em 288.806 e sobe; limite e estudante_sim saem de zero juntos em 89.022, e renda em 42.096; limite passa por cima de pontuacao em 10.476. Das sete colunas cinza, cartoes e idade saem de zero em 16.072 e 11.659, e as outras cinco entre 3.594 e 1.527, e todas ficam perto de zero. No de baixo, as mesmas curvas contra a razão das normas, de 0 a 1, feitas de trechos retos: até 0,25 só pontuacao cresce; limite e estudante_sim saem de zero entre 0,25 e 0,27, renda entre 0,37 e 0,42, e limite cruza pontuacao perto de 0,83, terminando perto de 440."
-destaque = {"renda": "C0", "limite": "C1", "pontuacao": "C2", "estudante_sim": "C3"}
+import matplotlib.pyplot as plt
+from matplotlib.lines import Line2D
+
+
+def com_virgula(valor, posicao):
+    return f"{valor:.1f}".replace(".", ",")
+
+
+destaque ={"renda": "C0", "limite": "C1", "pontuacao": "C2", "estudante_sim": "C3"}
 fig, (ax_lam, ax_razao) = plt.subplots(2, 1, figsize=(4.8, 5.8))
 for coluna in X.columns:
     em_destaque = coluna in destaque
@@ -155,7 +215,7 @@ ax_lam.set_xscale("log")
 ax_lam.set_xlim(lams.min(), lams.max())
 ax_lam.set_xlabel("λ")
 ax_razao.set_xlim(0, 1)
-ax_razao.xaxis.set_major_formatter(lambda valor, _: f"{valor:.1f}".replace(".", ","))
+ax_razao.xaxis.set_major_formatter(com_virgula)
 ax_razao.set_xlabel(
     r"$\|\hat{\beta}^{L}_{\lambda}\|_1 \;/\; \|\hat{\beta}\|_1$"
 )
@@ -171,32 +231,39 @@ fig.tight_layout(rect=(0, 0.1, 1, 1))
 plt.show()
 ```
 
-No painel de baixo, os caminhos são feitos de trechos retos, e, nesta grade, cada dobra é um ponto em que alguma coluna entra. Com a razão perto de 1, `limite` está acima de `pontuacao`, como nos mínimos quadrados, e mais à esquerda as duas curvas se cruzam. O chunk abaixo mede até que $\lambda$ `limite` fica acima e qual das duas fica acima no resto da grade:
+No painel de baixo, os caminhos são feitos de trechos retos, e, nesta grade, cada dobra é um ponto em que alguma coluna entra. Com a razão perto de 1, `limite` está acima de `pontuacao`, como nos mínimos quadrados, e mais à esquerda as duas curvas se cruzam. A célula abaixo acha o maior $\lambda$ em que `limite` fica acima e conta, nos dois trechos da grade, quantos pontos têm `limite` acima de `pontuacao`:
 
 ```{python}
 #| label: cruzamento
+def milhar(v):
+    return f"{v:,.0f}".replace(",", ".")
+
+
 acima = caminho["limite"] > caminho["pontuacao"]
 lam_cruza = float(caminho.index[acima].max())
-print("limite > pontuacao até λ =", f"{lam_cruza:,.0f}".replace(",", "."))
-print("em todo λ da grade até esse:", bool(acima.loc[:lam_cruza].all()))
-print("pontuacao ≥ limite acima dele:",
-      bool((~acima.loc[lam_cruza:].iloc[1:]).all()))
+ate_ele = acima.loc[:lam_cruza]
+depois_dele = acima.loc[lam_cruza:].iloc[1:]
+print("maior λ com limite > pontuacao:", milhar(lam_cruza))
 print("razão nesse λ:", f"{razao.loc[lam_cruza]:.2f}".replace(".", ","))
+pd.DataFrame(
+    {"pontos da grade": [len(ate_ele), len(depois_dele)],
+     "com limite > pontuacao": [ate_ele.sum(), depois_dele.sum()]},
+    index=pd.Index([f"λ até {milhar(lam_cruza)}", f"λ acima de {milhar(lam_cruza)}"],
+                   name="trecho da grade"),
+)
 ```
 
-`limite` fica acima de `pontuacao` em todos os $\lambda$ da grade até 10.476; para $\lambda$ maiores que esse, `pontuacao` fica acima ou igual.
+A tabela diz que `limite` fica acima de `pontuacao` em todos os $\lambda$ da grade até 10.476 e em nenhum acima dele: para $\lambda$ maiores que esse, `pontuacao` fica acima ou igual.
 
 ### Por que `pontuacao` entra primeiro
 
-A ordem de entrada tem uma regra, e ela sai de olhar o ponto em que todos os coeficientes são zero. Ali, com as colunas padronizadas $\tilde x_{ij}$ da seção 11.3, o intercepto é $\bar y$ e o RSS vale $\sum_i (y_i - \bar y)^2$. Dar à coluna $j$ um coeficiente pequeno, $\delta$, troca cada resíduo $y_i - \bar y$ por $y_i - \bar y - \delta\tilde x_{ij}$. Abrindo o quadrado, o RSS muda em $-2\delta\sum_i\tilde x_{ij}(y_i - \bar y) + \delta^2\sum_i\tilde x_{ij}^2$, e com $\delta$ pequeno o termo em $\delta^2$ é desprezível. O termo que sobra faz o RSS cair quando $\delta$ tem o mesmo sinal da soma $\sum_i\tilde x_{ij}(y_i - \bar y)$, e subir quando tem o sinal oposto. Com o sinal que ajuda, o RSS cai a uma taxa de **duas vezes** o módulo da soma por unidade de $|\delta|$.
-
-A penalidade sobe $\lambda|\delta|$, a uma taxa $\lambda$, qualquer que seja o sinal de $\delta$. Enquanto a penalidade subir mais depressa do que o RSS cai, para toda coluna, o lasso fica no zero. Todos os coeficientes do lasso são zero, portanto, enquanto
+A ordem de entrada tem uma regra: **a primeira coluna a entrar é a de maior correlação com a resposta, em valor absoluto.** Ela sai de olhar o ponto em que todos os coeficientes são zero. Nas colunas padronizadas $\tilde x_{ij}$ da seção 11.3, dar à coluna $j$ um coeficiente pequeno $\delta$ baixa o RSS a uma taxa de $2\,\big|\sum_i\tilde x_{ij}(y_i - \bar y)\big|$ por unidade de $|\delta|$, e a penalidade sobe a uma taxa $\lambda$. Enquanto a penalidade subir mais depressa para toda coluna, o lasso fica no zero, isto é, enquanto
 
 $$
-\lambda \ge \lambda_{\max} = 2\max_j\Big|\sum_{i=1}^{n}\tilde x_{ij}\,(y_i - \bar y)\Big|,
+\lambda \ge \lambda_{\max} = 2\max_j\Big|\sum_{i=1}^{n}\tilde x_{ij}\,(y_i - \bar y)\Big| = 2n\,\mathrm{dp}(y)\max_j|r_j|,
 $$
 
-isto é, enquanto $\lambda$ for pelo menos o dobro da maior dessas somas em módulo. A coluna que atinge esse máximo, a que baixa o RSS mais depressa, é a primeira a entrar. O chunk abaixo faz a conta em `Credit`:
+com $r_j$ a correlação da coluna $j$ com $y$ e $\mathrm{dp}(y)$ o desvio padrão de $y$, com divisor $n$, como na padronização. A célula abaixo calcula $\lambda_{\max}$ em `Credit` pelas duas formas, a soma e a correlação, e o compara com a grade:
 
 ```{python}
 #| label: primeira-a-entrar
@@ -204,43 +271,30 @@ X_padr = mq_padr[0].transform(X)  # as 11 colunas padronizadas
 somas = pd.Series(  # uma soma Σ x̃ᵢⱼ(yᵢ − ȳ) por coluna j, em módulo
     np.abs(X_padr.T @ (y - y.mean()).to_numpy()), index=X.columns
 )
+correlacao = X.corrwith(y).abs().sort_values(ascending=False)
 lam_max = 2 * somas.max()
 proximo = lams[lams > entrada.iloc[0]].min()
-print("coluna do máximo:", somas.idxmax())
-print("λ_max:", f"{lam_max:,.0f}".replace(",", "."))
-print("λ_max no intervalo da entrada:",
-      bool(entrada.iloc[0] < lam_max <= proximo))
+print("coluna da maior soma:", somas.idxmax())
+print("coluna da maior |correlação|:", correlacao.index[0])
+pd.Series(
+    [lam_max, 2 * n * y.std(ddof=0) * correlacao.iloc[0], entrada.iloc[0], proximo],
+    index=pd.Index(["λ_max pela soma", "λ_max pela correlação",
+                    "λ em que pontuacao entra na grade", "ponto seguinte da grade"]),
+).to_frame("λ").style.format(milhar)
 ```
 
 ::: {.funcao}
-**`modelo[0].transform(X)`**: o primeiro passo do `Pipeline`, o `StandardScaler` já ajustado, aplicado a `X`: as colunas padronizadas com as médias e os desvios do ajuste. Em `X_padr.T @ …`, a transposta e o produto de matriz por vetor dão uma soma por coluna.
+- **`.transform(X)`**: aplica a `X` um passo já ajustado, aqui o `StandardScaler`: as colunas padronizadas com as médias e os desvios do ajuste. Em `X_padr.T @ …`, a transposta e o produto de matriz por vetor dão uma soma por coluna.
+- **`X.corrwith(y)`**: a correlação de cada coluna de `X` com a série `y`, uma por coluna.
 :::
 
-A coluna do máximo é `pontuacao`, e o $\lambda_{\max}$ cai entre o $\lambda$ em que `pontuacao` entra na grade e o ponto seguinte, onde todos os coeficientes ainda são zero. A soma tem uma leitura mais familiar: numa coluna padronizada, ela é a correlação da coluna com a resposta multiplicada por $n$ vezes o desvio padrão de $y$, que se escreve $\mathrm{dp}(y)$. A correlação da coluna $j$ com $y$ é
-
-$$
-r_j = \frac{\sum_{i}\tilde x_{ij}\,(y_i - \bar y)}{n \cdot 1 \cdot \mathrm{dp}(y)},
-$$
-
-em que o 1 é o desvio padrão de $\tilde x_j$; os dois desvios padrão usam divisor $n$, como na padronização. Então $\lambda_{\max} = 2n\,\mathrm{dp}(y)\max_j|r_j|$: a primeira coluna a entrar é a de maior correlação com a resposta em valor absoluto.
+A coluna da maior soma e a da maior correlação são a mesma, `pontuacao`, e as duas formas dão o mesmo $\lambda_{\max}$. Ele cai entre o $\lambda$ em que `pontuacao` entra na grade e o ponto seguinte, onde todos os coeficientes ainda são zero. As duas maiores correlações, e a correlação entre as duas colunas:
 
 ```{python}
 #| label: correlacao
-correlacao = X.corrwith(y).abs().sort_values(ascending=False)
-print("maiores |correlações| com saldo:")
-for coluna, r in correlacao.head(2).items():
-    print(f"  {coluna}: {r:.4f}".replace(".", ","))
-print("λ_max pela correlação igual:",
-      bool(np.isclose(2 * n * y.std(ddof=0) * correlacao.iloc[0], lam_max)))
-entre_elas = X["limite"].corr(X["pontuacao"])
-print("corr(limite, pontuacao):", f"{entre_elas:.4f}".replace(".", ","))
+print("corr(limite, pontuacao):", f"{X['limite'].corr(X['pontuacao']):.4f}".replace(".", ","))
+correlacao.head(2).to_frame("|correlação| com saldo").style.format(decimal=",", precision=4)
 ```
-
-::: {.funcao}
-- **`X.corrwith(y)`**: a correlação de cada coluna de `X` com a série `y`, uma por coluna.
-- **`serie.items()`**: os pares (rótulo, valor) da série, um por vez, para percorrer com `for`.
-- **`np.isclose(a, b)`**: `True` se `a` e `b` são iguais a menos do arredondamento da conta em ponto flutuante.
-:::
 
 `pontuacao` tem a maior correlação com `saldo`, por pouco: 0,8636 contra 0,8617 de `limite`. E as duas colunas quase se repetem, com correlação entre elas de 0,9969. Uma diferença pequena na correlação com `saldo` decide qual das duas entra primeiro, e é essa que fica sozinha no modelo com a penalidade forte: nesta grade, nos pontos acima daquele em que `limite` entra, 89.022, até $\lambda_{\max}$. Com diferença tão pequena, outra amostra de clientes pode inverter a ordem e deixar `limite` no lugar de `pontuacao`.
 
@@ -276,58 +330,82 @@ Para cada $\lambda$ existe um $s$ com os mesmos coeficientes, e vice-versa. O n�
 
 Com duas colunas, o orçamento vira uma região do plano $(\beta_1, \beta_2)$. No lasso, com orçamento $s_L$, é o losango $|\beta_1| + |\beta_2| \le s_L$, com os bicos à distância $s_L$ da origem; na ridge, com orçamento $s_R$, é o disco $\beta_1^2 + \beta_2^2 \le s_R$, de raio $\sqrt{s_R}$. A solução é o ponto da região com o menor RSS.
 
-Para ver onde esse ponto cai, o chunk abaixo sorteia 100 observações de duas colunas de uma normal bivariada, com variâncias 1 e correlação 0,5, e uma resposta $y = 1{,}0\,x_1 + 2{,}5\,x_2 + \varepsilon$, com $\varepsilon$ normal de desvio 1. Nas colunas padronizadas, ele ajusta os mínimos quadrados e o lasso com $\lambda = 300$, valor escolhido para este exemplo porque zera um dos dois coeficientes. O orçamento do lasso, $s_L$, é a norma $\ell_1$ da solução dele.
-
-Para comparar as duas formas de região, a ridge precisa ter o mesmo tamanho. O chunk procura, numa grade fina de $\lambda$, a ridge cuja solução tem norma $\ell_2$ igual a $s_L$. O disco dela tem então raio $s_L$ e toca os eixos nos mesmos pontos que os bicos do losango, de modo que as duas regiões diferem só na forma.
+Para ver onde esse ponto cai, um exemplo com duas colunas sorteadas: 100 observações de uma normal bivariada, com variâncias 1 e correlação 0,5, e uma resposta $y = 1{,}0\,x_1 + 2{,}5\,x_2 + \varepsilon$, com $\varepsilon$ normal de desvio 1.
 
 ```{python}
-#| label: geometria
+#| label: geometria-dados
 rng = np.random.default_rng(11)
 Z = rng.multivariate_normal([0, 0], [[1, 0.5], [0.5, 1]], size=100)
 y_z = 1.0 * Z[:, 0] + 2.5 * Z[:, 1] + rng.normal(0, 1, size=100)
 n_z = len(Z)
+print("observações:", n_z)
+print("colunas:", Z.shape[1])
+```
 
-mq_z = make_pipeline(StandardScaler(), LinearRegression()).fit(Z, y_z)
-lasso_z = lasso(300, n_z).fit(Z, y_z)
+::: {.funcao}
+- **`rng.multivariate_normal(medias, covariancias, size)`**: `size` sorteios de uma normal em várias dimensões, aqui duas, com o vetor de médias e a matriz de covariâncias dados; com variâncias 1, a covariância 0,5 é a correlação entre as duas colunas.
+:::
+
+Nas colunas padronizadas, os mínimos quadrados e o lasso com $\lambda = 300$, valor escolhido para este exemplo porque zera um dos dois coeficientes. O orçamento do lasso, $s_L$, é a norma $\ell_1$ da solução dele:
+
+```{python}
+#| label: geometria-lasso
+mq_z = make_pipeline(StandardScaler(), LinearRegression())
+mq_z.fit(Z, y_z)
+lasso_z = lasso(300, n_z)
+lasso_z.fit(Z, y_z)
 s_L = float(np.abs(lasso_z[-1].coef_).sum())  # o orçamento do lasso
+print("orçamento s_L do lasso:", f"{s_L:.3f}".replace(".", ","))
+```
 
+Para comparar as duas formas de região, a ridge precisa ter o mesmo tamanho. A célula abaixo ajusta a ridge numa grade fina de $\lambda$, de 10 a 1.000, e fica com a de norma $\ell_2$ mais perto de $s_L$. O disco dela tem então raio $s_L$ e toca os eixos nos mesmos pontos que os bicos do losango, de modo que as duas regiões diferem só na forma.
 
+```{python}
+#| label: geometria-ridge
 def ridge(lam):
     """A ridge nas colunas padronizadas."""
     return make_pipeline(StandardScaler(), Ridge(alpha=lam))
 
 
 lams_z = np.logspace(1, 3, 2001)
-normas = np.array(
-    [np.linalg.norm(ridge(lam).fit(Z, y_z)[-1].coef_) for lam in lams_z]
-)
+normas = []
+for lam in lams_z:
+    modelo = ridge(lam)
+    modelo.fit(Z, y_z)
+    normas.append(np.linalg.norm(modelo[-1].coef_))
+normas = np.array(normas)
 lam_ridge = float(lams_z[np.argmin(np.abs(normas - s_L))])
-ridge_z = ridge(lam_ridge).fit(Z, y_z)
+ridge_z = ridge(lam_ridge)
+ridge_z.fit(Z, y_z)
 raio = float(np.linalg.norm(ridge_z[-1].coef_))
-
-solucoes = pd.DataFrame(
-    [mq_z[-1].coef_, lasso_z[-1].coef_ + 0.0, ridge_z[-1].coef_],
-    index=["mínimos quadrados", "lasso, λ = 300", "ridge"],
-    columns=["β₁", "β₂"],
-)
-beta_mq = mq_z[-1].coef_
-norma_1, norma_2 = np.abs(beta_mq).sum(), np.linalg.norm(beta_mq)
-print("orçamento s_L do lasso:", f"{s_L:.3f}".replace(".", ","))
 print("λ da ridge:", f"{lam_ridge:.1f}".replace(".", ","))
 print("raio do disco da ridge:", f"{raio:.3f}".replace(".", ","))
-print("s_R da ridge (raio²):", f"{raio**2:.3f}".replace(".", ","))
-print("normas ℓ1 e ℓ2 de β̂:",
-      f"{norma_1:.3f}; {norma_2:.3f}".replace(".", ","))
-print("β̂ fora das duas regiões:", bool(norma_1 > s_L and norma_2 > raio))
-solucoes.style.set_uuid("solucoes").format(decimal=",", precision=3)
 ```
 
 ::: {.funcao}
-- **`rng.multivariate_normal(medias, covariancias, size)`**: `size` sorteios de uma normal em várias dimensões, aqui duas, com o vetor de médias e a matriz de covariâncias dados; com variâncias 1, a covariância 0,5 é a correlação entre as duas colunas.
 - **`np.argmin(arr)`**: a posição do menor elemento; aqui, a do $\lambda$ da grade cuja norma fica mais perto de `s_L`.
 :::
 
-O lasso com $\lambda = 300$ põe $\beta_1$ em zero e fica com $\beta_2 = 1{,}374$: o orçamento $s_L$ é 1,374, todo gasto em $\beta_2$. A ridge com $\lambda = 110{,}9$ tem norma $\ell_2$ igual a 1,374, o valor de $s_L$, e o disco dela tem raio 1,374. O orçamento da ridge, na forma $\beta_1^2 + \beta_2^2 \le s_R$, é o quadrado do raio, $s_R = 1{,}889$; o chunk o calcula antes de arredondar o raio. A ridge reparte o peso: 0,712 e 1,176, os dois diferentes de zero. E $\hat\beta$, os mínimos quadrados, tem norma $\ell_1$ 3,235 e norma $\ell_2$ 2,557, e fica fora das duas regiões.
+As três soluções, lado a lado, com os dois tamanhos de cada uma: a norma $\ell_1$, $|\beta_1| + |\beta_2|$, e a soma dos quadrados, $\beta_1^2 + \beta_2^2$, que é o quadrado da norma $\ell_2$.
+
+```{python}
+#| label: geometria-resumo
+beta_mq = mq_z[-1].coef_
+solucoes = pd.DataFrame(
+    [beta_mq, lasso_z[-1].coef_ + 0.0, ridge_z[-1].coef_],
+    index=["mínimos quadrados", "lasso, λ = 300",
+           f"ridge, λ = {lam_ridge:.1f}".replace(".", ",")],
+    columns=["β₁", "β₂"],
+)
+solucoes["norma ℓ1"] = solucoes[["β₁", "β₂"]].abs().sum(axis=1)
+solucoes["soma dos quadrados"] = (solucoes[["β₁", "β₂"]] ** 2).sum(axis=1)
+solucoes["norma ℓ2"] = np.sqrt(solucoes["soma dos quadrados"])
+solucoes.style.format(decimal=",", precision=3)
+```
+
+O lasso com $\lambda = 300$ põe $\beta_1$ em zero e fica com $\beta_2 = 1{,}374$: o orçamento $s_L$ é 1,374, todo gasto em $\beta_2$. A ridge com $\lambda = 110{,}9$ tem norma $\ell_2$ igual a 1,374, o valor de $s_L$, e o disco dela tem raio 1,374. O orçamento da ridge, na forma $\beta_1^2 + \beta_2^2 \le s_R$, é a soma dos quadrados, $s_R = 1{,}889$.
+
+A ridge reparte o peso: 0,712 e 1,176, os dois diferentes de zero. E $\hat\beta$, os mínimos quadrados, tem norma $\ell_1$ 3,235, maior que o $s_L$ de 1,374, e norma $\ell_2$ 2,557, maior que o raio de 1,374: fica fora das duas regiões.
 
 Para desenhar a região e o RSS juntos, calcula-se o RSS em cada ponto de uma malha de 200 × 200 pares $(\beta_1, \beta_2)$. Com as colunas padronizadas, o intercepto é a média da resposta, como a seção 11.3 mostrou para a ridge, e o resíduo de cada observação é $y_i - \bar y - \beta_1\tilde x_{i1} - \beta_2\tilde x_{i2}$. A função `rss_em` faz essa conta para um par $(\beta_1, \beta_2)$:
 
@@ -340,15 +418,29 @@ r = y_z - y_z.mean()             # a resposta centrada
 def rss_em(beta):
     """O RSS de um par (β₁, β₂)."""
     return float(((r - Z_padr @ beta) ** 2).sum())
+
+
+print("RSS em β̂:", numero_br(rss_em(beta_mq)))
 ```
+
+A malha percorre 200 valores de $\beta_1$ e 200 de $\beta_2$, e guarda o RSS de cada par numa matriz com uma linha por $\beta_2$:
 
 ```{python}
 #| label: rss-malha
-#| include: false
 b1s = np.linspace(-1.6, 1.6, 200)
 b2s = np.linspace(-1.6, 2.8, 200)
-rss = np.array([[rss_em((b1, b2)) for b1 in b1s] for b2 in b2s])
+rss = np.zeros((len(b2s), len(b1s)))
+for i, b2 in enumerate(b2s):
+    for j, b1 in enumerate(b1s):
+        rss[i, j] = rss_em((b1, b2))
+print("linhas (β₂):", rss.shape[0])
+print("colunas (β₁):", rss.shape[1])
 ```
+
+::: {.funcao}
+- **`np.linspace(a, b, k)`**: `k` números igualmente espaçados de `a` a `b`; aqui, os 200 valores de cada coeficiente.
+- **`np.zeros((linhas, colunas))`**: uma matriz de zeros do tamanho dado, que o laço preenche.
+:::
 
 Cada curva de nível do RSS é uma elipse centrada em $\hat\beta$, e todos os pontos dela têm o mesmo RSS. Quanto mais longe de $\hat\beta$, maior o RSS. A solução com orçamento é o ponto da região com o menor RSS: a primeira elipse que, crescendo a partir de $\hat\beta$, encosta na região.
 
@@ -358,12 +450,15 @@ Antes da figura, um palpite: a elipse que cresce a partir de $\hat\beta$ encosta
 #| label: fig-geometria
 #| fig-cap: 'Curvas de nível do RSS (azul) e regiões de orçamento (cinza) do lasso, à esquerda, e da ridge, à direita, com duas colunas padronizadas. O "x" cinza é $\hat\beta$, a solução de mínimos quadrados. A região do lasso é o losango $|\beta_1| + |\beta_2| \le 1{,}374$; a da ridge é o disco $\beta_1^2 + \beta_2^2 \le 1{,}374^2$, de raio 1,374. O ponto laranja é a solução de cada método, onde a curva de nível mais externa desenhada encosta na região.'
 #| fig-alt: "Dois painéis lado a lado, intitulados lasso e ridge, com os eixos beta 1, de −1,6 a 1,6, e beta 2, de −1,6 a 3,2. À esquerda, um losango cinza inteiro, com contorno cinza, com bicos nos eixos a 1,37 da origem, e elipses azuis inclinadas centradas no x cinza rotulado beta chapéu, em cerca de (0,81; 2,43). A elipse mais externa encosta no losango exatamente no bico de cima, sobre o eixo vertical, onde está o ponto laranja da solução do lasso. À direita, um disco cinza inteiro de raio 1,37 com elipses do mesmo tipo; a mais externa encosta no disco fora dos eixos, em cerca de (0,71; 1,18), onde está o ponto laranja da solução da ridge."
+def com_menos(valor, posicao):
+    return f"{valor:.1f}".replace(".", ",").replace("-", "−")
+
+
 fig, (ax_l, ax_r) = plt.subplots(1, 2, figsize=(5.0, 4.4), sharey=True)
 angulos = np.linspace(0, 2 * np.pi, 400)
 regiao = {"facecolor": (0.45, 0.45, 0.45, 0.3), "edgecolor": "0.45", "linewidth": 1.2}
 ax_l.fill([s_L, 0, -s_L, 0], [0, s_L, 0, -s_L], **regiao)
 ax_r.fill(raio * np.cos(angulos), raio * np.sin(angulos), **regiao)
-com_menos = lambda valor, _: f"{valor:.1f}".replace(".", ",").replace("-", "−")
 for ax, modelo, nome in [(ax_l, lasso_z, "lasso"), (ax_r, ridge_z, "ridge")]:
     beta = modelo[-1].coef_
     minimo, no_ponto = rss_em(beta_mq), rss_em(beta)
@@ -390,7 +485,6 @@ plt.show()
 O losango tem bicos, e os bicos estão sobre os eixos. A elipse que cresce a partir de $\hat\beta$ encosta no losango justamente no bico de cima, onde $\beta_1 = 0$: é o zero de $\beta_1$ na tabela das três soluções. O disco não tem bicos, e a elipse encosta nele num ponto fora dos eixos, com os dois coeficientes diferentes de zero.
 
 ::: {.funcao}
-- **`np.linspace(a, b, k)`**: `k` números igualmente espaçados de `a` a `b`; aqui, os 400 ângulos que desenham o disco.
 - **`ax.fill(xs, ys, color, alpha)`**: pinta o polígono de vértices `(xs, ys)`; o losango tem quatro vértices, e o disco é um polígono de 400 lados.
 - **`np.cos(arr)`** e **`np.sin(arr)`**: o cosseno e o seno de cada ângulo, em radianos; $(r\cos\theta, r\sin\theta)$ percorre o círculo de raio $r$.
 - **`ax.contour(b1s, b2s, rss, levels, colors)`**: as curvas de nível de `rss` sobre a malha, uma para cada valor de `levels`; `colors` fixa a cor de todas.
@@ -415,7 +509,7 @@ A tabela das três soluções mostra ainda o risco do zero. O $y$ deste exemplo 
 
 ## Lasso ou ridge?
 
-Qual dos dois prevê melhor? O simulador da seção 11.3, com $n = 50$ observações, $p = 45$ preditores, ruído de desvio $\sigma = 2$ e 200 réplicas do ruído sobre uma matriz de treino fixa, serve para comparar os dois em dois casos extremos. No cenário **denso**, os 45 coeficientes verdadeiros são sorteados da normal padrão, e todos os preditores importam. No **esparso**, só dois importam, com coeficientes 3 e −3, e os outros 43 valem zero. A função `decompoe` faz a conta da seção 11.3, com médias sobre os 2.000 pontos de teste, e devolve os dois termos separados, o viés² e a variância, junto com o número médio de coeficientes diferentes de zero e o número de colunas que ficam zeradas em algumas réplicas e não em outras; `mse_esperado` soma os dois termos e $\sigma^2$.
+Qual dos dois prevê melhor? O simulador da seção 11.3, com $n = 50$ observações, $p = 45$ preditores, ruído de desvio $\sigma = 2$ e 200 réplicas do ruído sobre uma matriz de treino fixa, serve para comparar os dois em dois casos extremos. No cenário **denso**, os 45 coeficientes verdadeiros são sorteados da normal padrão, e todos os preditores importam. No **esparso**, só dois importam, com coeficientes 3 e −3, e os outros 43 valem zero. A função `decompoe` faz a conta da seção 11.3, com médias sobre os 2.000 pontos de teste, e devolve os dois termos separados, o viés² e a variância, junto com o número médio de coeficientes diferentes de zero; `mse_esperado` soma os dois termos e $\sigma^2$.
 
 ```{python}
 #| label: simulador
@@ -430,7 +524,7 @@ beta_esparso[[0, 1]] = [3, -3]                     # só dois importam
 
 
 def decompoe(beta, modelo):
-    """Viés², variância, não nulos em média e colunas que oscilam."""
+    """Viés², variância e número médio de coeficientes não nulos."""
     f_treino, f_teste = X_sim @ beta, X_teste @ beta
     previsoes, nao_zero = [], []
     for ruido in ruidos:
@@ -440,20 +534,21 @@ def decompoe(beta, modelo):
     previsoes, nao_zero = np.array(previsoes), np.array(nao_zero)
     vies2 = ((previsoes.mean(axis=0) - f_teste) ** 2).mean()
     variancia = previsoes.var(axis=0).mean()
-    # colunas zeradas em algumas réplicas e não em outras
-    oscilam = int((nao_zero.any(axis=0) & ~nao_zero.all(axis=0)).sum())
-    return float(vies2), float(variancia), float(nao_zero.sum(axis=1).mean()), oscilam
+    return {"viés²": float(vies2), "variância": float(variancia),
+            "não nulos": float(nao_zero.sum(axis=1).mean())}
 
 
 def mse_esperado(beta, modelo):
     """MSE de teste esperado: viés² + variância + σ²."""
-    vies2, variancia = decompoe(beta, modelo)[:2]
-    return vies2 + variancia + sigma**2
+    partes = decompoe(beta, modelo)
+    return partes["viés²"] + partes["variância"] + sigma**2
+
+
+print("coeficientes do cenário esparso diferentes de zero:", np.count_nonzero(beta_esparso))
 ```
 
 ::: {.funcao}
-- **`np.zeros(k)`**: um array de `k` zeros; aqui, os 45 coeficientes do cenário esparso antes de os dois primeiros receberem 3 e −3.
-- **`arr.any(axis=0)`** e **`arr.all(axis=0)`**: para cada coluna de uma matriz de `True`/`False`, se algum ou se todos os valores são `True`; `&` é o "e" elemento a elemento, e `~` troca `True` por `False`.
+- **`np.count_nonzero(arr)`**: quantos elementos de `arr` são diferentes de zero.
 :::
 
 Cada método percorre a sua grade de 31 valores de $\lambda$ em cada cenário: a da ridge vai de $10^{-2}$ a $10^{4}$, e a do lasso, de $10^{-1}$ a $10^{3}$. A tabela guarda o menor MSE de teste esperado de cada método em cada cenário. São $2 \times 2 \times 31 \times 200 = 24.800$ ajustes.
@@ -466,26 +561,19 @@ lams_ridge = np.logspace(-2, 4, 31)
 lams_lasso = np.logspace(-1, 3, 31)
 linhas, melhor_lam, curvas = {}, {}, {}
 for cenario, beta in [("denso", beta_denso), ("esparso", beta_esparso)]:
-    curva_ridge = pd.Series(
-        [mse_esperado(beta, ridge(lam)) for lam in lams_ridge], index=lams_ridge
-    )
-    curva_lasso = pd.Series(
-        [mse_esperado(beta, lasso(lam, n_sim)) for lam in lams_lasso],
-        index=lams_lasso,
-    )
+    curva_ridge = pd.Series(index=lams_ridge, dtype=float)
+    for lam in lams_ridge:
+        curva_ridge[lam] = mse_esperado(beta, ridge(lam))
+    curva_lasso = pd.Series(index=lams_lasso, dtype=float)
+    for lam in lams_lasso:
+        curva_lasso[lam] = mse_esperado(beta, lasso(lam, n_sim))
     linhas[cenario] = {"ridge": curva_ridge.min(), "lasso": curva_lasso.min()}
     melhor_lam[cenario] = {"ridge": curva_ridge.idxmin(),
                            "lasso": curva_lasso.idxmin()}
     curvas[cenario] = {"ridge": curva_ridge, "lasso": curva_lasso}
 tabela = pd.DataFrame(linhas).T
 tabela.index.name = "cenário"
-print("ridge ganha no denso:",
-      bool(tabela.loc["denso", "ridge"] < tabela.loc["denso", "lasso"]))
-print("lasso ganha no esparso:",
-      bool(tabela.loc["esparso", "lasso"] < tabela.loc["esparso", "ridge"]))
-tabela.style.set_uuid("contra").set_table_attributes('style="width: auto"').format(
-    decimal=",", precision=2
-)
+tabela.style.format(decimal=",", precision=2)
 ```
 
 No cenário denso, a ridge chega a 14,52 e o lasso, a 19,29. No esparso, a ordem se inverte: o lasso chega a 4,96, 0,96 acima do piso $\sigma^2 = 4$ (4,96 − 4), e a ridge fica em 10,67. Neste simulador, nenhum dos dois ganha nos dois cenários: qual prevê melhor depende de quantas colunas importam de fato. A figura mostra as curvas inteiras, de onde saem esses mínimos.
@@ -512,7 +600,7 @@ fig.tight_layout()
 plt.show()
 ```
 
-Para ver de onde vem cada vitória, o chunk abaixo separa o MSE de cada método, no $\lambda$ do mínimo, em viés² e variância, conta quantos coeficientes ficam diferentes de zero, em média nas 200 réplicas, e quantas colunas o lasso zera em algumas réplicas e não em outras:
+Para ver de onde vem cada vitória, a célula abaixo separa o MSE de cada método, no $\lambda$ do mínimo, em viés² e variância, e conta quantos coeficientes ficam diferentes de zero, em média nas 200 réplicas:
 
 ```{python}
 #| label: mecanismo
@@ -520,24 +608,24 @@ linhas = []
 for cenario, beta in [("denso", beta_denso), ("esparso", beta_esparso)]:
     for metodo in ["ridge", "lasso"]:
         lam = melhor_lam[cenario][metodo]
-        modelo = ridge(lam) if metodo == "ridge" else lasso(lam, n_sim)
-        linhas.append((cenario, metodo, lam, *decompoe(beta, modelo)))
-decomposicao = pd.DataFrame(
-    linhas,
-    columns=["cenário", "método", "λ", "viés²", "variância",
-             "não nulos", "oscilam"],
-).set_index(["cenário", "método"])
-print("colunas que o lasso zera só às vezes:")
-for cenario in ["denso", "esparso"]:
-    print(f"  {cenario}:", decomposicao.loc[(cenario, "lasso"), "oscilam"])
-decomposicao.drop(columns="oscilam").style.set_uuid("mecanismo").set_table_attributes(
-    'style="width: auto"'
-).format(decimal=",", thousands=".", precision=2)
+        if metodo == "ridge":
+            modelo = ridge(lam)
+        else:
+            modelo = lasso(lam, n_sim)
+        linha = {"cenário": cenario, "método": metodo, "λ": lam}
+        linha.update(decompoe(beta, modelo))
+        linhas.append(linha)
+decomposicao = pd.DataFrame(linhas).set_index(["cenário", "método"])
+decomposicao.style.format(decimal=",", thousands=".", precision=2)
 ```
 
-No denso, o lasso perde pela variância. O viés² dos dois é parecido, 5,34 na ridge e 5,12 no lasso, e a variância do lasso, 10,17, é quase o dobro da da ridge, 5,18 (2 × 5,18 = 10,36). O lasso fica, em média, com 37,67 dos 45 coeficientes, e os que ele zera importavam. Quais são zerados muda de uma réplica para outra, e 43 das 45 colunas saem do modelo em algumas réplicas e ficam em outras. Cada troca de colunas muda as previsões, e é uma das fontes dessa variância.
+No denso, o lasso perde pela variância. O viés² dos dois é parecido, 5,34 na ridge e 5,12 no lasso, e a variância do lasso, 10,17, é quase o dobro da da ridge, 5,18 (2 × 5,18 = 10,36).
 
-No esparso, a ridge perde pelo viés². Ela mantém os 45 coeficientes, e o $\lambda$ que contém os 43 inúteis encolhe também os dois que importam: o viés² dela é 4,74, contra 0,40 do lasso. O lasso zera, em média, 45 − 9,24 = 35,76 dos 45 coeficientes, e ganha também na variância, 0,57 contra 1,92. Mesmo assim, ele guarda em média 9,24 colunas, mais que as 2 que importam; com o $\lambda$ do menor MSE, algumas das inúteis ficam no modelo.
+O lasso fica, em média, com 37,67 dos 45 coeficientes, e neste cenário todos os 45 importam: cada coluna zerada é efeito verdadeiro jogado fora.
+
+No esparso, a ridge perde pelo viés². Ela mantém os 45 coeficientes, e o $\lambda$ que segura os 43 inúteis encolhe também os dois que importam: o viés² dela é 4,74, contra 0,40 do lasso.
+
+O lasso zera, em média, 45 − 9,24 = 35,76 dos 45 coeficientes, e ganha também na variância, 0,57 contra 1,92. Mesmo assim, ele guarda em média 9,24 colunas, mais que as 2 que importam; com o $\lambda$ do menor MSE, algumas das inúteis ficam no modelo.
 
 Como ponto de partida, e não como regra: se a suspeita é que poucos preditores carregam quase todo o efeito, o lasso é o candidato natural, e ainda entrega um modelo mais fácil de ler; se muitos preditores contribuem um pouco cada, a ridge tende a prever melhor. Com colunas que quase se repetem, como `limite` e `pontuacao`, o lasso tende a ficar com uma só, e qual delas depende de detalhes da amostra.
 

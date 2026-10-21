@@ -10,25 +10,31 @@ A ridge e o lasso produzem um modelo para cada valor de $\lambda$. Com $\lambda$
 #| label: setup
 #| include: false
 import matplotlib.pyplot as plt
-import numpy as np
-import pandas as pd
-from matplotlib.lines import Line2D
-from sklearn.linear_model import Lasso, LinearRegression, Ridge
-from sklearn.model_selection import GridSearchCV, KFold, cross_val_score
-from sklearn.pipeline import make_pipeline
-from sklearn.preprocessing import StandardScaler
 
 plt.style.use("estilo-figuras.mplstyle")
+```
+
+As colunas de `Credit` são as da seção 11.1, com as categóricas trocadas por indicadoras. A função `numero_br` só escreve os números com vírgula decimal e ponto de milhar:
+
+```{python}
+#| label: dados
+import numpy as np
+import pandas as pd
 
 credit = pd.read_csv("dados/Credit.csv")
 X = pd.get_dummies(credit.drop(columns="saldo"), drop_first=True, dtype=float)
 y = credit["saldo"]
 n = len(X)
 
-numero_br = lambda valor, casas=2: (
-    f"{valor:,.{casas}f}".replace(",", "_").replace(".", ",").replace("_", ".")
-    .replace("-", "−")
-)
+
+def numero_br(valor, casas=2):
+    texto = f"{valor:,.{casas}f}"
+    texto = texto.replace(",", "_").replace(".", ",").replace("_", ".")
+    return texto.replace("-", "−")
+
+
+print("clientes:", n)
+print("colunas:", X.shape[1])
 ```
 
 ## Uma grade e a validação cruzada
@@ -42,13 +48,49 @@ A resposta é a do capítulo 10: estimar o erro de teste com validação cruzada
 
 O último passo existe porque a validação cruzada serviu só para escolher $\lambda$. Os modelos dos grupos treinam com nove décimos das linhas cada; o modelo que vai ser usado aprende com todas.
 
-A grade precisa ir de um $\lambda$ que quase não encolhe a um que encolhe muito, e em escala logarítmica, porque o efeito de $\lambda$ muda quando ele é multiplicado por 10, não quando se soma 1 a ele. Em `Credit`, a grade da ridge tem 51 valores, de $10^{-3}$ a $10^{2}$, e a validação cruzada usa os 10 grupos da seção 11.2, com a mesma semente. O `GridSearchCV` faz os quatro passos de uma vez. O `StandardScaler` vai dentro do `Pipeline` para que, em cada grupo, a padronização seja ajustada só com as linhas de treino; padronizar `X` antes da busca deixaria as linhas de validação entrarem na escala, o vazamento da seção 10.6. Para comparar, entra também o erro de validação cruzada dos mínimos quadrados, com os mesmos grupos.
+O passo 2, para um $\lambda$ só, é a validação cruzada do capítulo 10. Com $\lambda = 1$ e os 10 grupos da seção 11.2, com a mesma semente, o primeiro grupo:
+
+```{python}
+#| label: um-lambda-um-grupo
+from sklearn.linear_model import Ridge
+from sklearn.model_selection import KFold
+from sklearn.pipeline import make_pipeline
+from sklearn.preprocessing import StandardScaler
+
+grupos = KFold(10, shuffle=True, random_state=11)
+divisoes = list(grupos.split(X))
+treino, val = divisoes[0]
+
+modelo = make_pipeline(StandardScaler(), Ridge(alpha=1))
+modelo.fit(X.iloc[treino], y.iloc[treino])
+previsao = modelo.predict(X.iloc[val])
+mse_grupo_1 = ((y.iloc[val] - previsao) ** 2).mean()
+print("grupo 1, MSE de validação com λ = 1:", numero_br(mse_grupo_1))
+```
+
+Os dez grupos, cada um com o seu ajuste, e a média dos dez erros:
+
+```{python}
+#| label: um-lambda
+erros_lam_1 = []
+for treino, val in grupos.split(X):
+    modelo = make_pipeline(StandardScaler(), Ridge(alpha=1))
+    modelo.fit(X.iloc[treino], y.iloc[treino])
+    previsao = modelo.predict(X.iloc[val])
+    erros_lam_1.append(((y.iloc[val] - previsao) ** 2).mean())
+cv_lam_1 = np.mean(erros_lam_1)
+print("erro de validação cruzada com λ = 1:", numero_br(cv_lam_1))
+```
+
+A grade precisa ir de um $\lambda$ que quase não encolhe a um que encolhe muito, e em escala logarítmica, porque o efeito de $\lambda$ muda quando ele é multiplicado por 10, não quando se soma 1 a ele. Em `Credit`, a grade da ridge tem 51 valores, de $10^{-3}$ a $10^{2}$, com os mesmos grupos. O `GridSearchCV` faz os quatro passos de uma vez: a conta acima, para cada $\lambda$ da grade, a escolha do menor erro e o reajuste. O `StandardScaler` vai dentro do `Pipeline` para que, em cada grupo, a padronização seja ajustada só com as linhas de treino; padronizar `X` antes da busca deixaria as linhas de validação entrarem na escala, o vazamento da seção 10.6. Para comparar, entra também o erro de validação cruzada dos mínimos quadrados, com os mesmos grupos.
 
 Antes da saída, um palpite: quanto você espera que a ridge, com o $\lambda$ escolhido, baixe o erro de validação cruzada dos mínimos quadrados? 10%? 1%?
 
 ```{python}
 #| label: grid-ridge
-grupos = KFold(10, shuffle=True, random_state=11)
+from sklearn.linear_model import LinearRegression
+from sklearn.model_selection import GridSearchCV, cross_val_score
+
 lams_ridge = np.logspace(-3, 2, 51)
 busca_ridge = GridSearchCV(
     make_pipeline(StandardScaler(), Ridge()),
@@ -60,33 +102,66 @@ busca_ridge.fit(X, y)
 cv_ridge = pd.Series(
     -busca_ridge.cv_results_["mean_test_score"], index=lams_ridge
 )
+pd.DataFrame(
+    {"à mão": [numero_br(cv_lam_1)],
+     "GridSearchCV": [numero_br(cv_ridge.iloc[30])]},
+    index=["erro com λ = 1"],
+)
+```
+
+::: {.funcao}
+- **`GridSearchCV(estimador, grade, cv, scoring)`**: o erro de validação cruzada do `estimador` em cada valor da `grade`, com os grupos de `cv`. A grade é um dicionário `{"passo__parametro": valores}`.
+- **`busca.cv_results_`**: as pontuações da busca; em `"mean_test_score"`, a média nos 10 grupos, com o sinal trocado (seção 11.1).
+:::
+
+O $\lambda = 1$ é o 31.º ponto da grade, e a tabela mostra o mesmo erro à mão e no `GridSearchCV`. O resumo da busca, ao lado do erro de validação cruzada dos mínimos quadrados:
+
+```{python}
+#| label: resumo-ridge
 lam_ridge = float(busca_ridge.best_params_["ridge__alpha"])
 cv_mq = -cross_val_score(
-    LinearRegression(), X, y, cv=grupos,
-    scoring="neg_mean_squared_error",
+    LinearRegression(), X, y, cv=grupos, scoring="neg_mean_squared_error"
 ).mean()
+pd.DataFrame(
+    {"λ": [numero_br(lam_ridge, 3), "100", "0"],
+     "erro de validação cruzada": [numero_br(cv_ridge.min()),
+                                   numero_br(cv_ridge.iloc[-1]),
+                                   numero_br(cv_mq)]},
+    index=["ridge, menor erro", "ridge, fim da grade", "mínimos quadrados"],
+)
+```
+
+::: {.funcao}
+- **`busca.best_params_`**: o valor da grade de melhor pontuação.
+- **`cross_val_score(estimador, X, y, cv, scoring)`**: a pontuação em cada grupo de `cv`, sem busca nem reajuste; o `.mean()` tira a média.
+:::
+
+Quantos $\lambda$ da grade ficam perto do menor erro, a menos de 1% dele?
+
+```{python}
+#| label: perto-do-minimo
 perto = cv_ridge[cv_ridge <= 1.01 * cv_ridge.min()]
 trecho = cv_ridge.loc[perto.index.min():perto.index.max()]
-print(f"{X.shape[0]} linhas, {X.shape[1]} colunas")
-print("λ escolhido:", numero_br(lam_ridge, 3))
-print("erro de validação cruzada:", numero_br(cv_ridge.min()))
-print("mínimos quadrados:", numero_br(cv_mq))
-print("λ a 1% do mínimo:", len(perto), "de", len(lams_ridge))
-print("  de", numero_br(perto.index.min(), 3),
-      "a", numero_br(perto.index.max(), 3))
-print("  sem buracos:", len(trecho) == len(perto))
-print("erro em λ = 100:", numero_br(cv_ridge.iloc[-1]))
+print("λ a 1% do menor erro:", len(perto), "de", len(lams_ridge))
+print("o menor deles:", numero_br(perto.index.min(), 3))
+print("o maior deles:", numero_br(perto.index.max(), 3))
+print("λ da grade entre esses dois:", len(trecho))
 ```
+
+A figura mostra a curva inteira:
 
 ```{python}
 #| label: fig-cv-ridge
 #| fig-cap: 'A ridge em `Credit`. Em cima, em cinza, o erro de validação cruzada em 10 grupos contra $\lambda$, em escala logarítmica; embaixo, os coeficientes padronizados ajustados com as 400 linhas, na mesma grade. A linha tracejada marca o $\lambda$ de menor erro de validação cruzada.'
 #| fig-alt: "Dois painéis empilhados com lambda de 0,001 a 100 em escala log no eixo horizontal comum. No de cima, a curva cinza do erro de validação cruzada fica praticamente plana, a menos de 1% do mínimo de 10.101,15, de 0,001 até 3,162, e sobe depois até 27.900,52 em lambda 100. No de baixo, os coeficientes: à esquerda, limite em laranja, pontuacao em verde e estudante_sim em roxo são positivos e renda em azul é negativa; para a direita, limite desce, pontuacao sobe, os dois se aproximam, estudante_sim desce devagar e renda sobe na direção de zero. Uma linha vertical tracejada em lambda 0,316 atravessa os dois painéis, na parte plana da curva de cima; nela, os coeficientes já estão um pouco afastados dos valores da esquerda: limite desceu um pouco e pontuacao subiu um pouco."
-caminho_ridge = pd.DataFrame(
-    [make_pipeline(StandardScaler(), Ridge(alpha=lam))
-     .fit(X, y)[-1].coef_ for lam in lams_ridge],
-    index=lams_ridge, columns=X.columns,
-)
+import matplotlib.pyplot as plt
+from matplotlib.lines import Line2D
+
+caminho_ridge = pd.DataFrame(index=lams_ridge, columns=X.columns, dtype=float)
+for lam in lams_ridge:
+    modelo = make_pipeline(StandardScaler(), Ridge(alpha=lam))
+    modelo.fit(X, y)
+    caminho_ridge.loc[lam] = modelo[-1].coef_
 destaque = {
     "renda": "C0", "limite": "C1",
     "pontuacao": "C2", "estudante_sim": "C3",
@@ -120,14 +195,7 @@ fig.legend(entradas, rotulos, loc="outside lower center", ncols=3,
 plt.show()
 ```
 
-::: {.funcao}
-- **`GridSearchCV(estimador, grade, cv, scoring)`**: o erro de validação cruzada do `estimador` em cada valor da `grade`, com os grupos de `cv`. A grade é um dicionário `{"passo__parametro": valores}`.
-- **`busca.cv_results_`**: as pontuações da busca; em `"mean_test_score"`, a média nos 10 grupos, com o sinal trocado (seção 11.1).
-- **`busca.best_params_`**: o valor da grade de melhor pontuação.
-- **`fig.legend(..., loc="outside lower center")`**: a legenda da figura inteira, embaixo e fora dos painéis.
-:::
-
-O menor erro de validação cruzada está no ponto da grade $\lambda = 0{,}316$, um encolhimento pequeno. O erro nele é 10.101,15 e o dos mínimos quadrados, 10.108,53; a ridge fica só 7,38 abaixo (10.108,53 − 10.101,15), menos de 0,1% (7,38 ÷ 10.108,53 ≈ 0,0007). O vale é raso, e 36 dos 51 valores da grade, todos os de 0,001 a 3,162, ficam a menos de 1% do erro mínimo. Na figura, é a parte plana da curva de cima; a linha tracejada cai nela, e ali os coeficientes, embaixo, já se afastaram um pouco dos da ponta esquerda.
+O menor erro de validação cruzada está no ponto da grade $\lambda = 0{,}316$, um encolhimento pequeno. O erro nele é 10.101,15 e o dos mínimos quadrados, 10.108,53; a ridge fica só 7,38 abaixo (10.108,53 − 10.101,15), menos de 0,1% (7,38 ÷ 10.108,53 ≈ 0,0007). O vale é raso, e 36 dos 51 valores da grade ficam a menos de 1% do erro mínimo; como a grade tem 36 pontos de 0,001 a 3,162, são todos os desse trecho. Na figura, é a parte plana da curva de cima; a linha tracejada cai nela, e ali os coeficientes, embaixo, já se afastaram um pouco dos da ponta esquerda.
 
 O 10.101,15 é um pouco otimista como estimativa do erro da ridge escolhida. Os mesmos grupos mediram o erro de 51 candidatos, e o menor de 51 números medidos com ruído tende a ficar abaixo do erro verdadeiro do modelo que o produziu. Nestes dados, com 400 clientes e 11 colunas, usar os mínimos quadrados daria um erro estimado quase igual.
 
@@ -135,29 +203,31 @@ O quarto passo do procedimento, o reajuste com as 400 linhas, fica guardado em `
 
 ```{python}
 #| label: refit
-ridge_final = make_pipeline(
-    StandardScaler(), Ridge(alpha=lam_ridge)
-).fit(X, y)
+ridge_final = make_pipeline(StandardScaler(), Ridge(alpha=lam_ridge))
+ridge_final.fit(X, y)
 melhor = busca_ridge.best_estimator_
-print("reajuste = ajuste com tudo:",
-      bool(np.allclose(melhor[-1].coef_, ridge_final[-1].coef_)))
-mq_padr = make_pipeline(StandardScaler(), LinearRegression()).fit(X, y)
-mudanca = pd.Series(
-    ridge_final[-1].coef_ - mq_padr[-1].coef_, index=X.columns
-)
+mq_padr = make_pipeline(StandardScaler(), LinearRegression())
+mq_padr.fit(X, y)
+
+mudanca = pd.Series(ridge_final[-1].coef_ - mq_padr[-1].coef_, index=X.columns)
 print("maiores mudanças nos coeficientes:")
 for coluna in mudanca.abs().nlargest(2).index:
     print(f"  {coluna}: {numero_br(mudanca[coluna])}")
 dif = np.abs(ridge_final.predict(X) - mq_padr.predict(X))
 print("maior diferença nas previsões:", numero_br(dif.max()))
 print("desvio padrão de saldo:", numero_br(y.std()))
+pd.DataFrame({
+    "best_estimator_": melhor[-1].coef_,
+    "ajuste com tudo": ridge_final[-1].coef_,
+    "mínimos quadrados": mq_padr[-1].coef_,
+}, index=X.columns).style.format(decimal=",", precision=2)
 ```
 
 ::: {.funcao}
 - **`busca.best_estimator_`**: o `Pipeline` reajustado com todas as linhas e o valor escolhido; é o modelo que se usa para prever. O reajuste é o padrão do `GridSearchCV` (`refit=True`).
-- **`np.allclose(a, b)`**: `True` se os dois arrays são iguais posição a posição, a menos do arredondamento de ponto flutuante.
-- **`cross_val_score(estimador, X, y, cv, scoring)`**, usado no chunk `grid-ridge` para os mínimos quadrados: a pontuação em cada grupo de `cv`, sem busca nem reajuste; o `.mean()` tira a média.
 :::
+
+As duas primeiras colunas da tabela são iguais: o `best_estimator_` é a ridge com o $\lambda$ escolhido, ajustada com as 400 linhas.
 
 Os coeficientes mudaram. Em relação aos mínimos quadrados, `limite` perdeu 36,22 e `pontuacao` ganhou 35,22, em coeficientes padronizados. As duas colunas quase se repetem, como a seção 11.3 mediu, e o peso passou de uma para a outra sem mexer muito nas previsões. Nas 400 linhas, a maior diferença entre as previsões da ridge e as dos mínimos quadrados é de 7,06 dólares, contra um desvio padrão de 459,76 no `saldo`.
 
@@ -165,29 +235,10 @@ Os coeficientes mudaram. Em relação aos mínimos quadrados, `limite` perdeu 36
 
 O mesmo procedimento vale para o lasso, com a conversão da seção 11.4, `alpha` $= \lambda/(2n)$, e a grade na escala do ajuste com as 400 linhas. Ela vai de $\lambda = 1$ a $\lambda = 10^{5}$, com 51 valores. A busca mede também o erro em $\lambda = 10.000$, o valor em que, na seção 11.4, o lasso ficou com seis colunas.
 
-Quando vários $\lambda$ dão erros parecidos, cabe também a regra do um desvio da seção 11.2. Aqui o modelo mais simples é o de **maior** $\lambda$, e a regra fica com o maior $\lambda$ cujo erro não passa do teto: o menor erro mais a margem $s/\sqrt{10}$, com $s$ o desvio padrão dos erros dos 10 grupos no $\lambda$ de menor erro, o mesmo desvio da seção 11.2. A função abaixo calcula o teto a partir dos erros de cada grupo.
-
-```{python}
-#| label: regra-do-um-desvio
-def por_grupo(busca):
-    """Erro de cada grupo (linhas) em cada λ (colunas)."""
-    res = busca.cv_results_
-    return -np.array(
-        [res[f"split{g}_test_score"] for g in range(10)]
-    )
-
-
-def regra_do_um_desvio(busca, lams):
-    """O maior λ da grade cujo erro não passa do teto, e o teto."""
-    erros = por_grupo(busca)
-    cv = erros.mean(axis=0)
-    i = np.argmin(cv)
-    teto = cv[i] + erros[:, i].std(ddof=1) / np.sqrt(10)
-    return float(lams[cv <= teto].max()), teto
-```
-
 ```{python}
 #| label: grid-lasso-credit
+from sklearn.linear_model import Lasso
+
 lams_lasso = np.logspace(0, 5, 51)
 lasso = Lasso(max_iter=100_000, tol=1e-8)
 busca_lasso = GridSearchCV(
@@ -200,30 +251,97 @@ busca_lasso.fit(X, y)
 cv_lasso = pd.Series(
     -busca_lasso.cv_results_["mean_test_score"], index=lams_lasso
 )
-abaixo_de_1 = [
-    -cross_val_score(
-        make_pipeline(StandardScaler(),
-                      Lasso(alpha=lam / (2 * n), max_iter=100_000,
-                            tol=1e-8)),
-        X, y, cv=grupos, scoring="neg_mean_squared_error",
-    ).mean()
-    for lam in np.logspace(-3, 0, 7)
-]
-lam_regra, teto = regra_do_um_desvio(busca_lasso, lams_lasso)
-print("erro só sobe com λ:", bool(np.all(np.diff(cv_lasso) > 0)))
-print("de λ = 0,001 a 1, só sobe:",
-      bool(np.all(np.diff(abaixo_de_1) > 0)))
+variacao = cv_lasso.diff().dropna()   # de cada λ da grade para o seguinte
+print("passos da grade em que o erro sobe:", int((variacao > 0).sum()))
+print("passos da grade em que o erro cai:", int((variacao < 0).sum()))
+print("λ de menor erro:", numero_br(cv_lasso.idxmin(), 0))
 print("erro em λ = 1:", numero_br(cv_lasso.iloc[0]))
 print("erro em λ = 10.000:", numero_br(cv_lasso.loc[1e4]))
+```
+
+Nos 50 passos da grade, de cada $\lambda$ para o seguinte, o erro sobe em todos, e o menor fica na ponta esquerda, $\lambda = 1$, com 10.108,55.
+
+Um mínimo na borda da grade costuma pedir uma grade mais longa, porque o melhor $\lambda$ pode estar do lado de fora. A célula abaixo mede o erro em sete valores de $\lambda$ entre 0,001 e 1:
+
+```{python}
+#| label: abaixo-de-1
+abaixo_de_1 = []
+for lam in np.logspace(-3, 0, 7):
+    modelo = make_pipeline(
+        StandardScaler(),
+        Lasso(alpha=lam / (2 * n), max_iter=100_000, tol=1e-8),
+    )
+    pontos = cross_val_score(modelo, X, y, cv=grupos,
+                             scoring="neg_mean_squared_error")
+    abaixo_de_1.append(-pontos.mean())
+print("de λ = 0,001 a 1, menor erro:", numero_br(min(abaixo_de_1)))
+print("de λ = 0,001 a 1, maior erro:", numero_br(max(abaixo_de_1)))
+```
+
+Do lado de fora, o ganho é desprezível: de $\lambda = 0{,}001$ a 1, o erro fica entre 10.108,53 e 10.108,55. À esquerda, o lasso encolhe cada vez menos, até virar os mínimos quadrados em $\lambda = 0$, cujo erro, 10.108,53, fica só 0,02 abaixo do de $\lambda = 1$ (10.108,55 − 10.108,53). No $\lambda$ de menor erro, o lasso quase não encolhe em `Credit`.
+
+Quando vários $\lambda$ dão erros parecidos, cabe também a regra do um desvio da seção 11.2. Aqui o modelo mais simples é o de **maior** $\lambda$, e a regra fica com o maior $\lambda$ cujo erro não passa do teto: o menor erro mais a margem $s/\sqrt{10}$, com $s$ o desvio padrão dos erros dos 10 grupos no $\lambda$ de menor erro, o mesmo desvio da seção 11.2. Na busca do lasso, passo a passo: os erros de cada grupo em cada $\lambda$, a média, o $\lambda$ de menor média, o desvio dos 10 grupos nele, o teto e o maior $\lambda$ que fica abaixo dele.
+
+```{python}
+#| label: regra-a-mao
+erros_grupos = []
+for g in range(10):
+    erros_grupos.append(-busca_lasso.cv_results_[f"split{g}_test_score"])
+erros_grupos = np.array(erros_grupos)    # 10 linhas (grupos) × 51 colunas (λ)
+
+media = erros_grupos.mean(axis=0)        # o erro de validação cruzada de cada λ
+i_min = np.argmin(media)
+s = erros_grupos[:, i_min].std(ddof=1)   # o desvio dos 10 grupos no λ de menor erro
+teto = media[i_min] + s / np.sqrt(10)
+lam_regra = float(lams_lasso[media <= teto].max())
+
+print("menor erro:", numero_br(media[i_min]))
+print("desvio dos 10 grupos nele:", numero_br(s))
+print("margem, desvio ÷ √10:", numero_br(s / np.sqrt(10)))
 print("teto:", numero_br(teto))
 print("λ pela regra:", numero_br(lam_regra, 0))
 print("erro no λ da regra:", numero_br(cv_lasso.loc[lam_regra]))
 ```
 
+::: {.funcao}
+- **`busca.cv_results_[f"split{g}_test_score"]`**: a pontuação no grupo `g`, de 0 a 9, uma por valor da grade. Empilhadas, formam uma matriz de 10 linhas, uma por grupo, e uma coluna por $\lambda$.
+- **`lams[media <= teto].max()`**: entre os $\lambda$ da grade com erro no teto ou abaixo dele, o maior.
+:::
+
+A mesma conta vai servir para o cenário simulado, mais adiante. A função `regra_do_um_desvio` guarda os passos acima e devolve o $\lambda$ da regra e o teto; na busca do lasso, ela repete a conta à mão:
+
+```{python}
+#| label: regra-do-um-desvio
+def regra_do_um_desvio(busca, lams):
+    """O maior λ da grade cujo erro não passa do teto, e o teto."""
+    erros = []
+    for g in range(10):
+        erros.append(-busca.cv_results_[f"split{g}_test_score"])
+    erros = np.array(erros)
+    cv = erros.mean(axis=0)
+    i = np.argmin(cv)
+    teto = cv[i] + erros[:, i].std(ddof=1) / np.sqrt(10)
+    return float(lams[cv <= teto].max()), teto
+
+
+lam_funcao, teto_funcao = regra_do_um_desvio(busca_lasso, lams_lasso)
+pd.DataFrame(
+    {"à mão": [numero_br(teto), numero_br(lam_regra, 0)],
+     "regra_do_um_desvio": [numero_br(teto_funcao), numero_br(lam_funcao, 0)]},
+    index=["teto", "λ pela regra"],
+)
+```
+
+Na figura, a curva do erro, o teto e o $\lambda$ da regra:
+
 ```{python}
 #| label: fig-cv-lasso-credit
 #| fig-cap: 'O lasso em `Credit`: o erro de validação cruzada em 10 grupos contra $\lambda$, em escala logarítmica, de 1 a 100 mil. A linha horizontal tracejada é o erro dos mínimos quadrados, com os mesmos grupos, e a traço-ponto, o teto da regra do um desvio; a vertical pontilhada marca o $\lambda$ que a regra escolhe. O eixo vertical vai só até 13 mil, e a curva sai pelo topo do painel depois de 10.000.'
 #| fig-alt: "Um painel com lambda de 1 a 100 mil em escala log no eixo horizontal e o erro de validação cruzada em mil dólares ao quadrado no vertical, de 9,8 a 13. A curva azul começa em 10.108,55 em lambda 1, praticamente em cima da linha horizontal tracejada dos mínimos quadrados, em 10.108,53, e só sobe com lambda: passa por 10.550,11 na linha vertical pontilhada, em lambda 5.012, logo abaixo da linha horizontal traço-ponto do teto, em 10.769,22, cruza o teto logo depois, passa por 12.067,70 em lambda 10.000 e sai pelo topo do painel."
+def com_virgula(valor, posicao):
+    return f"{valor:.1f}".replace(".", ",")
+
+
 fig, ax = plt.subplots(figsize=(4.8, 3.8), layout="constrained")
 ax.plot(lams_lasso, cv_lasso / 1000, color="C0", linewidth=2)
 ax.axhline(cv_mq / 1000, color="0.45", linestyle="--", linewidth=1.2)
@@ -232,8 +350,7 @@ ax.axvline(lam_regra, color="0.45", linestyle=":", linewidth=2)
 ax.set_xscale("log")
 ax.set_xlim(lams_lasso.min(), lams_lasso.max())
 ax.set_ylim(9.8, 13)
-ax.yaxis.set_major_formatter(
-    lambda valor, _: f"{valor:.1f}".replace(".", ","))
+ax.yaxis.set_major_formatter(com_virgula)
 ax.set_xlabel("λ")
 ax.set_ylabel("erro de validação\ncruzada (mil dólares²)")
 entradas = [
@@ -249,13 +366,6 @@ fig.legend(entradas, rotulos, loc="outside lower center", ncols=2,
 plt.show()
 ```
 
-::: {.funcao}
-- **`busca.cv_results_[f"split{g}_test_score"]`**: a pontuação no grupo `g`, de 0 a 9, uma por valor da grade. Empilhadas, formam uma matriz de 10 linhas, uma por grupo, e uma coluna por $\lambda$.
-- **`lams[cv <= teto].max()`**: entre os $\lambda$ da grade com erro no teto ou abaixo dele, o maior.
-:::
-
-Na grade inteira, o erro só sobe quando $\lambda$ cresce, e o menor fica na ponta esquerda, $\lambda = 1$, com 10.108,55. Um mínimo na borda da grade costuma pedir uma grade mais longa, porque o melhor $\lambda$ pode estar do lado de fora. Aqui, do lado de fora, o ganho é desprezível: de $\lambda = 0{,}001$ a 1 o erro também só sobe, e à esquerda o lasso encolhe cada vez menos, até virar os mínimos quadrados em $\lambda = 0$, cujo erro, 10.108,53, fica só 0,02 abaixo (10.108,55 − 10.108,53). No $\lambda$ de menor erro, o lasso também quase não encolhe em `Credit`.
-
 O teto fica em 10.769,22, e a regra escolhe o ponto da grade $\lambda = 5.012$, com erro de validação cruzada 10.550,11, abaixo dele. Com $\lambda = 10.000$, o erro chega a 12.067,70. Quais colunas o lasso guarda com o $\lambda$ da regra, e são as mesmas que ele mantém com $\lambda = 10.000$?
 
 ```{python}
@@ -263,22 +373,28 @@ O teto fica em 10.769,22, e a regra escolhe o ponto da grade $\lambda = 5.012$, 
 lasso_regra = make_pipeline(
     StandardScaler(),
     Lasso(alpha=lam_regra / (2 * n), max_iter=100_000, tol=1e-8),
-).fit(X, y)
+)
+lasso_regra.fit(X, y)
 colunas_regra = X.columns[lasso_regra[-1].coef_ != 0]
 lasso_10mil = make_pipeline(
     StandardScaler(),
     Lasso(alpha=1e4 / (2 * n), max_iter=100_000, tol=1e-8),
-).fit(X, y)
+)
+lasso_10mil.fit(X, y)
 colunas_10mil = X.columns[lasso_10mil[-1].coef_ != 0]
 print("colunas pela regra:", len(colunas_regra))
-for coluna in colunas_regra:
-    print(" ", coluna)
-print("mesmas de λ = 10.000:", set(colunas_10mil) == set(colunas_regra))
+print("  ", ", ".join(colunas_regra))
+print("colunas com λ = 10.000:", len(colunas_10mil))
+print("  ", ", ".join(colunas_10mil))
 ```
 
 O modelo da regra fica com seis colunas, `renda`, `limite`, `pontuacao`, `cartoes`, `idade` e `estudante_sim`, as mesmas de $\lambda = 10.000$. Mesmo assim, o erro de validação cruzada é bem diferente, 12.067,70 com $\lambda = 10.000$ contra 10.550,11 com $\lambda = 5.012$. O $\lambda$ decide quais colunas ficam e quanto os coeficientes delas são encolhidos, e com $\lambda = 10.000$ o encolhimento custa 1.517,59 de erro a mais (12.067,70 − 10.550,11).
 
-Entre os dois métodos, em `Credit`, a ridge tem o menor erro de validação cruzada, 10.101,15, contra 10.108,55 do melhor lasso. A diferença, 7,40 (10.108,55 − 10.101,15), é do tamanho da que separa a ridge dos mínimos quadrados, e as duas são pequenas diante da margem da regra do um desvio, 660,67 (10.769,22 − 10.108,55), que dá a escala da incerteza do próprio erro estimado. Nenhum dos dois ganha de fato dos mínimos quadrados. O que o lasso oferece aqui é outra coisa: pela regra do um desvio, um modelo com seis das 11 colunas, a um erro 448,96 maior que o da ridge (10.550,11 − 10.101,15), cerca de 4% (448,96 ÷ 10.101,15 ≈ 0,044).
+Entre os dois métodos, em `Credit`, a ridge tem o menor erro de validação cruzada, 10.101,15, contra 10.108,55 do melhor lasso. A diferença, 7,40 (10.108,55 − 10.101,15), é do tamanho da que separa a ridge dos mínimos quadrados.
+
+As duas diferenças são pequenas diante da margem da regra do um desvio, 660,67 (10.769,22 − 10.108,55), que dá a escala da incerteza do próprio erro estimado. Nenhum dos dois ganha de fato dos mínimos quadrados.
+
+O que o lasso oferece aqui é outra coisa: pela regra do um desvio, um modelo com seis das 11 colunas, a um erro 448,96 maior que o da ridge (10.550,11 − 10.101,15), cerca de 4% (448,96 ÷ 10.101,15 ≈ 0,044).
 
 ## O lasso no cenário esparso
 
@@ -315,19 +431,30 @@ busca_sim.fit(X_sim, y_sim)
 cv_sim = -busca_sim.cv_results_["mean_test_score"]
 lam_min = float(lams_sim[np.argmin(cv_sim)])
 coef_min = busca_sim.best_estimator_[-1].coef_
-ordem = np.argsort(-np.abs(coef_min))   # do maior |coef| ao menor
+
+
+def maiores(coef, quantos=3):
+    """Os maiores coeficientes em valor absoluto, com o tipo do preditor."""
+    ordem = np.argsort(-np.abs(coef))   # do maior |coef| ao menor
+    linhas = []
+    for j in ordem[:quantos]:
+        if j < 2:
+            tipo = "sinal"
+        else:
+            tipo = "ruído"
+        linhas.append({"preditor": j + 1, "tipo": tipo, "coeficiente": numero_br(coef[j])})
+    return pd.DataFrame(linhas).set_index("preditor")
+
+
 print("λ de menor erro:", numero_br(lam_min))
 print("erro de validação cruzada:", numero_br(cv_sim.min()))
 print("não nulos:", int((coef_min != 0).sum()))
-print("preditores de sinal:", numero_br(coef_min[0]),
-      "e", numero_br(coef_min[1]))
-print("os dois maiores são os de sinal:",
-      set(ordem[:2].tolist()) == {0, 1})
 print("maior ruído, |coef|:", numero_br(np.abs(coef_min[2:]).max()))
+maiores(coef_min)
 ```
 
 ::: {.funcao}
-**`np.argsort(arr)`**: as posições que põem `arr` em ordem crescente; com `-np.abs(coef)`, a ordem vai do maior coeficiente em valor absoluto ao menor, e `ordem[:2]` são as posições dos dois maiores.
+**`np.argsort(arr)`**: as posições que põem `arr` em ordem crescente; com `-np.abs(coef)`, a ordem vai do maior coeficiente em valor absoluto ao menor, e `ordem[:quantos]` são as posições dos maiores, três se nada for dito. Os preditores 1 e 2 são os de sinal.
 :::
 
 Com o menor erro de validação cruzada, 2,76, no ponto da grade $\lambda = 17{,}78$, o lasso fica com 13 coeficientes não nulos. Os dois maiores em valor absoluto são os dos preditores de sinal, 3,48 e −2,08. Os outros 11 (13 − 2) são preditores de ruído que o lasso não descartou, com coeficientes que não passam de 0,64 em valor absoluto.
@@ -354,22 +481,18 @@ A regra do um desvio, com a mesma função de `Credit`:
 ```{python}
 #| label: um-desvio-lasso
 lam_regra_sim, teto_sim = regra_do_um_desvio(busca_sim, lams_sim)
-coef_regra = make_pipeline(
+lasso_regra_sim = make_pipeline(
     StandardScaler(),
-    Lasso(alpha=lam_regra_sim / (2 * n_sim),
-          max_iter=100_000, tol=1e-8),
-).fit(X_sim, y_sim)[-1].coef_
-ordem_regra = np.argsort(-np.abs(coef_regra))
+    Lasso(alpha=lam_regra_sim / (2 * n_sim), max_iter=100_000, tol=1e-8),
+)
+lasso_regra_sim.fit(X_sim, y_sim)
+coef_regra = lasso_regra_sim[-1].coef_
 print("teto:", numero_br(teto_sim))
 print("λ pela regra:", numero_br(lam_regra_sim))
-print("erro no λ da regra:",
-      numero_br(cv_sim[lams_sim == lam_regra_sim][0]))
+print("erro no λ da regra:", numero_br(cv_sim[lams_sim == lam_regra_sim][0]))
 print("não nulos:", int((coef_regra != 0).sum()))
-print("preditores de sinal:", numero_br(coef_regra[0]),
-      "e", numero_br(coef_regra[1]))
-print("os dois maiores são os de sinal:",
-      set(ordem_regra[:2].tolist()) == {0, 1})
 print("maior ruído, |coef|:", numero_br(np.abs(coef_regra[2:]).max()))
+maiores(coef_regra)
 ```
 
 A regra vai até $\lambda = 35{,}48$. O erro de validação cruzada sobe de 2,76 para 3,20, abaixo do teto de 3,27, e em troca sobram 6 coeficientes não nulos, os dois de sinal, 3,18 e −2,00, ainda os maiores, e quatro preditores de ruído (6 − 2), o maior deles com 0,38 em valor absoluto. Como ficam os mínimos quadrados, com os 45 preditores?
@@ -378,50 +501,60 @@ A regra vai até $\lambda = 35{,}48$. O erro de validação cruzada sobe de 2,76
 #| label: minimos-quadrados-sim
 mq_sim = make_pipeline(StandardScaler(), LinearRegression())
 cv_mq_sim = -cross_val_score(
-    mq_sim, X_sim, y_sim, cv=grupos,
-    scoring="neg_mean_squared_error",
+    mq_sim, X_sim, y_sim, cv=grupos, scoring="neg_mean_squared_error"
 ).mean()
-interpola = all(
-    np.abs(mq_sim.fit(X_sim[tr], y_sim[tr]).predict(X_sim[tr])
-           - y_sim[tr]).max() < 1e-6
-    for tr, _ in grupos.split(X_sim)
-)
-coef_mq_sim = mq_sim.fit(X_sim, y_sim)[-1].coef_
-ordem_mq = np.argsort(-np.abs(coef_mq_sim)).tolist()
 print("erro de validação cruzada:", numero_br(cv_mq_sim))
-print("passa pelo treino em cada grupo:", interpola)
-print("preditores de sinal:", numero_br(coef_mq_sim[0]),
-      "e", numero_br(coef_mq_sim[1]))
-print("posição do 1.º de sinal:", ordem_mq.index(0) + 1)
-print("posição do 2.º de sinal:", ordem_mq.index(1) + 1)
-print("maior ruído, |coef|:",
-      numero_br(np.abs(coef_mq_sim[2:]).max()))
+
+linhas = []
+for g, (treino, _) in enumerate(grupos.split(X_sim), start=1):
+    mq_sim.fit(X_sim[treino], y_sim[treino])
+    residuo = np.abs(mq_sim.predict(X_sim[treino]) - y_sim[treino]).max()
+    linhas.append({"grupo": g, "linhas de treino": len(treino),
+                   "maior |resíduo de treino| abaixo de um milionésimo":
+                       residuo < 1e-6})
+pd.DataFrame(linhas).set_index("grupo")
 ```
 
-No erro de validação cruzada, são 603,84 nos mínimos quadrados contra 2,76 do lasso no menor erro, cerca de 219 vezes menor (603,84 ÷ 2,76 ≈ 219). Em cada grupo, o treino tem 45 das 50 linhas, e os mínimos quadrados têm 46 coeficientes a ajustar, um para cada preditor e o intercepto, mais coeficientes que linhas de treino. Em todos os 10 grupos, o ajuste passa pelos pontos de treino, ruído incluído, e as previsões nas 5 linhas de fora saem muito erradas.
+No erro de validação cruzada, são 603,84 nos mínimos quadrados contra 2,76 do lasso no menor erro, cerca de 219 vezes menor (603,84 ÷ 2,76 ≈ 219). Em cada grupo, o treino tem 45 das 50 linhas, e os mínimos quadrados têm 46 coeficientes a ajustar, um para cada preditor e o intercepto, mais coeficientes que linhas de treino. Nos 10 grupos da tabela, o ajuste passa pelos pontos de treino, ruído incluído, e as previsões nas 5 linhas de fora saem muito erradas.
 
-Nos coeficientes ajustados com as 50 linhas, o 1.º preditor de sinal tem o maior em valor absoluto, 4,30, mas o 2.º, −1,53, fica só em 4.º lugar, com dois preditores de ruído à frente dele, a maior com 1,99. Olhando só o tamanho dos coeficientes, os mínimos quadrados misturam o 2.º preditor de sinal com o ruído.
+Com as 50 linhas, os quatro maiores coeficientes dos mínimos quadrados em valor absoluto:
+
+```{python}
+#| label: mq-coeficientes
+mq_sim.fit(X_sim, y_sim)
+coef_mq_sim = mq_sim[-1].coef_
+maiores(coef_mq_sim, quantos=4)
+```
+
+O 1.º preditor de sinal tem o maior coeficiente em valor absoluto, 4,30, mas o 2.º, −1,53, fica só em 4.º lugar, com dois preditores de ruído à frente dele, o maior com 1,99. Olhando só o tamanho dos coeficientes, os mínimos quadrados misturam o 2.º preditor de sinal com o ruído.
 
 A figura mostra o erro de validação cruzada e os coeficientes do lasso ajustados com as 50 linhas, contra a razão $\lVert\hat\beta^L_\lambda\rVert_1/\lVert\hat\beta\rVert_1$ da seção 11.4, e não contra $\lambda$. A razão vai de 0, no modelo nulo, a 1, nos mínimos quadrados; num eixo de $\lambda$ em escala logarítmica, os mínimos quadrados, com $\lambda = 0$, não teriam lugar. Os coeficientes usam uma grade mais longa, de $10^{3}$ a $10^{-2}$, com 101 valores, que chega perto dos mínimos quadrados, e nela se vê em que $\lambda$ cada coluna sai do zero.
 
 ```{python}
 #| label: caminho-lasso-sim
 lams_caminho = np.logspace(3, -2, 101)        # do maior λ ao menor
-caminho_sim = np.array([
-    make_pipeline(
+caminho_sim = []
+for lam in lams_caminho:
+    modelo = make_pipeline(
         StandardScaler(),
         Lasso(alpha=lam / (2 * n_sim), max_iter=100_000, tol=1e-8),
-    ).fit(X_sim, y_sim)[-1].coef_
-    for lam in lams_caminho
-])
-razao_sim = (np.abs(caminho_sim).sum(axis=1)
-             / np.abs(coef_mq_sim).sum())
-razao_de = lambda lam: razao_sim[np.argmin(np.abs(lams_caminho - lam))]
+    )
+    modelo.fit(X_sim, y_sim)
+    caminho_sim.append(modelo[-1].coef_)
+caminho_sim = np.array(caminho_sim)
+razao_sim = np.abs(caminho_sim).sum(axis=1) / np.abs(coef_mq_sim).sum()
+
+
+def razao_de(lam):
+    """A razão das normas no ponto do caminho mais perto de λ."""
+    return razao_sim[np.argmin(np.abs(lams_caminho - lam))]
+
+
 # λ de entrada de cada coluna: o maior λ com coeficiente não nulo
-entrada = np.where(caminho_sim != 0, lams_caminho[:, None], 0)
-primeiras = np.argsort(-entrada.max(axis=0))[:2]
-print("os de sinal entram primeiro:",
-      set(primeiras.tolist()) == {0, 1})
+entrada = np.where(caminho_sim != 0, lams_caminho[:, None], 0).max(axis=0)
+print("λ de entrada, 1.º de sinal:", numero_br(entrada[0]))
+print("λ de entrada, 2.º de sinal:", numero_br(entrada[1]))
+print("λ de entrada, o primeiro do ruído:", numero_br(entrada[2:].max()))
 print("razão no menor λ:", numero_br(razao_sim[-1], 3))
 print("razão no menor erro:", numero_br(razao_de(lam_min)))
 print("razão pela regra:", numero_br(razao_de(lam_regra_sim)))
@@ -436,12 +569,20 @@ coef_todos = np.vstack([caminho_sim, coef_mq_sim])
 - **`np.vstack([matriz, linha])`**: empilha as linhas, uma matriz embaixo da outra; aqui, os coeficientes dos mínimos quadrados como a última linha do caminho.
 :::
 
-No menor $\lambda$ do caminho, a razão já é 0,994, e os mínimos quadrados entram na figura em 1. O menor erro de validação cruzada fica na razão 0,25, e a regra do um desvio, em 0,19. A curva do erro para antes, na razão 0,62, a de $\lambda = 1$, o fim da grade da validação cruzada.
+Os dois preditores de sinal entram em $\lambda$ maiores que o primeiro de ruído, isto é, antes dele no caminho, que começa no maior $\lambda$. No menor $\lambda$ do caminho, a razão já é 0,994, e os mínimos quadrados entram na figura em 1. O menor erro de validação cruzada fica na razão 0,25, e a regra do um desvio, em 0,19. A curva do erro para antes, na razão 0,62, a de $\lambda = 1$, o fim da grade da validação cruzada.
 
 ```{python}
 #| label: fig-cv-lasso
 #| fig-cap: 'O lasso no cenário esparso ($n = 50$, $p = 45$). Em cima, o erro de validação cruzada em 10 grupos, que termina na razão 0,62; embaixo, os coeficientes padronizados ajustados com as 50 linhas, com os mínimos quadrados em 1.'
 #| fig-alt: "Dois painéis empilhados com a razão das normas l1, de 0 a 1, no eixo horizontal comum. No de cima, a curva cinza do erro de validação cruzada cai depressa perto de zero até um mínimo de 2,76 na razão 0,25 e volta a subir devagar à direita, até o fim da grade, na razão 0,62. No de baixo, a curva azul do 1.º preditor de sinal sobe de zero logo no começo até 3,48 na linha tracejada e 4,30 em 1; a laranja do 2.º desce de zero até −2,08 na linha tracejada e termina em −1,53 em 1. As curvas cinza do ruído saem do zero depois das duas coloridas e se abrem para a direita; em 1, a maior em valor absoluto chega a 1,99. Uma linha pontilhada na razão 0,19 marca a regra do um desvio e uma tracejada na razão 0,25 marca o menor erro."
+def com_virgula(valor, posicao):
+    return f"{valor:.1f}".replace(".", ",")
+
+
+def com_menos(valor, posicao):
+    return f"{valor:.0f}".replace("-", "−")
+
+
 fig, (ax_cv, ax_coef) = plt.subplots(
     2, 1, figsize=(4.8, 5.8), sharex=True, layout="constrained"
 )
@@ -461,10 +602,8 @@ for ax in (ax_cv, ax_coef):
     ax.axvline(razao_de(lam_regra_sim), color="0.45", linestyle=":",
                linewidth=2)
 ax_coef.set_xlim(0, 1.02)
-ax_coef.xaxis.set_major_formatter(
-    lambda valor, _: f"{valor:.1f}".replace(".", ","))
-ax_coef.yaxis.set_major_formatter(
-    lambda valor, _: f"{valor:.0f}".replace("-", "−"))
+ax_coef.xaxis.set_major_formatter(com_virgula)
+ax_coef.yaxis.set_major_formatter(com_menos)
 ax_coef.set_xlabel(
     r"$\|\hat{\beta}^{\mathrm{L}}_{\lambda}\|_1 \;/\; \|\hat{\beta}\|_1$",
     fontsize=12)
