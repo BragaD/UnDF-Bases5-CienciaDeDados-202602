@@ -86,7 +86,48 @@ print("padronizando antes:",
     round(mse_antes, 2))
 ```
 
-O jeito certo ajusta o `StandardScaler` só nos carros de treino de cada divisão. Antes do laço, a primeira das dez divisões por extenso:
+::: {.funcao}
+**`escala.fit_transform(X)`**: o `StandardScaler` aprende a média e o desvio padrão de cada coluna de `X` e devolve `X` padronizado com esses números, num passo só.
+:::
+
+O jeito certo põe o `StandardScaler` dentro do `Pipeline` e entrega o `Pipeline` inteiro ao `cross_val_score`. A tabela põe os três erros lado a lado:
+
+```{python}
+#| label: certo-auto
+from sklearn.pipeline \
+    import make_pipeline
+
+modelo = make_pipeline(
+    StandardScaler(), knn)
+pont = cross_val_score(
+    modelo, X, y, cv=dez_grupos,
+    scoring=neg_mse)
+mse_dentro = float(
+    -pont.mean())
+
+pd.DataFrame(
+    {"MSE do 10-fold": [
+        mse_sem, mse_antes,
+        mse_dentro]},
+    index=["sem padronizar",
+        "antes (errado)",
+        "dentro (Pipeline, certo)"],
+).round(2)
+```
+
+A diferença entre os dois códigos é onde o `fit` do `StandardScaler` acontece. No errado, ele acontece uma vez, em todos os carros, e cada grupo de validação é padronizado com uma média e um desvio que ele mesmo ajudou a calcular. No certo, o `Pipeline` entregue inteiro ao `cross_val_score` é reajustado em cada grupo de treino, com o `StandardScaler` junto: ele aprende a média e o desvio só dos carros de treino, e o grupo de validação é padronizado com esses números, como um carro novo seria. A leitura para casa, no fim da seção, faz esse laço por extenso, divisão a divisão.
+
+Padronizar importa: o MSE cai de 17,43, sem padronizar, para 15,06, com o `StandardScaler` dentro, uma diferença de 2,37. **Onde** padronizar importa pouco neste caso: 14,93 no jeito errado contra 15,06 no certo, uma diferença de 0,13. Há etapas em que o vazamento não é pequeno: a leitura para casa mostra uma em que ele decide tudo.
+
+::: {.conceito}
+Toda etapa que aprende do dado (padronizar, preencher valores faltantes, escolher colunas, reduzir a dimensão) entra no `Pipeline`, e o `Pipeline` inteiro entra no `cross_val_score`. Assim cada etapa é reajustada em cada grupo de treino, e o grupo de validação chega ao modelo como uma observação nova chegaria.
+:::
+
+## Leitura para casa
+
+### Padronizar dentro, divisão a divisão
+
+O jeito certo ajusta o `StandardScaler` só nos carros de treino de cada divisão, e o `Pipeline` faz isso sozinho. Por extenso, a primeira das dez divisões:
 
 ```{python}
 #| label: primeira-divisao
@@ -176,35 +217,18 @@ print("padronizando dentro:",
     round(mse_a_mao, 2))
 ```
 
-O `Pipeline` faz o mesmo laço: entregue inteiro ao `cross_val_score`, ele é reajustado em cada grupo de treino, com o `StandardScaler` junto.
+O `Pipeline` dentro do `cross_val_score` faz o mesmo laço, e chega ao mesmo número:
 
 ```{python}
-#| label: certo-auto
-from sklearn.pipeline \
-    import make_pipeline
-
-modelo = make_pipeline(
-    StandardScaler(), knn)
-pont = cross_val_score(
-    modelo, X, y, cv=dez_grupos,
-    scoring=neg_mse)
-mse_dentro = float(
-    -pont.mean())
-
+#| label: laco-contra-pipeline
 pd.DataFrame(
-    {"MSE do 10-fold": [
-        mse_sem, mse_antes,
-        mse_a_mao, mse_dentro]},
-    index=["sem padronizar",
-        "antes (errado)",
-        "dentro (laço)",
-        "dentro (Pipeline)"],
+    {"laço": [mse_a_mao],
+        "Pipeline": [mse_dentro]},
+    index=["MSE do 10-fold"],
 ).round(2)
 ```
 
-A diferença entre os dois códigos é onde o `fit` do `StandardScaler` acontece. No errado, ele acontece uma vez, em todos os carros, e cada grupo de validação é padronizado com uma média e um desvio que ele mesmo ajudou a calcular. No certo, o `fit` acontece em cada grupo de treino: o `StandardScaler` aprende a média e o desvio só dos carros de treino, e o grupo de validação é padronizado com esses números, como um carro novo seria. As linhas `dentro (laço)` e `dentro (Pipeline)` dão o mesmo número: o `Pipeline` dentro do `cross_val_score` faz o laço por extenso.
-
-Padronizar importa: o MSE cai de 17,43, sem padronizar, para 15,06, com o `StandardScaler` dentro, uma diferença de 2,37. **Onde** padronizar importa pouco neste caso: 14,93 no jeito errado contra 15,06 no certo, uma diferença de 0,13. O motivo aparece nos números que o `StandardScaler` aprende. As médias da primeira divisão já estão na tabela de cima; os desvios padrão, nos mesmos carros:
+Por que padronizar antes dá quase o mesmo erro que padronizar dentro? O motivo aparece nos números que o `StandardScaler` aprende. As médias da primeira divisão já estão na tabela de cima; os desvios padrão, nos mesmos carros:
 
 ```{python}
 #| label: desvios-treino
@@ -217,7 +241,7 @@ pd.DataFrame({
 
 No primeiro grupo, tirar os 40 carros de validação move a média de `peso` de 2.977,58 para 2.952,62, e a padronização quase não muda. O vazamento existe, e é pequeno porque uma média de centenas de carros mal sente 40 deles. Há etapas em que ele não é pequeno.
 
-## Quando o vazamento decide tudo
+### Quando o vazamento decide tudo
 
 Um conjunto de dados fabricado para não ter nada a aprender: 50 observações, 25 de cada classe, e 5.000 colunas de ruído sorteadas de uma normal padrão, sem relação nenhuma com a classe. A classe de uma observação nova não depende de nenhuma das 5.000 colunas, e um classificador qualquer acerta como quem joga uma moeda justa: a taxa de erro de teste é 50%.
 
@@ -310,7 +334,7 @@ Com a seleção feita antes, o 5-fold estima 2% de erro, num problema em que nen
 
 O desenho deste exemplo vem de @hastie2009, seção 7.10.2.
 
-## Trinta conjuntos de ruído
+### Trinta conjuntos de ruído
 
 Um conjunto só pode ter saído por sorte. A mesma comparação, repetida em 30 conjuntos de ruído, cada um com a sua partição em cinco grupos; a tabela dá as taxas de erro em porcentagem, com a seleção antes da validação cruzada (o jeito errado) e dentro dela (o certo):
 
@@ -425,7 +449,3 @@ plt.show()
 Na tabela, o maior erro estimado com a seleção antes, 6%, fica abaixo do menor erro estimado com a seleção dentro, 38%: nos 30 conjuntos, as duas fileiras da figura não se encostam. O jeito errado vai de 0% a 6%, com média de 1,60%; o certo, de 38% a 72%, com média de 55,47%. O certo não acerta 50% em cada conjunto, e nem deveria: com 50 observações e cinco grupos de 10, a estimativa da validação cruzada oscila muito de uma amostra para outra, como a seção 10.4 mediu. Ela fica do lado do acaso, de 38% a 72%, um pouco acima de 50% em média porque os grupos não são estratificados. O errado não fica perto de nada que exista: ele mede o quanto o acaso das 5.000 colunas consegue separar 50 observações, e esse acaso é grande.
 
 Os dois exemplos cometem o mesmo erro, uma etapa que aprende do dado ajustada fora da validação cruzada. O tamanho do estrago depende do quanto a etapa aprende. A padronização aprende uma média e um desvio por coluna, sem olhar a resposta; a seleção de colunas olha a resposta e escolhe, entre 5.000, as que melhor a acompanham naquelas 50 observações.
-
-::: {.conceito}
-Toda etapa que aprende do dado (padronizar, preencher valores faltantes, escolher colunas, reduzir a dimensão) entra no `Pipeline`, e o `Pipeline` inteiro entra no `cross_val_score`. Assim cada etapa é reajustada em cada grupo de treino, e o grupo de validação chega ao modelo como uma observação nova chegaria.
-:::
