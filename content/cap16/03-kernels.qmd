@@ -29,28 +29,23 @@ def nuvens(n):
     X[: n // 2] += 2
     X[n // 2 : 3 * n // 4] -= 2
     i = np.arange(n)
-    y = np.where(i < 3 * n // 4,
-        -1, 1)
+    y = np.where(i < 3 * n // 4, -1, 1)
     return X, y
 
 X, y = nuvens(200)
 X_teste, y_teste = nuvens(10_000)
-print("classe −1:",
-    (y == -1).sum())
+print("classe −1:", (y == -1).sum())
 print("classe 1:", (y == 1).sum())
 ```
 
-Para imprimir os resultados com vírgula decimal:
+A função `numero_br` escreve os números com a pontuação brasileira:
 
 ```{python}
 #| label: numero-br
-numero_br = lambda v, casas=2: (
-    f"{v:,.{casas}f}"
-    .replace(",", "_")
-    .replace(".", ",")
-    .replace("_", ".")
-    .replace("-", "−")
-)
+def numero_br(valor, casas=2):
+    texto = f"{valor:,.{casas}f}"
+    texto = texto.replace(",", "_").replace(".", ",").replace("_", ".")
+    return texto.replace("-", "−")
 ```
 
 O primeiro candidato é o classificador de vetores de suporte da seção 16.2, com `C=1`:
@@ -62,129 +57,104 @@ from sklearn.svm import SVC
 linear = SVC(kernel="linear", C=1)
 linear.fit(X, y)
 prev = linear.predict(X_teste)
-classes_prev, vezes = np.unique(
-    prev, return_counts=True)
-print("classes previstas:",
-    classes_prev)
-print("vezes:", vezes)
-erro = (prev != y_teste).mean()
-print("erro de teste:",
-    numero_br(erro, 4))
-maior = np.abs(linear.coef_).max()
-print("|coef_| abaixo de 0,001:",
-    maior < 1e-3)
-print("intercept_:", numero_br(
-    linear.intercept_[0]))
+print("previsões da classe −1:", numero_br((prev == -1).sum(), 0))
+print("previsões da classe 1:", numero_br((prev == 1).sum(), 0))
+print("erro de teste:", numero_br((prev != y_teste).mean(), 4))
+print("maior |coef_|, com três casas:", numero_br(np.abs(linear.coef_).max(), 3))
+print("intercept_:", numero_br(linear.intercept_[0]))
 ```
 
-::: {.funcao}
-- **`np.unique(v, return_counts=True)`** — os valores distintos de `v`, em ordem, e quantas vezes cada um aparece.
-:::
-
-Os 10.000 pontos de teste recebem a classe $-1$, e o erro de teste, 0,25, é a fração da classe $1$, um quarto dos pontos por construção. Os coeficientes saem quase zero e o intercepto, $-1{,}00$: $f(x)$ fica perto de $-1$ no plano inteiro. Os dados e as regiões desse classificador:
+Os 10.000 pontos de teste recebem a classe $-1$, e o erro de teste, 0,25, é a fração da classe $1$, um quarto dos pontos por construção. Os coeficientes saem zero até a terceira casa, e o intercepto, $-1{,}00$: $f(x)$ fica perto de $-1$ no plano inteiro. Os dados e as regiões desse classificador:
 
 ```{python}
 #| label: fig-nuvens
-#| fig-cap: "Em cima, os 200 pontos de treino: os círculos azuis, da classe $-1$, em duas nuvens, e os triângulos laranja, da classe $1$, entre elas. Embaixo, as regiões do classificador de vetores de suporte com `C=1`: o plano inteiro fica com a cor da classe $-1$."
-#| fig-alt: "Dois gráficos de dispersão empilhados, com eixos X1 e X2 de −5 a 5 e marcas em −4, 0 e 4. Em cima, uma nuvem de círculos azuis em torno de (2; 2), outra em torno de (−2; −2) e triângulos laranja em torno da origem, entre as duas. Embaixo, os mesmos pontos sobre um fundo azul claro uniforme, sem reta nenhuma. A legenda fica embaixo."
+#| fig-cap: "À esquerda, os 200 pontos de treino: os círculos azuis, da classe $-1$, em duas nuvens, e os triângulos laranja, da classe $1$, entre elas. À direita, as regiões do classificador de vetores de suporte com `C=1`: o plano inteiro fica com a cor da classe $-1$."
+#| fig-alt: "Dois gráficos de dispersão lado a lado, com eixos X1 e X2 de −5 a 5 e marcas em −4, 0 e 4. À esquerda, uma nuvem de círculos azuis em torno de (2; 2), outra em torno de (−2; −2) e triângulos laranja em torno da origem, entre as duas. À direita, os mesmos pontos sobre um fundo azul claro uniforme, sem reta nenhuma. A legenda fica embaixo."
 import matplotlib.pyplot as plt
 
 g = np.linspace(-5, 5, 201)
 g1, g2 = np.meshgrid(g, g)
-malha = np.column_stack(
-    [g1.ravel(), g2.ravel()])
+malha = np.column_stack([g1.ravel(), g2.ravel()])
 
 def classes(ax, pts, y):
     a = pts[y == -1]
     b = pts[y == 1]
-    ax.scatter(a[:, 0], a[:, 1],
-        color="C0", s=12,
-        label="classe −1")
-    ax.scatter(b[:, 0], b[:, 1],
-        color="C1", s=16,
-        marker="^",
-        label="classe 1")
+    ax.scatter(a[:, 0], a[:, 1], color="C0", s=12, label="classe −1")
+    ax.scatter(b[:, 0], b[:, 1], color="C1", s=16, marker="^", label="classe 1")
     ax.set_aspect("equal")
     ax.set_xlim(-5, 5)
     ax.set_ylim(-5, 5)
     ax.set_xticks([-4, 0, 4])
     ax.set_yticks([-4, 0, 4])
-    ax.set_ylabel("$X_2$")
+    ax.set_xlabel("$X_1$")
 
-def regioes(ax, modelo,
-        margens=True):
-    z = modelo.decision_function(
-        malha).reshape(g1.shape)
+def regioes(ax, modelo, margens=True):
+    z = modelo.decision_function(malha).reshape(g1.shape)
     lim = np.abs(z).max() + 1
-    ax.contourf(g1, g2, z,
-        levels=[-lim, 0, lim],
-        colors=["C0", "C1"],
-        alpha=0.2)
+    ax.contourf(g1, g2, z, levels=[-lim, 0, lim], colors=["C0", "C1"], alpha=0.2)
     if margens:
-        ax.contour(g1, g2, z,
-            levels=[-1, 0, 1],
-            colors="0.45",
-            linewidths=1.5,
-            linestyles=["--", "-",
-                "--"])
+        ax.contour(g1, g2, z, levels=[-1, 0, 1], colors="0.45", linewidths=1.5,
+                   linestyles=["--", "-", "--"])
 
-fig, eixos = plt.subplots(2, 1,
-    figsize=(3.8, 6.6),
-    sharex=True,
-    layout="constrained")
+fig, eixos = plt.subplots(1, 2, figsize=(7.5, 4.2), sharey=True, layout="constrained")
 classes(eixos[0], X, y)
-regioes(eixos[1], linear,
-    margens=False)
+regioes(eixos[1], linear, margens=False)
 classes(eixos[1], X, y)
-eixos[0].set_title("os dados",
-    fontsize=9)
-eixos[1].set_title(
-    "SVC linear, C = 1",
-    fontsize=9)
-eixos[1].set_xlabel("$X_1$")
-handles, rotulos = (eixos[0]
-    .get_legend_handles_labels())
-fig.legend(handles, rotulos,
-    ncols=2,
-    loc="outside lower center")
+eixos[0].set_title("os dados")
+eixos[1].set_title("SVC linear, C = 1")
+eixos[0].set_ylabel("$X_2$")
+handles, rotulos = eixos[0].get_legend_handles_labels()
+fig.legend(handles, rotulos, ncols=2, loc="outside lower center")
 plt.show()
 ```
 
 ::: {.funcao}
+- **`plt.subplots(1, 2, sharey=True)`** — dois gráficos lado a lado, com o mesmo eixo vertical.
 - **`ax.get_legend_handles_labels()`** — os marcadores e os rótulos que um gráfico poria na legenda; passados a `fig.legend`, aparecem uma vez só para a figura toda.
 :::
 
-No painel de baixo, a cor do fundo é a classe que o classificador daria a cada ponto do plano. Não há fronteira a traçar: $f$ não muda de sinal. Uma reta que separe a nuvem do meio de uma das nuvens de fora deixa a outra nuvem de fora do mesmo lado que a do meio, e o ajuste prefere não separar nada.
+No painel da direita, a cor do fundo é a classe que o classificador daria a cada ponto do plano. Não há fronteira a traçar: $f$ não muda de sinal. Uma reta que separe a nuvem do meio de uma das nuvens de fora deixa a outra nuvem de fora do mesmo lado que a do meio, e o ajuste prefere não separar nada.
 
 Nas figuras seguintes, a leitura é a mesma, e as curvas cinza marcam a fronteira $f(x) = 0$, contínua, e as bordas da margem, $f(x) = \pm 1$, tracejadas.
 
-Na regressão, uma relação curva entre preditor e resposta se ajusta com termos como $X^2$ e $X^3$ ([seção 8.5](../cap08/05-interacao-e-termos-nao-lineares.qmd)). O classificador de vetores de suporte aceita a mesma ideia: em vez de $X_1$ e $X_2$, ele recebe também $X_1^2$, $X_1 X_2$ e $X_2^2$ e procura um hiperplano nesse espaço de 5 colunas. Nele, a fronteira é plana; no plano original, $f(x) = 0$ vira uma equação do segundo grau em $X_1$ e $X_2$, e a curva que ela descreve pode separar a nuvem do meio das outras duas.
+Na regressão, uma relação curva entre preditor e resposta se ajusta com termos como $X^2$ e $X^3$ ([seção 8.5](../cap08/05-interacao-e-termos-nao-lineares.qmd)). O classificador de vetores de suporte aceita a mesma ideia: em vez de $X_1$ e $X_2$, ele recebe também $X_1^2$, $X_1 X_2$ e $X_2^2$ e procura um hiperplano nesse espaço de 5 colunas. Nele, a fronteira é plana; no plano original, $f(x) = 0$ vira uma equação do segundo grau em $X_1$ e $X_2$, e a curva que ela descreve pode separar a nuvem do meio das outras duas. As 5 colunas de um ponto, o ponto 0:
 
 ```{python}
-#| label: ampliado
-from sklearn.pipeline import (
-    make_pipeline)
-from sklearn.preprocessing \
-    import PolynomialFeatures
+#| label: cinco-colunas
+import pandas as pd
+from sklearn.preprocessing import PolynomialFeatures
 
-ampliado = make_pipeline(
-    PolynomialFeatures(2,
-        include_bias=False),
-    SVC(kernel="linear", C=1))
-ampliado.fit(X, y)
-print(ampliado[0]
-    .get_feature_names_out(
-        ["X1", "X2"]))
-p_amp = ampliado.predict(X_teste)
-e_amp = (p_amp != y_teste).mean()
-print("erro de teste:",
-    numero_br(e_amp, 4))
+colunas = PolynomialFeatures(2, include_bias=False)
+X5 = colunas.fit_transform(X)
+print(f"ponto 0: X1 = {numero_br(X[0, 0])}, X2 = {numero_br(X[0, 1])}")
+print("colunas de X:", X.shape[1], "· colunas de X5:", X5.shape[1])
+nomes5 = colunas.get_feature_names_out(["X1", "X2"])
+pd.DataFrame(X5[:1], columns=nomes5, index=["ponto 0"]).style.format(numero_br)
 ```
 
 ::: {.funcao}
-- **`PolynomialFeatures(2, include_bias=False)`**, de `sklearn.preprocessing` — acrescenta às colunas os termos até o grau 2, o primeiro argumento: os quadrados e os produtos dois a dois. `include_bias=False` não cria a coluna de uns, porque o intercepto já é do `SVC`.
-- **`make_pipeline(passo1, passo2)`**, de `sklearn.pipeline` — encadeia os passos: o `fit` e o `predict` passam os dados pelo primeiro e entregam o resultado ao segundo. **`ampliado[0]`** é o primeiro passo.
+- **`PolynomialFeatures(2, include_bias=False)`**, de `sklearn.preprocessing` — acrescenta às colunas os termos até o grau 2, o primeiro argumento: os quadrados e os produtos dois a dois. `include_bias=False` não cria a coluna de uns, porque o intercepto já é do `SVC`. **`.fit_transform(X)`** — aprende quantas colunas há e devolve a tabela ampliada.
 - **`.get_feature_names_out(["X1", "X2"])`** — os nomes das colunas que o passo produz, a partir dos nomes dados às colunas de entrada.
+- **`pd.DataFrame(X5[:1], columns=nomes5, index=[...])`**, do `pandas` — a primeira linha de `X5` numa tabela, com as colunas e a linha rotuladas; **`.style.format(numero_br)`** escreve cada valor com a `numero_br`.
+:::
+
+As duas primeiras colunas repetem $X_1$ e $X_2$; as outras três são os quadrados e o produto, e dá para conferir cada uma com os dois números do ponto. O `Pipeline` faz essa transformação antes do `SVC`, no `fit` e no `predict`:
+
+```{python}
+#| label: ampliado
+from sklearn.pipeline import make_pipeline
+
+ampliado = make_pipeline(
+    PolynomialFeatures(2, include_bias=False), SVC(kernel="linear", C=1)
+)
+ampliado.fit(X, y)
+p_amp = ampliado.predict(X_teste)
+e_amp = (p_amp != y_teste).mean()
+print("erro de teste:", numero_br(e_amp, 4))
+```
+
+::: {.funcao}
+- **`make_pipeline(passo1, passo2)`**, de `sklearn.pipeline` — encadeia os passos: o `fit` e o `predict` passam os dados pelo primeiro e entregam o resultado ao segundo.
 :::
 
 Com as 5 colunas, o erro de teste cai de 0,25 para 0,1035. A fronteira, desenhada no plano original:
@@ -193,15 +163,11 @@ Com as 5 colunas, o erro de teste cai de 0,25 para 0,1035. A fronteira, desenhad
 #| label: fig-ampliado
 #| fig-cap: "O classificador de vetores de suporte com `C=1` nas 5 colunas de grau até 2, desenhado no plano de $X_1$ e $X_2$. A curva cinza contínua é a fronteira $f(x) = 0$, e as tracejadas, as bordas da margem, $f(x) = \\pm 1$."
 #| fig-alt: "Gráfico de dispersão com eixos X1 e X2 de −5 a 5: círculos azuis em duas nuvens, em torno de (2; 2) e de (−2; −2), e triângulos laranja em torno da origem. Duas curvas cinza contínuas, com as tracejadas dos dois lados, delimitam uma faixa laranja clara que cruza o gráfico do canto de cima à esquerda ao de baixo à direita e contém a nuvem do meio; as duas nuvens azuis ficam fora da faixa, uma de cada lado, sobre fundo azul claro. A legenda fica embaixo."
-fig, ax = plt.subplots(
-    figsize=(3.8, 3.9),
-    layout="constrained")
+fig, ax = plt.subplots(figsize=(3.8, 4.2), layout="constrained")
 regioes(ax, ampliado)
 classes(ax, X, y)
-ax.set_xlabel("$X_1$")
-fig.legend(handles, rotulos,
-    ncols=2,
-    loc="outside lower center")
+ax.set_ylabel("$X_2$")
+fig.legend(handles, rotulos, ncols=2, loc="outside lower center")
 plt.show()
 ```
 
@@ -272,177 +238,152 @@ def phi(A):
     x1 = A[:, 0]
     x2 = A[:, 1]
     r = np.sqrt(2)
-    return np.column_stack([
-        np.ones(len(A)), r * x1,
-        r * x2, x1**2,
-        r * x1 * x2, x2**2])
+    return np.column_stack([np.ones(len(A)), r * x1, r * x2, x1**2, r * x1 * x2, x2**2])
 
-print("(1 + <a, b>)² =",
-    (1 + a @ b) ** 2)
+print("(1 + <a, b>)² =", (1 + a @ b) ** 2)
 fa, fb = phi(np.vstack([a, b]))
-print("<φ(a), φ(b)> =",
-    numero_br(fa @ fb, 4))
+print("<φ(a), φ(b)> =", numero_br(fa @ fb, 4))
 K2 = (1 + X @ X.T) ** 2
 F = phi(X)
-print("todos os pares iguais:",
-    np.allclose(K2, F @ F.T))
+dif = np.abs(K2 - F @ F.T).max()
+print("pares de pontos de treino:", numero_br(K2.size, 0))
+print("maior diferença entre os dois, abaixo de um milionésimo:", dif < 1e-6)
 ```
 
 ::: {.funcao}
 - **`np.ones(k)`** — um array com `k` uns: a coluna constante. **`np.sqrt(2)`** — a raiz quadrada, $\sqrt{2}$.
 - **`fa, fb = phi(...)`** — `phi` devolve duas linhas, uma por ponto, e cada uma vai para um nome.
-- **`X.T`** — a transposta: as linhas viram colunas. `X @ X.T` é a matriz dos produtos internos entre cada par de linhas de `X`, 200 por 200.
+- **`X.T`** — a transposta: as linhas viram colunas. `X @ X.T` é a matriz dos produtos internos entre cada par de linhas de `X`, 200 por 200; **`K2.size`** é o número de elementos dela.
 :::
 
-O kernel polinomial de grau 2 dá o mesmo número que o produto interno nessas seis colunas, sem calculá-las. Usar esse kernel equivale a ajustar o classificador de vetores de suporte num espaço com os termos de grau até 2, cada um multiplicado por uma constante fixa, $\sqrt{2}$ ou 1; com grau $d$, os termos vão até o grau $d$.
+Para $a$ e $b$, as duas contas dão 4. Nos 40.000 pares dos pontos de treino, a diferença entre elas fica abaixo de um milionésimo, o que sobra do arredondamento: o kernel polinomial de grau 2 dá o mesmo número que o produto interno nessas seis colunas, sem calculá-las. Usar esse kernel equivale a ajustar o classificador de vetores de suporte num espaço com os termos de grau até 2, cada um multiplicado por uma constante fixa, $\sqrt{2}$ ou 1; com grau $d$, os termos vão até o grau $d$.
 
-As colunas do `PolynomialFeatures` são as mesmas sem essas constantes e sem a coluna de uns. Por isso o kernel dá uma fronteira do mesmo tipo que a da figura acima, mas não a mesma. Em quantos pontos de teste as previsões do kernel de grau 2 e as do `ampliado` diferem?
+As colunas do `PolynomialFeatures` são as mesmas sem essas constantes e sem a coluna de uns. Por isso o kernel dá uma fronteira do mesmo tipo que a da figura acima, mas não a mesma. Os erros de teste dos dois:
 
 ```{python}
 #| label: kernel-contra-ampliado
-poli2 = SVC(kernel="poly",
-    degree=2, gamma=1, coef0=1,
-    C=1).fit(X, y)
+poli2 = SVC(kernel="poly", degree=2, gamma=1, coef0=1, C=1)
+poli2.fit(X, y)
 p_k2 = poli2.predict(X_teste)
-difere = (p_k2 != p_amp).mean()
-print("previsões diferentes:",
-    numero_br(difere, 4))
+pd.DataFrame({
+    "ajuste": ["5 colunas do PolynomialFeatures", "kernel polinomial de grau 2"],
+    "erro de teste": [e_amp, (p_k2 != y_teste).mean()],
+}).style.format({"erro de teste": "{:.4f}"}, decimal=",").hide()
 ```
 
 ::: {.funcao}
 - **`SVC(kernel="poly", degree=2, gamma=1, coef0=1)`** — a máquina de vetores de suporte com o kernel polinomial: o `SVC` multiplica o produto interno por `gamma`, soma `coef0` e eleva a `degree`. Com `gamma=1` e `coef0=1`, é a fórmula do kernel polinomial acima, com $d$ igual a `degree`.
 :::
 
-As previsões diferem numa fração de 0,0048 dos pontos de teste. As constantes $\sqrt{2}$ põem as colunas em escalas diferentes das do `PolynomialFeatures`, e o mesmo `C`, que limita o tamanho dos coeficientes, pesa de um jeito diferente em cada uma; a coluna de uns também ganha um coeficiente limitado pelo `C`, ao contrário do intercepto.
+Os erros, 0,1035 e 0,1045, ficam próximos sem coincidir: as constantes $\sqrt{2}$ põem as colunas em escalas diferentes das do `PolynomialFeatures`, e o mesmo `C`, que limita o tamanho dos coeficientes, pesa de um jeito diferente em cada uma.
 
-Por que não montar as colunas, como no começo da seção? Com o kernel, o ajuste precisa de $K(x_i, x_{i'})$ para cada par de pontos de treino, e esse número depende de $n$, não do grau. As colunas do espaço ampliado dependem de $p$ e do grau. Num conjunto com 16 colunas e 207 linhas:
+Por que não montar as colunas, como no começo da seção? As colunas do espaço ampliado dependem de $p$ e do grau; com o kernel, o ajuste precisa de $K(x_i, x_{i'})$ para cada par de pontos de treino, e cada um custa os $p$ produtos de $\langle x_i, x_{i'} \rangle$, qualquer que seja o grau. Com $p = 16$ preditores:
 
 ```{python}
 #| label: contas
 from math import comb
 
 p = 16
-print("colunas, p = 16:")
-cols = []
-for d in [2, 3, 5, 10]:
-    col = comb(p + d, d) - 1
-    cols.append(col)
-    print(f"  grau {d}:",
-        numero_br(col, 0))
-print("mais colunas que p:",
-    min(cols) > p)
-print("pares de pontos:")
-for n in [207, 2_070, 20_700]:
-    rot = numero_br(n, 0)
-    pares = comb(n, 2)
-    print(f"  n = {rot}:",
-        numero_br(pares, 0))
+for n in [200, 2_000, 20_000]:
+    print(f"pares de pontos com n = {numero_br(n, 0)}:", numero_br(comb(n, 2), 0))
+graus_d = [2, 3, 5, 10]
+pd.DataFrame({
+    "grau d": graus_d,
+    "colunas do espaço ampliado": [comb(p + d, d) - 1 for d in graus_d],
+}).style.format(thousands=".").hide()
 ```
 
 ::: {.funcao}
 - **`comb(n, k)`**, do módulo `math` — de quantas formas se escolhem `k` itens entre `n`, sem importar a ordem: `comb(n, 2)` é o número de pares. `comb(p + d, d) - 1` conta os termos de grau 1 até $d$ em $p$ variáveis, sem o termo constante.
 :::
 
-O critério é o custo de cada par. No espaço do kernel, que tem essas colunas multiplicadas pelas constantes e mais a coluna de uns, o produto interno de um par soma um produto por coluna. O kernel polinomial chega ao mesmo número com a soma dos 16 produtos de $\langle x_i, x_{i'} \rangle$: soma 1 e eleva à potência, qualquer que seja o grau. As colunas vão de 152 no grau 2 a 20.348 no grau 5 e 5.311.734 no grau 10, e já no grau 2 passam dos 16 produtos do kernel.
-
-O número de pares não depende do grau: com 207 linhas, são 21.321. Ele cresce com o quadrado de $n$, e com 20.700 linhas seriam 214.234.650. O kernel compensa quando o grau é alto e $n$ não é enorme. O kernel radial é definido direto como função de dois pontos: não há colunas a montar.
+Na tabela, as colunas passam dos 16 produtos do kernel já no grau 2 e chegam a milhões no grau 10. O número de pares não depende do grau, mas cresce com o quadrado de $n$. O kernel compensa quando o grau é alto e $n$ não é enorme. O kernel radial é definido direto como função de dois pontos: não há colunas a montar.
 
 Num ponto novo $x$, os vetores de suporte distantes de $x$ quase não entram na soma de $f(x)$ com o kernel radial; é a vizinhança de $x$ que decide a classe.
 
-O `SVC` faz essas contas no `fit` e no `predict`; refazer a soma à mão serve só para ver a fórmula funcionando. Um `SVC` com kernel radial e $\gamma = 1$, e $f(x)$ refeito para 50 pontos de teste. A matriz `K` tem uma linha por ponto e uma coluna por vetor de suporte, e o produto `K @ alfa` faz, em cada linha, a soma $\sum_{i \in S} \alpha_i K(x, x_i)$:
+O `SVC` faz essas contas no `fit` e no `predict`; refazer a soma à mão serve só para ver a fórmula funcionando. O código ajusta um `SVC` com kernel radial e $\gamma = 1$ e calcula o kernel entre 50 pontos de teste e os vetores de suporte, numa matriz `K` com uma linha por ponto e uma coluna por vetor de suporte:
 
 ```{python}
 #| label: kernel-radial
-from sklearn.metrics.pairwise \
-    import rbf_kernel
+from sklearn.metrics.pairwise import rbf_kernel
 
-radial = SVC(kernel="rbf",
-    gamma=1, C=1)
+gama_r = 1
+radial = SVC(kernel="rbf", gamma=gama_r, C=1)
 radial.fit(X, y)
 x_novos = X_teste[:50]
 sv = radial.support_vectors_
-K = rbf_kernel(x_novos, sv,
-    gamma=1)
-print("K:", K.shape)
-d2 = ((x_novos[0] - sv[0])
-    ** 2).sum()
-print("K[0, 0] = exp(−d²):",
-    np.isclose(K[0, 0],
-        np.exp(-1 * d2)))
-alfa = radial.dual_coef_[0]
-b0 = radial.intercept_[0]
-f_mao = K @ alfa + b0
-f_svc = radial.decision_function(
-    x_novos)
-print("igual ao SVC:",
-    np.allclose(f_mao, f_svc))
-print("β0 < 0:", b0 < 0)
+K = rbf_kernel(x_novos, sv, gamma=gama_r)
+print("linhas de K, uma por ponto:", K.shape[0])
+print("colunas de K, uma por vetor de suporte:", K.shape[1])
+d2 = ((x_novos[0] - sv[0]) ** 2).sum()
+print("K[0, 0] do rbf_kernel:", numero_br(K[0, 0], 4))
+print("exp(−γ·d²) à mão:", numero_br(np.exp(-gama_r * d2), 4))
 ```
 
 ::: {.funcao}
 - **`SVC(kernel="rbf", gamma=1, C=1)`** — a máquina de vetores de suporte com o kernel radial; `"rbf"` vem de *radial basis function*, e `gamma` é o $\gamma$.
 - **`rbf_kernel(A, B, gamma)`**, de `sklearn.metrics.pairwise` — o kernel radial entre cada linha de `A` e cada linha de `B`, numa matriz com uma linha para cada linha de `A`.
-- **`K.shape`** — o número de linhas e o de colunas do array. É um atributo, e não leva parênteses.
+- **`K.shape`** — o número de linhas, `K.shape[0]`, e o de colunas, `K.shape[1]`, do array. É um atributo, e não leva parênteses.
 :::
 
-A matriz `K` tem 50 linhas e 86 colunas, uma por vetor de suporte, e a soma refeita à mão coincide com o `decision_function`. O mesmo com o kernel polinomial de grau 3:
+A matriz `K` tem 50 linhas e 86 colunas, uma por vetor de suporte, e o primeiro elemento dela é o kernel do primeiro ponto com o primeiro vetor de suporte, refeito à mão. Para o ponto 0, a primeira linha de `K`, cada vetor de suporte entra na soma com o termo $\alpha_i K(x, x_i)$. Os cinco primeiros termos, a soma dos 86 e o $f(x)$:
 
 ```{python}
-#| label: kernel-poli
-from sklearn.metrics.pairwise \
-    import polynomial_kernel
+#| label: soma-um-ponto
+alfa = radial.dual_coef_[0]
+b0 = radial.intercept_[0]
+termos = alfa * K[0]
+cinco = pd.DataFrame({
+    "α_i": alfa[:5],
+    "K(x, x_i)": K[0, :5],
+    "α_i · K(x, x_i)": termos[:5],
+}, index=[f"vetor de suporte {i}" for i in range(5)])
+print("β0, intercept_[0]:", numero_br(b0))
+print("soma dos 86 termos:", numero_br(termos.sum(), 4))
+print("f(x) = β0 + soma:", numero_br(b0 + termos.sum(), 4))
+print("decision_function do ponto 0:", numero_br(radial.decision_function(x_novos[:1])[0], 4))
+def quatro_casas(valor):
+    return numero_br(valor, 4)
 
-poli = SVC(kernel="poly",
-    degree=3, gamma=1, coef0=1,
-    C=1)
-poli.fit(X, y)
-sv_p = poli.support_vectors_
-K_p = polynomial_kernel(x_novos,
-    sv_p, degree=3, gamma=1,
-    coef0=1)
-formula = (
-    1 + x_novos @ sv_p.T) ** 3
-print("K_p = (1 + <x, x_i>)³:",
-    np.allclose(K_p, formula))
-alfa_p = poli.dual_coef_[0]
-f_mao_p = (K_p @ alfa_p
-    + poli.intercept_[0])
-f_svc_p = poli.decision_function(
-    x_novos)
-print("igual ao SVC:",
-    np.allclose(f_mao_p, f_svc_p))
+cinco.style.format(quatro_casas)
 ```
 
 ::: {.funcao}
-- **`polynomial_kernel(A, B, degree, gamma, coef0)`**, de `sklearn.metrics.pairwise` — o kernel polinomial do `SVC` entre cada linha de `A` e cada linha de `B`.
+- **`radial.dual_coef_[0]`** — os $\alpha_i$, um por vetor de suporte, na ordem das colunas de `K`, com o sinal da classe de cada vetor de suporte embutido.
+- **`quatro_casas`** — a `numero_br` com quatro casas, para o `style.format` escrever cada valor da tabela.
+- **`alfa * K[0]`** — multiplica, elemento a elemento, cada $\alpha_i$ pelo kernel do ponto 0 com o mesmo vetor de suporte: os 86 termos da soma.
 :::
 
-As duas máquinas, com os mesmos pontos:
+Os termos de vetores de suporte longe do ponto 0 têm kernel perto de zero e quase não pesam. Somados ao $\beta_0$, eles dão o `decision_function`. Para os 50 pontos de uma vez, o produto `K @ alfa` faz a mesma soma em cada linha de `K`:
+
+```{python}
+#| label: soma-radial
+f_mao = K @ alfa + b0
+f_svc = radial.decision_function(x_novos)
+print("maior diferença nos 50, abaixo de um milionésimo:",
+      np.abs(f_mao - f_svc).max() < 1e-6)
+tres = pd.DataFrame({"f(x) à mão": f_mao[:3], "decision_function": f_svc[:3]},
+                    index=["ponto 0", "ponto 1", "ponto 2"])
+tres.style.format(numero_br)
+```
+
+Nos três primeiros pontos, as duas colunas coincidem, e nos 50 a diferença fica abaixo de um milionésimo: a soma refeita à mão é o `decision_function`. O $\beta_0$ do ajuste é negativo. O kernel radial e o polinomial de grau 3, com `gamma=1` e `coef0=1`, nos mesmos pontos:
 
 ```{python}
 #| label: fig-kernels
-#| fig-cap: "Duas máquinas de vetores de suporte nos 200 pontos de treino, com `C=1`. Em cima, o kernel polinomial de grau 3 com `gamma=1` e `coef0=1`; embaixo, o kernel radial com $\\gamma = 1$. A curva cinza contínua é a fronteira $f(x) = 0$, e as tracejadas, as bordas da margem, $f(x) = \\pm 1$. No título, a taxa de erro nos 10.000 pontos de teste."
-#| fig-alt: "Dois gráficos empilhados com os mesmos pontos: círculos azuis em duas nuvens, em torno de (2; 2) e de (−2; −2), e triângulos laranja em torno da origem. Em cima, a região laranja clara cobre a nuvem do meio e se abre para o canto de cima à esquerda, onde ocupa um retângulo inteiro sem nenhum círculo azul, com um triângulo afastado dos outros; há ainda uma ponta laranja na borda direita. Embaixo, a região laranja é uma mancha arredondada em volta da nuvem do meio, que se estende para a esquerda até um triângulo isolado, cercada pela curva cinza contínua; as tracejadas contornam as duas nuvens azuis, e o resto do fundo é azul claro."
-fig, eixos = plt.subplots(2, 1,
-    figsize=(3.8, 6.6),
-    sharex=True,
-    layout="constrained")
-for ax, m, nome in [
-        (eixos[0], poli,
-            "polinomial, grau 3"),
-        (eixos[1], radial,
-            "radial, γ = 1")]:
+#| fig-cap: "Duas máquinas de vetores de suporte nos 200 pontos de treino, com `C=1`. À esquerda, o kernel polinomial de grau 3 com `gamma=1` e `coef0=1`; à direita, o kernel radial com $\\gamma = 1$. A curva cinza contínua é a fronteira $f(x) = 0$, e as tracejadas, as bordas da margem, $f(x) = \\pm 1$. No título, a taxa de erro nos 10.000 pontos de teste."
+#| fig-alt: "Dois gráficos lado a lado com os mesmos pontos: círculos azuis em duas nuvens, em torno de (2; 2) e de (−2; −2), e triângulos laranja em torno da origem. À esquerda, a região laranja clara cobre a nuvem do meio e se abre para o canto de cima à esquerda, onde ocupa um retângulo inteiro sem nenhum círculo azul, com um triângulo afastado dos outros; há ainda uma ponta laranja na borda direita. À direita, a região laranja é uma mancha arredondada em volta da nuvem do meio, que se estende para a esquerda até um triângulo isolado, cercada pela curva cinza contínua; as tracejadas contornam as duas nuvens azuis, e o resto do fundo é azul claro."
+poli = SVC(kernel="poly", degree=3, gamma=1, coef0=1, C=1)
+poli.fit(X, y)
+fig, eixos = plt.subplots(1, 2, figsize=(7.5, 4.2), sharey=True, layout="constrained")
+paineis = [(eixos[0], poli, "polinomial, grau 3"), (eixos[1], radial, "radial, γ = 1")]
+for ax, m, nome in paineis:
     regioes(ax, m)
     classes(ax, X, y)
-    pm = m.predict(X_teste)
-    em = (pm != y_teste).mean()
-    ax.set_title(nome + " · erro "
-        + numero_br(em, 3),
-        fontsize=9)
-eixos[1].set_xlabel("$X_1$")
-fig.legend(handles, rotulos,
-    ncols=2,
-    loc="outside lower center")
+    erro_m = (m.predict(X_teste) != y_teste).mean()
+    ax.set_title(nome + " · erro " + numero_br(erro_m, 3))
+eixos[0].set_ylabel("$X_2$")
+fig.legend(handles, rotulos, ncols=2, loc="outside lower center")
 plt.show()
 ```
 
@@ -450,89 +391,77 @@ As duas fronteiras cercam a nuvem do meio, mas diferem longe dela. O polinomial 
 
 ## O $\gamma$ e o `C` do radial
 
-No kernel radial, $\gamma$ diz quão depressa a semelhança cai com a distância. Com $\gamma$ grande, só os vetores de suporte muito próximos de $x$ pesam em $f(x)$, e a fronteira pode contornar pontos isolados. Antes da tabela, um palpite: quando $\gamma$ cresce, o erro de treino sobe ou desce? E o de teste?
+No kernel radial, $\gamma$ diz quão depressa a semelhança cai com a distância. Com $\gamma$ grande, só os vetores de suporte muito próximos de $x$ pesam em $f(x)$, e a fronteira pode contornar pontos isolados. Para o radial com $\gamma = 1$, já ajustado, os erros de treino e de teste e o número de vetores de suporte:
+
+```{python}
+#| label: gama-um
+prev_treino = radial.predict(X)
+prev_teste = radial.predict(X_teste)
+print("erro de treino:", numero_br((prev_treino != y).mean(), 3))
+print("erro de teste:", numero_br((prev_teste != y_teste).mean(), 4))
+print("vetores de suporte:", len(radial.support_))
+```
+
+A mesma conta para cinco valores de $\gamma$, uma linha por valor. Antes da tabela, um palpite: quando $\gamma$ cresce, o erro de treino sobe ou desce? E o de teste?
 
 ```{python}
 #| label: gama
-import pandas as pd
-
-def mede(gama, c=1):
-    m = SVC(kernel="rbf",
-        gamma=gama, C=c)
-    m.fit(X, y)
-    ptr = m.predict(X)
-    pte = m.predict(X_teste)
-    e_tr = (ptr != y).mean()
-    e_te = (pte != y_teste).mean()
-    return {"gama": gama,
-        "treino": e_tr,
-        "teste": e_te,
-        "n_vs": len(m.support_)}
-
 gamas = [0.01, 0.1, 1, 10, 100]
-tabela = pd.DataFrame(
-    [mede(gm) for gm in gamas])
+linhas = []
+for gama in gamas:
+    m = SVC(kernel="rbf", gamma=gama, C=1)
+    m.fit(X, y)
+    prev_treino = m.predict(X)
+    prev_teste = m.predict(X_teste)
+    linhas.append({
+        "gama": gama,
+        "treino": (prev_treino != y).mean(),
+        "teste": (prev_teste != y_teste).mean(),
+        "n_vs": len(m.support_),
+    })
+tabela = pd.DataFrame(linhas)
 tabela.style.format(
-    {"gama": "{:g}",
-        "treino": "{:.3f}",
-        "teste": "{:.4f}"},
-    decimal=",").hide()
+    {"gama": "{:g}", "treino": "{:.3f}", "teste": "{:.4f}"}, decimal=","
+).hide()
 ```
 
 A coluna `n_vs` é o número de vetores de suporte. Dois valores de $\gamma$ da tabela, desenhados:
 
 ```{python}
 #| label: fig-gama
-#| fig-cap: "O kernel radial com `C=1` e dois valores de $\\gamma$. Em cima, $\\gamma = 0{,}1$; embaixo, $\\gamma = 10$. A curva cinza contínua é a fronteira, e as tracejadas, as bordas da margem."
-#| fig-alt: "Dois gráficos empilhados com os mesmos pontos: círculos azuis em duas nuvens e triângulos laranja entre elas. Em cima, uma região laranja clara lisa, em forma de elipse alongada e inclinada, contém a nuvem do meio, com as curvas tracejadas largas em volta. Embaixo, a região laranja se quebra em manchas irregulares em volta dos triângulos, com ilhas pequenas em volta de triângulos isolados, e as curvas tracejadas contornam quase cada círculo azul, um por um."
-fig, eixos = plt.subplots(2, 1,
-    figsize=(3.8, 6.6),
-    sharex=True,
-    layout="constrained")
-for ax, gm in zip(eixos,
-        [0.1, 10]):
-    m = SVC(kernel="rbf",
-        gamma=gm, C=1).fit(X, y)
+#| fig-cap: "O kernel radial com `C=1` e dois valores de $\\gamma$. À esquerda, $\\gamma = 0{,}1$; à direita, $\\gamma = 10$. A curva cinza contínua é a fronteira, e as tracejadas, as bordas da margem."
+#| fig-alt: "Dois gráficos lado a lado com os mesmos pontos: círculos azuis em duas nuvens e triângulos laranja entre elas. À esquerda, uma região laranja clara lisa, em forma de elipse alongada e inclinada, contém a nuvem do meio, com as curvas tracejadas largas em volta. À direita, a região laranja se quebra em manchas irregulares em volta dos triângulos, com ilhas pequenas em volta de triângulos isolados, e as curvas tracejadas contornam quase cada círculo azul, um por um."
+fig, eixos = plt.subplots(1, 2, figsize=(7.5, 4.2), sharey=True, layout="constrained")
+for ax, gama in zip(eixos, [0.1, 10]):
+    m = SVC(kernel="rbf", gamma=gama, C=1)
+    m.fit(X, y)
     regioes(ax, m)
     classes(ax, X, y)
-    rot = numero_br(gm, 1).rstrip(
-        "0").rstrip(",")
-    ax.set_title(f"γ = {rot}",
-        fontsize=9)
-eixos[1].set_xlabel("$X_1$")
-fig.legend(handles, rotulos,
-    ncols=2,
-    loc="outside lower center")
+    rotulo = f"{gama:g}".replace(".", ",")
+    ax.set_title(f"γ = {rotulo}")
+eixos[0].set_ylabel("$X_2$")
+fig.legend(handles, rotulos, ncols=2, loc="outside lower center")
 plt.show()
 ```
 
-Com $\gamma = 0{,}1$, a fronteira é uma curva lisa em volta da nuvem do meio. Com $\gamma = 10$, ela se quebra em ilhas em volta de grupos pequenos de pontos, e a margem contorna os círculos quase um por um. Três leituras da tabela, e as classes previstas com $\gamma = 0{,}01$:
+Com $\gamma = 0{,}1$, a fronteira é uma curva lisa em volta da nuvem do meio. Com $\gamma = 10$, ela se quebra em ilhas em volta de grupos pequenos de pontos, e a margem contorna os círculos quase um por um. O $\gamma$ de menor erro de teste na tabela, e as classes previstas com $\gamma = 0{,}01$:
 
 ```{python}
 #| label: gama-leitura
-dif = np.diff(tabela["treino"])
-print("treino não sobe:",
-    np.all(dif <= 0))
 i_min = tabela["teste"].idxmin()
-g_min = tabela.loc[i_min, "gama"]
-print("menor erro de teste: γ =",
-    f"{g_min:g}".replace(
-        ".", ","))
-depois = tabela["teste"][i_min:]
-print("teste sobe depois dele:",
-    np.all(np.diff(depois) > 0))
-m_01 = SVC(kernel="rbf",
-    gamma=0.01).fit(X, y)
-print("classes com γ = 0,01:",
-    np.unique(m_01.predict(
-        X_teste)))
+print("menor erro de teste: γ =", numero_br(tabela.loc[i_min, "gama"], 1))
+m_01 = SVC(kernel="rbf", gamma=0.01)
+m_01.fit(X, y)
+prev_01 = m_01.predict(X_teste)
+print("γ = 0,01, previsões da classe −1:", numero_br((prev_01 == -1).sum(), 0))
+print("γ = 0,01, previsões da classe 1:", numero_br((prev_01 == 1).sum(), 0))
 ```
 
 ::: {.funcao}
-- **`tabela["teste"].idxmin()`** — o rótulo da linha com o menor valor da coluna; **`tabela.loc[i, "gama"]`**, o valor de `gama` nessa linha. **`tabela["teste"][i_min:]`** — a coluna da linha `i_min` em diante.
+- **`tabela["teste"].idxmin()`** — o rótulo da linha com o menor valor da coluna; **`tabela.loc[i, "gama"]`**, o valor de `gama` nessa linha.
 :::
 
-O erro de treino não sobe com $\gamma$: de 0,25 em $\gamma = 0{,}01$ vai a zero em $\gamma = 100$. O erro de teste desce e volta a subir. O menor é o de $\gamma = 0{,}1$, 0,1054, e em $\gamma = 100$ o erro de teste chega a 0,2364, perto dos 0,25 de prever $-1$ para todos. Com $\gamma = 100$, os 200 pontos de treino são vetores de suporte.
+Na tabela, o erro de treino não sobe com $\gamma$: de 0,25 em $\gamma = 0{,}01$ vai a zero em $\gamma = 100$. O erro de teste desce e volta a subir. O menor é o de $\gamma = 0{,}1$, 0,1054, e em $\gamma = 100$ o erro de teste chega a 0,2364, perto dos 0,25 de prever $-1$ para todos. Com $\gamma = 100$, os 200 pontos de treino são vetores de suporte.
 
 Em $\gamma = 0{,}01$, o kernel quase não distingue pontos próximos de pontos distantes: o ajuste prevê $-1$ para todos os pontos de teste, e os erros de treino e de teste ficam em 0,25.
 
@@ -540,14 +469,13 @@ O `C` do `SVC` também regula a flexibilidade. Na [seção 16.2](../cap16/02-o-c
 
 ```{python}
 #| label: c-grande
-for c in [1, 1e5]:
-    r = mede(1, c=c)
-    print(f"C = {c:,.0f}:"
-        .replace(",", "."))
-    print("  treino:",
-        numero_br(r["treino"], 3))
-    print("  teste:",
-        numero_br(r["teste"], 4))
+for c in [1, 100_000]:
+    m = SVC(kernel="rbf", gamma=1, C=c)
+    m.fit(X, y)
+    erro_treino = (m.predict(X) != y).mean()
+    erro_teste = (m.predict(X_teste) != y_teste).mean()
+    print(f"C = {numero_br(c, 0)}: erro de treino", numero_br(erro_treino, 3),
+          "· erro de teste", numero_br(erro_teste, 4))
 ```
 
 Com $\gamma = 1$, subir o `C` de 1 para 100.000 zera o erro de treino e leva o de teste de 0,1130 para 0,1768: com a margem estreita, a fronteira segue mais os pontos de treino.
@@ -558,78 +486,46 @@ Com $\gamma$ e `C` para escolher, a validação cruzada da [seção 10.5](../cap
 
 ```{python}
 #| label: busca
-from sklearn.model_selection \
-    import GridSearchCV
-from sklearn.model_selection \
-    import StratifiedKFold
+from sklearn.model_selection import GridSearchCV, StratifiedKFold
 
-grupos = StratifiedKFold(5,
-    shuffle=True, random_state=16)
-grade = {
-    "C": [0.1, 1, 10, 100, 1000],
-    "gamma": gamas}
-busca = GridSearchCV(
-    SVC(kernel="rbf"), grade,
-    cv=grupos)
+grupos = StratifiedKFold(5, shuffle=True, random_state=16)
+grade = {"C": [0.1, 1, 10, 100, 1000], "gamma": gamas}
+busca = GridSearchCV(SVC(kernel="rbf"), grade, cv=grupos)
 busca.fit(X, y)
 r = busca.cv_results_
 acerto = r["mean_test_score"]
-res = pd.DataFrame({
-    "C": r["param_C"],
-    "gama": r["param_gamma"],
-    "erro": 1 - acerto})
+res = pd.DataFrame({"C": r["param_C"], "gama": r["param_gamma"], "erro": 1 - acerto})
 res = res.astype(float)
-(res.pivot(index="C",
-        columns="gama",
-        values="erro")
-    .style.format("{:.3f}",
-        decimal=",")
-    .format_index("{:g}", axis=0,
-        decimal=",")
-    .format_index("{:g}", axis=1,
-        decimal=","))
+(
+    res.pivot(index="C", columns="gama", values="erro")
+    .style.format("{:.3f}", decimal=",")
+    .format_index("{:g}", axis=0, decimal=",")
+    .format_index("{:g}", axis=1, decimal=",")
+)
 ```
 
 ::: {.funcao}
+- **`res.astype(float)`** — converte todas as colunas da tabela para números de ponto flutuante; as colunas `param_C` e `param_gamma` do `cv_results_` chegam como objetos genéricos.
 - **`res.pivot(index="C", columns="gama", values="erro")`** — uma tabela com uma linha por valor de `C`, uma coluna por valor de `gama` e o `erro` de cada par nas células.
 - **`.format_index("{:g}", axis=0, decimal=",")`** — formata os rótulos das linhas (`axis=0`) ou das colunas (`axis=1`), sem mudar os valores.
 :::
 
-A coluna de $\gamma = 100$, os três melhores pares e o escolhido:
+Os três pares de menor erro, em ordem, e o escolhido:
 
 ```{python}
 #| label: busca-leitura
-g100 = res[res["gama"] == 100]
-e100 = g100["erro"]
-print("γ = 100, todo C em 0,25:",
-    np.allclose(e100, 0.25))
-top = res.sort_values(
-    "erro").head(3)
-for _, lin in top.iterrows():
-    print(f"C = {lin['C']:g},",
-        f"γ = {lin['gama']:g}:"
-        .replace(".", ","),
-        numero_br(lin["erro"], 3))
-empate = np.isclose(acerto,
-    acerto.max()).sum()
-print("pares no menor erro:",
-    empate)
+empate = np.isclose(acerto, acerto.max()).sum()
+print("pares no menor erro:", empate)
 melhor = busca.best_params_
-print("escolhido: C =",
-    f"{melhor['C']:g}, γ =",
-    f"{melhor['gamma']:g}"
-    .replace(".", ","))
-pb = busca.predict(X_teste)
-print("erro de teste:", numero_br(
-    (pb != y_teste).mean(), 4))
+print("C escolhido:", numero_br(melhor["C"], 0))
+print("γ escolhido:", numero_br(melhor["gamma"], 1))
+erro_busca = (busca.predict(X_teste) != y_teste).mean()
+print("erro de teste do escolhido:", numero_br(erro_busca, 4))
+top = res.sort_values("erro", kind="stable").head(3)
+top.style.format({"C": "{:g}", "gama": "{:g}", "erro": "{:.3f}"}, decimal=",").hide()
 ```
 
-::: {.funcao}
-- **`res[res["gama"] == 100]`** — as linhas de `res` em que a comparação dá `True`: aqui, as de `gama` igual a 100.
-- **`res.sort_values("erro")`** — as linhas em ordem crescente de `erro`; **`.head(3)`**, as três primeiras. **`.iterrows()`** percorre as linhas, uma por vez, como pares (rótulo, linha).
-:::
-
-Com $\gamma = 100$, o erro de validação cruzada fica em 0,25 com qualquer `C`: a mesma taxa de uma regra que previsse $-1$ para todos os pontos.
+Na tabela da busca, a coluna de $\gamma = 100$ fica em 0,250 com qualquer `C`: a mesma taxa de uma regra que previsse $-1$ para todos os pontos.
 
 A busca escolhe `C=1` e $\gamma = 0{,}1$, com erro de 0,085; os dois pares seguintes empatam em 0,100, e a diferença para eles é $0{,}100 - 0{,}085 = 0{,}015$. Nos 10.000 pontos de teste, o ajuste escolhido erra 0,1054.
 
@@ -642,21 +538,15 @@ Os pontos foram simulados, e por isso o **classificador de Bayes** da [seção 7
 ```{python}
 #| label: bayes
 def normal(pts, centro):
-    d2 = ((pts - centro)
-        ** 2).sum(axis=1)
+    d2 = ((pts - centro) ** 2).sum(axis=1)
     return np.exp(-d2 / 2)
 
-meio = 0.25 * normal(X_teste,
-    [0, 0])
-lados = (0.5 * normal(X_teste,
-        [2, 2])
-    + 0.25 * normal(X_teste,
-        [-2, -2]))
-regra = np.where(meio > lados,
-    1, -1)
+meio = 0.25 * normal(X_teste, [0, 0])
+lados = 0.5 * normal(X_teste, [2, 2]) + 0.25 * normal(X_teste, [-2, -2])
+regra = np.where(meio > lados, 1, -1)
 bayes = (regra != y_teste).mean()
-print("regra de Bayes, teste:",
-    numero_br(bayes, 4))
+print("regra de Bayes, erro de teste:", numero_br(bayes, 4))
+print("SVC escolhido, erro de teste:", numero_br(erro_busca, 4))
 ```
 
 Nos mesmos 10.000 pontos, a regra de Bayes erra 0,0942, e o `SVC` escolhido, 0,1054: a diferença, $0{,}1054 - 0{,}0942 = 0{,}0112$, é o que o ajuste com 200 pontos de treino deixa de acertar em relação à regra que conhece as distribuições.
@@ -675,48 +565,48 @@ com $p$ o número de colunas e $v$ a variância de todos os números de `X` junt
 #| label: gama-escala
 p_x = X.shape[1]
 gama = 1 / (p_x * X.var())
-print("X.var():",
-    numero_br(X.var(), 4))
-print("1 / (p · X.var()):",
-    numero_br(gama, 4))
+print("X.var():", numero_br(X.var(), 4))
+print("1 / (p · X.var()):", numero_br(gama, 4))
 padrao = SVC(kernel="rbf")
 padrao.fit(X, y)
-com_num = SVC(kernel="rbf",
-    gamma=gama).fit(X, y)
-iguais = np.allclose(
-    padrao.decision_function(X),
-    com_num.decision_function(X))
-print("gamma='scale' = esse γ:",
-    iguais)
+com_num = SVC(kernel="rbf", gamma=gama)
+com_num.fit(X, y)
+f_padrao = padrao.decision_function(X)
+f_num = com_num.decision_function(X)
+print("maior diferença nos 200, abaixo de um milionésimo:",
+      np.abs(f_padrao - f_num).max() < 1e-6)
+pd.DataFrame({"gamma='scale'": f_padrao[:3], "esse γ": f_num[:3]},
+             index=["ponto 0", "ponto 1", "ponto 2"]).style.format(numero_br)
 ```
 
 ::: {.funcao}
-- **`X.var()`** — a variância de todos os números de `X` juntos, sem separar por coluna, com divisor igual à quantidade de números, $n \cdot p$.
+- **`X.var()`** — a variância de todos os números de `X` juntos, sem separar por coluna, com divisor igual à quantidade de números, $n \cdot p$. **`X.shape[1]`** — o número de colunas.
 :::
 
-O $\gamma$ que o `SVC` usa sem `gamma` depende dos dados: aqui, 0,1308. Com outros dados, ou com os mesmos dados numa outra unidade, sai outro número. No kernel polinomial, o padrão é `coef0=0`, e ele muda o resultado. Os dois `coef0`, com o mesmo $\gamma$ de `"scale"`:
+Os escores do padrão e os do ajuste com esse número coincidem. O $\gamma$ que o `SVC` usa sem `gamma` depende dos dados: aqui, 0,1308. Com outros dados, ou com os mesmos dados numa outra unidade, sai outro número. No kernel polinomial, o padrão é `coef0=0`, e ele muda o resultado. Os dois `coef0`, com o mesmo $\gamma$ de `"scale"`:
 
 ```{python}
 #| label: polinomial
 ajustes = {
-    "poly padrão":
-        SVC(kernel="poly"),
-    "poly, coef0=1":
-        SVC(kernel="poly",
-            coef0=1),
-    "rbf padrão": padrao}
+    "poly padrão": SVC(kernel="poly"),
+    "poly, coef0=1": SVC(kernel="poly", coef0=1),
+    "rbf padrão": padrao,
+}
+linhas = []
 for nome, m in ajustes.items():
     m.fit(X, y)
-    pm = m.predict(X_teste)
-    em = (pm != y_teste).mean()
-    print(nome + ":",
-        np.unique(pm), numero_br(
-            em, 4))
+    previsto = m.predict(X_teste)
+    linhas.append({
+        "ajuste": nome,
+        "previsões da classe 1": (previsto == 1).sum(),
+        "erro de teste": (previsto != y_teste).mean(),
+    })
+pd.DataFrame(linhas).style.format(
+    {"erro de teste": "{:.4f}"}, decimal=",", thousands="."
+).hide()
 ```
 
-Com `coef0=0` e grau 3, o kernel é $K(x, x_i) = (\gamma \langle x, x_i \rangle)^3$, e $f(x) - \beta_0$ só tem termos de grau 3. Uma função assim é ímpar: em $-x$, vale o oposto do que vale em $x$. Para qualquer ponto $x_0$, $f(x_0) - \beta_0 = -\big(f(-x_0) - \beta_0\big)$: o valor em $(-2; -2)$ é o oposto do valor em $(2; 2)$.
-
-As duas nuvens da classe $-1$ ficam em lados opostos da origem, perto de $(2; 2)$ e de $(-2; -2)$, e por isso $f(x) - \beta_0$ tem sinais opostos nelas. Só um $\beta_0$ negativo o bastante para vencer a parte positiva põe as duas do lado $-1$, e aí a nuvem do meio vai junto: o ajuste prevê $-1$ para todos, com erro de 0,25, como o linear.
+Com `coef0=0` e grau 3, o kernel é $K(x, x_i) = (\gamma \langle x, x_i \rangle)^3$, e $f(x) - \beta_0$ só tem termos de grau 3: vale o oposto em $(-2; -2)$ do que vale em $(2; 2)$, onde ficam as duas nuvens da classe $-1$. Um $\beta_0$ que ponha as duas do lado $-1$ leva junto a nuvem do meio, e o ajuste prevê $-1$ para todos: nenhuma previsão da classe $1$ na tabela, com erro de 0,25, como o linear.
 
 Com `coef0=1`, o $1 +$ da fórmula traz os termos de grau 0, 1 e 2, e o erro de teste cai para 0,1055. O radial com o $\gamma$ de `"scale"` erra 0,1053.
 
@@ -726,109 +616,95 @@ O que o $\gamma$ faz no simulado, acertar o treino e errar os pontos novos quand
 
 ```{python}
 #| label: dados-heart
-from sklearn.model_selection \
-    import train_test_split
+from sklearn.model_selection import train_test_split
 
-coracao = pd.read_csv(
-    "dados/Heart.csv").dropna()
+coracao = pd.read_csv("dados/Heart.csv").dropna()
 alvo = "doenca_cardiaca"
 y_h = coracao[alvo]
-X_h = pd.get_dummies(
-    coracao.drop(columns=alvo),
-    drop_first=True, dtype=float)
-X_tr, X_te, y_tr, y_te = (
-    train_test_split(X_h, y_h,
-        test_size=90,
-        random_state=16,
-        stratify=y_h))
-print("preditores:",
-    coracao.shape[1] - 1)
-print("linhas, colunas:",
-    X_h.shape)
-print("treino, teste:",
-    len(X_tr), len(X_te))
-print("treino:", y_tr
-    .value_counts().to_dict())
-print("teste:", y_te
-    .value_counts().to_dict())
+X_h = pd.get_dummies(coracao.drop(columns=alvo), drop_first=True, dtype=float)
+X_tr, X_te, y_tr, y_te = train_test_split(
+    X_h, y_h, test_size=90, random_state=16, stratify=y_h
+)
+print("preditores:", coracao.shape[1] - 1)
+print("pacientes:", X_h.shape[0], "· colunas com as indicadoras:", X_h.shape[1])
+print("pacientes de treino:", len(X_tr), "· de teste:", len(X_te))
+pd.DataFrame({"treino": y_tr.value_counts(), "teste": y_te.value_counts()})
 ```
 
 ::: {.funcao}
 - **`pd.read_csv("dados/Heart.csv").dropna()`** — lê a tabela e descarta as linhas com algum valor faltando. **`coracao.drop(columns=alvo)`** — a tabela sem a coluna `alvo`; a original não muda.
 - **`pd.get_dummies(tabela, drop_first=True, dtype=float)`** — troca cada coluna de texto por colunas indicadoras, de 0 e 1, uma por categoria; `drop_first=True` descarta a primeira categoria de cada coluna em ordem alfabética, que fica como base.
-- **`train_test_split(X, y, test_size=90, random_state=16, stratify=y)`**, de `sklearn.model_selection` — separa 90 linhas para teste, sorteadas com a semente 16; `stratify=y` mantém nos dois conjuntos a proporção de cada classe de `y`. **`.to_dict()`** — a contagem como um dicionário.
+- **`train_test_split(X, y, test_size=90, random_state=16, stratify=y)`**, de `sklearn.model_selection` — separa 90 linhas para teste, sorteadas com a semente 16; `stratify=y` mantém nos dois conjuntos a proporção de cada classe de `y`. **`y_tr.value_counts()`** — quantas vezes aparece cada classe; a tabela põe as duas contagens lado a lado.
 :::
 
 São 297 pacientes e 16 colunas, os 13 preditores com as indicadoras: 207 de treino e 90 de teste. As colunas estão em unidades diferentes (anos, mm Hg, mg/dL, indicadoras de 0 e 1), e o kernel radial mede distâncias, em que a coluna de maior variação pesa mais. Por isso cada modelo entra num `Pipeline` com o `StandardScaler`, que aprende as médias e os desvios só no treino ([seção 10.6](../cap10/06-vazamento.qmd)).
 
-Os modelos são o classificador de vetores de suporte, a análise discriminante linear (LDA) da [seção 9.7](../cap09/07-leitura-complementar-lda-e-qda.qmd) e o kernel radial com três valores de $\gamma$; os `SVC`, todos com `C=1`. A LDA entra como uma segunda fronteira linear, já conhecida, para comparar. O escore dela não depende da escala dos preditores; ela entra no `Pipeline` só para os cinco modelos seguirem o mesmo caminho:
+Primeiro, o classificador de vetores de suporte com `C=1`, passo a passo: o `StandardScaler` aprende a média e o desvio de cada coluna no treino e padroniza os dois conjuntos; o `SVC` ajusta no treino padronizado e prevê no teste padronizado:
 
 ```{python}
-#| label: modelos-heart
-from sklearn.preprocessing \
-    import StandardScaler
-from sklearn import (
-    discriminant_analysis as da)
+#| label: svc-heart
+from sklearn.preprocessing import StandardScaler
 
-def com_escala(modelo):
-    return make_pipeline(
-        StandardScaler(), modelo)
-
-LDA = (da
-    .LinearDiscriminantAnalysis)
+padronizador = StandardScaler()
+padronizador.fit(X_tr)
+Z_tr = padronizador.transform(X_tr)
+Z_te = padronizador.transform(X_te)
 svc_h = SVC(kernel="linear", C=1)
-modelos = {
-    "SVC linear":
-        com_escala(svc_h),
-    "LDA": com_escala(LDA())}
-for gm in [0.001, 0.01, 0.1]:
-    nome = f"γ = {gm:g}".replace(
-        ".", ",")
-    rbf = SVC(kernel="rbf",
-        gamma=gm, C=1)
-    modelos[nome] = com_escala(
-        rbf)
+svc_h.fit(Z_tr, y_tr)
+previsto_h = svc_h.predict(Z_te)
+print("classes_:", svc_h.classes_[0], "e", svc_h.classes_[1])
+print("erros de teste:", (previsto_h != y_te).sum(), "de", len(y_te))
 ```
 
 ::: {.funcao}
-- **`StandardScaler()`**, de `sklearn.preprocessing` — subtrai de cada coluna a sua média e divide pelo seu desvio padrão, ambos calculados no `fit`, só com as linhas de treino.
-- **`da.LinearDiscriminantAnalysis()`**, do módulo `sklearn.discriminant_analysis` — a LDA; o `decision_function` dela também é um escore que cresce com a chance da classe `"sim"`. O código guarda a classe no nome `LDA` e cria um modelo com `LDA()`.
+- **`StandardScaler()`**, de `sklearn.preprocessing` — subtrai de cada coluna a sua média e divide pelo seu desvio padrão. **`padronizador.fit(X_tr)`** calcula as médias e os desvios só com as linhas de treino, e **`padronizador.transform(...)`** aplica essas mesmas contas a qualquer conjunto.
+:::
+
+Os modelos da comparação são esse classificador de vetores de suporte, a análise discriminante linear (LDA) da [seção 9.7](../cap09/07-leitura-complementar-lda-e-qda.qmd) e o kernel radial com três valores de $\gamma$; os `SVC`, todos com `C=1`. Cada um entra num `Pipeline` com o `StandardScaler`, que faz os passos acima no `fit` e no `predict`. A LDA entra como uma segunda fronteira linear, já conhecida, para comparar. O escore dela não depende da escala dos preditores; ela entra no `Pipeline` só para os cinco modelos seguirem o mesmo caminho:
+
+```{python}
+#| label: modelos-heart
+from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
+
+modelos = {
+    "SVC linear": make_pipeline(StandardScaler(), SVC(kernel="linear", C=1)),
+    "LDA": make_pipeline(StandardScaler(), LinearDiscriminantAnalysis()),
+}
+for gama in [0.001, 0.01, 0.1]:
+    nome = "γ = " + f"{gama:g}".replace(".", ",")
+    modelos[nome] = make_pipeline(StandardScaler(), SVC(kernel="rbf", gamma=gama, C=1))
+print("modelos:", list(modelos))
+```
+
+::: {.funcao}
+- **`LinearDiscriminantAnalysis()`**, de `sklearn.discriminant_analysis` — a LDA; o `decision_function` dela também é um escore que cresce com a chance da classe `"sim"`.
+- **`list(modelos)`** — os nomes, as chaves do dicionário.
 - **`m.decision_function(X_te)`** num `Pipeline` — passa as linhas pelo `StandardScaler` e entrega o resultado ao modelo.
 :::
 
-Para cada um, o código calcula o escore $f(x)$ do `decision_function` nos dois conjuntos e a área sob a curva ROC (AUC, de *area under the curve*) da [seção 9.5](../cap09/05-avaliando-um-classificador.qmd):
+Para cada um, num laço, o código ajusta no treino e calcula o escore $f(x)$ do `decision_function` nos dois conjuntos e a área sob a curva ROC (AUC, de *area under the curve*) da [seção 9.5](../cap09/05-avaliando-um-classificador.qmd):
 
 ```{python}
 #| label: auc-heart
-from sklearn.metrics import (
-    roc_auc_score)
+from sklearn.metrics import roc_auc_score
 
 escores = {}
 linhas = []
 for nome, m in modelos.items():
     m.fit(X_tr, y_tr)
-    s_tr = m.decision_function(
-        X_tr)
-    s_te = m.decision_function(
-        X_te)
+    s_tr = m.decision_function(X_tr)
+    s_te = m.decision_function(X_te)
     escores[nome] = (s_tr, s_te)
     p_te = m.predict(X_te)
-    a_tr = roc_auc_score(
-        y_tr, s_tr)
-    a_te = roc_auc_score(
-        y_te, s_te)
-    linhas.append({"modelo": nome,
-        "auc_treino": a_tr,
-        "auc_teste": a_te,
-        "erros_teste":
-            (p_te != y_te).sum()})
-m_lin = modelos["SVC linear"]
-print("classes_:", m_lin.classes_)
+    linhas.append({
+        "modelo": nome,
+        "auc_treino": roc_auc_score(y_tr, s_tr),
+        "auc_teste": roc_auc_score(y_te, s_te),
+        "erros_teste": (p_te != y_te).sum(),
+    })
+print("classes_ do SVC linear:", list(modelos["SVC linear"].classes_))
 auc = pd.DataFrame(linhas)
-auc.style.format(
-    {"auc_treino": "{:.3f}",
-        "auc_teste": "{:.3f}"},
-    decimal=",").hide()
+auc.style.format({"auc_treino": "{:.3f}", "auc_teste": "{:.3f}"}, decimal=",").hide()
 ```
 
 ::: {.funcao}
@@ -836,35 +712,29 @@ auc.style.format(
 - **`roc_auc_score(y, escore)`**, de `sklearn.metrics` — a área sob a curva ROC; com rótulos de texto, a classe positiva é a última em ordem alfabética, `"sim"`.
 :::
 
-Com `"sim"` em `classes_[1]`, um escore maior quer dizer mais indício de doença, e é esse o sentido de que a curva ROC precisa. As leituras da tabela, uma a uma:
+Com `"sim"` em `classes_[1]`, um escore maior quer dizer mais indício de doença, e é esse o sentido de que a curva ROC precisa. Os extremos da tabela e a distância entre as duas fronteiras lineares:
 
 ```{python}
 #| label: leitura-heart
-radiais = auc.iloc[2:]
-sobe = np.all(np.diff(
-    radiais["auc_treino"]) > 0)
-print("AUC de treino sobe com γ:",
-    sobe)
 i_tr = auc["auc_treino"].idxmax()
-print("maior AUC de treino:",
-    auc.loc[i_tr, "modelo"])
+print("maior AUC de treino:", auc.loc[i_tr, "modelo"])
 i_te = auc["auc_teste"].idxmin()
-print("menor AUC de teste:",
-    auc.loc[i_te, "modelo"])
+print("menor AUC de teste:", auc.loc[i_te, "modelo"])
 i_er = auc["erros_teste"].idxmax()
-print("mais erros de teste:",
-    auc.loc[i_er, "modelo"])
-dif = (auc.iloc[0, 1:3]
-    - auc.iloc[1, 1:3]).abs()
-print("|SVC − LDA| < 0,01:",
-    np.all(dif < 0.01))
+print("mais erros de teste:", auc.loc[i_er, "modelo"])
+linha_svc = auc.loc[0]
+linha_lda = auc.loc[1]
+dif_treino = abs(linha_svc["auc_treino"] - linha_lda["auc_treino"])
+dif_teste = abs(linha_svc["auc_teste"] - linha_lda["auc_teste"])
+print("|SVC − LDA| na AUC de treino:", numero_br(dif_treino, 3))
+print("|SVC − LDA| na AUC de teste:", numero_br(dif_teste, 3))
 ```
 
 ::: {.funcao}
-- **`auc["auc_treino"].idxmax()`** — o rótulo da linha com o maior valor da coluna, como o `idxmin` faz com o menor. **`.abs()`** — o valor absoluto de cada elemento da série.
+- **`auc["auc_treino"].idxmax()`** — o rótulo da linha com o maior valor da coluna, como o `idxmin` faz com o menor. **`auc.loc[0]`** — a linha de rótulo 0, a do SVC linear. **`abs(v)`** — o valor absoluto.
 :::
 
-No treino, a área sob a curva sobe com $\gamma$, de 0,906 para 0,920 e 0,990, e o $\gamma = 0{,}1$ tem a maior área de treino dos cinco. No teste, ele tem a menor área, 0,895, e o maior número de erros, 17 dos 90 pacientes. São 90 pacientes num só sorteio, e a diferença para os outros modelos é de poucos pacientes. Na tabela do simulado, o $\gamma$ fez o mesmo: acima de certo valor, o treino não piora e o teste piora.
+Nas três linhas do radial, a área de treino sobe com $\gamma$, de 0,906 para 0,920 e 0,990, e o $\gamma = 0{,}1$ tem a maior área de treino dos cinco. No teste, ele tem a menor área, 0,895, e o maior número de erros, 17 dos 90 pacientes. São 90 pacientes num só sorteio, e a diferença para os outros modelos é de poucos pacientes. Na tabela do simulado, o $\gamma$ fez o mesmo: acima de certo valor, o treino não piora e o teste piora.
 
 As duas fronteiras lineares, o classificador de vetores de suporte e a LDA, ficam a menos de 0,01 uma da outra na área, no treino e no teste; no teste, erram 15 e 13 pacientes.
 
@@ -872,26 +742,18 @@ As curvas ROC do classificador de vetores de suporte e do kernel radial com os t
 
 ```{python}
 #| label: fig-roc-gama
-#| fig-cap: "Curvas ROC no `Heart`, em cima no treino e embaixo no teste: o classificador de vetores de suporte, em laranja, e o kernel radial com $\\gamma = 0{,}001$ (azul), $0{,}01$ (verde) e $0{,}1$ (roxo), todos com `C=1`. No treino, a curva roxa encosta no canto de cima à esquerda; no teste, ela fica abaixo das outras enquanto a taxa de falso alarme é baixa."
-#| fig-alt: "Dois gráficos empilhados com eixos de 0 a 1, rotulados taxa de falso alarme e revocação, cada um com quatro curvas em laranja, azul, verde e roxo e uma diagonal cinza tracejada. Em cima, a curva roxa sobe quase na vertical até perto do topo e fica acima das outras três, que andam juntas. Embaixo, as quatro se entrelaçam, e a roxa fica abaixo das outras em boa parte do caminho. A legenda, em duas colunas, fica embaixo."
-from sklearn.metrics import (
-    roc_curve)
+#| fig-cap: "Curvas ROC no `Heart`, à esquerda no treino e à direita no teste: o classificador de vetores de suporte, em laranja, e o kernel radial com $\\gamma = 0{,}001$ (azul), $0{,}01$ (verde) e $0{,}1$ (roxo), todos com `C=1`. No treino, a curva roxa encosta no canto de cima à esquerda; no teste, ela fica abaixo das outras enquanto a taxa de falso alarme é baixa."
+#| fig-alt: "Dois gráficos lado a lado com eixos de 0 a 1, rotulados taxa de falso alarme e revocação, cada um com quatro curvas em laranja, azul, verde e roxo e uma diagonal cinza tracejada. À esquerda, a curva roxa sobe quase na vertical até perto do topo e fica acima das outras três, que andam juntas. À direita, as quatro se entrelaçam, e a roxa fica abaixo das outras em boa parte do caminho. A legenda, em quatro colunas, fica embaixo."
+from sklearn.metrics import roc_curve
 
 def painel(ax, nomes, cores, k):
-    yy = [y_tr, y_te][k]
-    for nome, cor in zip(nomes,
-            cores):
-        s = escores[nome][k]
-        fa, rev, _ = roc_curve(yy,
-            s, pos_label="sim")
-        rot = None
-        if k == 0:
-            rot = nome
-        ax.plot(fa, rev, lw=1.8,
-            color=cor, label=rot)
-    ax.plot([0, 1], [0, 1],
-        color="0.45", ls="--",
-        lw=1)
+    y_painel = [y_tr, y_te][k]
+    for nome, cor in zip(nomes, cores):
+        escore = escores[nome][k]
+        falso_alarme, revocacao, _ = roc_curve(y_painel, escore, pos_label="sim")
+        rotulo = nome if k == 0 else None
+        ax.plot(falso_alarme, revocacao, lw=1.8, color=cor, label=rotulo)
+    ax.plot([0, 1], [0, 1], color="0.45", ls="--", lw=1)
     marcas = [0, 0.5, 1]
     textos = ["0", "0,5", "1"]
     ax.set_xticks(marcas, textos)
@@ -899,35 +761,25 @@ def painel(ax, nomes, cores, k):
     ax.set_xlim(-0.02, 1.02)
     ax.set_ylim(-0.02, 1.02)
     ax.set_aspect("equal")
-    ax.set_ylabel("revocação")
-
-embaixo = "outside lower center"
+    ax.set_xlabel("taxa de falso alarme")
 
 def rocs(nomes, cores):
-    fig, eixos = plt.subplots(
-        2, 1, figsize=(3.8, 6.6),
-        sharex=True,
-        layout="constrained")
+    fig, eixos = plt.subplots(1, 2, figsize=(7.5, 4.3), sharey=True,
+                             layout="constrained")
     for k in [0, 1]:
-        painel(eixos[k], nomes,
-            cores, k)
-    eixos[0].set_title("treino",
-        fontsize=9)
-    eixos[1].set_title("teste",
-        fontsize=9)
-    eixos[1].set_xlabel(
-        "taxa de falso alarme")
-    fig.legend(ncols=2,
-        loc=embaixo)
+        painel(eixos[k], nomes, cores, k)
+    eixos[0].set_title("treino")
+    eixos[1].set_title("teste")
+    eixos[0].set_ylabel("revocação")
+    fig.legend(ncols=4, loc="outside lower center")
     plt.show()
 
-rocs(["SVC linear", "γ = 0,001",
-        "γ = 0,01", "γ = 0,1"],
-    ["C1", "C0", "C2", "C3"])
+rocs(["SVC linear", "γ = 0,001", "γ = 0,01", "γ = 0,1"], ["C1", "C0", "C2", "C3"])
 ```
 
 ::: {.funcao}
 - **`roc_curve(y, escore, pos_label="sim")`**, de `sklearn.metrics` — a taxa de falso alarme, a revocação e o limiar de cada ponto da curva ROC; `pos_label` diz qual rótulo é a classe positiva. O `_` descarta os limiares.
+- **`nome if k == 0 else None`** — o nome no painel de treino, para a legenda, e nenhum rótulo no de teste.
 - **`ax.set_xticks(marcas, textos)`** — o segundo argumento, `textos`, é o texto de cada marca, aqui com vírgula decimal.
 :::
 
@@ -935,53 +787,36 @@ No treino, a curva roxa, do $\gamma = 0{,}1$, fica acima das outras; no teste, e
 
 ## A escala dos preditores
 
-Sem o `StandardScaler`, o que muda? E se o `colesterol` estiver em mmol/L em vez de mg/dL, dividido por 38,67? Antes de olhar, um palpite: a troca de unidade muda o resultado com a padronização? E sem ela? O kernel radial com o $\gamma$ de `"scale"`, nas quatro combinações, e os erros nos 90 pacientes de teste:
+Sem o `StandardScaler`, o que muda? E se o `colesterol` estiver em mmol/L em vez de mg/dL, dividido por 38,67? A troca de unidade muda o resultado com a padronização? E sem ela? O kernel radial com o $\gamma$ de `"scale"`, nas quatro combinações, e os erros nos 90 pacientes de teste:
 
 ```{python}
 #| label: sem-escala
-def avalia(Xa, Xb, escala):
-    m = SVC(kernel="rbf")
-    if escala:
-        m = com_escala(m)
-    m.fit(Xa, y_tr)
-    s = m.decision_function(Xb)
-    pb = m.predict(Xb)
-    e = (pb != y_te).sum()
-    a = roc_auc_score(y_te, s)
-    return e, a
-
 X_tr2 = X_tr.copy()
 X_te2 = X_te.copy()
-for t in [X_tr2, X_te2]:
-    t["colesterol"] /= 38.67
-unid = [(X_tr, X_te, "mg/dL"),
-    (X_tr2, X_te2, "mmol/L")]
+X_tr2["colesterol"] = X_tr2["colesterol"] / 38.67
+X_te2["colesterol"] = X_te2["colesterol"] / 38.67
+unidades = [("mg/dL", X_tr, X_te), ("mmol/L", X_tr2, X_te2)]
 quatro = []
-for escala in [False, True]:
-    rot = ["sem", "com"][escala]
-    for Xa, Xb, un in unid:
-        e, a = avalia(Xa, Xb,
-            escala)
+for escala in ["sem", "com"]:
+    for unidade, Xa, Xb in unidades:
+        if escala == "com":
+            m = make_pipeline(StandardScaler(), SVC(kernel="rbf"))
+        else:
+            m = SVC(kernel="rbf")
+        m.fit(Xa, y_tr)
+        previsto = m.predict(Xb)
+        escore = m.decision_function(Xb)
         quatro.append({
-            "escala": rot,
-            "unidade": un,
-            "erros": e, "auc": a})
-q = pd.DataFrame(quatro)
-com = q[q["escala"] == "com"]
-e_mg, e_mm = com["erros"]
-a_mg, a_mm = com["auc"]
-print("com escala, erros iguais:",
-    e_mg == e_mm)
-print("com escala, AUC iguais:",
-    np.isclose(a_mg, a_mm))
-q.style.format(
-    {"auc": "{:.3f}"},
-    decimal=",").hide()
+            "escala": escala,
+            "unidade": unidade,
+            "erros": (previsto != y_te).sum(),
+            "auc": roc_auc_score(y_te, escore),
+        })
+pd.DataFrame(quatro).style.format({"auc": "{:.3f}"}, decimal=",").hide()
 ```
 
 ::: {.funcao}
-- **`t["colesterol"] /= 38.67`** — divide a coluna por 38,67, na própria tabela; as cópias feitas com `.copy()` deixam `X_tr` e `X_te` como estavam.
-- **`["sem", "com"][escala]`** — `False` vale 0 e `True` vale 1 como posição da lista.
+- **`X_tr2["colesterol"] = X_tr2["colesterol"] / 38.67`** — troca a coluna pela coluna dividida por 38,67; as cópias feitas com `.copy()` deixam `X_tr` e `X_te` como estavam.
 :::
 
 Sem a padronização, o modelo erra 32 dos 90 pacientes, contra 16 com o `StandardScaler`. Por que tanto? O código procura a coluna de maior variância e o $\gamma$ que o `"scale"` calcula sem padronizar:
@@ -989,12 +824,10 @@ Sem a padronização, o modelo erra 32 dos 90 pacientes, contra 16 com o `Standa
 ```{python}
 #| label: sem-escala-gama
 variancias = X_tr.var(ddof=0)
-print("maior variância:",
-    variancias.idxmax())
+print("maior variância:", variancias.idxmax())
 v = X_tr.to_numpy().var()
-print("γ sem escala:",
-    f"{1 / (16 * v):.1e}"
-    .replace(".", ","))
+gama_cru = 1 / (16 * v)
+print("γ sem escala:", f"{gama_cru:.1e}".replace(".", ",").replace("-", "−"))
 ```
 
 ::: {.funcao}
@@ -1003,7 +836,7 @@ print("γ sem escala:",
 
 Sem a padronização, a coluna de maior variância é o `colesterol`, e o $\gamma$ de `"scale"`, calculado com a variância de todos os números da tabela juntos, sai perto de $10^{-5}$. Nas distâncias entre pacientes, as colunas de variância grande pesam mais que as indicadoras de 0 e 1.
 
-Mudar só a unidade do `colesterol` muda o resultado sem padronização, para 30 erros. Com ela, nada muda: continuam 16 erros, e as duas áreas são iguais, como o `np.isclose` confere. A padronização põe cada coluna na mesma escala, qualquer que seja a unidade de origem.
+Mudar só a unidade do `colesterol` muda o resultado sem padronização, para 30 erros. Com ela, nada muda: continuam 16 erros, e as duas áreas são iguais na tabela. A padronização põe cada coluna na mesma escala, qualquer que seja a unidade de origem.
 
 ## Escolhas e limites do kernel
 
@@ -1011,4 +844,4 @@ O problema do classificador de vetores de suporte continua o mesmo; o que muda �
 
 Em troca, há mais a escolher: o kernel, o $\gamma$ ou o grau, e o `C` do `SVC`, todos por validação cruzada e com os preditores na mesma escala. No simulado, a escolha chegou a 0,1054 de erro de teste, contra 0,0942 da regra de Bayes; no `Heart`, o kernel radial mais flexível teve a menor área e o maior número de erros neste teste.
 
-O método também tem limites. O ajuste precisa do kernel para cada par de pontos de treino, e esse número cresce com o quadrado de $n$. O `SVC` devolve um escore $f(x)$ e uma classe, no padrão do `SVC`, não uma probabilidade. E, fora do kernel linear, não há um coeficiente por preditor para ler: a fronteira fica escrita como uma soma sobre os vetores de suporte.
+O método também tem limites. O ajuste precisa do kernel para cada par de pontos de treino, e esse número cresce com o quadrado de $n$. O `SVC` devolve um escore $f(x)$ e uma classe, não uma probabilidade. E, fora do kernel linear, não há um coeficiente por preditor para ler: a fronteira fica escrita como uma soma sobre os vetores de suporte.

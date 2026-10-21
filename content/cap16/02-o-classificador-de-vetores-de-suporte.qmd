@@ -14,17 +14,14 @@ import matplotlib.pyplot as plt
 plt.style.use("estilo-figuras.mplstyle")
 ```
 
-Para imprimir com vírgula decimal:
+A função `numero_br` escreve os números com a pontuação brasileira:
 
 ```{python}
 #| label: numero-br
-numero_br = lambda v, casas=2: (
-    f"{v:,.{casas}f}"
-    .replace(",", "_")
-    .replace(".", ",")
-    .replace("_", ".")
-    .replace("-", "−")
-)
+def numero_br(valor, casas=2):
+    texto = f"{valor:,.{casas}f}"
+    texto = texto.replace(",", "_").replace(".", ",").replace("_", ".")
+    return texto.replace("-", "−")
 ```
 
 Os pontos são os mesmos 40 sorteios da seção 16.1, com a classe $1$ deslocada de 1 nas duas coordenadas, o que mistura as nuvens. Depois deles, o mesmo gerador sorteia 10.000 pontos de teste, 5.000 de cada classe, com o mesmo deslocamento (o `_` em `10_000` só separa os milhares para quem lê):
@@ -38,18 +35,16 @@ X = rng.normal(size=(40, 2))
 y = np.repeat([-1, 1], 20)
 X_mis = X.copy()
 X_mis[y == 1] += 1
-X_teste = rng.normal(
-    size=(10_000, 2))
-y_teste = np.repeat(
-    [-1, 1], 5_000)
+X_teste = rng.normal(size=(10_000, 2))
+y_teste = np.repeat([-1, 1], 5_000)
 X_teste[y_teste == 1] += 1
-print("treino:", X_mis.shape)
-print("teste:", X_teste.shape)
+print("pontos de treino:", len(X_mis))
+print("pontos de teste:", numero_br(len(X_teste), 0))
 ```
 
 ## Uma margem que aceita violações
 
-O classificador de margem máxima pede que todo ponto de treino fique do lado certo da margem. Afrouxar essa exigência dá o **classificador de vetores de suporte**: cada ponto ganha uma variável de folga, que mede quanto ele invade a margem, e a soma dessas folgas tem um teto. Essa folga é de cada ponto, e não a folga entre as projeções das duas classes da seção 16.1.
+O classificador de margem máxima pede que todo ponto de treino fique do lado certo da margem. Afrouxar essa exigência dá o **classificador de vetores de suporte**: cada ponto ganha uma variável de folga, que mede quanto ele invade a margem, e a soma dessas folgas tem um teto.
 
 ::: {.conceito}
 O **classificador de vetores de suporte** escolhe $\beta_0, \dots, \beta_p$, as folgas $\varepsilon_1, \dots, \varepsilon_n$ e a margem $M$ que resolvem
@@ -81,55 +76,86 @@ Na escala em que o `SVC` guarda os coeficientes, a da seção 16.1, a borda da m
 O `SVC` tem um argumento chamado `C`, mas ele não é o orçamento $C$: vai no sentido contrário. Um `C` pequeno no `SVC` dá uma margem larga, com muita folga gasta; um `C` grande dá uma margem estreita, com pouca folga. Daqui em diante, `C` em fonte de código é sempre o argumento do `SVC`, e $C$, em itálico, o orçamento.
 :::
 
-O `SVC` com `C=1`, o valor padrão do argumento, e o $y_i f(x_i)$ e a folga de cada um dos 40 pontos. Aqui as duas coordenadas estão na mesma escala; com preditores em unidades diferentes, a margem e as folgas dependeriam da unidade, e o `StandardScaler` entra antes do `SVC` num `Pipeline`, ajustado só no treino ([seção 10.6](../cap10/06-vazamento.qmd)):
+O primeiro ajuste usa o `SVC` com `C=1`, o valor padrão do argumento. Aqui as duas coordenadas estão na mesma escala; com preditores em unidades diferentes, a margem e as folgas dependeriam da unidade, e o `StandardScaler` entra antes do `SVC` num `Pipeline`, ajustado só no treino ([seção 10.6](../cap10/06-vazamento.qmd)). Primeiro, a folga de um ponto só, o ponto 26, da classe $1$:
 
 ```{python}
-#| label: folgas
+#| label: uma-folga
 from sklearn.svm import SVC
 
 modelo = SVC(kernel="linear", C=1)
 modelo.fit(X_mis, y)
-yf = y * modelo.decision_function(
-    X_mis)
+print("classes_[1]:", modelo.classes_[1])
+f_26 = modelo.decision_function(X_mis[[26]])[0]
+yf_26 = y[26] * f_26
+eps_26 = max(0, 1 - yf_26)
+print("classe do ponto 26:", y[26])
+print("f(x):", numero_br(f_26))
+print("y·f(x):", numero_br(yf_26))
+print("folga, max(0, 1 − y·f(x)):", numero_br(eps_26))
+```
+
+O ponto 26 tem $y_i f(x_i) = -1{,}30$: está do lado errado do hiperplano, e a folga dele, $1 - (-1{,}30) = 2{,}30$, passa de 1. A mesma conta, para os 40 pontos de uma vez:
+
+```{python}
+#| label: folgas
+yf = y * modelo.decision_function(X_mis)
 eps = np.maximum(0, 1 - yf)
-print("maior folga:",
-    numero_br(eps.max()))
+print("folga do ponto 26:", numero_br(eps[26]))
+print("maior folga:", numero_br(eps.max()))
 ```
 
 ::: {.funcao}
-- **`np.maximum(0, 1 - yf)`** — compara, elemento a elemento, 0 com $1 - y_i f(x_i)$ e fica com o maior: a folga de cada ponto.
+- **`max(0, 1 - yf_26)`** — o maior dos dois números. **`np.maximum(0, 1 - yf)`** faz o mesmo elemento a elemento: compara 0 com cada $1 - y_i f(x_i)$ e fica com o maior, a folga de cada ponto.
 :::
 
-Em termos de $y_i f(x_i)$, as quatro faixas da folga são $y_i f(x_i) \ge 1$, entre 0 e 1, igual a 0 e menor que 0. O `SVC` resolve o problema só até uma tolerância de 0,001, o padrão do argumento `tol`, e por isso o código testa primeiro, com essa folga, quem está sobre a borda ($y_i f(x_i)$ perto de 1) e sobre o hiperplano (perto de 0):
+Em termos de $y_i f(x_i)$, as quatro faixas da folga são $y_i f(x_i) \ge 1$, entre 0 e 1, igual a 0 e menor que 0. O `SVC` resolve o problema só até uma tolerância de 0,001, o padrão do argumento `tol`, e por isso as duas faixas de igualdade, sobre a borda ($y_i f(x_i)$ perto de 1) e sobre o hiperplano (perto de 0), são testadas primeiro, com essa tolerância. Para o ponto 26, faixa a faixa:
+
+```{python}
+#| label: faixa-de-um
+tol = 1e-3
+if abs(yf_26 - 1) <= tol:
+    faixa_26 = "sobre a borda"
+elif abs(yf_26) <= tol:
+    faixa_26 = "no hiperplano"
+elif yf_26 > 1:
+    faixa_26 = "além"
+elif yf_26 > 0:
+    faixa_26 = "dentro"
+else:
+    faixa_26 = "lado errado"
+print("y·f(x) do ponto 26:", numero_br(yf_26))
+print("faixa do ponto 26:", faixa_26)
+```
+
+A ordem dos testes decide: um ponto sobre a borda tem $y_i f(x_i) > 0$ também, mas cai em "sobre a borda", que é testada antes; e o teste `yf_26 > 0` só chega a quem não passou de 1. A mesma sequência, para os 40 pontos de uma vez, e uma tabela com os pontos de cada faixa e os erros de treino de cada uma:
 
 ```{python}
 #| label: grupos
-sobre = np.isclose(yf, 1,
-    atol=1e-3)
-no_hip = np.isclose(yf, 0,
-    atol=1e-3)
-nomes = ["sobre a borda",
-    "no hiperplano", "além",
-    "dentro", "lado errado"]
-faixa = np.select(
-    [sobre, no_hip, yf > 1,
-        yf > 0],
-    nomes[:4], nomes[4])
-for nome in nomes:
-    n = (faixa == nome).sum()
-    print(nome + ":", n)
+import pandas as pd
+
+sobre = np.isclose(yf, 1, atol=tol)
+no_hip = np.isclose(yf, 0, atol=tol)
+nomes = ["sobre a borda", "no hiperplano", "além", "dentro", "lado errado"]
+faixa = np.select([sobre, no_hip, yf > 1, yf > 0], nomes[:4], nomes[4])
+print("faixa do ponto 26:", faixa[26])
 dentro = faixa == "dentro"
 errado = faixa == "lado errado"
-erros = (modelo.predict(X_mis)
-    != y).sum()
-print("erros de treino:", erros)
-print("erros = lado errado:",
-    erros == errado.sum())
+erro_treino = modelo.predict(X_mis) != y
+contagem = []
+for nome in nomes:
+    na_faixa = faixa == nome
+    contagem.append({
+        "faixa": nome,
+        "pontos": na_faixa.sum(),
+        "erros de treino": (na_faixa & erro_treino).sum(),
+    })
+pd.DataFrame(contagem).style.hide()
 ```
 
 ::: {.funcao}
-- **`np.select(condicoes, nomes, padrao)`** — para cada ponto, o nome da primeira condição da lista que é `True`, e `padrao` quando nenhuma é: aqui, quem tem $y_i f(x_i)$ negativo. A ordem decide: um ponto sobre a borda tem `yf > 0` também, mas cai em `"sobre a borda"`, que vem antes; e `yf > 0` só pega quem não passou de 1. **`nomes[:4]`** — os quatro primeiros nomes da lista; `nomes[4]`, o quinto, é o padrão.
-- **`faixa == "dentro"`** — `True` onde a faixa do ponto é `"dentro"`.
+- **`np.isclose(yf, 1, atol=tol)`** — `True` onde `yf` difere de 1 em no máximo `tol`, 0,001.
+- **`np.select(condicoes, nomes, padrao)`** — o `if`/`elif` acima, ponto a ponto: para cada ponto, o nome da primeira condição da lista que é `True`, e `padrao` quando nenhuma é, aqui quem tem $y_i f(x_i)$ negativo. **`nomes[:4]`** — os quatro primeiros nomes da lista; `nomes[4]`, o quinto, é o padrão.
+- **`faixa == "dentro"`** — `True` onde a faixa do ponto é `"dentro"`. **`a & b`** — `True` onde os dois são `True`: os pontos da faixa que o classificador erra.
 :::
 
 Na figura, a reta contínua é o hiperplano e as tracejadas são as bordas da margem. Os pontos sem anel estão além da tracejada do seu lado. O anel roxo marca quem está sobre a tracejada ou entre ela e a reta contínua; o verde, quem passou da reta contínua para a região da outra classe:
@@ -143,61 +169,37 @@ import matplotlib.pyplot as plt
 def classes(ax, pts, y):
     a = pts[y == -1]
     b = pts[y == 1]
-    ax.scatter(a[:, 0], a[:, 1],
-        color="C0", s=18,
-        label="classe −1")
-    ax.scatter(b[:, 0], b[:, 1],
-        color="C1", s=24,
-        marker="^",
-        label="classe 1")
+    ax.scatter(a[:, 0], a[:, 1], color="C0", s=18, label="classe −1")
+    ax.scatter(b[:, 0], b[:, 1], color="C1", s=24, marker="^", label="classe 1")
     ax.set_aspect("equal")
 
 def regioes(ax, modelo):
     g = np.linspace(-3, 4, 141)
     g1, g2 = np.meshgrid(g, g)
-    malha = np.column_stack(
-        [g1.ravel(), g2.ravel()])
-    z = modelo.decision_function(
-        malha).reshape(g1.shape)
+    malha = np.column_stack([g1.ravel(), g2.ravel()])
+    z = modelo.decision_function(malha).reshape(g1.shape)
     lim = np.abs(z).max() + 1
-    ax.contourf(g1, g2, z,
-        levels=[-lim, 0, lim],
-        colors=["C0", "C1"],
-        alpha=0.2)
-    estilos = ["--", "-", "--"]
-    ax.contour(g1, g2, z,
-        levels=[-1, 0, 1],
-        colors="0.45",
-        linewidths=1.5,
-        linestyles=estilos)
+    ax.contourf(g1, g2, z, levels=[-lim, 0, lim], colors=["C0", "C1"], alpha=0.2)
+    ax.contour(g1, g2, z, levels=[-1, 0, 1], colors="0.45", linewidths=1.5,
+               linestyles=["--", "-", "--"])
 
-def anel(ax, pts, cor, rotulo,
-        tam=90, lw=1.5):
-    ax.scatter(pts[:, 0],
-        pts[:, 1], s=tam,
-        facecolors="none",
-        edgecolors=cor,
-        linewidths=lw,
-        label=rotulo)
+def anel(ax, pts, cor, rotulo, tam=90, lw=1.5):
+    ax.scatter(pts[:, 0], pts[:, 1], s=tam, facecolors="none", edgecolors=cor,
+               linewidths=lw, label=rotulo)
 
-fig, ax = plt.subplots(
-    figsize=(3.8, 4.8),
-    layout="constrained")
+fig, ax = plt.subplots(figsize=(3.8, 4.8), layout="constrained")
 regioes(ax, modelo)
 classes(ax, X_mis, y)
 na_margem = sobre | dentro
-anel(ax, X_mis[na_margem], "C3",
-    "sobre a borda ou dentro")
-anel(ax, X_mis[errado],
-    "C2", "lado errado")
+anel(ax, X_mis[na_margem], "C3", "sobre a borda ou dentro")
+anel(ax, X_mis[errado], "C2", "lado errado")
 ax.set_xlim(-2.5, 3.5)
 ax.set_ylim(-2.5, 3.5)
 ax.set_xticks([-2, 0, 2])
 ax.set_yticks([-2, 0, 2])
 ax.set_xlabel("$X_1$")
 ax.set_ylabel("$X_2$")
-fig.legend(ncols=2,
-    loc="outside lower center")
+fig.legend(ncols=2, loc="outside lower center")
 plt.show()
 ```
 
@@ -207,99 +209,82 @@ plt.show()
 
 `classes` desenha os pontos das duas classes; `regioes` pinta o lado de cada classe e traça o hiperplano e as bordas da margem; `anel` desenha anéis vazios numa cor e num tamanho escolhidos.
 
-Dos 40 pontos, 18 ficam além da margem e 3 sobre a borda, todos com folga zero; 10 invadem a margem sem cruzar o hiperplano; nenhum fica sobre o hiperplano; e 9 estão do lado errado dele, com $\varepsilon_i > 1$. São exatamente os 9 erros de treino. A faixa entre as tracejadas, vazia na margem máxima, agora tem pontos dentro, e os de anel verde estão na região da outra classe.
+Dos 40 pontos, 18 ficam além da margem, com folga zero, e 3 sobre a borda, com folga zero a menos da tolerância; 10 invadem a margem sem cruzar o hiperplano; nenhum fica sobre o hiperplano; e 9 estão do lado errado dele, com $\varepsilon_i > 1$. São os 9 erros de treino: na tabela, a coluna dos erros só tem valor na linha do lado errado, e lá ele é 9, os 9 pontos da faixa. A faixa entre as tracejadas, vazia na margem máxima, agora tem pontos dentro, e os de anel verde estão na região da outra classe.
 
-Na margem máxima, os vetores de suporte eram os pontos sobre a borda. E agora, quais pontos definem o hiperplano? Um palpite pela figura antes da saída:
+Na margem máxima, os vetores de suporte eram os pontos sobre a borda. E agora, quais pontos definem o hiperplano? Pela figura, quais você apontaria? O código conta os vetores de suporte que o `SVC` devolve em cada faixa:
 
 ```{python}
 #| label: vetores
 sv = modelo.support_
-print("vetores de suporte:",
-    len(sv))
-print("n_support_:",
-    modelo.n_support_)
-com_anel = sobre | dentro | errado
-mesmos = set(sv) == set(
-    np.flatnonzero(com_anel))
-print("= pontos com anel:",
-    mesmos)
+print("vetores de suporte:", len(sv))
+for classe, quantos in zip(modelo.classes_, modelo.n_support_):
+    print(f"vetores de suporte da classe {numero_br(classe, 0)}:", quantos)
+e_vs = np.isin(np.arange(40), sv)
+linhas = []
+for nome in nomes:
+    na_faixa = faixa == nome
+    linhas.append({
+        "faixa": nome,
+        "pontos": na_faixa.sum(),
+        "vetores de suporte": (na_faixa & e_vs).sum(),
+    })
+pd.DataFrame(linhas).style.hide()
 ```
 
 ::: {.funcao}
-- **`np.flatnonzero(m)`** — as posições em que a máscara `m` é `True`.
+- **`np.isin(np.arange(40), sv)`** — `True` nas posições de 0 a 39 que estão em `sv`, a lista dos vetores de suporte.
 :::
 
-Os 22 vetores de suporte, 11 de cada classe, são exatamente os $3 + 10 + 9$ pontos com anel: os que estão sobre a borda, dentro da margem ou do lado errado do hiperplano. Todo ponto com folga positiva é vetor de suporte.
+Nas faixas com anel, as duas colunas são iguais: os 22 vetores de suporte, 11 de cada classe, são exatamente os $3 + 10 + 9$ pontos que estão sobre a borda, dentro da margem ou do lado errado do hiperplano, e nenhum dos 18 pontos além da margem é vetor de suporte. Todo ponto com folga positiva é vetor de suporte.
 
 ## O que o `C` do `SVC` faz
 
-O código ajusta o `SVC` com sete valores de `C`, de 0,01 a 10, e mede, em cada um, a margem $M$, o número de vetores de suporte e a soma das folgas, isto é, quanto do orçamento $C$ a solução gastou. Antes de ler a tabela, um palpite: quando o `C` do `SVC` cresce, a margem alarga ou estreita? E os vetores de suporte, aumentam ou diminuem?
+O `C` do `SVC` muda a margem, os vetores de suporte e a soma das folgas, isto é, quanto do orçamento $C$ a solução gastou. Primeiro, um valor só, `C` = 0,01, com cada medida por extenso:
+
+```{python}
+#| label: um-c
+m = SVC(kernel="linear", C=0.01)
+m.fit(X_mis, y)
+yf_c = y * m.decision_function(X_mis)
+folgas_c = np.maximum(0, 1 - yf_c)
+margem_c = 1 / np.linalg.norm(m.coef_[0])
+print("C do SVC:", numero_br(0.01))
+print("margem, 1 / norma de coef_:", numero_br(margem_c))
+print("vetores de suporte:", len(m.support_))
+print("soma das folgas:", numero_br(folgas_c.sum()))
+```
+
+A mesma conta para sete valores de `C`, de 0,01 a 10, e mais um, 100, dez vezes o último, uma linha por valor. Antes de ler a tabela, um palpite: quando o `C` do `SVC` cresce, a margem alarga ou estreita? E os vetores de suporte, aumentam ou diminuem?
 
 ```{python}
 #| label: grade-c
-import pandas as pd
-
-def resumo(c):
+grade = [0.01, 0.03, 0.1, 0.3, 1, 3, 10]
+linhas = []
+for c in grade + [100]:
     m = SVC(kernel="linear", C=c)
     m.fit(X_mis, y)
-    f_c = m.decision_function(
-        X_mis)
-    yf_c = y * f_c
-    norma = np.linalg.norm(
-        m.coef_[0])
-    folgas = np.maximum(
-        0, 1 - yf_c)
-    return {"c_svc": c,
-        "margem": 1 / norma,
+    yf_c = y * m.decision_function(X_mis)
+    folgas_c = np.maximum(0, 1 - yf_c)
+    linhas.append({
+        "c_svc": c,
+        "margem": 1 / np.linalg.norm(m.coef_[0]),
         "n_vs": len(m.support_),
-        "soma_folgas":
-            folgas.sum()}
-
-grade = [0.01, 0.03, 0.1, 0.3,
-    1, 3, 10]
-tabela = pd.DataFrame(
-    [resumo(c) for c in grade])
+        "soma_folgas": folgas_c.sum(),
+    })
+tabela = pd.DataFrame(linhas)
 tabela.style.format(
-    {"c_svc": "{:g}",
-        "margem": "{:.2f}",
-        "soma_folgas": "{:.2f}"},
-    decimal=",").hide()
+    {"c_svc": "{:g}", "margem": "{:.2f}", "soma_folgas": "{:.2f}"}, decimal=","
+).hide()
 ```
 
 ::: {.funcao}
-- **`pd.DataFrame([...])`** — uma tabela com uma linha por dicionário da lista e uma coluna por chave: `c_svc` é o `C` do `SVC`, `margem` é $M$, `n_vs` é o número de vetores de suporte, e `soma_folgas` é $\sum_i \varepsilon_i$.
-- **`tabela.style.format({...}, decimal=",")`** — formata a exibição sem mudar os valores: cada coluna com o seu formato (`"{:.2f}"`, duas casas; `"{:g}"`, sem zeros sobrando) e vírgula decimal. **`.hide()`** — esconde a coluna do índice.
+- **`grade + [100]`** — a lista `grade` com o 100 no fim; `grade` continua com os sete valores.
+- Na tabela, `c_svc` é o `C` do `SVC`, `margem` é $M$, `n_vs` é o número de vetores de suporte, e `soma_folgas` é $\sum_i \varepsilon_i$. No formato, `"{:g}"` escreve o número sem zeros sobrando.
 :::
 
-Quando o `C` do `SVC` cresce, a margem estreita, de 3,14 para 0,72, os vetores de suporte caem de 40 para 21 e a soma das folgas cai de 29,87 para 18,46. O código confere que nenhuma das três colunas cresce de uma linha para a seguinte, a menos da tolerância de 0,001 do `SVC`, e compara a última linha com um `C` dez vezes maior, 100:
+Quando o `C` do `SVC` cresce de 0,01 a 10, a margem estreita, de 3,14 para 0,72, os vetores de suporte caem de 40 para 21 e a soma das folgas cai de 29,87 para 18,46. Nenhuma das três colunas cresce de uma linha para a seguinte, e a soma das folgas mostra o sentido invertido do aviso: o `C` do `SVC` cresce, e o orçamento que a solução gasta encolhe.
 
-```{python}
-#| label: nao-cresce
-for col in ["margem", "n_vs",
-        "soma_folgas"]:
-    passos = np.diff(tabela[col])
-    ok = np.all(passos <= 1e-3)
-    print(col, "não cresce:", ok)
-u10 = tabela.iloc[6, 1:]
-u100 = pd.Series(
-    resumo(100)).iloc[1:]
-u3 = tabela.iloc[5, 1:]
-for nome, u in [("C = 3", u3),
-        ("C = 100", u100)]:
-    igual = np.allclose(
-        u.astype(float),
-        u10.astype(float),
-        atol=1e-3)
-    print(nome, "igual a C = 10:",
-        igual)
-```
-
-::: {.funcao}
-- **`np.diff(v)`** — as diferenças entre elementos vizinhos: `v[1] - v[0]`, `v[2] - v[1]`, e assim por diante.
-- **`tabela.iloc[6, 1:]`** — a linha na posição 6 (`C` = 10), da segunda coluna em diante, sem `c_svc`. **`pd.Series(dicionario)`** — o dicionário de `resumo(100)` como uma série, com as chaves como rótulos. **`.astype(float)`** — converte os valores para número de ponto flutuante, para o `np.allclose` comparar.
-:::
-
-As três colunas andam juntas, e a soma das folgas mostra o sentido invertido do aviso: o `C` do `SVC` cresce, e o orçamento que a solução gasta encolhe. Com `C` = 3, 10 e 100, a margem, os vetores de suporte e a soma das folgas coincidem, e de 1 para 3 a solução ainda muda: os vetores de suporte passam de 22 para 21. Nestes 40 pontos, nos valores medidos, a partir de `C` = 3 apertar o orçamento não muda mais a solução. Isso é destes dados; em outros, o ponto em que a solução para de mudar é outro.
+Nas três últimas linhas, `C` = 3, 10 e 100, a margem, os vetores de suporte e a soma das folgas coincidem, e de 1 para 3 a solução ainda muda: os vetores de suporte passam de 22 para 21. Nestes 40 pontos, nos valores medidos, a partir de `C` = 3 apertar o orçamento não muda mais a solução. Isso é destes dados; em outros, o ponto em que a solução para de mudar é outro.
 
 Quatro valores de `C` da grade, um por painel:
 
@@ -307,29 +292,20 @@ Quatro valores de `C` da grade, um por painel:
 #| label: fig-quatro-c
 #| fig-cap: "O classificador de vetores de suporte nos 40 pontos misturados com quatro valores do `C` do `SVC`, que cresce da esquerda para a direita e de cima para baixo. A reta cinza contínua é o hiperplano, e as tracejadas, as bordas da margem; os anéis roxos marcam os vetores de suporte. No título de cada painel, o `C` do `SVC` e VS, o número de vetores de suporte. Com `C` maior, a margem estreita e sobram menos vetores de suporte."
 #| fig-alt: "Quatro painéis em grade de dois por dois, com os mesmos círculos azuis e triângulos laranja misturados, eixos X1 e X2 de −2,5 a 3,5, com marcas em −2, 0 e 2. Em cada um, uma reta cinza desce da esquerda para a direita entre duas retas tracejadas paralelas. No painel de cima à esquerda, C = 0,03, as tracejadas ficam longe da reta, quase nos cantos, e 34 pontos têm anel roxo; no de cima à direita, C = 0,1, a faixa é um pouco mais estreita, com 29 anéis; embaixo à esquerda, C = 0,3, mais estreita, com 25; embaixo à direita, C = 1, a mais estreita, com 22."
-fig, eixos = plt.subplots(2, 2,
-    figsize=(3.8, 4.2),
-    sharex=True, sharey=True,
-    layout="constrained")
-for c, ax in zip(
-        [0.03, 0.1, 0.3, 1],
-        eixos.ravel()):
+fig, eixos = plt.subplots(2, 2, figsize=(7, 7), sharex=True, sharey=True,
+                         layout="constrained")
+for c, ax in zip([0.03, 0.1, 0.3, 1], eixos.ravel()):
     m = SVC(kernel="linear", C=c)
     m.fit(X_mis, y)
     regioes(ax, m)
     classes(ax, X_mis, y)
-    anel(ax, m.support_vectors_,
-        "C3", None, tam=40, lw=1)
+    anel(ax, m.support_vectors_, "C3", None, tam=80, lw=1.5)
     ax.set_xlim(-2.5, 3.5)
     ax.set_ylim(-2.5, 3.5)
     ax.set_xticks([-2, 0, 2])
     ax.set_yticks([-2, 0, 2])
-    vs = len(m.support_)
-    rot = numero_br(c, 2).rstrip(
-        "0").rstrip(",")
-    ax.set_title(
-        f"C = {rot} · VS = {vs}",
-        fontsize=9)
+    rotulo = f"{c:g}".replace(".", ",")
+    ax.set_title(f"C = {rotulo} · VS = {len(m.support_)}")
 fig.supxlabel("$X_1$")
 fig.supylabel("$X_2$")
 plt.show()
@@ -337,7 +313,7 @@ plt.show()
 
 ::: {.funcao}
 - **`plt.subplots(2, 2, sharex=True, sharey=True)`** — quatro gráficos em duas linhas e duas colunas, com os mesmos limites de eixo; `eixos.ravel()` os põe numa fila, na ordem de leitura.
-- **`ax.set_title(texto, fontsize=9)`** — o título do painel, em fonte menor. **`fig.supxlabel`** e **`fig.supylabel`** — um rótulo só para os eixos de todos os painéis.
+- **`ax.set_title(texto)`** — o título do painel; `f"{c:g}"` escreve o número sem zeros sobrando, e `.replace(".", ",")` troca o ponto pela vírgula. **`fig.supxlabel`** e **`fig.supylabel`** — um rótulo só para os eixos de todos os painéis.
 :::
 
 A largura da margem regula o equilíbrio entre viés e variância ([seção 7.6](../cap07/06-qualidade-do-ajuste-e-vies-variancia.qmd)). Com a margem larga, de `C` pequeno no `SVC`, muitos pontos a violam: todos eles ajudam a decidir o hiperplano, e um ponto a mais ou a menos pesa pouco. É um classificador de variância baixa, que pode ter viés alto. Com a margem estreita, de `C` grande, menos pontos decidem a fronteira, e o classificador se ajusta mais aos dados de treino.
@@ -354,7 +330,7 @@ $$
 \end{aligned}
 $$
 
-A perda é a soma das folgas, e a penalidade é a da ridge. Com $\lambda$ grande, encolher os coeficientes vale mais que reduzir as folgas: os coeficientes saem pequenos, a margem $1/\lVert\beta\rVert$ sai larga, e a soma das folgas cresce. O `SVC` minimiza
+A perda é a soma das folgas, e tem nome: **perda dobradiça** (*hinge loss*), pelo formato do gráfico de $\max[0,\ 1 - y_i f(x_i)]$, que o fim da seção desenha. A penalidade é a da ridge. Com $\lambda$ grande, encolher os coeficientes vale mais que reduzir as folgas: os coeficientes saem pequenos, a margem $1/\lVert\beta\rVert$ sai larga, e a soma das folgas cresce. O `SVC` minimiza
 
 $$
 \begin{aligned}
@@ -365,40 +341,78 @@ $$
 
 Dividir tudo por `C` não muda onde fica o mínimo, e dá a forma anterior com $\lambda = 1/(2\,\texttt{C})$: o `C` do `SVC` está no denominador. Com `C=0.1`, por exemplo, o $\lambda$ correspondente é $1/(2 \cdot 0{,}1) = 5$.
 
-Dá para conferir a conta. Se ela está certa, nenhuma combinação de coeficientes perto da solução do `SVC` dá um valor menor na forma com $\lambda = 5$. O código mexe um pouco nos três coeficientes, 1.000 vezes ao acaso, e conta quantas dessas variações dão um valor menor. Para contraste, faz o mesmo com $\lambda = 10$, o valor que sairia esquecendo o $\tfrac12$. O `scikit-learn` não calcula o valor da forma com $\lambda$, e a função `objetivo` existe só para essa conferência. `m.intercept_[0]` e `m.coef_[0]` estão na escala do `SVC`, sem dividir pela norma, que é a escala em que as duas formas acima estão escritas:
+Dá para conferir a conta. Se ela está certa, nenhuma combinação de coeficientes perto da solução do `SVC` dá um valor menor na forma com $\lambda = 5$. Para contraste, a mesma conferência vale para $\lambda = 10$, o valor que sairia esquecendo o $\tfrac12$. O `scikit-learn` não calcula o valor da forma com $\lambda$, e a conta sai à mão. `m.intercept_[0]` e `m.coef_[0]` estão na escala do `SVC`, sem dividir pela norma, que é a escala em que as duas formas acima estão escritas. Primeiro, o valor na própria solução do `SVC`, com $\lambda = 5$:
 
 ```{python}
-#| label: lambda
+#| label: objetivo-a-mao
 m = SVC(kernel="linear", C=0.1)
 m.fit(X_mis, y)
 b0 = m.intercept_[0]
 b = m.coef_[0]
+f = b0 + X_mis @ b
+perda = np.maximum(0, 1 - y * f).sum()
+penalidade = 5 * (b**2).sum()
+print("perda dobradiça, a soma das folgas:", numero_br(perda, 4))
+print("penalidade, 5 · (β1² + β2²):", numero_br(penalidade, 4))
+print("objetivo com λ = 5:", numero_br(perda + penalidade, 4))
+```
 
+A mesma conta vira uma função, `objetivo`, para valer em outros coeficientes e outros $\lambda$. Andando 0,05 para cada lado em cada um dos três coeficientes, um de cada vez, o objetivo nos seis vizinhos, ao lado do da solução:
+
+```{python}
+#| label: vizinhos
 def objetivo(b0, b, lam):
     f = b0 + X_mis @ b
-    folga = np.maximum(
-        0, 1 - y * f)
-    return (folga.sum()
-        + lam * (b**2).sum())
+    folga = np.maximum(0, 1 - y * f)
+    return folga.sum() + lam * (b**2).sum()
 
-viz = np.random.default_rng(160)
-d = viz.normal(scale=0.05,
-    size=(1000, 3))
-for lam in [5, 10]:
-    base = objetivo(b0, b, lam)
-    menores = sum(
-        objetivo(b0 + e[0],
-            b + e[1:], lam) < base
-        for e in d)
-    print(f"λ = {lam}: vizinhos",
-        "menores:", menores)
+passos = {
+    "solução do SVC": (0, 0, 0),
+    "β0 + 0,05": (0.05, 0, 0),
+    "β0 − 0,05": (-0.05, 0, 0),
+    "β1 + 0,05": (0, 0.05, 0),
+    "β1 − 0,05": (0, -0.05, 0),
+    "β2 + 0,05": (0, 0, 0.05),
+    "β2 − 0,05": (0, 0, -0.05),
+}
+linhas = []
+for nome, (d0, d1, d2) in passos.items():
+    linhas.append({
+        "coeficientes": nome,
+        "λ = 5": objetivo(b0 + d0, b + np.array([d1, d2]), 5),
+        "λ = 10": objetivo(b0 + d0, b + np.array([d1, d2]), 10),
+    })
+vizinhos = pd.DataFrame(linhas)
+vizinhos.style.format({"λ = 5": "{:.4f}", "λ = 10": "{:.4f}"}, decimal=",").hide()
 ```
 
 ::: {.funcao}
-- **`viz.normal(scale=0.05, size=(1000, 3))`** — 1.000 linhas de 3 sorteios da normal com média 0 e desvio padrão 0,05, de um gerador com semente própria, 160, diferente da dos dados.
+- **`passos.items()`** — os pares de chave e valor do dicionário; cada valor é um trio de deslocamentos, e `(d0, d1, d2)` o separa em três nomes.
 :::
 
-Com $\lambda = 5$, nenhum dos 1.000 vizinhos fica abaixo da solução do `SVC`; com $\lambda = 10$, 345 ficam, e a mesma solução deixa de ser o mínimo. A correspondência completa, lida nos dois sentidos:
+Na coluna de $\lambda = 5$, todos os seis vizinhos ficam acima de 24,3736, o valor na solução do `SVC`. Na de $\lambda = 10$, o vizinho $\beta_1 - 0{,}05$ já fica abaixo da solução: 27,6812, contra 27,9764. Com $\lambda = 10$, a solução do `SVC` não é o mínimo.
+
+Seis direções são poucas. O código mexe ao acaso nos três coeficientes ao mesmo tempo, 1.000 vezes, e conta quantas dessas variações dão um valor menor que o da solução:
+
+```{python}
+#| label: lambda
+viz = np.random.default_rng(160)
+d = viz.normal(scale=0.05, size=(1000, 3))
+for lam in [5, 10]:
+    base = objetivo(b0, b, lam)
+    menores = 0
+    for e in d:
+        if objetivo(b0 + e[0], b + e[1:], lam) < base:
+            menores += 1
+    print(f"λ = {lam}: objetivo na solução do SVC:", numero_br(base, 4),
+          "· vizinhos menores:", menores, "de", numero_br(len(d), 0))
+```
+
+::: {.funcao}
+- **`viz.normal(scale=0.05, size=(1000, 3))`** — sorteios da normal com desvio padrão 0,05 (`scale`), de um gerador com semente própria, 160, diferente da dos dados. Cada linha `e` mexe no intercepto, `e[0]`, e nos dois coeficientes, `e[1:]`.
+:::
+
+Com $\lambda = 5$, nenhum dos 1.000 vizinhos fica abaixo da solução do `SVC`; com $\lambda = 10$, 345 ficam. A correspondência completa, lida nos dois sentidos:
 
 ::: {.callout-note}
 Um `C` grande no `SVC` é um $\lambda = 1/(2\,\texttt{C})$ pequeno, que é um orçamento $C$ pequeno.
@@ -415,160 +429,168 @@ A última linha é a da seção 16.1: o orçamento zero corresponde a `C=np.inf`
 ```{python}
 #| label: c-zero
 try:
-    SVC(kernel="linear",
-        C=0).fit(X_mis, y)
+    SVC(kernel="linear", C=0).fit(X_mis, y)
 except ValueError as erro:
-    msg = str(erro)
-    for k in range(0, 90, 30):
-        print(msg[k:k + 30])
+    print("ValueError:", str(erro)[:90])
 ```
 
 A mensagem diz que `C` precisa estar no intervalo $(0, \infty]$: `C=np.inf` é aceito, `C=0` não.
 
 ## Só os vetores de suporte contam
 
-Na seção 16.1, empurrar para longe do hiperplano um ponto que não era vetor de suporte não mudava a solução. Vale o mesmo com folgas? E se o ponto empurrado for um vetor de suporte? O código pega o ponto mais afastado da margem entre os 18 que não são vetores de suporte e o vetor de suporte de maior folga, o que está mais fundo do lado errado. Cada um é empurrado 2 unidades na direção da sua classe, perpendicular ao hiperplano, e o ajuste é refeito. Antes de ler a saída, um palpite: qual dos dois muda o hiperplano?
+Na seção 16.1, empurrar para longe do hiperplano um ponto que não era vetor de suporte não mudava a solução. Vale o mesmo com folgas? E se o ponto empurrado for um vetor de suporte? O código pega o ponto mais afastado da margem entre os 18 que não são vetores de suporte e o vetor de suporte de maior folga, o que está mais fundo do lado errado. Cada um é empurrado 2 unidades na direção da sua classe, perpendicular ao hiperplano, e o ajuste é refeito. Qual dos dois você espera que mude o hiperplano?
 
 ```{python}
-#| label: mover
-norma = np.linalg.norm(
-    modelo.coef_[0])
+#| label: mover-escolha
+norma = np.linalg.norm(modelo.coef_[0])
 direcao = modelo.coef_[0] / norma
-fora = np.setdiff1d(
-    np.arange(40), sv)
+fora = np.setdiff1d(np.arange(40), sv)
 i = fora[np.argmax(yf[fora])]
 j = sv[np.argmax(eps[sv])]
-print("não é VS:", i, "· VS:", j)
-print(f"folga de {j}:",
-    numero_br(eps[j]))
-
-def empurra(k):
-    X_mov = X_mis.copy()
-    X_mov[k] += 2 * y[k] * direcao
-    m = SVC(kernel="linear", C=1)
-    return m.fit(X_mov, y), X_mov
-
-m_i, _ = empurra(i)
-iguais = (
-    np.allclose(m_i.coef_,
-        modelo.coef_, atol=1e-3)
-    and np.allclose(
-        m_i.intercept_,
-        modelo.intercept_,
-        atol=1e-3))
-print(f"igual, movendo {i}:",
-    iguais)
-antes = modelo.coef_[0]
-print("coef_ antes:",
-    numero_br(antes[0]), ";",
-    numero_br(antes[1]))
-m_j, X_j = empurra(j)
-depois = m_j.coef_[0]
-print("coef_ depois:",
-    numero_br(depois[0]), ";",
-    numero_br(depois[1]))
-f_j = m_j.decision_function(
-    X_j[[j]])[0]
-yf_j = y[j] * f_j
-print("y f de", j, "depois:",
-    numero_br(yf_j))
-print(j, "ainda é VS:",
-    j in m_j.support_)
+print("fora dos vetores de suporte, o mais afastado da margem:", i)
+print("vetor de suporte de maior folga:", j, "· folga:", numero_br(eps[j]))
 ```
 
 ::: {.funcao}
-- **`np.setdiff1d(a, b)`** — os elementos de `a` que não estão em `b`: as posições dos pontos que não são vetores de suporte.
-- **`fora[np.argmax(yf[fora])]`** — entre esses, o de maior $y_i f(x_i)$, o mais afastado da margem; **`sv[np.argmax(eps[sv])]`**, entre os vetores de suporte, o de maior folga.
-- **`return m.fit(X_mov, y), X_mov`** — devolve dois valores, o modelo ajustado e os pontos movidos; `m_i, _ = ...` guarda o primeiro e descarta o segundo no `_`. **`X_j[[j]]`** — a linha `j` como uma tabela de uma linha, o formato que o `decision_function` espera.
+- **`fora[np.argmax(yf[fora])]`** — entre os pontos que não são vetores de suporte, o de maior $y_i f(x_i)$, o mais afastado da margem; **`sv[np.argmax(eps[sv])]`**, entre os vetores de suporte, o de maior folga. **`np.argmax(v)`** — a posição do maior valor.
 :::
 
-O ponto 17, que não é vetor de suporte, sai do lugar sem mudar os coeficientes nem o intercepto. O ponto 26, um vetor de suporte com folga 2,30, empurrado as mesmas 2 unidades na direção da sua classe, atravessa o hiperplano e sai da margem: no ajuste novo, o seu $y_i f(x_i)$ é 1,35, e ele deixa de ser vetor de suporte. Os coeficientes mudam de $(1{,}12;\ 0{,}67)$ para $(1{,}23;\ 0{,}74)$.
+Cada um é empurrado 2 unidades, num ajuste próprio, e os coeficientes dos três ajustes, na escala do `SVC`, vão lado a lado:
+
+```{python}
+#| label: mover
+X_i = X_mis.copy()
+X_i[i] += 2 * y[i] * direcao
+m_i = SVC(kernel="linear", C=1)
+m_i.fit(X_i, y)
+
+X_j = X_mis.copy()
+X_j[j] += 2 * y[j] * direcao
+m_j = SVC(kernel="linear", C=1)
+m_j.fit(X_j, y)
+
+yf_j = y[j] * m_j.decision_function(X_j[[j]])[0]
+print(f"y·f do ponto {j} no ajuste novo:", numero_br(yf_j))
+print(f"ponto {j} entre os vetores de suporte do ajuste novo:",
+      "sim" if j in m_j.support_ else "não")
+coeficientes = pd.DataFrame(
+    {
+        "original": [modelo.intercept_[0], modelo.coef_[0, 0], modelo.coef_[0, 1]],
+        f"movendo {i}": [m_i.intercept_[0], m_i.coef_[0, 0], m_i.coef_[0, 1]],
+        f"movendo {j}": [m_j.intercept_[0], m_j.coef_[0, 0], m_j.coef_[0, 1]],
+    },
+    index=["intercept_", "coef_ de X1", "coef_ de X2"],
+)
+coeficientes.style.format(numero_br)
+```
+
+::: {.funcao}
+- **`"sim" if j in m_j.support_ else "não"`** — `"sim"` quando `j` está entre os vetores de suporte do ajuste novo, e `"não"` quando não está.
+:::
+
+O ponto 17, que não é vetor de suporte, sai do lugar sem mudar os coeficientes nem o intercepto: as colunas `original` e `movendo 17` são iguais. O ponto 26, um vetor de suporte com folga 2,30, empurrado as mesmas 2 unidades na direção da sua classe, atravessa o hiperplano e sai da margem: no ajuste novo, o seu $y_i f(x_i)$ é 1,35, e ele deixa de ser vetor de suporte. Os coeficientes mudam de $(1{,}12;\ 0{,}67)$ para $(1{,}23;\ 0{,}74)$.
 
 A análise discriminante linear da [seção 9.7](../cap09/07-leitura-complementar-lda-e-qda.qmd) se comporta de outro jeito: a fronteira dela depende das médias das classes e da covariância, calculadas com todos os pontos de treino, inclusive os que estão muito longe dela. O classificador de vetores de suporte ignora os pontos que estão folgadamente do lado certo da margem.
 
 ## Escolhendo `C` por validação cruzada
 
-O `C` é um parâmetro de ajuste como o $\lambda$ da ridge, e a escolha segue o mesmo caminho: validação cruzada numa grade de valores ([seção 10.5](../cap10/05-validacao-cruzada-em-classificacao.qmd)). A grade é a mesma de antes, e o critério é a taxa de erro média nos 5 grupos:
+O `C` é um parâmetro de ajuste como o $\lambda$ da ridge, e a escolha segue o mesmo caminho: validação cruzada numa grade de valores ([seção 10.5](../cap10/05-validacao-cruzada-em-classificacao.qmd)). Os 40 pontos se dividem em 5 grupos; em cada divisão, um grupo fica para validação e os outros quatro treinam. A primeira divisão, com `C` = 0,01, passo a passo:
+
+```{python}
+#| label: uma-divisao
+from sklearn.model_selection import StratifiedKFold
+
+grupos = StratifiedKFold(5, shuffle=True, random_state=16)
+divisoes = list(grupos.split(X_mis, y))
+treino, validacao = divisoes[0]
+print("pontos de treino:", len(treino))
+print("pontos de validação:", len(validacao))
+m = SVC(kernel="linear", C=0.01)
+m.fit(X_mis[treino], y[treino])
+previsto = m.predict(X_mis[validacao])
+erro = (previsto != y[validacao]).mean()
+print("erro de validação, primeira divisão:", numero_br(erro, 3))
+```
+
+::: {.funcao}
+- **`StratifiedKFold(n_splits, shuffle, random_state)`**, de `sklearn.model_selection` — divide as linhas em `n_splits` grupos com a mesma proporção de classes do conjunto todo; `shuffle=True` embaralha antes, com a semente `random_state`.
+- **`grupos.split(X, y)`** — as divisões, uma por grupo, cada uma com as posições de treino e as de validação; `list` as reúne numa lista, e `treino, validacao = divisoes[0]` separa as duas partes da primeira.
+- **`(previsto != y[validacao]).mean()`** — a média de um array de `True` e `False`, em que `True` conta 1 e `False` conta 0: a fração de `True`, aqui a taxa de erro.
+:::
+
+A mesma conta nas 5 divisões, e a média dos 5 erros:
+
+```{python}
+#| label: cinco-divisoes
+erros_c = []
+for treino, validacao in divisoes:
+    m = SVC(kernel="linear", C=0.01)
+    m.fit(X_mis[treino], y[treino])
+    previsto = m.predict(X_mis[validacao])
+    erros_c.append((previsto != y[validacao]).mean())
+for k, e in enumerate(erros_c):
+    print(f"divisão {k + 1}:", numero_br(e, 3))
+print("média, o erro de validação cruzada:", numero_br(np.mean(erros_c), 3))
+```
+
+O `GridSearchCV` faz esse laço para cada valor da grade, que é a mesma de antes, com os mesmos 5 grupos, e o critério é a taxa de erro média:
 
 ```{python}
 #| label: busca-c
-from sklearn.model_selection \
-    import GridSearchCV
-from sklearn.model_selection \
-    import StratifiedKFold
+from sklearn.model_selection import GridSearchCV
 
-grupos = StratifiedKFold(5,
-    shuffle=True, random_state=16)
-busca = GridSearchCV(
-    SVC(kernel="linear"),
-    {"C": grade}, cv=grupos)
+busca = GridSearchCV(SVC(kernel="linear"), {"C": grade}, cv=grupos)
 busca.fit(X_mis, y)
-r = busca.cv_results_
-erro_cv = 1 - r["mean_test_score"]
-def rot(c):
-    return f"{c:g}".replace(
-        ".", ",")
-
-print("pontos por grupo:",
-    len(X_mis) // 5)
-print("C: erro de val. cruzada")
-for c, e in zip(grade, erro_cv):
-    print(rot(c) + ":",
-        numero_br(e, 3))
+erro_cv = 1 - busca.cv_results_["mean_test_score"]
 c_best = busca.best_params_["C"]
-print("escolhido:", rot(c_best))
+print("C escolhido:", numero_br(c_best))
 previsto = busca.predict(X_teste)
-teste = (previsto
-    != y_teste).mean()
-print("erro de teste:",
-    numero_br(teste, 4))
+teste = (previsto != y_teste).mean()
+print("erro de teste do escolhido:", numero_br(teste, 4))
+pd.DataFrame({"c_svc": grade, "erro_cv": erro_cv}).style.format(
+    {"c_svc": "{:g}", "erro_cv": "{:.3f}"}, decimal=","
+).hide()
 ```
 
 ::: {.funcao}
-- **`StratifiedKFold(n_splits, shuffle, random_state)`** — divide as linhas em `n_splits` grupos com a mesma proporção de classes do conjunto todo; `shuffle=True` embaralha antes, com a semente `random_state`.
 - **`GridSearchCV(estimador, grade, cv)`**, de `sklearn.model_selection` — ajusta o estimador com cada valor da grade, um dicionário com o nome do argumento e a lista de valores, e mede a taxa de acerto por validação cruzada nos grupos de `cv`. No fim, reajusta com todas as linhas o valor de maior acerto médio; `busca.predict` usa esse ajuste.
-- **`busca.cv_results_`** — um dicionário com os resultados; `r["mean_test_score"]` é o acerto médio nos grupos, na ordem da grade, e `1 -` o transforma em taxa de erro. **`busca.best_params_`** — o valor escolhido, num dicionário.
+- **`busca.cv_results_`** — um dicionário com os resultados; `["mean_test_score"]` é o acerto médio nos grupos, na ordem da grade, e `1 -` o transforma em taxa de erro. **`busca.best_params_`** — o valor escolhido, num dicionário.
 :::
 
-A validação cruzada escolhe `C` = 0,01, a margem mais larga da grade, com erro de validação cruzada 0,175, e a taxa de erro de teste desse ajuste é 0,2317. O valor está na ponta da grade, e isso levanta uma dúvida: um `C` ainda menor faria melhor? O código olha o ajuste com `C` = 0,01 e o compara com `C` = 0,001:
+A validação cruzada escolhe `C` = 0,01, a margem mais larga da grade, com erro de validação cruzada 0,175, a média das 5 divisões acima, e a taxa de erro de teste desse ajuste é 0,2317. O valor está na ponta da grade, e isso levanta uma dúvida: um `C` ainda menor faria melhor? O código olha o ajuste com `C` = 0,01 e o compara com `C` = 0,001:
 
 ```{python}
 #| label: ponta
-from sklearn.model_selection \
-    import cross_val_score
+from sklearn.model_selection import cross_val_score
 
 m01 = SVC(kernel="linear", C=0.01)
 m01.fit(X_mis, y)
-print("vetores de suporte:",
-    len(m01.support_))
-pesos = np.abs(m01.dual_coef_)
-print("todos com peso C:",
-    np.allclose(pesos, 0.01))
-m001 = SVC(kernel="linear",
-    C=0.001).fit(X_mis, y)
+print("vetores de suporte, C = 0,01:", len(m01.support_))
+
+m001 = SVC(kernel="linear", C=0.001)
+m001.fit(X_mis, y)
+acerto = cross_val_score(SVC(kernel="linear", C=0.001), X_mis, y, cv=grupos)
+print("erro de validação cruzada, C = 0,001:", numero_br(1 - acerto.mean(), 3))
+
 def reta(m):
-    v = np.r_[m.intercept_,
-        m.coef_[0]]
-    return v / np.linalg.norm(
-        m.coef_[0])
-print("C = 0,001, mesma reta:",
-    np.allclose(reta(m01),
-        reta(m001)))
-acerto = cross_val_score(
-    SVC(kernel="linear", C=0.001),
-    X_mis, y, cv=grupos)
-e001 = 1 - acerto.mean()
-print("val. cruzada, C = 0,001:",
-    numero_br(e001, 3))
+    v = np.r_[m.intercept_, m.coef_[0]]
+    return v / np.linalg.norm(m.coef_[0])
+
+def tres_casas(valor):
+    return numero_br(valor, 3)
+
+pd.DataFrame(
+    {"C = 0,01": reta(m01), "C = 0,001": reta(m001)}, index=["β0", "β1", "β2"]
+).style.format(tres_casas)
 ```
 
 ::: {.funcao}
-- **`m.dual_coef_`** — o peso de cada vetor de suporte na solução, com o sinal da classe. Em valor absoluto, fica entre 0 e o `C` do `SVC`.
-- **`cross_val_score(estimador, X, y, cv)`**, de `sklearn.model_selection` — a taxa de acerto em cada um dos grupos de `cv`; com os mesmos `grupos` da busca, o erro médio é comparável ao da tabela acima.
+- **`cross_val_score(estimador, X, y, cv)`**, de `sklearn.model_selection` — a taxa de acerto em cada um dos grupos de `cv`, o mesmo laço da primeira divisão, feito pela função; com os mesmos `grupos` da busca, o erro médio é comparável ao da tabela acima.
 - **`reta(m)`** — junta o intercepto e os coeficientes num vetor só e o divide pela norma de $(\beta_1, \beta_2)$, a escala de $\sum_j \beta_j^2 = 1$ da seção 16.1: a mesma reta dá o mesmo vetor, qualquer que seja a escala do ajuste.
+- **`.style.format(tres_casas)`** — escreve cada valor da tabela com a função `tres_casas`, que chama `numero_br` com três casas.
 :::
 
-Com `C` = 0,01, os 40 pontos são vetores de suporte, e todos com o mesmo peso, o maior permitido. O orçamento é tão folgado que todo ponto entra na decisão por igual, e diminuir o `C` para 0,001 dá a mesma reta. Com os mesmos grupos, o erro de validação cruzada de `C` = 0,001 é 0,175, igual ao de 0,01: estender a grade para baixo criaria um empate, e o `GridSearchCV`, que fica com o primeiro valor da grade entre os empatados, trocaria só o valor de `C`, não o classificador escolhido.
+Com `C` = 0,01, os 40 pontos são vetores de suporte. O orçamento é tão folgado que todo ponto entra na decisão, e diminuir o `C` para 0,001 dá a mesma reta, como mostram as duas colunas da tabela. Com os mesmos grupos, o erro de validação cruzada de `C` = 0,001 é 0,175, igual ao de 0,01: estender a grade para baixo criaria um empate, e o `GridSearchCV`, que fica com o primeiro valor da grade entre os empatados, trocaria só o valor de `C`, não o classificador escolhido.
 
 Estes dados foram simulados, e por isso a regra de menor taxa de erro esperada é conhecida: o **classificador de Bayes** da [seção 7.7](../cap07/07-classificacao-e-o-classificador-de-bayes.qmd). As duas classes são normais com o mesmo espalhamento, têm o mesmo tamanho, e a classe $1$ foi deslocada de 1 nas duas coordenadas; com isso, a fronteira de Bayes é a reta $X_1 + X_2 = 1$. Nos mesmos pontos de teste, ela erra:
 
@@ -577,58 +599,48 @@ Estes dados foram simulados, e por isso a regra de menor taxa de erro esperada �
 lado = X_teste.sum(axis=1) > 1
 regra = np.where(lado, 1, -1)
 bayes = (regra != y_teste).mean()
-print("regra X1 + X2 > 1:",
-    numero_br(bayes, 4))
+print("erro de teste da regra X1 + X2 > 1:", numero_br(bayes, 4))
+print("erro de teste do SVC escolhido:", numero_br(teste, 4))
 ```
-
-::: {.funcao}
-- **`np.where(cond, 1, -1)`** — 1 onde `cond` é `True`, e −1 onde é `False`.
-:::
 
 Nestes pontos, a regra de Bayes erra 0,2304, e o `SVC` escolhido, 0,2317: a diferença, de 0,0013, é pequena. Mas a escolha de `C` não é firme. Com outra semente no embaralhamento dos grupos, a validação cruzada pode escolher outro valor. O código repete a busca com as sementes de 0 a 19 e mede o erro de teste de cada `C` da grade:
 
 ```{python}
 #| label: sementes
 escolhas = []
-for s in range(20):
-    g = StratifiedKFold(5,
-        shuffle=True,
-        random_state=s)
-    b = GridSearchCV(
-        SVC(kernel="linear"),
-        {"C": grade}, cv=g)
+for semente in range(20):
+    g = StratifiedKFold(5, shuffle=True, random_state=semente)
+    b = GridSearchCV(SVC(kernel="linear"), {"C": grade}, cv=g)
     b.fit(X_mis, y)
-    escolhas.append(
-        b.best_params_["C"])
-conta = pd.Series(escolhas)
-print("C: vezes escolhido")
-for c, n in (conta.value_counts()
-        .sort_index().items()):
-    print(rot(c) + ":", n)
-erros_t = []
+    escolhas.append(b.best_params_["C"])
+
+linhas = []
 for c in grade:
     m = SVC(kernel="linear", C=c)
     m.fit(X_mis, y)
-    p = m.predict(X_teste)
-    erros_t.append(
-        (p != y_teste).mean())
-erros_t = np.array(erros_t)
-entre = np.all((erros_t > 0.23)
-    & (erros_t < 0.26))
-print("teste entre 0,23 e 0,26:",
-    entre)
+    previsto = m.predict(X_teste)
+    linhas.append({
+        "c_svc": c,
+        "vezes escolhido": escolhas.count(c),
+        "erro de teste": (previsto != y_teste).mean(),
+    })
+sementes = pd.DataFrame(linhas)
+escolhidos = (sementes["vezes escolhido"] > 0).sum()
+print("valores de C escolhidos ao menos uma vez:", escolhidos)
+sementes.style.format({"c_svc": "{:g}", "erro de teste": "{:.4f}"}, decimal=",").hide()
 ```
 
 ::: {.funcao}
-- **`pd.Series(escolhas).value_counts()`** — quantas vezes cada valor aparece; **`.sort_index()`** ordena pelos valores de `C`, e **`.items()`** percorre os pares (valor, contagem).
-- **`a & b`** — `True` onde os dois são `True`: `entre` confere que todo erro de teste está acima de 0,23 e abaixo de 0,26.
+- **`escolhas.count(c)`** — quantas vezes o valor `c` aparece na lista.
 :::
 
-As 20 sementes escolhem 6 valores diferentes de `C`, de 0,01 a 10. Nestes dados, nenhum `C` da grade é muito pior que outro: o erro de teste de todos fica entre 0,23 e 0,26. A curva de validação cruzada, ao contrário, é ruidosa: com 8 pontos por grupo, um erro a mais num grupo soma $1/8$ ao erro dele e $1/40 = 0{,}025$ à média dos 5. Com 40 pontos de treino, pequenas mudanças nos grupos trocam o vencedor.
+As 20 sementes escolhem 6 valores diferentes de `C`, de 0,01 a 10.
+
+Nestes dados, nenhum `C` da grade é muito pior que outro: na última coluna, o erro de teste de todos fica entre 0,23 e 0,26. A curva de validação cruzada, ao contrário, é ruidosa: com 8 pontos por grupo, um erro a mais num grupo soma $1/8$ ao erro dele e $1/40 = 0{,}025$ à média dos 5. Com 40 pontos de treino, pequenas mudanças nos grupos trocam o vencedor.
 
 ## A perda dobradiça e a regressão logística
 
-Na forma com $\lambda$, a perda do classificador de vetores de suporte é a soma de $\max[0,\ 1 - y_i f(x_i)]$, a **perda dobradiça** (*hinge loss*): uma linha que desce em reta até $y_i f(x_i) = 1$ e daí em diante é zero, com uma dobra no 1. Na ridge, a perda é a soma dos quadrados dos resíduos.
+Na forma com $\lambda$, a perda do classificador de vetores de suporte é a soma de $\max[0,\ 1 - y_i f(x_i)]$, a perda dobradiça: uma linha que desce em reta até $y_i f(x_i) = 1$ e daí em diante é zero, com uma dobra no 1. Na ridge, a perda é a soma dos quadrados dos resíduos.
 
 A regressão logística da [seção 9.2](../cap09/02-regressao-logistica.qmd) também pode ser escrita com uma perda. Com as classes em $-1$ e $1$, a perda de cada ponto é $\log(1 + e^{-y_i f(x_i)})$. As duas perdas, calculadas em quatro valores de $y_i f(x_i)$:
 
@@ -637,16 +649,18 @@ A regressão logística da [seção 9.2](../cap09/02-regressao-logistica.qmd) ta
 z = np.array([-2, 0, 1, 3])
 dobra = np.maximum(0, 1 - z)
 logis = np.log1p(np.exp(-z))
-print("yf: dobradiça · logística")
-for a, b1, b2 in zip(z, dobra,
-        logis):
-    print(numero_br(a, 0), ":",
-        numero_br(b1, 0), "·",
-        numero_br(b2, 4))
+perdas = pd.DataFrame({"y·f(x)": z, "dobradiça": dobra, "logística": logis})
+
+def quatro_casas(valor):
+    return numero_br(valor, 4)
+
+perdas.style.format(
+    {"y·f(x)": numero_br, "dobradiça": numero_br, "logística": quatro_casas}
+).hide()
 ```
 
 ::: {.funcao}
-- **`np.exp(-z)`** — $e^{-z}$, elemento a elemento. **`np.log1p(v)`** — $\log(1 + v)$, o logaritmo natural.
+- **`np.exp(-z)`** — $e^{-z}$, elemento a elemento. **`np.log1p(v)`** — $\log(1 + v)$, o logaritmo natural. **`quatro_casas`** — a `numero_br` com quatro casas; no `style.format`, um dicionário dá a cada coluna a sua função.
 :::
 
 Em $y_i f(x_i) = 1$ e em 3, a perda dobradiça é zero, e a logística, 0,3133 e 0,0486: pequena, mas não zero. O gráfico das duas:
@@ -656,21 +670,12 @@ Em $y_i f(x_i) = 1$ e em 3, a perda dobradiça é zero, e a logística, 0,3133 e
 #| fig-cap: "A perda dobradiça, em laranja, e a perda da regressão logística, em azul, como funções de $y_i f(x_i)$. A linha vertical cinza marca $y_i f(x_i) = 1$, a borda da margem: dali para a direita, a perda dobradiça é zero, e a logística continua positiva, cada vez menor."
 #| fig-alt: "Gráfico de linhas com o eixo horizontal de −4 a 3, rotulado y f(x), e o vertical de 0 a 5, rotulado perda. Uma reta laranja desce da esquerda até tocar o zero em 1 e segue horizontal em zero até 3. Uma curva azul desce de forma suave, acima da reta laranja perto do 1 e abaixo dela à esquerda, e se aproxima do zero sem tocá-lo. Uma linha vertical cinza tracejada passa em 1."
 zz = np.linspace(-4, 3, 281)
-fig, ax = plt.subplots(
-    figsize=(3.8, 2.8),
-    layout="constrained")
-ax.plot(zz,
-    np.maximum(0, 1 - zz),
-    color="C1", lw=2)
-ax.plot(zz,
-    np.log1p(np.exp(-zz)),
-    color="C0", lw=2)
-ax.axvline(1, color="0.45",
-    ls="--", lw=1)
-ax.text(-1.6, 3.2, "dobradiça",
-    color="C1")
-ax.text(-3.4, 1.7, "logística",
-    color="C0")
+fig, ax = plt.subplots(figsize=(3.8, 2.8), layout="constrained")
+ax.plot(zz, np.maximum(0, 1 - zz), color="C1", lw=2)
+ax.plot(zz, np.log1p(np.exp(-zz)), color="C0", lw=2)
+ax.axvline(1, color="0.45", ls="--", lw=1)
+ax.text(-1.6, 3.2, "dobradiça", color="C1")
+ax.text(-3.4, 1.7, "logística", color="C0")
 ax.set_xlabel("$y_i f(x_i)$")
 ax.set_ylabel("perda")
 ax.set_xlim(-4, 3)
@@ -679,7 +684,7 @@ plt.show()
 ```
 
 ::: {.funcao}
-- **`ax.plot(x, y, color, lw)`** — uma linha pelos pontos, com a cor e a espessura `lw`. **`ax.axvline(1, ...)`** — uma linha vertical em $x = 1$.
+- **`ax.axvline(1, ...)`** — uma linha vertical em $x = 1$.
 - **`ax.text(x, y, texto, color)`** — escreve o texto na posição $(x, y)$, nas coordenadas dos dados.
 :::
 
@@ -689,41 +694,25 @@ Com perdas parecidas, os dois métodos costumam dar fronteiras parecidas, mesmo 
 
 ```{python}
 #| label: logistica
-from sklearn.linear_model import (
-    LogisticRegression)
+from sklearn.linear_model import LogisticRegression
 
-logit = LogisticRegression(
-    C=np.inf,
-    solver="newton-cholesky",
-    tol=1e-8)
+logit = LogisticRegression(C=np.inf, solver="newton-cholesky", tol=1e-8)
 logit.fit(X_mis, y)
 p_log = logit.predict(X_teste)
 p_svc = modelo.predict(X_teste)
-e_log = (p_log != y_teste).mean()
-e_svc = (p_svc != y_teste).mean()
-print("teste, logística:",
-    numero_br(e_log, 4))
-print("teste, SVC:",
-    numero_br(e_svc, 4))
-conc = (p_log == p_svc).mean()
-print("mesma classe:",
-    numero_br(conc, 4))
-print("β0; β1; β2 (Σβj² = 1):")
-for nome, m in [
-        ("logística", logit),
-        ("SVC", modelo)]:
-    v = reta(m)
-    print(nome,
-        numero_br(v[0], 3), ";",
-        numero_br(v[1], 3), ";",
-        numero_br(v[2], 3))
+print("erro de teste, logística:", numero_br((p_log != y_teste).mean(), 4))
+print("erro de teste, SVC:", numero_br((p_svc != y_teste).mean(), 4))
+print("fração com a mesma classe:", numero_br((p_log == p_svc).mean(), 4))
+pd.DataFrame(
+    {"logística": reta(logit), "SVC": reta(modelo)}, index=["β0", "β1", "β2"]
+).style.format(tres_casas)
 ```
 
 ::: {.funcao}
 - **`LogisticRegression(C=np.inf, solver="newton-cholesky", tol=1e-8)`**, de `sklearn.linear_model` — a regressão logística sem penalidade (`C=np.inf`), resolvida pelo método de Newton com tolerância pequena (`tol=1e-8`), que chega ao mesmo ponto em máquinas diferentes.
 :::
 
-As duas fronteiras dão a mesma classe a 0,9796 dos pontos de teste, e os erros de teste, 0,2403 na logística e 0,2391 no `SVC`, diferem em 0,0012. Na escala de $\sum_j \beta_j^2 = 1$, os coeficientes das duas retas ficam próximos, sem coincidir.
+As duas fronteiras dão a mesma classe a 0,9796 dos pontos de teste, e os erros de teste, 0,2403 na logística e 0,2391 no `SVC`, diferem em 0,0012. Na tabela, na escala de $\sum_j \beta_j^2 = 1$, os coeficientes das duas retas ficam próximos, sem coincidir.
 
 ## O `LinearSVC`
 
@@ -733,28 +722,24 @@ O `scikit-learn` tem um segundo classificador por hiperplano, o `LinearSVC`. O n
 #| label: linear-svc
 from sklearn.svm import LinearSVC
 
-def mostra(nome, m):
-    b0 = m.intercept_[0]
-    b = m.coef_[0]
-    print(nome)
-    print("  β0:", numero_br(b0),
-        "· β:", numero_br(b[0]),
-        ";", numero_br(b[1]))
-
 padrao = LinearSVC(C=1)
 padrao.fit(X_mis, y)
-dobradica = LinearSVC(C=1,
-    loss="hinge", random_state=16)
+dobradica = LinearSVC(C=1, loss="hinge", random_state=16)
 dobradica.fit(X_mis, y)
-mostra("SVC linear", modelo)
-for nome, m in [
-        ("LinearSVC", padrao),
-        ("hinge", dobradica)]:
-    mostra(nome, m)
-    p = m.predict(X_teste)
-    igual = (p == p_svc).mean()
-    print("  mesma classe:",
-        numero_br(igual, 4))
+linhas = []
+for nome, m in [("SVC linear", modelo), ("LinearSVC", padrao), ("hinge", dobradica)]:
+    previsto = m.predict(X_teste)
+    linhas.append({
+        "ajuste": nome,
+        "β0": m.intercept_[0],
+        "β1": m.coef_[0, 0],
+        "β2": m.coef_[0, 1],
+        "mesma classe que o SVC": (previsto == p_svc).mean(),
+    })
+pd.DataFrame(linhas).style.format(
+    {"β0": numero_br, "β1": numero_br, "β2": numero_br,
+     "mesma classe que o SVC": quatro_casas}
+).hide()
 ```
 
 ::: {.funcao}
@@ -765,4 +750,4 @@ Os coeficientes saem outros: $(0{,}57;\ 0{,}39)$ no padrão e $(1{,}08;\ 0{,}65)
 
 ## Quantos pontos aceitar
 
-Vale aceitar pontos de treino do lado errado, e quantos? Não há um número fixo: o orçamento é um parâmetro de ajuste, escolhido por validação cruzada como o $\lambda$ da ridge. Nestes 40 pontos, a validação cruzada escolheu a margem mais larga da grade, em que todos os pontos são vetores de suporte, mas sem firmeza: em 10 das 20 divisões dos grupos, o escolhido foi `C` = 0,01, e nas outras 10, outro valor; e o erro de teste de todo `C` da grade ficou entre 0,23 e 0,26. O orçamento limita quantos pontos ficam do lado errado, no máximo $C$, mas não fixa esse número: é o ajuste que decide quantos cruzam o hiperplano. Em troca dos pontos do lado errado, a fronteira passa a depender de muitos pontos, e não de poucos.
+Vale aceitar pontos de treino do lado errado, e quantos? Não há um número fixo: o orçamento é um parâmetro de ajuste, escolhido por validação cruzada como o $\lambda$ da ridge. Nestes 40 pontos, a validação cruzada escolheu a margem mais larga da grade, em que todos os pontos são vetores de suporte, mas sem firmeza: em 10 das 20 sementes do embaralhamento, o escolhido foi `C` = 0,01, e nas outras 10, outro valor; e o erro de teste de todo `C` da grade ficou entre 0,23 e 0,26. O orçamento limita quantos pontos ficam do lado errado, no máximo $C$, mas não fixa esse número: é o ajuste que decide quantos cruzam o hiperplano. Em troca dos pontos do lado errado, a fronteira passa a depender de muitos pontos, e não de poucos.

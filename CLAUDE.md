@@ -52,7 +52,7 @@ Decisão do autor (20/10/2026): *"dont worry about phone render."* **A largura d
 - Tabelas e equações só precisam caber na coluna de texto do desktop.
 - Revisores (`slide-auditor`, `/visual-audit`, lentes de render) **não** medem a 390 px nem abrem achado de largura de celular.
 
-**O capítulo 10 foi o primeiro revisado sob essas duas regras; os capítulos 6 a 9 e 11 a 17 ainda não.** Um agente que revisar um desses capítulos aplica as duas, seção a seção, com os números da prosa intactos (diff das saídas antes e depois, host e container).
+**Os capítulos 10 a 16 já foram revisados sob essas duas regras; os capítulos 6 a 9 e 17 ainda não.** Um agente que revisar um desses capítulos aplica as duas, seção a seção, com os números da prosa intactos (diff das saídas antes e depois, host e container).
 
 ### O que falta
 
