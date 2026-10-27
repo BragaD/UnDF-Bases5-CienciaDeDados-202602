@@ -272,65 +272,6 @@ plt.show()
 
 Na figura, o coeficiente verdadeiro é zero nos dois painéis; o que cresce com $p$ é o quanto a estimativa depende da amostra. Com $p = 19$, 26 das 200 amostras dão $|\hat\beta_1|$ acima de 5 e nem cabem no gráfico. Coeficientes que mudam tanto dão previsões que mudam também: é a variância, um dos dois lados da troca entre viés e variância da seção 7.6, e aqui ela não traz nenhuma redução de viés em troca, porque nenhuma coluna tem relação com $y$.
 
-### O $C_p$, o BIC e o $R^2$ ajustado
-
-O erro de treino não serve para comparar modelos com números diferentes de colunas. Os critérios da seção 11.2 corrigem isso: servem também quando $p$ chega perto de $n$? Os três se apoiam numa estimativa da variância do ruído feita com o próprio treino:
-
-$$
-\hat\sigma^2 = \frac{\mathrm{RSS}_p}{n - p - 1},
-$$
-
-em que $\mathrm{RSS}_p$ é o RSS do modelo com todas as $p$ colunas. O $C_p$ e o BIC de um modelo com $d$ colunas somam ao RSS dele uma penalidade proporcional a $\hat\sigma^2$. O $R^2$ ajustado é
-
-$$
-R^2_{\text{ajustado}} = 1 - \frac{\mathrm{RSS}/(n - d - 1)}{\mathrm{TSS}/(n - 1)},
-$$
-
-e no modelo com todas as colunas, $d = p$, o numerador da fração é o próprio $\hat\sigma^2$. Com $n = 20$ e $p = 19$, o denominador $n - p - 1$ é zero. Com $p = 18$, é 1, e $\hat\sigma^2$ é o próprio RSS.
-
-A célula sorteia 200 conjuntos de ruído puro, cada um com $n = 20$ linhas e 18 colunas. Cada valor de $p$ usa as $p$ primeiras colunas de cada amostra: com $p = 1$, só a primeira; com $p = 18$, todas. Em cada caso, a célula ajusta o modelo com as $p$ colunas e calcula $\hat\sigma^2$ e o $R^2$ ajustado. A variância verdadeira do ruído é 1, e nenhuma coluna tem relação com $y$.
-
-```{python}
-#| label: criterios
-rng = np.random.default_rng(13)
-registros = []
-for amostra in range(200):              # 200 amostras de ruído puro, n = 20
-    X_rep = rng.normal(size=(n, 18))
-    y_rep = rng.normal(size=n)
-    tss = ((y_rep - y_rep.mean()) ** 2).sum()
-    for p in [1, 18]:                   # o modelo com todas as p colunas
-        modelo = LinearRegression()
-        modelo.fit(X_rep[:, :p], y_rep)
-        rss = ((y_rep - modelo.predict(X_rep[:, :p])) ** 2).sum()
-        sigma2 = rss / (n - p - 1)
-        r2_ajustado = 1 - sigma2 / (tss / (n - 1))
-        registros.append({"p": p, "σ̂²": sigma2, "R² ajustado": r2_ajustado})
-criterios = pd.DataFrame(registros)
-print("linhas da tabela (200 amostras × 2 valores de p):", len(criterios))
-print("n − p − 1 com p = 19:", n - 19 - 1)
-```
-
-Cada valor de $p$ tem agora 200 valores de $\hat\sigma^2$ e 200 do $R^2$ ajustado. A célula seguinte os resume pela mediana e pelos quantis de 10% e 90%, que cercam os 80% centrais. De 18 colunas de ruído, que $R^2$ ajustado você espera?
-
-```{python}
-#| label: criterios-resumo
-linhas_q = []
-for p in [1, 18]:
-    grupo = criterios[criterios["p"] == p]
-    for nome, q in [("10%", 0.1), ("mediana", 0.5), ("90%", 0.9)]:
-        linhas_q.append({"p": p, "quantil": nome,
-                         "σ̂²": grupo["σ̂²"].quantile(q),
-                         "R² ajustado": grupo["R² ajustado"].quantile(q)})
-resumo_criterios = pd.DataFrame(linhas_q).set_index(["p", "quantil"])
-resumo_criterios.style.format(tres_casas)
-```
-
-Com $p = 1$, os dois critérios fazem o que se espera: $\hat\sigma^2$ fica em torno da variância verdadeira, 1, e o $R^2$ ajustado em torno de zero, como deve ser para uma coluna de ruído.
-
-Com $p = 18$, a mediana do $R^2$ ajustado é 0,430: em metade das amostras, 18 colunas de ruído passam de 0,430 no critério que devia descontar o número de colunas. Em um décimo delas, passam de 0,976.
-
-A causa está em $\hat\sigma^2$, que erra para os dois lados: os 80% centrais vão de 0,028 a 3,101. A distribuição é assimétrica, e mais da metade das amostras fica abaixo de 1, com mediana 0,467. Pela fórmula, sempre que $\hat\sigma^2$ sai abaixo da variância amostral de $y$, $\mathrm{TSS}/(n - 1)$, o $R^2$ ajustado sai positivo. Com $p$ perto de $n$, a estimativa em que os critérios se apoiam muda tanto de uma amostra para outra que a correção deixa de valer, e com $p = 19$ nem se calcula. O que avalia o modelo, então, é o erro em observações que não entraram no ajuste, num conjunto de teste ou na validação cruzada.
-
 ## Regularizar com $p$ grande
 
 A seleção passo a passo para frente, a ridge, o lasso e a PCR ajustam modelos menos flexíveis que os mínimos quadrados, e é isso que os torna úteis quando $p$ é grande. Até quantas colunas de ruído eles ainda ajudam? A célula mede só o lasso, como representante da família; a seleção, a ridge e a PCR não são testadas aqui. Ele aparece lado a lado com os mínimos quadrados e com o modelo nulo, que prevê a média de $y$ do treino. O desenho:
@@ -548,3 +489,64 @@ Com $p = 2.000$, o lasso ficou com 58 colunas de ruído na primeira amostra e 59
 ## O que muda, então
 
 Com $p + 1 \ge n$, os mínimos quadrados passam por todos os pontos de treino e erram muito fora deles; já perto disso, o erro de teste sobe. A regularização ainda ajuda, mas o erro dela também sobe com as colunas de ruído: com 1.980 delas, o lasso ficou longe do piso de 1.
+
+## Leitura para casa
+
+### O $C_p$, o BIC e o $R^2$ ajustado
+
+O erro de treino não serve para comparar modelos com números diferentes de colunas. Os critérios da leitura para casa da seção 11.2 corrigem isso: servem também quando $p$ chega perto de $n$? Os três se apoiam numa estimativa da variância do ruído feita com o próprio treino:
+
+$$
+\hat\sigma^2 = \frac{\mathrm{RSS}_p}{n - p - 1},
+$$
+
+em que $\mathrm{RSS}_p$ é o RSS do modelo com todas as $p$ colunas. O $C_p$ e o BIC de um modelo com $d$ colunas somam ao RSS dele uma penalidade proporcional a $\hat\sigma^2$. O $R^2$ ajustado é
+
+$$
+R^2_{\text{ajustado}} = 1 - \frac{\mathrm{RSS}/(n - d - 1)}{\mathrm{TSS}/(n - 1)},
+$$
+
+e no modelo com todas as colunas, $d = p$, o numerador da fração é o próprio $\hat\sigma^2$. Com $n = 20$ e $p = 19$, o denominador $n - p - 1$ é zero. Com $p = 18$, é 1, e $\hat\sigma^2$ é o próprio RSS.
+
+A célula sorteia 200 conjuntos de ruído puro, cada um com $n = 20$ linhas e 18 colunas. Cada valor de $p$ usa as $p$ primeiras colunas de cada amostra: com $p = 1$, só a primeira; com $p = 18$, todas. Em cada caso, a célula ajusta o modelo com as $p$ colunas e calcula $\hat\sigma^2$ e o $R^2$ ajustado. A variância verdadeira do ruído é 1, e nenhuma coluna tem relação com $y$.
+
+```{python}
+#| label: criterios
+rng = np.random.default_rng(13)
+registros = []
+for amostra in range(200):              # 200 amostras de ruído puro, n = 20
+    X_rep = rng.normal(size=(n, 18))
+    y_rep = rng.normal(size=n)
+    tss = ((y_rep - y_rep.mean()) ** 2).sum()
+    for p in [1, 18]:                   # o modelo com todas as p colunas
+        modelo = LinearRegression()
+        modelo.fit(X_rep[:, :p], y_rep)
+        rss = ((y_rep - modelo.predict(X_rep[:, :p])) ** 2).sum()
+        sigma2 = rss / (n - p - 1)
+        r2_ajustado = 1 - sigma2 / (tss / (n - 1))
+        registros.append({"p": p, "σ̂²": sigma2, "R² ajustado": r2_ajustado})
+criterios = pd.DataFrame(registros)
+print("linhas da tabela (200 amostras × 2 valores de p):", len(criterios))
+print("n − p − 1 com p = 19:", n - 19 - 1)
+```
+
+Cada valor de $p$ tem agora 200 valores de $\hat\sigma^2$ e 200 do $R^2$ ajustado. A célula seguinte os resume pela mediana e pelos quantis de 10% e 90%, que cercam os 80% centrais. De 18 colunas de ruído, que $R^2$ ajustado você espera?
+
+```{python}
+#| label: criterios-resumo
+linhas_q = []
+for p in [1, 18]:
+    grupo = criterios[criterios["p"] == p]
+    for nome, q in [("10%", 0.1), ("mediana", 0.5), ("90%", 0.9)]:
+        linhas_q.append({"p": p, "quantil": nome,
+                         "σ̂²": grupo["σ̂²"].quantile(q),
+                         "R² ajustado": grupo["R² ajustado"].quantile(q)})
+resumo_criterios = pd.DataFrame(linhas_q).set_index(["p", "quantil"])
+resumo_criterios.style.format(tres_casas)
+```
+
+Com $p = 1$, os dois critérios fazem o que se espera: $\hat\sigma^2$ fica em torno da variância verdadeira, 1, e o $R^2$ ajustado em torno de zero, como deve ser para uma coluna de ruído.
+
+Com $p = 18$, a mediana do $R^2$ ajustado é 0,430: em metade das amostras, 18 colunas de ruído passam de 0,430 no critério que devia descontar o número de colunas. Em um décimo delas, passam de 0,976.
+
+A causa está em $\hat\sigma^2$, que erra para os dois lados: os 80% centrais vão de 0,028 a 3,101. A distribuição é assimétrica, e mais da metade das amostras fica abaixo de 1, com mediana 0,467. Pela fórmula, sempre que $\hat\sigma^2$ sai abaixo da variância amostral de $y$, $\mathrm{TSS}/(n - 1)$, o $R^2$ ajustado sai positivo. Com $p$ perto de $n$, a estimativa em que os critérios se apoiam muda tanto de uma amostra para outra que a correção deixa de valer, e com $p = 19$ nem se calcula. O que avalia o modelo, então, é o erro em observações que não entraram no ajuste, num conjunto de teste ou na validação cruzada.
