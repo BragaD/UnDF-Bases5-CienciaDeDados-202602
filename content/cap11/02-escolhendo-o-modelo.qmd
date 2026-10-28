@@ -4,7 +4,7 @@
 Esta seção corresponde à seção 6.1.3 de @james2023.
 :::
 
-A busca completa em `Credit` deixa doze candidatos: para cada tamanho $k$, o $\mathcal{M}_k$, o melhor modelo com $k$ preditores entre todos os daquele tamanho, de $\mathcal{M}_0$, sem preditor nenhum, a $\mathcal{M}_{11}$, com as 11 colunas. Qual deles usar? O RSS de treino não decide: ele cai quando o modelo ganha colunas, e acabaria escolhendo o modelo com todas. Há duas saídas. Uma é **medir** o erro de teste diretamente, em observações que o ajuste não viu. A outra é **corrigir** o erro de treino, somando a ele uma penalidade que cresce com o número de preditores, e fica para a leitura para casa, no fim da seção.
+A busca completa em `Credit` deixa doze candidatos, o melhor modelo de cada tamanho, de $\mathcal{M}_0$, sem preditor nenhum, a $\mathcal{M}_{11}$, com as 11 colunas. Qual deles usar? O RSS de treino escolheria sempre o de 11 colunas, porque nunca sobe quando o modelo ganha colunas. A validação cruzada do capítulo 10 decide pelo erro em observações que o ajuste não viu. O outro caminho, corrigir o erro de treino com uma penalidade pelo número de preditores, fica para a leitura para casa, no fim da seção.
 
 ```{python}
 #| label: setup
@@ -37,9 +37,7 @@ print("clientes:", n)
 print("colunas candidatas:", p)
 ```
 
-A função `numero_br` só escreve um número com vírgula decimal e ponto de milhar, com o número de casas pedido.
-
-A busca completa da seção 11.1 fica guardada numa função: para cada tamanho $k$, ela ajusta todos os modelos com $k$ preditores e devolve as colunas de $\mathcal{M}_k$ e o RSS de treino dele. A tabela `melhores` é essa busca feita com os 400 clientes.
+A busca completa da seção 11.1, guardada numa função, devolve as colunas e o RSS de treino de cada $\mathcal{M}_k$; `melhores` é essa busca nos 400 clientes.
 
 ```{python}
 #| label: melhores-por-tamanho
@@ -73,28 +71,28 @@ print("candidatos, de M_0 a M_11:", len(melhores))
 
 ## Medir o erro de teste
 
-O jeito de medir é o do capítulo 10: separar observações que o ajuste não vê e calcular nelas o erro de cada tamanho, por conjunto de validação ou por validação cruzada.
+A validação cruzada pede aqui o cuidado da seção 10.6. Os $\mathcal{M}_k$ da tabela `melhores` foram escolhidos olhando os 400 clientes, e validá-los em parte desses clientes deixaria as linhas de validação influenciarem a escolha das colunas. Por isso, em cada grupo da validação cruzada, a busca completa é **refeita só com as linhas de treino**, e o $\mathcal{M}_k$ de um grupo pode ser diferente do de outro.
 
-Há um cuidado, o mesmo da seção 10.6. Os $\mathcal{M}_k$ da tabela `melhores` foram escolhidos olhando os 400 clientes. Validar esses modelos em parte desses clientes deixaria as linhas de validação influenciarem a escolha das colunas: é vazamento. A busca completa tem de ser **refeita só com as linhas de treino**, e o $\mathcal{M}_k$ de um treino pode ser diferente do de outro.
-
-Primeiro, uma divisão e um tamanho só, por extenso. O sorteio separa os clientes de treino e os de validação:
+O primeiro dos 10 grupos, por extenso:
 
 ```{python}
-#| label: uma-divisao
-from sklearn.model_selection import train_test_split
+#| label: um-grupo
+from sklearn.model_selection import KFold
 
-X_treino, X_val, y_treino, y_val = train_test_split(
-    X, y, test_size=0.25, random_state=11
-)
-print("treino:", len(y_treino))
-print("validação:", len(y_val))
+grupos = KFold(10, shuffle=True, random_state=11)
+divisoes = list(grupos.split(X))
+treino, val = divisoes[0]
+X_treino, y_treino = X.iloc[treino], y.iloc[treino]
+X_val, y_val = X.iloc[val], y.iloc[val]
+print("grupo 1, treino:", len(y_treino))
+print("grupo 1, validação:", len(y_val))
 ```
 
 ::: {.funcao}
-**`train_test_split(X, y, test_size, random_state)`**: sorteia quais linhas vão para cada lado e devolve, nesta ordem, `X` de treino, `X` de validação, `y` de treino e `y` de validação. `test_size=0.25` manda um quarto das linhas para a validação, e `random_state=11` é a semente do sorteio.
+**`KFold(n_splits, shuffle, random_state)`**: o esquema de divisão do *k*-fold, aqui com 10 grupos, linhas embaralhadas antes da divisão e a semente 11. **`grupos.split(X)`** devolve, uma divisão por vez, o par (posições de treino, posições de validação); `list` guarda as 10 numa lista. **`X.iloc[posicoes]`** recorta as linhas pela posição.
 :::
 
-A busca completa, refeita só com os clientes de treino, dá os $\mathcal{M}_k$ daquele treino. O de 4 preditores, ao lado do de 4 preditores escolhido com os 400 clientes:
+A busca completa, refeita só com os clientes de treino do grupo, dá os $\mathcal{M}_k$ daquele treino. O de 4 preditores, ao lado do de 4 preditores escolhido com os 400 clientes:
 
 ```{python}
 #| label: busca-no-treino
@@ -104,7 +102,7 @@ print("M_4 do treino:", ", ".join(sorted(colunas_4)))
 print("M_4 dos 400 clientes:", ", ".join(sorted(melhores.loc[4, "preditores"])))
 ```
 
-Neste sorteio, os dois coincidem. Esse modelo é ajustado no treino, prevê os clientes de validação, e o erro é a média dos quadrados das diferenças:
+No grupo 1, os dois coincidem. Esse modelo é ajustado no treino do grupo, prevê os clientes de validação, e o erro é a média dos quadrados das diferenças:
 
 ```{python}
 #| label: erro-m4
@@ -112,7 +110,7 @@ modelo = LinearRegression()
 modelo.fit(X_treino[colunas_4], y_treino)
 previsao = modelo.predict(X_val[colunas_4])
 mse_4 = float(((y_val - previsao) ** 2).mean())
-print("MSE de validação do M_4:", numero_br(mse_4, 1))
+print("MSE de validação do M_4, grupo 1:", numero_br(mse_4, 1))
 ```
 
 A função abaixo faz a mesma conta para todos os tamanhos: recebe um treino e uma validação, refaz a busca no treino e mede, na validação, o MSE do melhor modelo de cada tamanho. O modelo nulo prevê, para todos os clientes da validação, a média de `saldo` no treino.
@@ -135,9 +133,8 @@ def erros_de_validacao(X_treino, y_treino, X_val, y_val):
     return pd.Series(erros, index=pd.Index(range(p + 1), name="k"))
 
 
-validacao = erros_de_validacao(X_treino, y_treino, X_val, y_val)
-print("menor erro de validação no tamanho:", int(validacao.idxmin()))
-validacao.to_frame("MSE de validação").style.format(
+erros_grupo_1 = erros_de_validacao(X_treino, y_treino, X_val, y_val)
+erros_grupo_1.to_frame("MSE de validação, grupo 1").T.style.format(
     decimal=",", thousands=".", precision=1
 )
 ```
@@ -146,32 +143,11 @@ validacao.to_frame("MSE de validação").style.format(
 **`serie.items()`**: os pares (rótulo, valor) da série, um por vez, para percorrer com `for`; aqui, o tamanho $k$ e as colunas do $\mathcal{M}_k$ daquele treino.
 
 **`np.full(tamanho, valor)`**: um array de `tamanho` posições, todas iguais a `valor`. É a previsão do modelo nulo.
+
+**`.T`**: a tabela transposta, com as linhas no lugar das colunas; aqui, os tamanhos viram colunas, e a tabela cabe numa linha só.
 :::
 
-A linha $k = 4$ repete o MSE calculado por extenso. Com 300 clientes no treino e 100 na validação, o menor erro de validação é o do modelo de 6 preditores. Uma única partição depende muito do sorteio; a validação cruzada em 10 grupos repete a conta 10 vezes, cada grupo servindo uma vez de validação, e tira a média. Cada grupo refaz a busca completa no seu treino. O primeiro grupo, sozinho:
-
-```{python}
-#| label: um-grupo
-from sklearn.model_selection import KFold
-
-grupos = KFold(10, shuffle=True, random_state=11)
-divisoes = list(grupos.split(X))
-treino, val = divisoes[0]
-print("grupo 1, treino:", len(treino))
-print("grupo 1, validação:", len(val))
-
-erros_grupo_1 = erros_de_validacao(X.iloc[treino], y.iloc[treino],
-                                   X.iloc[val], y.iloc[val])
-erros_grupo_1.to_frame("MSE de validação, grupo 1").T.style.format(
-    decimal=",", thousands=".", precision=1
-)
-```
-
-::: {.funcao}
-**`KFold(n_splits, shuffle, random_state)`**: o esquema de divisão do *k*-fold, aqui com 10 grupos, linhas embaralhadas antes da divisão e a semente 11. **`grupos.split(X)`** devolve, uma divisão por vez, o par (posições de treino, posições de validação); `list` guarda as 10 numa lista. **`X.iloc[posicoes]`** recorta as linhas pela posição. **`.T`**: a tabela transposta, com as linhas no lugar das colunas; aqui, os tamanhos viram colunas, e a tabela cabe numa linha só.
-:::
-
-Os outros nove grupos repetem a conta, cada um com a sua busca completa. A função abaixo recebe a semente, para a mesma conta servir a outros sorteios adiante.
+A coluna $k = 4$ repete o MSE calculado por extenso. Os outros nove grupos repetem a conta, cada um com a sua busca completa. A função abaixo recebe a semente do `KFold`, para a mesma conta servir a outros sorteios.
 
 ```{python}
 #| label: validacao-cruzada
@@ -197,7 +173,7 @@ print("tamanho escolhido:", int(cv.idxmin()))
 **`erros.mean()`**: numa tabela, a média de cada coluna. `erros` tem uma linha por grupo e uma coluna por tamanho, e `cv` fica com o erro de validação cruzada de cada tamanho.
 :::
 
-São 10 buscas completas, uma por grupo, com 20.470 ajustes só nelas. A validação cruzada também escolhe o modelo de 6 preditores.
+São 10 buscas completas, uma por grupo, com 20.470 ajustes só nelas.
 
 ## A regra do um desvio
 
@@ -484,7 +460,27 @@ Os três critérios dependem da contagem $d$ de preditores, e o $C_p$ e o BIC de
 
 ### O BIC ao lado da validação
 
-Para pôr o BIC ao lado dos dois erros medidos fora do treino, o de validação e o de validação cruzada, a figura usa a raiz de cada um, que fica na unidade de `saldo`, em dólares.
+A validação cruzada não é o único jeito de medir o erro fora do treino. Um conjunto de validação só, como na seção 10.1, separa por sorteio um quarto dos clientes, e a função `erros_de_validacao` dá o erro de cada tamanho, com a busca refeita nos clientes de treino:
+
+```{python}
+#| label: uma-divisao
+from sklearn.model_selection import train_test_split
+
+X_tr, X_va, y_tr, y_va = train_test_split(X, y, test_size=0.25, random_state=11)
+validacao = erros_de_validacao(X_tr, y_tr, X_va, y_va)
+print("treino:", len(y_tr))
+print("validação:", len(y_va))
+print("menor erro de validação no tamanho:", int(validacao.idxmin()))
+validacao.to_frame("MSE de validação").style.format(
+    decimal=",", thousands=".", precision=1
+)
+```
+
+::: {.funcao}
+**`train_test_split(X, y, test_size, random_state)`**: sorteia quais linhas vão para cada lado e devolve, nesta ordem, `X` de treino, `X` de validação, `y` de treino e `y` de validação. `test_size=0.25` manda um quarto das linhas para a validação, e `random_state=11` é a semente do sorteio.
+:::
+
+Com 300 clientes no treino e 100 na validação, o menor erro de validação é o do modelo de 6 preditores, o mesmo da validação cruzada. Para pôr o BIC ao lado dos dois erros medidos fora do treino, a figura usa a raiz de cada um, que fica na unidade de `saldo`, em dólares.
 
 ```{python}
 #| label: fig-bic-validacao-cv

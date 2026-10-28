@@ -107,16 +107,16 @@ coeficientes.style.format(numero_br)
 ::: {.funcao}
 - **`(df == 0).sum()`**: numa tabela, a mesma contagem, uma por coluna.
 - **`df + 0.0`**: o lasso às vezes devolve `-0.0`, que é igual a zero mas apareceria na tabela com sinal; somar `0.0` o troca por `0.0`.
-- **`numero_br(valor)`**: escreve o número com uma casa, vírgula decimal e o sinal de menos tipográfico; passada a `.style.format`, vale para cada valor da tabela.
+- **`df.style.format(funcao)`**: mostra cada valor da tabela como o texto que `funcao` devolve para ele; os números guardados não mudam.
 :::
 
 Com $\lambda = 1.000$, nenhum coeficiente é zero. Com $\lambda = 10.000$, cinco são exatamente zero: `escolaridade`, `imovel_proprio_sim`, `casado_sim` e as duas indicadoras de região; o modelo fica com as outras seis colunas. Com $\lambda = 100.000$, dez são zero, e sobra só `pontuacao`, com 271,6.
 
-`limite` tinha o maior coeficiente dos mínimos quadrados em módulo, 440,1, e com $\lambda = 100.000$ já é zero, enquanto `pontuacao`, que tinha 175,6, continua no modelo. Por que é `pontuacao` que sobra?
+`limite` tinha o maior coeficiente dos mínimos quadrados em módulo, 440,1, e com $\lambda = 100.000$ já é zero, enquanto `pontuacao`, que tinha 175,6, continua no modelo. A leitura para casa, no fim da seção, mostra por que é `pontuacao` que sobra.
 
 ## O caminho do lasso em `Credit`
 
-Como na ridge, ajustar uma grade de valores de $\lambda$ mostra o caminho de cada coeficiente. A grade tem 100 valores, de 10 a $10^{5{,}6}$. O tamanho do vetor de coeficientes agora se resume pela norma $\ell_1$: a razão $\lVert\hat\beta^L_\lambda\rVert_1/\lVert\hat\beta\rVert_1$, com $\hat\beta$ os mínimos quadrados nas colunas padronizadas, vale 1 nos mínimos quadrados e 0 no modelo nulo. A célula conta também, em cada $\lambda$, quantos coeficientes não são zero, e quantos pontos da grade dão cada tamanho de modelo.
+Ajustar uma grade de valores de $\lambda$ mostra o caminho de cada coeficiente, dos mínimos quadrados até o zero. A grade tem 100 valores, de 10 a $10^{5{,}6}$, e a célula conta, em cada $\lambda$, quantos coeficientes não são zero:
 
 ```{python}
 #| label: caminho-lasso
@@ -127,81 +127,24 @@ for lam in lams:
     modelo.fit(X, y)
     caminho.loc[lam] = modelo[-1].coef_
 
-coef_mq = mq_padr[-1].coef_
-razao = caminho.abs().sum(axis=1) / np.abs(coef_mq).sum()
 nao_nulos = (caminho != 0).sum(axis=1)
-print("razão no menor λ:", f"{razao.iloc[0]:.3f}".replace(".", ","))
-print("razão no maior λ:", f"{razao.iloc[-1]:.3f}".replace(".", ","))
-nao_nulos.value_counts().sort_index().rename_axis("não nulos").to_frame("pontos da grade")
+print("valores de λ:", len(lams))
+print("coeficientes não nulos no menor λ:", nao_nulos.iloc[0])
+print("coeficientes não nulos no maior λ:", nao_nulos.iloc[-1])
 ```
 
 ::: {.funcao}
-- **`df.sum(axis=1)`**: soma cada linha, em vez de cada coluna; aqui, uma soma por $\lambda$. Com `caminho.abs()`, é a norma $\ell_1$ dos coeficientes em cada $\lambda$; com `caminho != 0`, o número de coeficientes não nulos.
-- **`serie.value_counts()`**: quantas vezes cada valor aparece; **`.sort_index()`** põe os valores em ordem crescente.
+**`df.sum(axis=1)`**: soma cada linha, em vez de cada coluna; aqui, uma soma por $\lambda$. Com `caminho != 0`, é o número de coeficientes não nulos em cada $\lambda$.
 :::
-
-A tabela conta quantos pontos da grade dão cada tamanho de modelo: aparecem de 0 a 11 colunas, com uma exceção, não há modelo de duas colunas. A razão vai de 1,000 no menor $\lambda$ a 0,000 no maior. E o tamanho do modelo, de um ponto da grade para o seguinte, com $\lambda$ crescendo, sobe alguma vez?
-
-```{python}
-#| label: passos
-variacao = nao_nulos.diff().dropna()  # não nulos num λ menos os do λ anterior
-passos = pd.Series(
-    [(variacao < 0).sum(), (variacao == 0).sum(), (variacao > 0).sum()],
-    index=pd.Index(["cai", "fica igual", "sobe"], name="não nulos, com λ crescendo"),
-)
-passos.to_frame("passos da grade")
-```
-
-::: {.funcao}
-**`serie.dropna()`**: a série sem os valores ausentes; aqui, sem a variação do primeiro ponto da grade, que não tem anterior.
-:::
-
-Em nenhum passo da grade o número de coeficientes não nulos sobe com $\lambda$ crescendo. Lida da direita para a esquerda, isto é, com $\lambda$ caindo, a contagem nunca diminui: as colunas entram uma a uma ou em grupo. O ponto da grade em que cada coluna entra, o maior $\lambda$ em que o coeficiente dela não é zero, explica a falta do modelo de duas colunas:
-
-```{python}
-#| label: entrada
-entrada, volta, anterior = {}, {}, {}
-for coluna in X.columns:
-    lam_entrada = caminho.index[caminho[coluna] != 0].max()
-    entrada[coluna] = lam_entrada
-    # zeros abaixo do λ de entrada: a coluna teria voltado a zero
-    volta[coluna] = int((caminho.loc[:lam_entrada, coluna] == 0).sum())
-    anterior[coluna] = lams[lams > lam_entrada].min()  # o ponto anterior da grade
-entrada = pd.Series(entrada).sort_values(ascending=False)
-entrada.index.name = "coluna"
-tabela_entrada = pd.DataFrame({
-    "λ de entrada": entrada,
-    "razão nesse λ": razao.loc[entrada.values].values,
-    "razão no ponto anterior": razao.loc[pd.Series(anterior)[entrada.index]].values,
-    "zeros depois de entrar": pd.Series(volta)[entrada.index],
-})
-tabela_entrada.style.format(
-    {"λ de entrada": "{:,.0f}", "razão nesse λ": "{:.2f}",
-     "razão no ponto anterior": "{:.2f}", "zeros depois de entrar": "{:d}"},
-    decimal=",", thousands=".",
-)
-```
-
-`pontuacao` entra sozinha, em $\lambda = 288.806$. `limite` e `estudante_sim` entram no mesmo ponto da grade, $\lambda = 89.022$, com a razão das normas em 0,27, e por isso o modelo passa de uma coluna para três; uma grade mais fina poderia separar as duas. Depois vêm `renda`, em 42.096, `cartoes` e `idade`, e por último as cinco que já eram zero com $\lambda = 10.000$. A última coluna da tabela conta, para cada coluna, os pontos da grade abaixo do $\lambda$ de entrada em que o coeficiente volta a zero: são todos zero, e nesta grade nenhuma coluna volta a zero depois de entrar.
-
-Cada coluna entra entre o ponto anterior da grade, em que o coeficiente dela ainda é zero, e o $\lambda$ de entrada. Por isso, no gráfico contra a razão das normas, a curva de uma coluna começa a sair do zero no valor da coluna "razão no ponto anterior": a de `renda`, por exemplo, sai do zero em 0,37 e já está fora dele em 0,42.
-
-Uma pergunta para a figura abaixo: a curva de `limite`, que entra depois de `pontuacao`, chega a passar por cima dela?
 
 ```{python}
 #| label: fig-caminho-lasso
-#| fig-cap: 'Coeficientes do lasso em `Credit`, com as 11 colunas padronizadas. Em cima, contra $\lambda$ em escala logarítmica; embaixo, contra $\lVert\hat\beta^L_\lambda\rVert_1/\lVert\hat\beta\rVert_1$, o tamanho do vetor de coeficientes, medido pela norma $\ell_1$, como fração do dos mínimos quadrados. As cores e a escala vertical são as da figura dos caminhos da ridge, na seção 11.3.'
-#| fig-alt: "Dois painéis empilhados com os mesmos onze coeficientes, de cerca de −275 a 440 no eixo vertical. No de cima, contra lambda de 10 a cerca de 400 mil em escala log: à esquerda, os coeficientes estão perto dos valores dos mínimos quadrados, limite perto de 440, pontuacao perto de 176, estudante_sim perto de 128 e renda perto de −275. Da direita para a esquerda, pontuacao sai de zero sozinha em 288.806 e sobe; limite e estudante_sim saem de zero juntos em 89.022, e renda em 42.096; limite passa por cima de pontuacao em 10.476. Das sete colunas cinza, cartoes e idade saem de zero em 16.072 e 11.659, e as outras cinco entre 3.594 e 1.527, e todas ficam perto de zero. No de baixo, as mesmas curvas contra a razão das normas, de 0 a 1, feitas de trechos retos: até 0,25 só pontuacao cresce; limite e estudante_sim saem de zero entre 0,25 e 0,27, renda entre 0,37 e 0,42, e limite cruza pontuacao perto de 0,83, terminando perto de 440."
-import matplotlib.pyplot as plt
+#| fig-cap: 'Coeficientes do lasso em `Credit`, com as 11 colunas padronizadas, contra $\lambda$ em escala logarítmica. As cores e a escala vertical são as da figura do caminho da ridge, na seção 11.3.'
+#| fig-alt: "Onze curvas, de cerca de −275 a 440 no eixo vertical, contra lambda de 10 a cerca de 400 mil em escala log. À esquerda, os coeficientes estão perto dos valores dos mínimos quadrados: limite perto de 440, pontuacao perto de 176, estudante_sim perto de 128 e renda perto de −275. Da direita para a esquerda, pontuacao sai de zero sozinha e sobe; depois limite e estudante_sim saem de zero juntos, e então renda; mais à esquerda, limite passa por cima de pontuacao. As sete colunas cinza saem de zero mais à esquerda e ficam perto de zero."
 from matplotlib.lines import Line2D
 
-
-def com_virgula(valor, posicao):
-    return f"{valor:.1f}".replace(".", ",")
-
-
-destaque ={"renda": "C0", "limite": "C1", "pontuacao": "C2", "estudante_sim": "C3"}
-fig, (ax_lam, ax_razao) = plt.subplots(2, 1, figsize=(4.8, 5.8))
+destaque = {"renda": "C0", "limite": "C1", "pontuacao": "C2", "estudante_sim": "C3"}
+fig, ax = plt.subplots(figsize=(6.4, 4.2))
 for coluna in X.columns:
     em_destaque = coluna in destaque
     estilo = {
@@ -209,94 +152,29 @@ for coluna in X.columns:
         "linewidth": 2 if em_destaque else 1,
         "zorder": 3 if em_destaque else 1,
     }
-    ax_lam.plot(lams, caminho[coluna], **estilo)
-    ax_razao.plot(razao, caminho[coluna], **estilo)
-ax_lam.set_xscale("log")
-ax_lam.set_xlim(lams.min(), lams.max())
-ax_lam.set_xlabel("λ")
-ax_razao.set_xlim(0, 1)
-ax_razao.xaxis.set_major_formatter(com_virgula)
-ax_razao.set_xlabel(
-    r"$\|\hat{\beta}^{L}_{\lambda}\|_1 \;/\; \|\hat{\beta}\|_1$"
-)
-for ax in (ax_lam, ax_razao):
-    ax.axhline(0, color="0.45", linewidth=0.8)
-    ax.set_ylim(-320, 480)
-    ax.set_ylabel("coeficiente padronizado")
+    ax.plot(lams, caminho[coluna], **estilo)
+ax.axhline(0, color="0.45", linewidth=0.8)
+ax.set_xscale("log")
+ax.set_xlim(lams.min(), lams.max())
+ax.set_ylim(-320, 480)
+ax.set_xlabel("λ")
+ax.set_ylabel("coeficiente padronizado")
 entradas = [Line2D([], [], color=cor, linewidth=2) for cor in destaque.values()]
 entradas.append(Line2D([], [], color="0.45", linewidth=1))
 fig.legend(entradas, [*destaque, "outras sete"], loc="lower center", ncols=3,
-           frameon=False, fontsize="small")
-fig.tight_layout(rect=(0, 0.1, 1, 1))
+           frameon=False)
+fig.tight_layout(rect=(0, 0.14, 1, 1))
 plt.show()
 ```
 
-No painel de baixo, os caminhos são feitos de trechos retos, e, nesta grade, cada dobra é um ponto em que alguma coluna entra. Com a razão perto de 1, `limite` está acima de `pontuacao`, como nos mínimos quadrados, e mais à esquerda as duas curvas se cruzam. A célula abaixo acha o maior $\lambda$ em que `limite` fica acima e conta, nos dois trechos da grade, quantos pontos têm `limite` acima de `pontuacao`:
+Da direita para a esquerda, com $\lambda$ caindo, as colunas saem do zero uma a uma ou em grupo, e o modelo cresce: no maior $\lambda$ da grade, nenhuma coluna tem coeficiente diferente de zero; no menor, as 11 têm. Na ridge, os coeficientes só se aproximavam de zero; no lasso, chegam a zero, e a coluna sai do modelo. Com $\lambda = 100.000$, só `pontuacao` fica, como mostrou a tabela dos três valores de $\lambda$. A leitura para casa, no fim da seção, conta em que $\lambda$ cada coluna entra.
+
+`limite`, que sai do modelo com $\lambda = 100.000$, anda junto com `saldo`:
 
 ```{python}
-#| label: cruzamento
-def milhar(v):
-    return f"{v:,.0f}".replace(",", ".")
-
-
-acima = caminho["limite"] > caminho["pontuacao"]
-lam_cruza = float(caminho.index[acima].max())
-ate_ele = acima.loc[:lam_cruza]
-depois_dele = acima.loc[lam_cruza:].iloc[1:]
-print("maior λ com limite > pontuacao:", milhar(lam_cruza))
-print("razão nesse λ:", f"{razao.loc[lam_cruza]:.2f}".replace(".", ","))
-pd.DataFrame(
-    {"pontos da grade": [len(ate_ele), len(depois_dele)],
-     "com limite > pontuacao": [ate_ele.sum(), depois_dele.sum()]},
-    index=pd.Index([f"λ até {milhar(lam_cruza)}", f"λ acima de {milhar(lam_cruza)}"],
-                   name="trecho da grade"),
-)
+#| label: limite-saldo
+print("correlação de limite com saldo:", f"{X['limite'].corr(y):.4f}".replace(".", ","))
 ```
-
-A tabela diz que `limite` fica acima de `pontuacao` em todos os $\lambda$ da grade até 10.476 e em nenhum acima dele: para $\lambda$ maiores que esse, `pontuacao` fica acima ou igual.
-
-### Por que `pontuacao` entra primeiro
-
-A ordem de entrada tem uma regra: **a primeira coluna a entrar é a de maior correlação com a resposta, em valor absoluto.** Ela sai de olhar o ponto em que todos os coeficientes são zero. Nas colunas padronizadas $\tilde x_{ij}$ da seção 11.3, dar à coluna $j$ um coeficiente pequeno $\delta$ baixa o RSS a uma taxa de $2\,\big|\sum_i\tilde x_{ij}(y_i - \bar y)\big|$ por unidade de $|\delta|$, e a penalidade sobe a uma taxa $\lambda$. Enquanto a penalidade subir mais depressa para toda coluna, o lasso fica no zero, isto é, enquanto
-
-$$
-\lambda \ge \lambda_{\max} = 2\max_j\Big|\sum_{i=1}^{n}\tilde x_{ij}\,(y_i - \bar y)\Big| = 2n\,\mathrm{dp}(y)\max_j|r_j|,
-$$
-
-com $r_j$ a correlação da coluna $j$ com $y$ e $\mathrm{dp}(y)$ o desvio padrão de $y$, com divisor $n$, como na padronização. A célula abaixo calcula $\lambda_{\max}$ em `Credit` pelas duas formas, a soma e a correlação, e o compara com a grade:
-
-```{python}
-#| label: primeira-a-entrar
-X_padr = mq_padr[0].transform(X)  # as 11 colunas padronizadas
-somas = pd.Series(  # uma soma Σ x̃ᵢⱼ(yᵢ − ȳ) por coluna j, em módulo
-    np.abs(X_padr.T @ (y - y.mean()).to_numpy()), index=X.columns
-)
-correlacao = X.corrwith(y).abs().sort_values(ascending=False)
-lam_max = 2 * somas.max()
-proximo = lams[lams > entrada.iloc[0]].min()
-print("coluna da maior soma:", somas.idxmax())
-print("coluna da maior |correlação|:", correlacao.index[0])
-pd.Series(
-    [lam_max, 2 * n * y.std(ddof=0) * correlacao.iloc[0], entrada.iloc[0], proximo],
-    index=pd.Index(["λ_max pela soma", "λ_max pela correlação",
-                    "λ em que pontuacao entra na grade", "ponto seguinte da grade"]),
-).to_frame("λ").style.format(milhar)
-```
-
-::: {.funcao}
-- **`.transform(X)`**: aplica a `X` um passo já ajustado, aqui o `StandardScaler`: as colunas padronizadas com as médias e os desvios do ajuste. Em `X_padr.T @ …`, a transposta e o produto de matriz por vetor dão uma soma por coluna.
-- **`X.corrwith(y)`**: a correlação de cada coluna de `X` com a série `y`, uma por coluna.
-:::
-
-A coluna da maior soma e a da maior correlação são a mesma, `pontuacao`, e as duas formas dão o mesmo $\lambda_{\max}$. Ele cai entre o $\lambda$ em que `pontuacao` entra na grade e o ponto seguinte, onde todos os coeficientes ainda são zero. As duas maiores correlações, e a correlação entre as duas colunas:
-
-```{python}
-#| label: correlacao
-print("corr(limite, pontuacao):", f"{X['limite'].corr(X['pontuacao']):.4f}".replace(".", ","))
-correlacao.head(2).to_frame("|correlação| com saldo").style.format(decimal=",", precision=4)
-```
-
-`pontuacao` tem a maior correlação com `saldo`, por pouco: 0,8636 contra 0,8617 de `limite`. E as duas colunas quase se repetem, com correlação entre elas de 0,9969. Uma diferença pequena na correlação com `saldo` decide qual das duas entra primeiro, e é essa que fica sozinha no modelo com a penalidade forte: nesta grade, nos pontos acima daquele em que `limite` entra, 89.022, até $\lambda_{\max}$. Com diferença tão pequena, outra amostra de clientes pode inverter a ordem e deixar `limite` no lugar de `pontuacao`.
 
 ::: {.callout-warning}
 ## Coeficiente zero não quer dizer coluna sem relação com a resposta
@@ -630,3 +508,166 @@ O lasso zera, em média, 45 − 9,24 = 35,76 dos 45 coeficientes, e ganha també
 Como ponto de partida, e não como regra: se a suspeita é que poucos preditores carregam quase todo o efeito, o lasso é o candidato natural, e ainda entrega um modelo mais fácil de ler; se muitos preditores contribuem um pouco cada, a ridge tende a prever melhor. Com colunas que quase se repetem, como `limite` e `pontuacao`, o lasso tende a ficar com uma só, e qual delas depende de detalhes da amostra.
 
 Em `Credit`, com $\lambda = 10.000$, o lasso fica com seis colunas, as 11 menos as cinco zeradas na tabela dos três $\lambda$. Se esse modelo prevê melhor que a ridge, e com qual $\lambda$, depende de quantos preditores importam, e isso não se sabe de antemão num conjunto de dados real. É a validação cruzada que estima o erro de teste de cada escolha, na seção 11.5.
+
+## Leitura para casa
+
+### O caminho contra a norma $\ell_1$
+
+O tamanho do vetor de coeficientes se resume pela norma $\ell_1$: a razão $\lVert\hat\beta^L_\lambda\rVert_1/\lVert\hat\beta\rVert_1$, com $\hat\beta$ os mínimos quadrados nas colunas padronizadas, vale 1 nos mínimos quadrados e 0 no modelo nulo. A célula calcula a razão em cada $\lambda$ do caminho e conta quantos pontos da grade dão cada tamanho de modelo.
+
+```{python}
+#| label: razao-lasso
+coef_mq = mq_padr[-1].coef_
+razao = caminho.abs().sum(axis=1) / np.abs(coef_mq).sum()
+print("razão no menor λ:", f"{razao.iloc[0]:.3f}".replace(".", ","))
+print("razão no maior λ:", f"{razao.iloc[-1]:.3f}".replace(".", ","))
+nao_nulos.value_counts().sort_index().rename_axis("não nulos").to_frame("pontos da grade")
+```
+
+::: {.funcao}
+- **`serie.value_counts()`**: quantas vezes cada valor aparece; **`.sort_index()`** põe os valores em ordem crescente.
+:::
+
+A tabela conta quantos pontos da grade dão cada tamanho de modelo: aparecem de 0 a 11 colunas, com uma exceção, não há modelo de duas colunas. A razão vai de 1,000 no menor $\lambda$ a 0,000 no maior. E o tamanho do modelo, de um ponto da grade para o seguinte, com $\lambda$ crescendo, sobe alguma vez?
+
+```{python}
+#| label: passos
+variacao = nao_nulos.diff().dropna()  # não nulos num λ menos os do λ anterior
+passos = pd.Series(
+    [(variacao < 0).sum(), (variacao == 0).sum(), (variacao > 0).sum()],
+    index=pd.Index(["cai", "fica igual", "sobe"], name="não nulos, com λ crescendo"),
+)
+passos.to_frame("passos da grade")
+```
+
+::: {.funcao}
+**`serie.dropna()`**: a série sem os valores ausentes; aqui, sem a variação do primeiro ponto da grade, que não tem anterior.
+:::
+
+Em nenhum passo da grade o número de coeficientes não nulos sobe com $\lambda$ crescendo. Lida da direita para a esquerda, isto é, com $\lambda$ caindo, a contagem nunca diminui: as colunas entram uma a uma ou em grupo. O ponto da grade em que cada coluna entra, o maior $\lambda$ em que o coeficiente dela não é zero, explica a falta do modelo de duas colunas:
+
+```{python}
+#| label: entrada
+entrada, volta, anterior = {}, {}, {}
+for coluna in X.columns:
+    lam_entrada = caminho.index[caminho[coluna] != 0].max()
+    entrada[coluna] = lam_entrada
+    # zeros abaixo do λ de entrada: a coluna teria voltado a zero
+    volta[coluna] = int((caminho.loc[:lam_entrada, coluna] == 0).sum())
+    anterior[coluna] = lams[lams > lam_entrada].min()  # o ponto anterior da grade
+entrada = pd.Series(entrada).sort_values(ascending=False)
+entrada.index.name = "coluna"
+tabela_entrada = pd.DataFrame({
+    "λ de entrada": entrada,
+    "razão nesse λ": razao.loc[entrada.values].values,
+    "razão no ponto anterior": razao.loc[pd.Series(anterior)[entrada.index]].values,
+    "zeros depois de entrar": pd.Series(volta)[entrada.index],
+})
+tabela_entrada.style.format(
+    {"λ de entrada": "{:,.0f}", "razão nesse λ": "{:.2f}",
+     "razão no ponto anterior": "{:.2f}", "zeros depois de entrar": "{:d}"},
+    decimal=",", thousands=".",
+)
+```
+
+`pontuacao` entra sozinha, em $\lambda = 288.806$. `limite` e `estudante_sim` entram no mesmo ponto da grade, $\lambda = 89.022$, com a razão das normas em 0,27, e por isso o modelo passa de uma coluna para três; uma grade mais fina poderia separar as duas. Depois vêm `renda`, em 42.096, `cartoes` e `idade`, e por último as cinco que já eram zero com $\lambda = 10.000$. A última coluna da tabela conta, para cada coluna, os pontos da grade abaixo do $\lambda$ de entrada em que o coeficiente volta a zero: são todos zero, e nesta grade nenhuma coluna volta a zero depois de entrar.
+
+Cada coluna entra entre o ponto anterior da grade, em que o coeficiente dela ainda é zero, e o $\lambda$ de entrada. Por isso, no gráfico contra a razão das normas, a curva de uma coluna começa a sair do zero no valor da coluna "razão no ponto anterior": a de `renda`, por exemplo, sai do zero em 0,37 e já está fora dele em 0,42.
+
+Uma pergunta para a figura abaixo: a curva de `limite`, que entra depois de `pontuacao`, chega a passar por cima dela?
+
+```{python}
+#| label: fig-caminho-lasso-razao
+#| fig-cap: 'Os coeficientes do lasso em `Credit` da @fig-caminho-lasso, agora contra $\lVert\hat\beta^L_\lambda\rVert_1/\lVert\hat\beta\rVert_1$, o tamanho do vetor de coeficientes, medido pela norma $\ell_1$, como fração do dos mínimos quadrados.'
+#| fig-alt: "Onze curvas contra a razão das normas, de 0 a 1, feitas de trechos retos, com o eixo vertical de cerca de −275 a 440: até 0,25 só pontuacao cresce; limite e estudante_sim saem de zero entre 0,25 e 0,27, renda entre 0,37 e 0,42, e limite cruza pontuacao perto de 0,83, terminando perto de 440. As sete colunas cinza ficam perto de zero."
+def com_virgula(valor, posicao):
+    return f"{valor:.1f}".replace(".", ",")
+
+
+fig, ax = plt.subplots(figsize=(6.4, 4.2))
+for coluna in X.columns:
+    em_destaque = coluna in destaque
+    estilo = {
+        "color": destaque.get(coluna, "0.45"),
+        "linewidth": 2 if em_destaque else 1,
+        "zorder": 3 if em_destaque else 1,
+    }
+    ax.plot(razao, caminho[coluna], **estilo)
+ax.axhline(0, color="0.45", linewidth=0.8)
+ax.set_xlim(0, 1)
+ax.xaxis.set_major_formatter(com_virgula)
+ax.set_ylim(-320, 480)
+ax.set_xlabel(r"$\|\hat{\beta}^{L}_{\lambda}\|_1 \;/\; \|\hat{\beta}\|_1$")
+ax.set_ylabel("coeficiente padronizado")
+fig.legend(entradas, [*destaque, "outras sete"], loc="lower center", ncols=3,
+           frameon=False)
+fig.tight_layout(rect=(0, 0.14, 1, 1))
+plt.show()
+```
+
+Na figura, os caminhos são feitos de trechos retos, e, nesta grade, cada dobra é um ponto em que alguma coluna entra. Com a razão perto de 1, `limite` está acima de `pontuacao`, como nos mínimos quadrados, e mais à esquerda as duas curvas se cruzam. A célula abaixo acha o maior $\lambda$ em que `limite` fica acima e conta, nos dois trechos da grade, quantos pontos têm `limite` acima de `pontuacao`:
+
+```{python}
+#| label: cruzamento
+def milhar(v):
+    return f"{v:,.0f}".replace(",", ".")
+
+
+acima = caminho["limite"] > caminho["pontuacao"]
+lam_cruza = float(caminho.index[acima].max())
+ate_ele = acima.loc[:lam_cruza]
+depois_dele = acima.loc[lam_cruza:].iloc[1:]
+print("maior λ com limite > pontuacao:", milhar(lam_cruza))
+print("razão nesse λ:", f"{razao.loc[lam_cruza]:.2f}".replace(".", ","))
+pd.DataFrame(
+    {"pontos da grade": [len(ate_ele), len(depois_dele)],
+     "com limite > pontuacao": [ate_ele.sum(), depois_dele.sum()]},
+    index=pd.Index([f"λ até {milhar(lam_cruza)}", f"λ acima de {milhar(lam_cruza)}"],
+                   name="trecho da grade"),
+)
+```
+
+A tabela diz que `limite` fica acima de `pontuacao` em todos os $\lambda$ da grade até 10.476 e em nenhum acima dele: para $\lambda$ maiores que esse, `pontuacao` fica acima ou igual.
+
+### Por que `pontuacao` entra primeiro
+
+A ordem de entrada tem uma regra: **a primeira coluna a entrar é a de maior correlação com a resposta, em valor absoluto.** Ela sai de olhar o ponto em que todos os coeficientes são zero. Nas colunas padronizadas $\tilde x_{ij}$ da seção 11.3, dar à coluna $j$ um coeficiente pequeno $\delta$ baixa o RSS a uma taxa de $2\,\big|\sum_i\tilde x_{ij}(y_i - \bar y)\big|$ por unidade de $|\delta|$, e a penalidade sobe a uma taxa $\lambda$. Enquanto a penalidade subir mais depressa para toda coluna, o lasso fica no zero, isto é, enquanto
+
+$$
+\lambda \ge \lambda_{\max} = 2\max_j\Big|\sum_{i=1}^{n}\tilde x_{ij}\,(y_i - \bar y)\Big| = 2n\,\mathrm{dp}(y)\max_j|r_j|,
+$$
+
+com $r_j$ a correlação da coluna $j$ com $y$ e $\mathrm{dp}(y)$ o desvio padrão de $y$, com divisor $n$, como na padronização. A célula abaixo calcula $\lambda_{\max}$ em `Credit` pelas duas formas, a soma e a correlação, e o compara com a grade:
+
+```{python}
+#| label: primeira-a-entrar
+X_padr = mq_padr[0].transform(X)  # as 11 colunas padronizadas
+somas = pd.Series(  # uma soma Σ x̃ᵢⱼ(yᵢ − ȳ) por coluna j, em módulo
+    np.abs(X_padr.T @ (y - y.mean()).to_numpy()), index=X.columns
+)
+correlacao = X.corrwith(y).abs().sort_values(ascending=False)
+lam_max = 2 * somas.max()
+proximo = lams[lams > entrada.iloc[0]].min()
+print("coluna da maior soma:", somas.idxmax())
+print("coluna da maior |correlação|:", correlacao.index[0])
+pd.Series(
+    [lam_max, 2 * n * y.std(ddof=0) * correlacao.iloc[0], entrada.iloc[0], proximo],
+    index=pd.Index(["λ_max pela soma", "λ_max pela correlação",
+                    "λ em que pontuacao entra na grade", "ponto seguinte da grade"]),
+).to_frame("λ").style.format(milhar)
+```
+
+::: {.funcao}
+- **`.transform(X)`**: aplica a `X` um passo já ajustado, aqui o `StandardScaler`: as colunas padronizadas com as médias e os desvios do ajuste. Em `X_padr.T @ …`, a transposta e o produto de matriz por vetor dão uma soma por coluna.
+- **`X.corrwith(y)`**: a correlação de cada coluna de `X` com a série `y`, uma por coluna.
+:::
+
+A coluna da maior soma e a da maior correlação são a mesma, `pontuacao`, e as duas formas dão o mesmo $\lambda_{\max}$. Ele cai entre o $\lambda$ em que `pontuacao` entra na grade e o ponto seguinte, onde todos os coeficientes ainda são zero. As duas maiores correlações, e a correlação entre as duas colunas:
+
+```{python}
+#| label: correlacao
+print("corr(limite, pontuacao):", f"{X['limite'].corr(X['pontuacao']):.4f}".replace(".", ","))
+correlacao.head(2).to_frame("|correlação| com saldo").style.format(decimal=",", precision=4)
+```
+
+`pontuacao` tem a maior correlação com `saldo`, por pouco: 0,8636 contra 0,8617 de `limite`. E as duas colunas quase se repetem, com correlação entre elas de 0,9969. Uma diferença pequena na correlação com `saldo` decide qual das duas entra primeiro, e é essa que fica sozinha no modelo com a penalidade forte: nesta grade, nos pontos acima daquele em que `limite` entra, 89.022, até $\lambda_{\max}$. Com diferença tão pequena, outra amostra de clientes pode inverter a ordem e deixar `limite` no lugar de `pontuacao`.

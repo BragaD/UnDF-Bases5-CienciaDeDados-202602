@@ -42,8 +42,6 @@ São 400 clientes e $p = 11$ colunas candidatas. `saldo` é a dívida média no 
 
 Entre as numéricas, `renda` está em milhares de dólares, `limite` é o limite de crédito do cliente, em dólares, `pontuacao` é a nota de crédito dele, `cartoes` é o número de cartões, e `idade` e `escolaridade` estão em anos (esta, anos de estudo). As quatro colunas categóricas viram indicadoras, como na seção 8.4: `imovel_proprio`, `estudante` e `casado` ganham uma cada, com `não` como base, e `regiao`, que tem três categorias, ganha duas, com `Leste` como base.
 
-As saídas das células abaixo escrevem os números como a prosa, com vírgula decimal e ponto de milhar. Quem faz isso é a função `numero_br`, que recebe o número e as casas decimais:
-
 ```{python}
 #| label: numero-br
 def numero_br(valor, casas=2):
@@ -510,7 +508,29 @@ print("para frente pelo RSS, 4 colunas:", juntar(colunas_passo[4]))
 
 Com quatro colunas, ele fica com `estudante_sim`, `limite`, `pontuacao` e `renda`, as mesmas da seleção para frente pelo RSS de treino. Com outra régua, as escolhas poderiam divergir. A validação cruzada interna só decide qual coluna entra em cada passo, e o seletor vê as 400 linhas ao escolher as colunas: o erro de validação de um modelo montado com elas ainda pede o cuidado da seção 10.6.
 
-## Quando há mais colunas que observações
+## Os três métodos lado a lado
+
+Os três métodos terminam no mesmo lugar: uma lista $\mathcal{M}_0, \mathcal{M}_1, \dots, \mathcal{M}_p$, um modelo por tamanho. A mesma construção vale para a regressão logística do capítulo 9, trocando o RSS por outra medida de ajuste. A seleção para trás começa pelo modelo com as $p$ colunas, e os mínimos quadrados só têm solução única quando $n > p$; o caso de mais colunas que observações fica para a leitura para casa, no fim da seção. O que muda entre os três é o número de modelos considerados, a exigência sobre $n$ e a garantia de achar o melhor modelo de cada tamanho:
+
+```{python}
+#| label: resumo-dos-metodos
+pd.DataFrame(
+    {
+        "modelos": ["2^p", "1 + p(p+1)/2", "1 + p(p+1)/2"],
+        f"com p = {p}": [numero_br(2**p, 0), numero_br(1 + p * (p + 1) // 2, 0),
+                         numero_br(1 + p * (p + 1) // 2, 0)],
+        "exige n > p": ["não", "não", "sim"],
+        "garante o melhor": ["sim", "não", "não"],
+    },
+    index=pd.Index(["busca completa", "para frente", "para trás"], name="método"),
+)
+```
+
+Com poucas colunas, como as 11 de `Credit`, a busca completa cabe no orçamento e é a única com garantia; com muitas, fica o passo a passo, para trás quando $n > p$ e para frente em qualquer caso. Em `Credit`, a lista já indica onde olhar: quase todo o ganho de $R^2$ de treino chega até três preditores. Verificar se o erro de teste confirma isso é o passo 3, assunto da seção 11.2.
+
+## Leitura para casa
+
+### Quando há mais colunas que observações
 
 Numa base com $n = 30$ clientes e $p = 40$ colunas, quais dos três métodos ainda podem ser usados, e até que tamanho de modelo?
 
@@ -537,21 +557,3 @@ print("para frente até M_29:", numero_br(para_frente_ate_29, 0))
 :::
 
 Mesmo parada em 29 colunas, a busca completa teria de ajustar mais de um trilhão de modelos, e a seleção para frente, 755. As duas condições se somam: com mais colunas que observações, a seleção para trás não começa; com $p$ grande, como 40, a busca completa é inviável pelo custo. Por isso, aqui, só a seleção para frente serve, e só até $\mathcal{M}_{29}$. Há ainda versões **híbridas**, que acrescentam colunas como a versão para frente mas, a cada passo, podem tirar uma que deixou de ajudar, na tentativa de chegar mais perto da busca completa sem pagar o custo dela.
-
-Os três métodos terminam no mesmo lugar: uma lista $\mathcal{M}_0, \mathcal{M}_1, \dots, \mathcal{M}_p$, um modelo por tamanho. A mesma construção vale para a regressão logística do capítulo 9, trocando o RSS por outra medida de ajuste. O que muda entre eles é o número de modelos considerados, a exigência sobre $n$ e a garantia de achar o melhor modelo de cada tamanho:
-
-```{python}
-#| label: resumo-dos-metodos
-pd.DataFrame(
-    {
-        "modelos": ["2^p", "1 + p(p+1)/2", "1 + p(p+1)/2"],
-        f"com p = {p}": [numero_br(2**p, 0), numero_br(1 + p * (p + 1) // 2, 0),
-                         numero_br(1 + p * (p + 1) // 2, 0)],
-        "exige n > p": ["não", "não", "sim"],
-        "garante o melhor": ["sim", "não", "não"],
-    },
-    index=pd.Index(["busca completa", "para frente", "para trás"], name="método"),
-)
-```
-
-Com poucas colunas, como as 11 de `Credit`, a busca completa cabe no orçamento e é a única com garantia; com muitas, fica o passo a passo, para trás quando $n > p$ e para frente em qualquer caso. Em `Credit`, a lista já indica onde olhar: quase todo o ganho de $R^2$ de treino chega até três preditores. Verificar se o erro de teste confirma isso é o passo 3, assunto da seção 11.2.

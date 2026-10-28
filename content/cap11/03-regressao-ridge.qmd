@@ -14,7 +14,7 @@ import matplotlib.pyplot as plt
 plt.style.use("estilo-figuras.mplstyle")
 ```
 
-As colunas de `Credit` são as da seção 11.1, com as categóricas trocadas por indicadoras. A função `numero_br` escreve os números com vírgula decimal e ponto de milhar:
+As colunas de `Credit` são as da seção 11.1, com as categóricas trocadas por indicadoras:
 
 ```{python}
 #| label: dados
@@ -133,90 +133,7 @@ $$
 
 e todas passam a ter desvio padrão 1. Numa coluna padronizada, o coeficiente é o **efeito de um desvio padrão**: a variação de `saldo` quando a coluna sobe um desvio padrão. Numa coluna crua, o mesmo efeito é o coeficiente vezes o desvio padrão da coluna.
 
-O teste é medir `renda` em milhões de dólares em vez de milhares, dividindo a coluna por 1.000, e comparar três ajustes, cada um feito nas duas unidades:
-
-1. os mínimos quadrados;
-2. a ridge com $\lambda = 100$ nas colunas cruas;
-3. a ridge com $\lambda = 100$ nas colunas padronizadas.
-
-```{python}
-#| label: escala
-from sklearn.pipeline import make_pipeline
-from sklearn.preprocessing import StandardScaler
-
-X_milhoes = X.assign(renda=X["renda"] / 1000)
-j = X.columns.get_loc("renda")  # a posição de renda nas colunas de X
-dp_milhares = X["renda"].std(ddof=0)  # ddof=0: n no denominador, como na fórmula
-dp_milhoes = X_milhoes["renda"].std(ddof=0)
-
-mq_milhares = LinearRegression()
-mq_milhares.fit(X, y)
-mq_milhoes = LinearRegression()
-mq_milhoes.fit(X_milhoes, y)
-
-crua_milhares = Ridge(alpha=100)
-crua_milhares.fit(X, y)
-crua_milhoes = Ridge(alpha=100)
-crua_milhoes.fit(X_milhoes, y)
-
-padr_milhares = make_pipeline(StandardScaler(), Ridge(alpha=100))
-padr_milhares.fit(X, y)
-padr_milhoes = make_pipeline(StandardScaler(), Ridge(alpha=100))
-padr_milhoes.fit(X_milhoes, y)
-
-print("desvio padrão de renda, em milhares:", numero_br(dp_milhares, 3))
-print("desvio padrão de renda, em milhões:", numero_br(dp_milhoes, 6))
-```
-
-::: {.funcao}
-- **`df.assign(coluna=valores)`**: uma cópia de `df` com a coluna trocada (ou acrescentada); `X` fica como estava.
-- **`X.columns.get_loc(nome)`**: a posição da coluna `nome` em `X`, a mesma do coeficiente dela em `coef_`.
-:::
-
-::: {.funcao}
-- **`StandardScaler()`**: subtrai de cada coluna a sua média e divide pelo seu desvio padrão (com $n$ no denominador), deixando-a com média 0 e desvio padrão 1.
-- **`make_pipeline(StandardScaler(), Ridge(alpha=100))`**: encadeia a padronização e a ridge num objeto só. `fit` padroniza cada coluna com as médias e os desvios das linhas que recebe e ajusta a ridge sobre o resultado; `predict` repete a mesma padronização antes de prever.
-- **`modelo[-1]`**: o último passo do `Pipeline`, a ridge, de onde sai o `coef_` na escala padronizada.
-:::
-
-A tabela tem uma linha por ajuste. As duas primeiras colunas são o efeito de um desvio padrão de `renda`, com a coluna em milhares e em milhões; a terceira é a maior diferença, sobre os 400 clientes, entre a previsão feita com a coluna em milhares e a feita com ela em milhões.
-
-```{python}
-#| label: escala-tabela
-escala = pd.DataFrame(
-    {
-        "em milhares": [
-            mq_milhares.coef_[j] * dp_milhares,
-            crua_milhares.coef_[j] * dp_milhares,
-            padr_milhares[-1].coef_[j],
-        ],
-        "em milhões": [
-            mq_milhoes.coef_[j] * dp_milhoes,
-            crua_milhoes.coef_[j] * dp_milhoes,
-            padr_milhoes[-1].coef_[j],
-        ],
-        "diferença máxima": [
-            np.abs(mq_milhares.predict(X) - mq_milhoes.predict(X_milhoes)).max(),
-            np.abs(crua_milhares.predict(X) - crua_milhoes.predict(X_milhoes)).max(),
-            np.abs(padr_milhares.predict(X) - padr_milhoes.predict(X_milhoes)).max(),
-        ],
-    },
-    index=["mínimos quadrados", "ridge crua", "ridge padronizada"],
-)
-dp_estudante = X["estudante_sim"].std(ddof=0)
-print("desvio padrão de estudante_sim:", numero_br(dp_estudante, 3))
-escala.style.format(decimal=",", thousands=".", precision=2)
-```
-
-::: {.funcao}
-**`np.abs(arr)`**: o valor absoluto de cada elemento do array.
-:::
-
-Com as colunas cruas, a ridge com $\lambda = 100$ dá a `renda` um efeito de −268,38 dólares por desvio padrão quando ela está em milhares, e de −0,48 quando está em milhões: a penalidade praticamente zerou a coluna só porque a unidade mudou. As previsões dos dois ajustes chegam a diferir em 578,45 dólares para o mesmo cliente.
-
-Nos mínimos quadrados e na ridge padronizada, a unidade não muda nada: o efeito é o mesmo nas duas colunas, e a maior diferença nas previsões aparece como 0,00, menos de meio centavo. O efeito na ridge padronizada é outro número, −94,60 contra os −274,67 dos mínimos quadrados, cerca de um terço (94,60 ÷ 274,67 ≈ 0,34): padronizadas, todas as colunas pagam a penalidade na mesma moeda, e $\lambda = 100$ já puxa bastante o coeficiente de `renda` para zero.
-
-O coeficiente de `estudante_sim` encolheu depressa porque era um número grande, e era grande em boa parte por causa da unidade: numa coluna que só vale 0 ou 1, um desvio padrão é menos de uma unidade, e o coeficiente por unidade sai grande. A velocidade do encolhimento não diz que ser estudante pesa menos no `saldo` que a renda.
+O coeficiente de `estudante_sim` encolheu depressa porque era um número grande, e era grande em boa parte por causa da unidade: numa coluna que só vale 0 ou 1, um desvio padrão é menos de uma unidade, e o coeficiente por unidade sai grande. A velocidade do encolhimento não diz que ser estudante pesa menos no `saldo` que a renda. A leitura para casa, no fim da seção, mede o efeito da unidade com `renda` em milhões de dólares e compara os coeficientes das duas colunas na mesma escala.
 
 ::: {.callout-warning}
 ## Ridge só depois de padronizar
@@ -224,67 +141,30 @@ O coeficiente de `estudante_sim` encolheu depressa porque era um número grande,
 Nas colunas cruas, o quanto a ridge encolhe cada coeficiente depende da unidade em que a coluna foi medida. A ridge se aplica **depois** de padronizar as colunas, inclusive as indicadoras, e toda ridge daqui em diante é um `make_pipeline(StandardScaler(), Ridge(alpha=lam))`.
 :::
 
-Padronizar uma indicadora tem um custo de leitura. O coeficiente de `estudante_sim` deixa de ser a diferença entre estudante e não estudante e passa a ser o efeito de um desvio padrão da coluna; para voltar à diferença entre os dois grupos, divide-se o coeficiente pelo desvio padrão da indicadora.
-
-Nas colunas padronizadas, que têm média zero, o intercepto da ridge é a média de `saldo`:
-
-```{python}
-#| label: intercepto
-ridge_padronizada = make_pipeline(StandardScaler(), Ridge(alpha=100))
-ridge_padronizada.fit(X, y)
-intercepto = ridge_padronizada[-1].intercept_
-print("intercepto com λ = 100:", numero_br(intercepto, 3))
-print("média de saldo:", numero_br(y.mean(), 3))
-
-rotulos = ["0,01", "0,1", "1", "10", "100", "1.000", "10.000", "100.000"]
-interceptos = pd.DataFrame(index=pd.Index(rotulos, name="λ"))
-for lam, rotulo in zip(np.logspace(-2, 5, 8), rotulos):
-    modelo = make_pipeline(StandardScaler(), Ridge(alpha=lam))
-    modelo.fit(X, y)
-    interceptos.loc[rotulo, "intercepto"] = modelo[-1].intercept_
-    interceptos.loc[rotulo, "média de saldo"] = y.mean()
-interceptos.style.format(decimal=",", precision=3)
-```
-
-::: {.funcao}
-- **`modelo.intercept_`**: o intercepto $\hat\beta_0$ estimado.
-- **`np.logspace(a, b, n)`**: `n` números igualmente espaçados em escala logarítmica, de $10^a$ a $10^b$; aqui, 8 valores de $\lambda$, de 0,01 a 100.000, cada um dez vezes o anterior.
-- **`df.loc[linha, coluna] = valor`**: grava `valor` na célula indicada, criando a coluna se ela ainda não existir.
-:::
-
-Os dois valores são 520,015, e a tabela mostra o intercepto igual à média de `saldo` nos oito valores de $\lambda$ que a célula testa, de 0,01 a 100.000. Com as colunas centradas, a previsão de um cliente com todas as colunas na média é o `saldo` médio, e $\lambda$ não entra nessa conta, porque o intercepto fica fora da penalidade.
-
 ## O caminho dos coeficientes em `Credit`
 
-A ridge dá um conjunto de coeficientes para cada $\lambda$. Ajustar uma grade de valores de $\lambda$ mostra o caminho que cada coeficiente percorre, dos mínimos quadrados até perto de zero. Para resumir o quanto o vetor inteiro encolheu, usa-se a **norma $\ell_2$** (lê-se "ele dois"), a distância do vetor de coeficientes até o zero:
-
-$$
-\lVert\beta\rVert_2 = \sqrt{\sum_{j=1}^{p}\beta_j^2}.
-$$
-
-A razão $\lVert\hat\beta^R_\lambda\rVert_2/\lVert\hat\beta\rVert_2$, com $\hat\beta$ os coeficientes dos mínimos quadrados nas colunas padronizadas, vale 1 quando a ridge devolve os mínimos quadrados e 0 quando todos os coeficientes são zero.
-
-Um ponto do caminho é a ridge com $\lambda = 100$, já ajustada acima. A razão compara a norma dos coeficientes dela com a dos mínimos quadrados, nas mesmas colunas padronizadas:
+A ridge dá um conjunto de coeficientes para cada $\lambda$. Um ponto, com as colunas padronizadas e $\lambda = 100$:
 
 ```{python}
-#| label: um-ponto-do-caminho
-mq_padr = make_pipeline(StandardScaler(), LinearRegression())
-mq_padr.fit(X, y)
-coef_mq = mq_padr[-1].coef_
-coef_100 = ridge_padronizada[-1].coef_
+#| label: uma-ridge-padronizada
+from sklearn.pipeline import make_pipeline
+from sklearn.preprocessing import StandardScaler
 
-norma_mq = np.linalg.norm(coef_mq)
-norma_100 = np.linalg.norm(coef_100)
-print("norma ℓ2, mínimos quadrados:", numero_br(norma_mq, 1))
-print("norma ℓ2, ridge com λ = 100:", numero_br(norma_100, 1))
-print("razão:", numero_br(norma_100 / norma_mq, 3))
+ridge_padronizada = make_pipeline(StandardScaler(), Ridge(alpha=100))
+ridge_padronizada.fit(X, y)
+coef_100 = pd.Series(ridge_padronizada[-1].coef_, index=X.columns)
+coef_100.to_frame("coeficiente padronizado, λ = 100").style.format(
+    decimal=",", precision=1
+)
 ```
 
 ::: {.funcao}
-**`np.linalg.norm(vetor)`**: a norma $\ell_2$ do vetor; com `axis=1`, numa matriz, a norma de cada linha, um número por linha.
+- **`StandardScaler()`**: subtrai de cada coluna a sua média e divide pelo seu desvio padrão (com $n$ no denominador), deixando-a com média 0 e desvio padrão 1.
+- **`make_pipeline(StandardScaler(), Ridge(alpha=100))`**: encadeia a padronização e a ridge num objeto só. `fit` padroniza cada coluna com as médias e os desvios das linhas que recebe e ajusta a ridge sobre o resultado; `predict` repete a mesma padronização antes de prever.
+- **`modelo[-1]`**: o último passo do `Pipeline`, a ridge, de onde sai o `coef_` na escala padronizada.
 :::
 
-O caminho repete a conta em 100 valores de $\lambda$, um ajuste por valor, e guarda os coeficientes numa linha por $\lambda$:
+O caminho repete o ajuste em 100 valores de $\lambda$, de 0,01 a 100.000, e guarda os coeficientes numa linha por $\lambda$:
 
 ```{python}
 #| label: caminho-ridge
@@ -295,64 +175,28 @@ for lam in lams:
     modelo.fit(X, y)
     caminho.loc[lam] = modelo[-1].coef_
 
-razao = np.linalg.norm(caminho, axis=1) / norma_mq
-print("razão no menor λ:", numero_br(razao[0], 3))
-print("razão no maior λ:", numero_br(razao[-1], 3))
+no_menor_lambda = caminho.iloc[0].abs()
+print("valores de λ:", len(lams))
+print("as quatro maiores em valor absoluto, no menor λ:",
+      ", ".join(sorted(no_menor_lambda.nlargest(4).index)))
 print("menor |coeficiente| no maior λ:", numero_br(caminho.iloc[-1].abs().min(), 3))
-
-
-def passos(valores):
-    """Em quantos passos entre dois λ vizinhos a curva cai e em quantos sobe."""
-    variacao = np.diff(valores)
-    return {"passos em que cai": int((variacao < 0).sum()),
-            "passos em que sobe": int((variacao > 0).sum())}
-
-
-pd.DataFrame({"razão das normas": passos(razao)}).T
 ```
 
 ::: {.funcao}
-**`np.diff(arr)`**: a diferença entre cada elemento e o anterior; com 100 valores de $\lambda$, são 99 diferenças, uma por passo da grade.
+- **`np.logspace(a, b, n)`**: `n` números igualmente espaçados em escala logarítmica, de $10^a$ a $10^b$; aqui, 100 valores de $\lambda$, de 0,01 a 100.000.
+- **`serie.nlargest(k)`**: os `k` maiores valores da série, com os rótulos.
 :::
 
-A razão vai de 0,999 no menor $\lambda$ a 0,004 no maior, e a tabela mostra que ela cai em todos os passos da grade, sem subir em nenhum. Mesmo no maior $\lambda$, o menor coeficiente em valor absoluto é 0,002, e nenhum dos 11 é exatamente zero. Nas colunas padronizadas, os coeficientes dos mínimos quadrados são comparáveis entre si:
-
-```{python}
-#| label: coeficientes-mq
-mq_padronizado = pd.Series(coef_mq, index=X.columns)
-tamanho = mq_padronizado.abs()
-print("as quatro maiores em valor absoluto:")
-print(", ".join(sorted(tamanho.nlargest(4).index)))
-print("a maior:", tamanho.idxmax())
-mq_padronizado.sort_values().to_frame("coeficiente padronizado").style.format(
-    decimal=",", precision=1
-)
-```
-
-::: {.funcao}
-**`serie.nlargest(k)`**: os `k` maiores valores da série, com os rótulos.
-:::
-
-Em valor absoluto, os quatro maiores coeficientes são os de `estudante_sim` (127,7), `pontuacao` (175,6), `renda` (−274,7) e `limite` (440,1), o maior de todos; os das outras sete colunas ficam entre −10,6 e 24,3. Na figura, as quatro ganham cor, e as sete vão em cinza.
-
-Isso fecha a pergunta sobre estudante e renda. Dividido pelo desvio padrão de `estudante_sim`, 0,300, o 127,7 volta à escala da indicadora: 127,7 ÷ 0,300 ≈ 425,7, o 425,747 dos mínimos quadrados da primeira tabela, a diferença de `saldo` entre estudante e não estudante. Medidos na mesma moeda, um desvio padrão de cada coluna, o efeito de `renda` (−274,7) é maior em valor absoluto que o de `estudante_sim` (127,7). É nessa moeda que a comparação se faz; a velocidade com que cada coeficiente cru encolhe não responde à pergunta.
-
-Antes de olhar: se o vetor inteiro encolhe a cada passo, cada coeficiente, sozinho, também só anda na direção de zero?
+Antes de olhar: com $\lambda$ crescendo, cada coeficiente só anda na direção de zero?
 
 ```{python}
 #| label: fig-caminho-ridge
-#| fig-cap: 'Coeficientes da ridge em `Credit`, com as 11 colunas padronizadas. Em cima, contra $\lambda$ em escala logarítmica; embaixo, contra $\lVert\hat\beta^R_\lambda\rVert_2/\lVert\hat\beta\rVert_2$, o tamanho do vetor de coeficientes como fração do dos mínimos quadrados. Os dois painéis contam o mesmo caminho em sentidos opostos: $\lambda$ pequeno, à esquerda em cima, corresponde à razão perto de 1, à direita embaixo.'
-#| fig-alt: "Dois painéis empilhados com os mesmos onze coeficientes, de cerca de −275 a 440 no eixo vertical. No de cima, contra lambda de 0,01 a 100.000 em escala log: à esquerda, limite perto de 440, pontuacao perto de 175, estudante_sim perto de 128 e renda perto de −275; todos se aproximam de zero à direita. A curva de pontuacao sobe até perto de 280 antes de cair, e a de renda sobe de −275 até passar de zero. As sete colunas restantes, em cinza, ficam perto de zero o tempo todo. No de baixo, as mesmas curvas contra a razão das normas, de 0 a 1, espelhadas: zero à esquerda, os mínimos quadrados à direita."
-import matplotlib.pyplot as plt
+#| fig-cap: 'Coeficientes da ridge em `Credit`, com as 11 colunas padronizadas, contra $\lambda$ em escala logarítmica. Em cor, as quatro colunas de maior coeficiente em valor absoluto no menor $\lambda$; em cinza, as outras sete.'
+#| fig-alt: "Onze curvas, de cerca de −275 a 440 no eixo vertical, contra lambda de 0,01 a 100.000 em escala log. À esquerda, limite perto de 440, pontuacao perto de 175, estudante_sim perto de 128 e renda perto de −275; todas se aproximam de zero à direita. A curva de pontuacao sobe até perto de 280 antes de cair, e a de renda sobe de −275 até passar de zero. As sete colunas restantes, em cinza, ficam perto de zero o tempo todo."
 from matplotlib.lines import Line2D
 
-
-def com_virgula(valor, posicao):
-    return f"{valor:.1f}".replace(".", ",")
-
-
 destaque = {"renda": "C0", "limite": "C1", "pontuacao": "C2", "estudante_sim": "C3"}
-fig, (ax_lam, ax_razao) = plt.subplots(2, 1, figsize=(6.4, 5.4))
+fig, ax = plt.subplots(figsize=(6.4, 4.2))
 for coluna in X.columns:
     em_destaque = coluna in destaque
     estilo = {
@@ -360,76 +204,28 @@ for coluna in X.columns:
         "linewidth": 2 if em_destaque else 1,
         "zorder": 3 if em_destaque else 1,
     }
-    ax_lam.plot(lams, caminho[coluna], **estilo)
-    ax_razao.plot(razao, caminho[coluna], **estilo)
-ax_lam.set_xscale("log")
-ax_lam.set_xlim(lams.min(), lams.max())
-ax_lam.set_xlabel("λ")
-ax_razao.set_xlim(0, 1)
-ax_razao.xaxis.set_major_formatter(com_virgula)
-ax_razao.set_xlabel(
-    r"$\|\hat{\beta}^{R}_{\lambda}\|_2 \;/\; \|\hat{\beta}\|_2$"
-)
-for ax in (ax_lam, ax_razao):
-    ax.axhline(0, color="0.45", linewidth=0.8)
-    ax.set_ylim(-320, 480)
-    ax.set_ylabel("coeficiente padronizado")
+    ax.plot(lams, caminho[coluna], **estilo)
+ax.axhline(0, color="0.45", linewidth=0.8)
+ax.set_xscale("log")
+ax.set_xlim(lams.min(), lams.max())
+ax.set_ylim(-320, 480)
+ax.set_xlabel("λ")
+ax.set_ylabel("coeficiente padronizado")
 entradas = [Line2D([], [], color=cor, linewidth=2) for cor in destaque.values()]
 entradas.append(Line2D([], [], color="0.45", linewidth=1))
 fig.legend(entradas, [*destaque, "outras sete"], loc="lower center", ncols=3,
            frameon=False)
-fig.tight_layout(rect=(0, 0.1, 1, 1))
+fig.tight_layout(rect=(0, 0.14, 1, 1))
 plt.show()
 ```
 
 ::: {.funcao}
 - **`ax.set_xscale("log")`**: põe o eixo horizontal em escala logarítmica, em que cada marca vale dez vezes a anterior.
 - **`Line2D([], [], color, linewidth)`**: um traço sem dados, que serve só de amostra na legenda.
-- **`fig.legend(amostras, rotulos, loc, ncols, frameon)`**: uma legenda só para a figura inteira, fora dos painéis, com `ncols` colunas e sem moldura. O `rect` de `fig.tight_layout` deixa livre, embaixo, a faixa da legenda.
+- **`fig.legend(amostras, rotulos, loc, ncols, frameon)`**: uma legenda só para a figura inteira, fora do painel, com `ncols` colunas e sem moldura. O `rect` de `fig.tight_layout` deixa livre, embaixo, a faixa da legenda.
 :::
 
-No agregado, tudo encolhe: a razão das normas só cai. Coluna a coluna, não. A célula abaixo conta, para cada uma das quatro curvas coloridas, os passos da grade em que ela cai e os em que sobe:
-
-```{python}
-#| label: nao-monotono
-contagem = {}
-for coluna in destaque:
-    contagem[coluna] = passos(caminho[coluna])
-pd.DataFrame(contagem).T
-```
-
-Na figura, `pontuacao` sobe antes de cair, e `renda` atravessa o zero. A célula seguinte mede onde:
-
-```{python}
-#| label: maximos
-pontuacao, renda = caminho["pontuacao"], caminho["renda"]
-lam_positivo = renda[renda > 0].index.min()
-depois_de_100 = caminho.loc[caminho.index >= 100]
-distancia = (depois_de_100["limite"] - depois_de_100["pontuacao"]).abs()
-print("pontuacao, mínimos quadrados:", numero_br(mq_padronizado["pontuacao"], 1))
-print("pontuacao, máximo:", numero_br(pontuacao.max(), 1))
-print("pontuacao, λ do máximo:", numero_br(pontuacao.idxmax(), 1))
-print("renda > 0 a partir de λ:", numero_br(lam_positivo, 1))
-print("menor renda daí em diante:", numero_br(renda[renda.index >= lam_positivo].min(), 1))
-print("renda, máximo:", numero_br(renda.max(), 1))
-print("maior |limite − pontuacao| com λ ≥ 100:", numero_br(distancia.max(), 2))
-```
-
-Na tabela de contagens, só `renda` e `pontuacao` sobem em algum passo; `limite` e `estudante_sim` caem em todos os 99. O coeficiente de `pontuacao` **sobe** de 175,6 nos mínimos quadrados até 281,8, com $\lambda$ perto de 7,9, antes de começar a cair. O de `renda` troca de sinal: começa em −274,7, é positivo em toda a grade a partir de $\lambda = 394{,}4$, com o menor valor daí em diante ainda acima de zero, e passa por um máximo de 23,4.
-
-```{python}
-#| label: correlacoes
-coef_100 = pd.Series(coef_100, index=X.columns)
-print("corr(limite, pontuacao):", numero_br(X["limite"].corr(X["pontuacao"]), 3))
-print("corr(renda, limite):", numero_br(X["renda"].corr(X["limite"]), 3))
-print("corr(renda, saldo):", numero_br(X["renda"].corr(y), 3))
-print("λ = 100, limite:", numero_br(coef_100["limite"], 1))
-print("λ = 100, pontuacao:", numero_br(coef_100["pontuacao"], 1))
-```
-
-As duas curvas dependem de `limite`, o maior coeficiente e o que a penalidade mais cobra. `pontuacao` quase repete `limite`, com correlação de 0,997: quando a penalidade encolhe `limite`, parte do papel dele passa para `pontuacao`. Com $\lambda = 100$, os dois coeficientes já são quase iguais, 211,4 e 209,6, e em todos os $\lambda$ da grade acima de 100 ficam a menos de 2 um do outro (a maior distância é de 1,62): a ridge divide o peso entre as duas colunas, e na figura dos caminhos a curva verde cobre a laranja.
-
-O −274,7 de `renda` compara clientes com os mesmos valores nas outras colunas, `limite` inclusive, e `renda` anda junto com `limite`, com correlação de 0,792. Sozinha, `renda` anda junto com `saldo`, com correlação de 0,464. Com `limite` encolhido, o coeficiente de `renda` passa a carregar parte do que `limite` deixou de explicar, e a troca de sinal é coerente com essa relação positiva.
+À esquerda, com $\lambda$ perto de zero, os coeficientes ficam perto dos mínimos quadrados nas colunas padronizadas; à direita, todos se aproximam de zero, e nenhum chega lá: no maior $\lambda$ da grade, o menor em valor absoluto ainda é 0,002. Nem todos descem direto: a curva de `pontuacao` sobe antes de cair, e a de `renda` troca de sinal. A leitura para casa, no fim da seção, mede onde isso acontece e por quê.
 
 ## Por que encolher ajuda
 
@@ -585,6 +381,13 @@ Da esquerda para a direita, a variância cai, e o viés², depois de um trecho p
 
 ```{python}
 #| label: pontas
+def passos(valores):
+    """Em quantos passos entre dois λ vizinhos a curva cai e em quantos sobe."""
+    variacao = np.diff(valores)
+    return {"passos em que cai": int((variacao < 0).sum()),
+            "passos em que sobe": int((variacao > 0).sum())}
+
+
 mse = curvas["MSE esperado"]
 vies2 = curvas["viés²"]
 trechos = {
@@ -600,6 +403,10 @@ print("variância no maior λ da grade:", numero_br(curvas["variância"].iloc[-1
 pd.DataFrame(trechos).T
 ```
 
+::: {.funcao}
+**`np.diff(arr)`**: a diferença entre cada elemento e o anterior; com 31 valores de $\lambda$, são 30 diferenças, uma por passo da grade.
+:::
+
 A variância cai em todos os passos da grade. O viés² não passa de 0,11 enquanto $\lambda \le 0{,}1$, oscilação do tamanho do resto de simulação, e a partir de $\lambda = 0{,}1$ só sobe. O MSE de teste esperado desce em todos os passos até o mínimo e sobe em todos depois dele.
 
 Na ponta esquerda, com $\lambda = 0{,}01$, o MSE de teste esperado é de 51,44, ainda longe do mínimo e pouco abaixo dos 53,50 dos mínimos quadrados. Na direita, com $\lambda = 10.000$, a variância é de 0,08 e o MSE, 48,15, está perto do modelo nulo. O mínimo de 14,52 fica num $\lambda$ intermediário, longe das duas pontas.
@@ -607,3 +414,242 @@ Na ponta esquerda, com $\lambda = 0{,}01$, o MSE de teste esperado é de 51,44, 
 A tabela `resumo`, acima, já mostrava os mínimos quadrados, com 53,50, acima do modelo nulo, com 48,67: nesse cenário, eles preveem pior que o modelo que ignora os preditores. É um caso em que a ridge ajuda muito: com $p$ perto de $n$, os mínimos quadrados são muito sensíveis à amostra. Com $p > n$, os mínimos quadrados nem têm uma solução única, porque há mais incógnitas, os coeficientes, que equações, as observações; a ridge continua a ter uma para cada $\lambda > 0$.
 
 Puxar os coeficientes para zero troca um pouco de viés por muito menos variância, e, quando os mínimos quadrados variam muito de uma amostra para outra, a troca baixa o erro de teste. A ridge não exclui nenhuma coluna: mesmo no maior $\lambda$ do caminho de `Credit`, nenhum dos 11 coeficientes é zero, e quando o objetivo é escolher quais colunas ficam, ela não faz esse trabalho. Em compensação, sai barata. A busca completa ajusta $2^p$ modelos; a ridge ajusta um modelo por valor de $\lambda$, e o caminho de `Credit`, com 100 valores de $\lambda$, custou 100 ajustes. O que falta é escolher o $\lambda$ sem conhecer a $f$ verdadeira, com validação cruzada, na seção 11.5.
+
+## Leitura para casa
+
+### `renda` em milhões
+
+A penalidade depende da unidade de cada coluna, e a padronização tira essa dependência. O teste é medir `renda` em milhões de dólares em vez de milhares, dividindo a coluna por 1.000, e comparar três ajustes, cada um feito nas duas unidades:
+
+1. os mínimos quadrados;
+2. a ridge com $\lambda = 100$ nas colunas cruas;
+3. a ridge com $\lambda = 100$ nas colunas padronizadas.
+
+```{python}
+#| label: escala
+X_milhoes = X.assign(renda=X["renda"] / 1000)
+j = X.columns.get_loc("renda")  # a posição de renda nas colunas de X
+dp_milhares = X["renda"].std(ddof=0)  # ddof=0: n no denominador, como na fórmula
+dp_milhoes = X_milhoes["renda"].std(ddof=0)
+
+mq_milhares = LinearRegression()
+mq_milhares.fit(X, y)
+mq_milhoes = LinearRegression()
+mq_milhoes.fit(X_milhoes, y)
+
+crua_milhares = Ridge(alpha=100)
+crua_milhares.fit(X, y)
+crua_milhoes = Ridge(alpha=100)
+crua_milhoes.fit(X_milhoes, y)
+
+padr_milhares = make_pipeline(StandardScaler(), Ridge(alpha=100))
+padr_milhares.fit(X, y)
+padr_milhoes = make_pipeline(StandardScaler(), Ridge(alpha=100))
+padr_milhoes.fit(X_milhoes, y)
+
+print("desvio padrão de renda, em milhares:", numero_br(dp_milhares, 3))
+print("desvio padrão de renda, em milhões:", numero_br(dp_milhoes, 6))
+```
+
+::: {.funcao}
+- **`df.assign(coluna=valores)`**: uma cópia de `df` com a coluna trocada (ou acrescentada); `X` fica como estava.
+- **`X.columns.get_loc(nome)`**: a posição da coluna `nome` em `X`, a mesma do coeficiente dela em `coef_`.
+- **`modelo[-1]`**: o último passo do `Pipeline`, a ridge, de onde sai o `coef_` na escala padronizada.
+:::
+
+A tabela tem uma linha por ajuste. As duas primeiras colunas são o efeito de um desvio padrão de `renda`, com a coluna em milhares e em milhões; a terceira é a maior diferença, sobre os 400 clientes, entre a previsão feita com a coluna em milhares e a feita com ela em milhões.
+
+```{python}
+#| label: escala-tabela
+escala = pd.DataFrame(
+    {
+        "em milhares": [
+            mq_milhares.coef_[j] * dp_milhares,
+            crua_milhares.coef_[j] * dp_milhares,
+            padr_milhares[-1].coef_[j],
+        ],
+        "em milhões": [
+            mq_milhoes.coef_[j] * dp_milhoes,
+            crua_milhoes.coef_[j] * dp_milhoes,
+            padr_milhoes[-1].coef_[j],
+        ],
+        "diferença máxima": [
+            np.abs(mq_milhares.predict(X) - mq_milhoes.predict(X_milhoes)).max(),
+            np.abs(crua_milhares.predict(X) - crua_milhoes.predict(X_milhoes)).max(),
+            np.abs(padr_milhares.predict(X) - padr_milhoes.predict(X_milhoes)).max(),
+        ],
+    },
+    index=["mínimos quadrados", "ridge crua", "ridge padronizada"],
+)
+dp_estudante = X["estudante_sim"].std(ddof=0)
+print("desvio padrão de estudante_sim:", numero_br(dp_estudante, 3))
+escala.style.format(decimal=",", thousands=".", precision=2)
+```
+
+::: {.funcao}
+**`np.abs(arr)`**: o valor absoluto de cada elemento do array.
+:::
+
+Com as colunas cruas, a ridge com $\lambda = 100$ dá a `renda` um efeito de −268,38 dólares por desvio padrão quando ela está em milhares, e de −0,48 quando está em milhões: a penalidade praticamente zerou a coluna só porque a unidade mudou. As previsões dos dois ajustes chegam a diferir em 578,45 dólares para o mesmo cliente.
+
+Nos mínimos quadrados e na ridge padronizada, a unidade não muda nada: o efeito é o mesmo nas duas colunas, e a maior diferença nas previsões aparece como 0,00, menos de meio centavo. O efeito na ridge padronizada é outro número, −94,60 contra os −274,67 dos mínimos quadrados, cerca de um terço (94,60 ÷ 274,67 ≈ 0,34): padronizadas, todas as colunas pagam a penalidade na mesma moeda, e $\lambda = 100$ já puxa bastante o coeficiente de `renda` para zero.
+
+Padronizar uma indicadora tem um custo de leitura. O coeficiente de `estudante_sim` deixa de ser a diferença entre estudante e não estudante e passa a ser o efeito de um desvio padrão da coluna; para voltar à diferença entre os dois grupos, divide-se o coeficiente pelo desvio padrão da indicadora.
+
+### O intercepto
+
+Nas colunas padronizadas, que têm média zero, o intercepto da ridge é a média de `saldo`. A ridge com $\lambda = 100$, ajustada na parte de cima da seção, e outros sete valores de $\lambda$:
+
+```{python}
+#| label: intercepto
+intercepto = ridge_padronizada[-1].intercept_
+print("intercepto com λ = 100:", numero_br(intercepto, 3))
+print("média de saldo:", numero_br(y.mean(), 3))
+
+rotulos = ["0,01", "0,1", "1", "10", "100", "1.000", "10.000", "100.000"]
+interceptos = pd.DataFrame(index=pd.Index(rotulos, name="λ"))
+for lam, rotulo in zip(np.logspace(-2, 5, 8), rotulos):
+    modelo = make_pipeline(StandardScaler(), Ridge(alpha=lam))
+    modelo.fit(X, y)
+    interceptos.loc[rotulo, "intercepto"] = modelo[-1].intercept_
+    interceptos.loc[rotulo, "média de saldo"] = y.mean()
+interceptos.style.format(decimal=",", precision=3)
+```
+
+::: {.funcao}
+- **`modelo.intercept_`**: o intercepto $\hat\beta_0$ estimado.
+- **`df.loc[linha, coluna] = valor`**: grava `valor` na célula indicada, criando a coluna se ela ainda não existir.
+:::
+
+Os dois valores são 520,015, e a tabela mostra o intercepto igual à média de `saldo` nos oito valores de $\lambda$ que a célula testa, de 0,01 a 100.000. Com as colunas centradas, a previsão de um cliente com todas as colunas na média é o `saldo` médio, e $\lambda$ não entra nessa conta, porque o intercepto fica fora da penalidade.
+
+### O caminho contra a norma $\ell_2$
+
+Para resumir o quanto o vetor inteiro de coeficientes encolheu, usa-se a **norma $\ell_2$** (lê-se "ele dois"), a distância do vetor de coeficientes até o zero:
+
+$$
+\lVert\beta\rVert_2 = \sqrt{\sum_{j=1}^{p}\beta_j^2}.
+$$
+
+A razão $\lVert\hat\beta^R_\lambda\rVert_2/\lVert\hat\beta\rVert_2$, com $\hat\beta$ os coeficientes dos mínimos quadrados nas colunas padronizadas, vale 1 quando a ridge devolve os mínimos quadrados e 0 quando todos os coeficientes são zero.
+
+Um ponto do caminho é a ridge com $\lambda = 100$. A razão compara a norma dos coeficientes dela com a dos mínimos quadrados, nas mesmas colunas padronizadas:
+
+```{python}
+#| label: um-ponto-do-caminho
+mq_padr = make_pipeline(StandardScaler(), LinearRegression())
+mq_padr.fit(X, y)
+coef_mq = mq_padr[-1].coef_
+
+norma_mq = np.linalg.norm(coef_mq)
+norma_100 = np.linalg.norm(coef_100)
+print("norma ℓ2, mínimos quadrados:", numero_br(norma_mq, 1))
+print("norma ℓ2, ridge com λ = 100:", numero_br(norma_100, 1))
+print("razão:", numero_br(norma_100 / norma_mq, 3))
+```
+
+::: {.funcao}
+**`np.linalg.norm(vetor)`**: a norma $\ell_2$ do vetor; com `axis=1`, numa matriz, a norma de cada linha, um número por linha.
+:::
+
+A mesma conta em cada $\lambda$ do caminho, e a função `passos`, da parte de cima da seção, conta os passos em que a razão cai e os em que sobe:
+
+```{python}
+#| label: razao-ridge
+razao = np.linalg.norm(caminho, axis=1) / norma_mq
+print("razão no menor λ:", numero_br(razao[0], 3))
+print("razão no maior λ:", numero_br(razao[-1], 3))
+pd.DataFrame({"razão das normas": passos(razao)}).T
+```
+
+A razão vai de 0,999 no menor $\lambda$ a 0,004 no maior, e a tabela mostra que ela cai em todos os passos da grade, sem subir em nenhum. Nas colunas padronizadas, os coeficientes dos mínimos quadrados são comparáveis entre si:
+
+```{python}
+#| label: coeficientes-mq
+mq_padronizado = pd.Series(coef_mq, index=X.columns)
+tamanho = mq_padronizado.abs()
+print("as quatro maiores em valor absoluto:")
+print(", ".join(sorted(tamanho.nlargest(4).index)))
+print("a maior:", tamanho.idxmax())
+mq_padronizado.sort_values().to_frame("coeficiente padronizado").style.format(
+    decimal=",", precision=1
+)
+```
+
+Em valor absoluto, os quatro maiores coeficientes são os de `estudante_sim` (127,7), `pontuacao` (175,6), `renda` (−274,7) e `limite` (440,1), o maior de todos; os das outras sete colunas ficam entre −10,6 e 24,3.
+
+Isso fecha a pergunta sobre estudante e renda. Dividido pelo desvio padrão de `estudante_sim`, 0,300, o 127,7 volta à escala da indicadora: 127,7 ÷ 0,300 ≈ 425,7, o 425,747 dos mínimos quadrados da primeira tabela, a diferença de `saldo` entre estudante e não estudante. Medidos na mesma moeda, um desvio padrão de cada coluna, o efeito de `renda` (−274,7) é maior em valor absoluto que o de `estudante_sim` (127,7). É nessa moeda que a comparação se faz; a velocidade com que cada coeficiente cru encolhe não responde à pergunta.
+
+Contra a razão das normas, o caminho aparece espelhado:
+
+```{python}
+#| label: fig-caminho-ridge-razao
+#| fig-cap: 'Os coeficientes da ridge em `Credit` da @fig-caminho-ridge, agora contra $\lVert\hat\beta^R_\lambda\rVert_2/\lVert\hat\beta\rVert_2$, o tamanho do vetor de coeficientes como fração do dos mínimos quadrados. O caminho aparece espelhado: $\lambda$ pequeno, à esquerda na @fig-caminho-ridge, corresponde à razão perto de 1, à direita aqui.'
+#| fig-alt: "Onze curvas contra a razão das normas, de 0 a 1, com o eixo vertical de cerca de −275 a 440: zero à esquerda e, à direita, os mínimos quadrados, com limite perto de 440, pontuacao perto de 175, estudante_sim perto de 128 e renda perto de −275. A curva de pontuacao passa por um máximo perto de 280 antes de chegar a 175, e a de renda é positiva à esquerda e negativa à direita. As sete colunas restantes, em cinza, ficam perto de zero."
+def com_virgula(valor, posicao):
+    return f"{valor:.1f}".replace(".", ",")
+
+
+fig, ax = plt.subplots(figsize=(6.4, 4.2))
+for coluna in X.columns:
+    em_destaque = coluna in destaque
+    estilo = {
+        "color": destaque.get(coluna, "0.45"),
+        "linewidth": 2 if em_destaque else 1,
+        "zorder": 3 if em_destaque else 1,
+    }
+    ax.plot(razao, caminho[coluna], **estilo)
+ax.axhline(0, color="0.45", linewidth=0.8)
+ax.set_xlim(0, 1)
+ax.xaxis.set_major_formatter(com_virgula)
+ax.set_ylim(-320, 480)
+ax.set_xlabel(r"$\|\hat{\beta}^{R}_{\lambda}\|_2 \;/\; \|\hat{\beta}\|_2$")
+ax.set_ylabel("coeficiente padronizado")
+fig.legend(entradas, [*destaque, "outras sete"], loc="lower center", ncols=3,
+           frameon=False)
+fig.tight_layout(rect=(0, 0.14, 1, 1))
+plt.show()
+```
+
+No agregado, tudo encolhe: a razão das normas só cai. Coluna a coluna, não. A célula abaixo conta, para cada uma das quatro curvas coloridas, os passos da grade em que ela cai e os em que sobe:
+
+```{python}
+#| label: nao-monotono
+contagem = {}
+for coluna in destaque:
+    contagem[coluna] = passos(caminho[coluna])
+pd.DataFrame(contagem).T
+```
+
+Na figura, `pontuacao` sobe antes de cair, e `renda` atravessa o zero. A célula seguinte mede onde:
+
+```{python}
+#| label: maximos
+pontuacao, renda = caminho["pontuacao"], caminho["renda"]
+lam_positivo = renda[renda > 0].index.min()
+depois_de_100 = caminho.loc[caminho.index >= 100]
+distancia = (depois_de_100["limite"] - depois_de_100["pontuacao"]).abs()
+print("pontuacao, mínimos quadrados:", numero_br(mq_padronizado["pontuacao"], 1))
+print("pontuacao, máximo:", numero_br(pontuacao.max(), 1))
+print("pontuacao, λ do máximo:", numero_br(pontuacao.idxmax(), 1))
+print("renda > 0 a partir de λ:", numero_br(lam_positivo, 1))
+print("menor renda daí em diante:", numero_br(renda[renda.index >= lam_positivo].min(), 1))
+print("renda, máximo:", numero_br(renda.max(), 1))
+print("maior |limite − pontuacao| com λ ≥ 100:", numero_br(distancia.max(), 2))
+```
+
+Na tabela de contagens, só `renda` e `pontuacao` sobem em algum passo; `limite` e `estudante_sim` caem em todos os 99. O coeficiente de `pontuacao` **sobe** de 175,6 nos mínimos quadrados até 281,8, com $\lambda$ perto de 7,9, antes de começar a cair. O de `renda` troca de sinal: começa em −274,7, é positivo em toda a grade a partir de $\lambda = 394{,}4$, com o menor valor daí em diante ainda acima de zero, e passa por um máximo de 23,4.
+
+```{python}
+#| label: correlacoes
+coef_100 = pd.Series(coef_100, index=X.columns)
+print("corr(limite, pontuacao):", numero_br(X["limite"].corr(X["pontuacao"]), 3))
+print("corr(renda, limite):", numero_br(X["renda"].corr(X["limite"]), 3))
+print("corr(renda, saldo):", numero_br(X["renda"].corr(y), 3))
+print("λ = 100, limite:", numero_br(coef_100["limite"], 1))
+print("λ = 100, pontuacao:", numero_br(coef_100["pontuacao"], 1))
+```
+
+As duas curvas dependem de `limite`, o maior coeficiente e o que a penalidade mais cobra. `pontuacao` quase repete `limite`, com correlação de 0,997: quando a penalidade encolhe `limite`, parte do papel dele passa para `pontuacao`. Com $\lambda = 100$, os dois coeficientes já são quase iguais, 211,4 e 209,6, e em todos os $\lambda$ da grade acima de 100 ficam a menos de 2 um do outro (a maior distância é de 1,62): a ridge divide o peso entre as duas colunas, e na figura dos caminhos a curva verde cobre a laranja.
+
+O −274,7 de `renda` compara clientes com os mesmos valores nas outras colunas, `limite` inclusive, e `renda` anda junto com `limite`, com correlação de 0,792. Sozinha, `renda` anda junto com `saldo`, com correlação de 0,464. Com `limite` encolhido, o coeficiente de `renda` passa a carregar parte do que `limite` deixou de explicar, e a troca de sinal é coerente com essa relação positiva.
