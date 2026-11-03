@@ -1188,35 +1188,28 @@ window.Quarto = {
 
 
 <p>Quantos vizinhos o <em>k</em>-NN deve consultar? E área, condomínio e IPTU devem passar pelo logaritmo antes da padronização? Nada no dado pediu os dez vizinhos da seção 17.4, nem o logaritmo, e as duas escolhas mudam o erro do modelo. Como escolher as duas, e com que dado, sem abrir o teste?</p>
-<p>A função <code>numero_br</code> escreve os números com a pontuação brasileira:</p>
-<div id="numero-br" class="cell" data-execution_count="2">
-<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb1"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a>numero_br <span class="op">=</span> <span class="kw">lambda</span> valor, casas<span class="op">=</span><span class="dv">2</span>: (</span>
-<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a>    <span class="ss">f"</span><span class="sc">{</span>valor<span class="sc">:,.</span>{casas}f<span class="sc">}</span><span class="ss">"</span>.replace(<span class="st">","</span>, <span class="st">"_"</span>).replace(<span class="st">"."</span>, <span class="st">","</span>).replace(<span class="st">"_"</span>, <span class="st">"."</span>)</span>
-<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a>    .replace(<span class="st">"-"</span>, <span class="st">"−"</span>)</span>
-<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a>)</span></code></pre></div><button title="Copiar para a área de transferência" class="code-copy-button"><i class="bi"></i></button></div>
-</div>
 <p>O ponto de partida é a tabela sem linhas repetidas, a divisão estratificada por cidade, os dez preditores e o logaritmo do aluguel como resposta. O <code>preparo</code> é o da seção 17.3: as colunas categóricas viram colunas de 0 e 1; área, condomínio e IPTU passam por <code>np.log1p</code> e são padronizados; o andar ausente vira 0, com uma coluna que marca onde ele faltava; e as contagens são padronizadas.</p>
-<div id="estado" class="cell" data-execution_count="3">
-<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb2"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a>alugueis <span class="op">=</span> pd.read_csv(<span class="st">"dados/alugueis.csv"</span>, na_values<span class="op">=</span>[<span class="st">"-"</span>]).drop_duplicates()</span>
-<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a>preditores <span class="op">=</span> [<span class="st">"cidade"</span>, <span class="st">"area_m2"</span>, <span class="st">"quartos"</span>, <span class="st">"banheiros"</span>, <span class="st">"vagas"</span>, <span class="st">"andar"</span>,</span>
-<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a>              <span class="st">"aceita_animal"</span>, <span class="st">"mobiliado"</span>, <span class="st">"condominio"</span>, <span class="st">"iptu"</span>]</span>
-<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a>treino, teste <span class="op">=</span> train_test_split(alugueis, test_size<span class="op">=</span><span class="fl">0.2</span>, random_state<span class="op">=</span><span class="dv">17</span>,</span>
-<span id="cb2-5"><a href="#cb2-5" aria-hidden="true" tabindex="-1"></a>                                 stratify<span class="op">=</span>alugueis[<span class="st">"cidade"</span>])</span>
-<span id="cb2-6"><a href="#cb2-6" aria-hidden="true" tabindex="-1"></a>X_treino, y_treino <span class="op">=</span> treino[preditores], np.log(treino[<span class="st">"aluguel"</span>])</span>
-<span id="cb2-7"><a href="#cb2-7" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb2-8"><a href="#cb2-8" aria-hidden="true" tabindex="-1"></a>preparo <span class="op">=</span> ColumnTransformer([</span>
-<span id="cb2-9"><a href="#cb2-9" aria-hidden="true" tabindex="-1"></a>    (<span class="st">"categoricas"</span>, OneHotEncoder(handle_unknown<span class="op">=</span><span class="st">"ignore"</span>, sparse_output<span class="op">=</span><span class="va">False</span>),</span>
-<span id="cb2-10"><a href="#cb2-10" aria-hidden="true" tabindex="-1"></a>     [<span class="st">"cidade"</span>, <span class="st">"aceita_animal"</span>, <span class="st">"mobiliado"</span>]),</span>
-<span id="cb2-11"><a href="#cb2-11" aria-hidden="true" tabindex="-1"></a>    (<span class="st">"assimetricas"</span>, Pipeline([</span>
-<span id="cb2-12"><a href="#cb2-12" aria-hidden="true" tabindex="-1"></a>        (<span class="st">"log"</span>, FunctionTransformer(np.log1p, feature_names_out<span class="op">=</span><span class="st">"one-to-one"</span>)),</span>
-<span id="cb2-13"><a href="#cb2-13" aria-hidden="true" tabindex="-1"></a>        (<span class="st">"escala"</span>, StandardScaler())]), [<span class="st">"area_m2"</span>, <span class="st">"condominio"</span>, <span class="st">"iptu"</span>]),</span>
-<span id="cb2-14"><a href="#cb2-14" aria-hidden="true" tabindex="-1"></a>    (<span class="st">"andar"</span>, Pipeline([</span>
-<span id="cb2-15"><a href="#cb2-15" aria-hidden="true" tabindex="-1"></a>        (<span class="st">"preenche"</span>, SimpleImputer(strategy<span class="op">=</span><span class="st">"constant"</span>, fill_value<span class="op">=</span><span class="dv">0</span>,</span>
-<span id="cb2-16"><a href="#cb2-16" aria-hidden="true" tabindex="-1"></a>                                   add_indicator<span class="op">=</span><span class="va">True</span>)),</span>
-<span id="cb2-17"><a href="#cb2-17" aria-hidden="true" tabindex="-1"></a>        (<span class="st">"escala"</span>, StandardScaler())]), [<span class="st">"andar"</span>]),</span>
-<span id="cb2-18"><a href="#cb2-18" aria-hidden="true" tabindex="-1"></a>    (<span class="st">"contagens"</span>, StandardScaler(), [<span class="st">"quartos"</span>, <span class="st">"banheiros"</span>, <span class="st">"vagas"</span>]),</span>
-<span id="cb2-19"><a href="#cb2-19" aria-hidden="true" tabindex="-1"></a>]).set_output(transform<span class="op">=</span><span class="st">"pandas"</span>)</span>
-<span id="cb2-20"><a href="#cb2-20" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">"X_treino:"</span>, X_treino.shape)</span></code></pre></div><button title="Copiar para a área de transferência" class="code-copy-button"><i class="bi"></i></button></div>
+<div id="estado" class="cell" data-execution_count="2">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb1"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a>alugueis <span class="op">=</span> pd.read_csv(<span class="st">"dados/alugueis.csv"</span>, na_values<span class="op">=</span>[<span class="st">"-"</span>]).drop_duplicates()</span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a>preditores <span class="op">=</span> [<span class="st">"cidade"</span>, <span class="st">"area_m2"</span>, <span class="st">"quartos"</span>, <span class="st">"banheiros"</span>, <span class="st">"vagas"</span>, <span class="st">"andar"</span>,</span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a>              <span class="st">"aceita_animal"</span>, <span class="st">"mobiliado"</span>, <span class="st">"condominio"</span>, <span class="st">"iptu"</span>]</span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a>treino, teste <span class="op">=</span> train_test_split(alugueis, test_size<span class="op">=</span><span class="fl">0.2</span>, random_state<span class="op">=</span><span class="dv">17</span>,</span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a>                                 stratify<span class="op">=</span>alugueis[<span class="st">"cidade"</span>])</span>
+<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a>X_treino, y_treino <span class="op">=</span> treino[preditores], np.log(treino[<span class="st">"aluguel"</span>])</span>
+<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-8"><a href="#cb1-8" aria-hidden="true" tabindex="-1"></a>preparo <span class="op">=</span> ColumnTransformer([</span>
+<span id="cb1-9"><a href="#cb1-9" aria-hidden="true" tabindex="-1"></a>    (<span class="st">"categoricas"</span>, OneHotEncoder(handle_unknown<span class="op">=</span><span class="st">"ignore"</span>, sparse_output<span class="op">=</span><span class="va">False</span>),</span>
+<span id="cb1-10"><a href="#cb1-10" aria-hidden="true" tabindex="-1"></a>     [<span class="st">"cidade"</span>, <span class="st">"aceita_animal"</span>, <span class="st">"mobiliado"</span>]),</span>
+<span id="cb1-11"><a href="#cb1-11" aria-hidden="true" tabindex="-1"></a>    (<span class="st">"assimetricas"</span>, Pipeline([</span>
+<span id="cb1-12"><a href="#cb1-12" aria-hidden="true" tabindex="-1"></a>        (<span class="st">"log"</span>, FunctionTransformer(np.log1p, feature_names_out<span class="op">=</span><span class="st">"one-to-one"</span>)),</span>
+<span id="cb1-13"><a href="#cb1-13" aria-hidden="true" tabindex="-1"></a>        (<span class="st">"escala"</span>, StandardScaler())]), [<span class="st">"area_m2"</span>, <span class="st">"condominio"</span>, <span class="st">"iptu"</span>]),</span>
+<span id="cb1-14"><a href="#cb1-14" aria-hidden="true" tabindex="-1"></a>    (<span class="st">"andar"</span>, Pipeline([</span>
+<span id="cb1-15"><a href="#cb1-15" aria-hidden="true" tabindex="-1"></a>        (<span class="st">"preenche"</span>, SimpleImputer(strategy<span class="op">=</span><span class="st">"constant"</span>, fill_value<span class="op">=</span><span class="dv">0</span>,</span>
+<span id="cb1-16"><a href="#cb1-16" aria-hidden="true" tabindex="-1"></a>                                   add_indicator<span class="op">=</span><span class="va">True</span>)),</span>
+<span id="cb1-17"><a href="#cb1-17" aria-hidden="true" tabindex="-1"></a>        (<span class="st">"escala"</span>, StandardScaler())]), [<span class="st">"andar"</span>]),</span>
+<span id="cb1-18"><a href="#cb1-18" aria-hidden="true" tabindex="-1"></a>    (<span class="st">"contagens"</span>, StandardScaler(), [<span class="st">"quartos"</span>, <span class="st">"banheiros"</span>, <span class="st">"vagas"</span>]),</span>
+<span id="cb1-19"><a href="#cb1-19" aria-hidden="true" tabindex="-1"></a>]).set_output(transform<span class="op">=</span><span class="st">"pandas"</span>)</span>
+<span id="cb1-20"><a href="#cb1-20" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">"X_treino:"</span>, X_treino.shape)</span></code></pre></div><button title="Copiar para a área de transferência" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-stdout">
 <pre><code>X_treino: (8267, 10)</code></pre>
 </div>
@@ -1228,14 +1221,14 @@ window.Quarto = {
 <p>O que o <code>fit</code> aprende do dado são os <strong>parâmetros</strong> do modelo: a média e o desvio de cada coluna, no <code>StandardScaler</code>; os anúncios guardados, no <em>k</em>-NN; os coeficientes, na regressão linear. Uma escolha fixada antes do <code>fit</code>, que ele não altera, é um <strong>hiperparâmetro</strong>: o número de vizinhos do <em>k</em>-NN, ou a decisão de passar a área pelo logaritmo antes da escala.</p>
 </div>
 <p>Por que não escolher o número de vizinhos pelo erro no próprio treino? Pense no que acontece com <em>k</em> = 1 antes de ver a saída:</p>
-<div id="treino-k1" class="cell" data-execution_count="4">
-<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb4"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a>um_vizinho <span class="op">=</span> Pipeline([(<span class="st">"preparo"</span>, preparo),</span>
-<span id="cb4-2"><a href="#cb4-2" aria-hidden="true" tabindex="-1"></a>                       (<span class="st">"modelo"</span>, KNeighborsRegressor(n_neighbors<span class="op">=</span><span class="dv">1</span>))])</span>
-<span id="cb4-3"><a href="#cb4-3" aria-hidden="true" tabindex="-1"></a>um_vizinho.fit(X_treino, y_treino)</span>
-<span id="cb4-4"><a href="#cb4-4" aria-hidden="true" tabindex="-1"></a>residuo <span class="op">=</span> y_treino <span class="op">-</span> um_vizinho.predict(X_treino)</span>
-<span id="cb4-5"><a href="#cb4-5" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">"RMSE no treino, k = 1:"</span>, numero_br(np.sqrt(np.mean(residuo<span class="op">**</span><span class="dv">2</span>)), <span class="dv">4</span>))</span></code></pre></div><button title="Copiar para a área de transferência" class="code-copy-button"><i class="bi"></i></button></div>
+<div id="treino-k1" class="cell" data-execution_count="3">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb3"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a>um_vizinho <span class="op">=</span> Pipeline([(<span class="st">"preparo"</span>, preparo),</span>
+<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a>                       (<span class="st">"modelo"</span>, KNeighborsRegressor(n_neighbors<span class="op">=</span><span class="dv">1</span>))])</span>
+<span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a>um_vizinho.fit(X_treino, y_treino)</span>
+<span id="cb3-4"><a href="#cb3-4" aria-hidden="true" tabindex="-1"></a>residuo <span class="op">=</span> y_treino <span class="op">-</span> um_vizinho.predict(X_treino)</span>
+<span id="cb3-5"><a href="#cb3-5" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">"RMSE no treino, k = 1:"</span>, <span class="bu">round</span>(np.sqrt(np.mean(residuo<span class="op">**</span><span class="dv">2</span>)), <span class="dv">4</span>))</span></code></pre></div><button title="Copiar para a área de transferência" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-stdout">
-<pre><code>RMSE no treino, k = 1: 0,0290</code></pre>
+<pre><code>RMSE no treino, k = 1: 0.029</code></pre>
 </div>
 </div>
 <div class="funcao">
@@ -1247,11 +1240,11 @@ window.Quarto = {
 <h2 class="anchored" data-anchor-id="uma-grade-sobre-o-pipeline-inteiro">Uma grade sobre o <code>Pipeline</code> inteiro</h2>
 <p>O procedimento é o da seção 11.5, lá para o <span class="math inline">\(\lambda\)</span> da ridge, e tem quatro passos: montar uma grade de valores; medir o erro de validação cruzada de cada um; ficar com o de menor erro; reajustar o modelo com esse valor, agora com todo o treino. O <code>GridSearchCV</code> faz os quatro.</p>
 <p>A novidade aqui é que a grade não mexe só no modelo. Ela percorre dois hiperparâmetros, um de cada passo do <code>Pipeline</code>, e cada um é chamado pelo caminho até ele, com <code>__</code> entre os nomes, como no <code>set_params</code> da seção 17.3. Os nomes disponíveis saem de <code>get_params</code>:</p>
-<div id="nomes" class="cell" data-execution_count="5">
-<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb6"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb6-1"><a href="#cb6-1" aria-hidden="true" tabindex="-1"></a>knn <span class="op">=</span> Pipeline([(<span class="st">"preparo"</span>, preparo), (<span class="st">"modelo"</span>, KNeighborsRegressor())])</span>
-<span id="cb6-2"><a href="#cb6-2" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> nome <span class="kw">in</span> knn.get_params():</span>
-<span id="cb6-3"><a href="#cb6-3" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> nome.endswith((<span class="st">"__log"</span>, <span class="st">"__n_neighbors"</span>)):</span>
-<span id="cb6-4"><a href="#cb6-4" aria-hidden="true" tabindex="-1"></a>        <span class="bu">print</span>(nome)</span></code></pre></div><button title="Copiar para a área de transferência" class="code-copy-button"><i class="bi"></i></button></div>
+<div id="nomes" class="cell" data-execution_count="4">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb5"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a>knn <span class="op">=</span> Pipeline([(<span class="st">"preparo"</span>, preparo), (<span class="st">"modelo"</span>, KNeighborsRegressor())])</span>
+<span id="cb5-2"><a href="#cb5-2" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> nome <span class="kw">in</span> knn.get_params():</span>
+<span id="cb5-3"><a href="#cb5-3" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> nome.endswith((<span class="st">"__log"</span>, <span class="st">"__n_neighbors"</span>)):</span>
+<span id="cb5-4"><a href="#cb5-4" aria-hidden="true" tabindex="-1"></a>        <span class="bu">print</span>(nome)</span></code></pre></div><button title="Copiar para a área de transferência" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-stdout">
 <pre><code>preparo__assimetricas__log
 modelo__n_neighbors</code></pre>
@@ -1261,19 +1254,19 @@ modelo__n_neighbors</code></pre>
 <p><strong><code>knn.get_params()</code></strong> — um dicionário com todas as escolhas fixadas antes do <code>fit</code>, isto é, os hiperparâmetros; os parâmetros que o <code>fit</code> aprende não estão nele, apesar do nome do método; num <code>Pipeline</code>, inclusive os das etapas internas, com o caminho até cada um separado por <code>__</code>. Aqui só se imprimem os nomes que terminam em <code>__log</code> ou <code>__n_neighbors</code>.</p>
 </div>
 <p><code>preparo__assimetricas__log</code> é a etapa <code>log</code> do <code>Pipeline</code> <code>assimetricas</code>, dentro do <code>preparo</code>. Ela aceita um transformador no lugar do atual ou a palavra <code>"passthrough"</code>, que tira a etapa do caminho: área, condomínio e IPTU vão direto para a padronização, em metros quadrados e em reais. A grade tem doze valores de <em>k</em>, de 5 a 60 de 5 em 5, e as duas versões do preparo:</p>
-<div id="grade" class="cell" data-execution_count="6">
-<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb8"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb8-1"><a href="#cb8-1" aria-hidden="true" tabindex="-1"></a>grupos <span class="op">=</span> KFold(<span class="dv">10</span>, shuffle<span class="op">=</span><span class="va">True</span>, random_state<span class="op">=</span><span class="dv">17</span>)</span>
-<span id="cb8-2"><a href="#cb8-2" aria-hidden="true" tabindex="-1"></a>grade <span class="op">=</span> {</span>
-<span id="cb8-3"><a href="#cb8-3" aria-hidden="true" tabindex="-1"></a>    <span class="st">"modelo__n_neighbors"</span>: <span class="bu">list</span>(<span class="bu">range</span>(<span class="dv">5</span>, <span class="dv">61</span>, <span class="dv">5</span>)),</span>
-<span id="cb8-4"><a href="#cb8-4" aria-hidden="true" tabindex="-1"></a>    <span class="st">"preparo__assimetricas__log"</span>: [</span>
-<span id="cb8-5"><a href="#cb8-5" aria-hidden="true" tabindex="-1"></a>        FunctionTransformer(np.log1p, feature_names_out<span class="op">=</span><span class="st">"one-to-one"</span>),</span>
-<span id="cb8-6"><a href="#cb8-6" aria-hidden="true" tabindex="-1"></a>        <span class="st">"passthrough"</span>,</span>
-<span id="cb8-7"><a href="#cb8-7" aria-hidden="true" tabindex="-1"></a>    ],</span>
-<span id="cb8-8"><a href="#cb8-8" aria-hidden="true" tabindex="-1"></a>}</span>
-<span id="cb8-9"><a href="#cb8-9" aria-hidden="true" tabindex="-1"></a>candidatos <span class="op">=</span> <span class="bu">len</span>(grade[<span class="st">"modelo__n_neighbors"</span>]) <span class="op">*</span> <span class="bu">len</span>(</span>
-<span id="cb8-10"><a href="#cb8-10" aria-hidden="true" tabindex="-1"></a>    grade[<span class="st">"preparo__assimetricas__log"</span>])</span>
-<span id="cb8-11"><a href="#cb8-11" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">"candidatos:"</span>, candidatos)</span>
-<span id="cb8-12"><a href="#cb8-12" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">"ajustes:"</span>, candidatos <span class="op">*</span> grupos.get_n_splits() <span class="op">+</span> <span class="dv">1</span>)</span></code></pre></div><button title="Copiar para a área de transferência" class="code-copy-button"><i class="bi"></i></button></div>
+<div id="grade" class="cell" data-execution_count="5">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb7"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb7-1"><a href="#cb7-1" aria-hidden="true" tabindex="-1"></a>grupos <span class="op">=</span> KFold(<span class="dv">10</span>, shuffle<span class="op">=</span><span class="va">True</span>, random_state<span class="op">=</span><span class="dv">17</span>)</span>
+<span id="cb7-2"><a href="#cb7-2" aria-hidden="true" tabindex="-1"></a>grade <span class="op">=</span> {</span>
+<span id="cb7-3"><a href="#cb7-3" aria-hidden="true" tabindex="-1"></a>    <span class="st">"modelo__n_neighbors"</span>: <span class="bu">list</span>(<span class="bu">range</span>(<span class="dv">5</span>, <span class="dv">61</span>, <span class="dv">5</span>)),</span>
+<span id="cb7-4"><a href="#cb7-4" aria-hidden="true" tabindex="-1"></a>    <span class="st">"preparo__assimetricas__log"</span>: [</span>
+<span id="cb7-5"><a href="#cb7-5" aria-hidden="true" tabindex="-1"></a>        FunctionTransformer(np.log1p, feature_names_out<span class="op">=</span><span class="st">"one-to-one"</span>),</span>
+<span id="cb7-6"><a href="#cb7-6" aria-hidden="true" tabindex="-1"></a>        <span class="st">"passthrough"</span>,</span>
+<span id="cb7-7"><a href="#cb7-7" aria-hidden="true" tabindex="-1"></a>    ],</span>
+<span id="cb7-8"><a href="#cb7-8" aria-hidden="true" tabindex="-1"></a>}</span>
+<span id="cb7-9"><a href="#cb7-9" aria-hidden="true" tabindex="-1"></a>candidatos <span class="op">=</span> <span class="bu">len</span>(grade[<span class="st">"modelo__n_neighbors"</span>]) <span class="op">*</span> <span class="bu">len</span>(</span>
+<span id="cb7-10"><a href="#cb7-10" aria-hidden="true" tabindex="-1"></a>    grade[<span class="st">"preparo__assimetricas__log"</span>])</span>
+<span id="cb7-11"><a href="#cb7-11" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">"candidatos:"</span>, candidatos)</span>
+<span id="cb7-12"><a href="#cb7-12" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">"ajustes:"</span>, candidatos <span class="op">*</span> grupos.get_n_splits() <span class="op">+</span> <span class="dv">1</span>)</span></code></pre></div><button title="Copiar para a área de transferência" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-stdout">
 <pre><code>candidatos: 24
 ajustes: 241</code></pre>
@@ -1285,94 +1278,94 @@ ajustes: 241</code></pre>
 </div>
 <p>São 24 combinações, cada uma ajustada nos dez grupos, mais o reajuste final do melhor candidato com todo o treino. As 24 são o produto 12 × 2 dos tamanhos das duas listas, e é esse o limite da busca em grade: cada hiperparâmetro novo multiplica o número de candidatos pelo tamanho da sua lista, e o custo junto. Por isso a grade fica restrita ao que tem motivo para variar.</p>
 <p>Antes de rodar: o logaritmo foi motivado na seção 17.1 por uma conta sobre dois imóveis, um de área gigante e outro mediano. Ele deve baixar o erro de validação cruzada do <em>k</em>-NN em todo <em>k</em>? E você esperaria o melhor <em>k</em> abaixo ou acima de dez?</p>
-<div id="cell-busca" class="cell" data-execution_count="7">
-<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb10"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb10-1"><a href="#cb10-1" aria-hidden="true" tabindex="-1"></a>busca <span class="op">=</span> GridSearchCV(knn, grade, cv<span class="op">=</span>grupos, scoring<span class="op">=</span><span class="st">"neg_root_mean_squared_error"</span>)</span>
-<span id="cb10-2"><a href="#cb10-2" aria-hidden="true" tabindex="-1"></a>busca.fit(X_treino, y_treino)</span>
-<span id="cb10-3"><a href="#cb10-3" aria-hidden="true" tabindex="-1"></a>resultados <span class="op">=</span> pd.DataFrame({</span>
-<span id="cb10-4"><a href="#cb10-4" aria-hidden="true" tabindex="-1"></a>    <span class="st">"k"</span>: busca.cv_results_[<span class="st">"param_modelo__n_neighbors"</span>].astype(<span class="bu">int</span>),</span>
-<span id="cb10-5"><a href="#cb10-5" aria-hidden="true" tabindex="-1"></a>    <span class="st">"preparo"</span>: [<span class="st">"sem log"</span> <span class="cf">if</span> <span class="bu">isinstance</span>(v, <span class="bu">str</span>) <span class="cf">else</span> <span class="st">"com log"</span></span>
-<span id="cb10-6"><a href="#cb10-6" aria-hidden="true" tabindex="-1"></a>                <span class="cf">for</span> v <span class="kw">in</span> busca.cv_results_[<span class="st">"param_preparo__assimetricas__log"</span>]],</span>
-<span id="cb10-7"><a href="#cb10-7" aria-hidden="true" tabindex="-1"></a>    <span class="st">"rmse"</span>: <span class="op">-</span>busca.cv_results_[<span class="st">"mean_test_score"</span>],</span>
-<span id="cb10-8"><a href="#cb10-8" aria-hidden="true" tabindex="-1"></a>})</span>
-<span id="cb10-9"><a href="#cb10-9" aria-hidden="true" tabindex="-1"></a>erro <span class="op">=</span> resultados.pivot(index<span class="op">=</span><span class="st">"k"</span>, columns<span class="op">=</span><span class="st">"preparo"</span>, values<span class="op">=</span><span class="st">"rmse"</span>)</span>
-<span id="cb10-10"><a href="#cb10-10" aria-hidden="true" tabindex="-1"></a>(erro.rename_axis(index<span class="op">=</span><span class="va">None</span>, columns<span class="op">=</span><span class="st">"k"</span>)</span>
-<span id="cb10-11"><a href="#cb10-11" aria-hidden="true" tabindex="-1"></a>     .style.<span class="bu">format</span>(<span class="kw">lambda</span> v: numero_br(v, <span class="dv">4</span>))</span>
-<span id="cb10-12"><a href="#cb10-12" aria-hidden="true" tabindex="-1"></a>     .highlight_min(subset<span class="op">=</span>[<span class="st">"com log"</span>], props<span class="op">=</span><span class="st">"font-weight: bold"</span>))</span></code></pre></div><button title="Copiar para a área de transferência" class="code-copy-button"><i class="bi"></i></button></div>
-<div id="busca" class="cell-output cell-output-display" data-execution_count="7">
+<div id="cell-busca" class="cell" data-execution_count="6">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb9"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb9-1"><a href="#cb9-1" aria-hidden="true" tabindex="-1"></a>busca <span class="op">=</span> GridSearchCV(knn, grade, cv<span class="op">=</span>grupos, scoring<span class="op">=</span><span class="st">"neg_root_mean_squared_error"</span>)</span>
+<span id="cb9-2"><a href="#cb9-2" aria-hidden="true" tabindex="-1"></a>busca.fit(X_treino, y_treino)</span>
+<span id="cb9-3"><a href="#cb9-3" aria-hidden="true" tabindex="-1"></a>resultados <span class="op">=</span> pd.DataFrame({</span>
+<span id="cb9-4"><a href="#cb9-4" aria-hidden="true" tabindex="-1"></a>    <span class="st">"k"</span>: busca.cv_results_[<span class="st">"param_modelo__n_neighbors"</span>].astype(<span class="bu">int</span>),</span>
+<span id="cb9-5"><a href="#cb9-5" aria-hidden="true" tabindex="-1"></a>    <span class="st">"preparo"</span>: [<span class="st">"sem log"</span> <span class="cf">if</span> <span class="bu">isinstance</span>(v, <span class="bu">str</span>) <span class="cf">else</span> <span class="st">"com log"</span></span>
+<span id="cb9-6"><a href="#cb9-6" aria-hidden="true" tabindex="-1"></a>                <span class="cf">for</span> v <span class="kw">in</span> busca.cv_results_[<span class="st">"param_preparo__assimetricas__log"</span>]],</span>
+<span id="cb9-7"><a href="#cb9-7" aria-hidden="true" tabindex="-1"></a>    <span class="st">"rmse"</span>: <span class="op">-</span>busca.cv_results_[<span class="st">"mean_test_score"</span>],</span>
+<span id="cb9-8"><a href="#cb9-8" aria-hidden="true" tabindex="-1"></a>})</span>
+<span id="cb9-9"><a href="#cb9-9" aria-hidden="true" tabindex="-1"></a>erro <span class="op">=</span> resultados.pivot(index<span class="op">=</span><span class="st">"k"</span>, columns<span class="op">=</span><span class="st">"preparo"</span>, values<span class="op">=</span><span class="st">"rmse"</span>)</span>
+<span id="cb9-10"><a href="#cb9-10" aria-hidden="true" tabindex="-1"></a>(erro.rename_axis(index<span class="op">=</span><span class="va">None</span>, columns<span class="op">=</span><span class="st">"k"</span>)</span>
+<span id="cb9-11"><a href="#cb9-11" aria-hidden="true" tabindex="-1"></a>     .style.<span class="bu">format</span>(precision<span class="op">=</span><span class="dv">4</span>)</span>
+<span id="cb9-12"><a href="#cb9-12" aria-hidden="true" tabindex="-1"></a>     .highlight_min(subset<span class="op">=</span>[<span class="st">"com log"</span>], props<span class="op">=</span><span class="st">"font-weight: bold"</span>))</span></code></pre></div><button title="Copiar para a área de transferência" class="code-copy-button"><i class="bi"></i></button></div>
+<div id="busca" class="cell-output cell-output-display" data-execution_count="6">
 <style type="text/css">
-#T_3ce95_row4_col0 {
+#T_ae6f1_row4_col0 {
   font-weight: bold;
 }
 </style>
 
-<table id="T_3ce95" class="caption-top table table-sm table-striped small">
+<table id="T_ae6f1" class="caption-top table table-sm table-striped small">
 <thead>
 <tr class="header">
 <th class="index_name level0" data-quarto-table-cell-role="th">k</th>
-<th id="T_3ce95_level0_col0" class="col_heading level0 col0" data-quarto-table-cell-role="th">com log</th>
-<th id="T_3ce95_level0_col1" class="col_heading level0 col1" data-quarto-table-cell-role="th">sem log</th>
+<th id="T_ae6f1_level0_col0" class="col_heading level0 col0" data-quarto-table-cell-role="th">com log</th>
+<th id="T_ae6f1_level0_col1" class="col_heading level0 col1" data-quarto-table-cell-role="th">sem log</th>
 </tr>
 </thead>
 <tbody>
 <tr class="odd">
-<th id="T_3ce95_level0_row0" class="row_heading level0 row0" data-quarto-table-cell-role="th">5</th>
-<td id="T_3ce95_row0_col0" class="data row0 col0">0,4306</td>
-<td id="T_3ce95_row0_col1" class="data row0 col1">0,4528</td>
+<th id="T_ae6f1_level0_row0" class="row_heading level0 row0" data-quarto-table-cell-role="th">5</th>
+<td id="T_ae6f1_row0_col0" class="data row0 col0">0.4306</td>
+<td id="T_ae6f1_row0_col1" class="data row0 col1">0.4528</td>
 </tr>
 <tr class="even">
-<th id="T_3ce95_level0_row1" class="row_heading level0 row1" data-quarto-table-cell-role="th">10</th>
-<td id="T_3ce95_row1_col0" class="data row1 col0">0,4216</td>
-<td id="T_3ce95_row1_col1" class="data row1 col1">0,4442</td>
+<th id="T_ae6f1_level0_row1" class="row_heading level0 row1" data-quarto-table-cell-role="th">10</th>
+<td id="T_ae6f1_row1_col0" class="data row1 col0">0.4216</td>
+<td id="T_ae6f1_row1_col1" class="data row1 col1">0.4442</td>
 </tr>
 <tr class="odd">
-<th id="T_3ce95_level0_row2" class="row_heading level0 row2" data-quarto-table-cell-role="th">15</th>
-<td id="T_3ce95_row2_col0" class="data row2 col0">0,4189</td>
-<td id="T_3ce95_row2_col1" class="data row2 col1">0,4442</td>
+<th id="T_ae6f1_level0_row2" class="row_heading level0 row2" data-quarto-table-cell-role="th">15</th>
+<td id="T_ae6f1_row2_col0" class="data row2 col0">0.4189</td>
+<td id="T_ae6f1_row2_col1" class="data row2 col1">0.4442</td>
 </tr>
 <tr class="even">
-<th id="T_3ce95_level0_row3" class="row_heading level0 row3" data-quarto-table-cell-role="th">20</th>
-<td id="T_3ce95_row3_col0" class="data row3 col0">0,4187</td>
-<td id="T_3ce95_row3_col1" class="data row3 col1">0,4444</td>
+<th id="T_ae6f1_level0_row3" class="row_heading level0 row3" data-quarto-table-cell-role="th">20</th>
+<td id="T_ae6f1_row3_col0" class="data row3 col0">0.4187</td>
+<td id="T_ae6f1_row3_col1" class="data row3 col1">0.4444</td>
 </tr>
 <tr class="odd">
-<th id="T_3ce95_level0_row4" class="row_heading level0 row4" data-quarto-table-cell-role="th">25</th>
-<td id="T_3ce95_row4_col0" class="data row4 col0">0,4184</td>
-<td id="T_3ce95_row4_col1" class="data row4 col1">0,4454</td>
+<th id="T_ae6f1_level0_row4" class="row_heading level0 row4" data-quarto-table-cell-role="th">25</th>
+<td id="T_ae6f1_row4_col0" class="data row4 col0">0.4184</td>
+<td id="T_ae6f1_row4_col1" class="data row4 col1">0.4454</td>
 </tr>
 <tr class="even">
-<th id="T_3ce95_level0_row5" class="row_heading level0 row5" data-quarto-table-cell-role="th">30</th>
-<td id="T_3ce95_row5_col0" class="data row5 col0">0,4188</td>
-<td id="T_3ce95_row5_col1" class="data row5 col1">0,4465</td>
+<th id="T_ae6f1_level0_row5" class="row_heading level0 row5" data-quarto-table-cell-role="th">30</th>
+<td id="T_ae6f1_row5_col0" class="data row5 col0">0.4188</td>
+<td id="T_ae6f1_row5_col1" class="data row5 col1">0.4465</td>
 </tr>
 <tr class="odd">
-<th id="T_3ce95_level0_row6" class="row_heading level0 row6" data-quarto-table-cell-role="th">35</th>
-<td id="T_3ce95_row6_col0" class="data row6 col0">0,4193</td>
-<td id="T_3ce95_row6_col1" class="data row6 col1">0,4474</td>
+<th id="T_ae6f1_level0_row6" class="row_heading level0 row6" data-quarto-table-cell-role="th">35</th>
+<td id="T_ae6f1_row6_col0" class="data row6 col0">0.4193</td>
+<td id="T_ae6f1_row6_col1" class="data row6 col1">0.4474</td>
 </tr>
 <tr class="even">
-<th id="T_3ce95_level0_row7" class="row_heading level0 row7" data-quarto-table-cell-role="th">40</th>
-<td id="T_3ce95_row7_col0" class="data row7 col0">0,4203</td>
-<td id="T_3ce95_row7_col1" class="data row7 col1">0,4475</td>
+<th id="T_ae6f1_level0_row7" class="row_heading level0 row7" data-quarto-table-cell-role="th">40</th>
+<td id="T_ae6f1_row7_col0" class="data row7 col0">0.4203</td>
+<td id="T_ae6f1_row7_col1" class="data row7 col1">0.4475</td>
 </tr>
 <tr class="odd">
-<th id="T_3ce95_level0_row8" class="row_heading level0 row8" data-quarto-table-cell-role="th">45</th>
-<td id="T_3ce95_row8_col0" class="data row8 col0">0,4212</td>
-<td id="T_3ce95_row8_col1" class="data row8 col1">0,4480</td>
+<th id="T_ae6f1_level0_row8" class="row_heading level0 row8" data-quarto-table-cell-role="th">45</th>
+<td id="T_ae6f1_row8_col0" class="data row8 col0">0.4212</td>
+<td id="T_ae6f1_row8_col1" class="data row8 col1">0.4480</td>
 </tr>
 <tr class="even">
-<th id="T_3ce95_level0_row9" class="row_heading level0 row9" data-quarto-table-cell-role="th">50</th>
-<td id="T_3ce95_row9_col0" class="data row9 col0">0,4218</td>
-<td id="T_3ce95_row9_col1" class="data row9 col1">0,4484</td>
+<th id="T_ae6f1_level0_row9" class="row_heading level0 row9" data-quarto-table-cell-role="th">50</th>
+<td id="T_ae6f1_row9_col0" class="data row9 col0">0.4218</td>
+<td id="T_ae6f1_row9_col1" class="data row9 col1">0.4484</td>
 </tr>
 <tr class="odd">
-<th id="T_3ce95_level0_row10" class="row_heading level0 row10" data-quarto-table-cell-role="th">55</th>
-<td id="T_3ce95_row10_col0" class="data row10 col0">0,4222</td>
-<td id="T_3ce95_row10_col1" class="data row10 col1">0,4487</td>
+<th id="T_ae6f1_level0_row10" class="row_heading level0 row10" data-quarto-table-cell-role="th">55</th>
+<td id="T_ae6f1_row10_col0" class="data row10 col0">0.4222</td>
+<td id="T_ae6f1_row10_col1" class="data row10 col1">0.4487</td>
 </tr>
 <tr class="even">
-<th id="T_3ce95_level0_row11" class="row_heading level0 row11" data-quarto-table-cell-role="th">60</th>
-<td id="T_3ce95_row11_col0" class="data row11 col0">0,4229</td>
-<td id="T_3ce95_row11_col1" class="data row11 col1">0,4489</td>
+<th id="T_ae6f1_level0_row11" class="row_heading level0 row11" data-quarto-table-cell-role="th">60</th>
+<td id="T_ae6f1_row11_col0" class="data row11 col0">0.4229</td>
+<td id="T_ae6f1_row11_col1" class="data row11 col1">0.4489</td>
 </tr>
 </tbody>
 </table>
@@ -1386,22 +1379,22 @@ ajustes: 241</code></pre>
 <p><strong><code>.highlight_min(subset, props)</code></strong> — aplica o estilo <code>props</code>, aqui o negrito, à menor célula das colunas de <code>subset</code>.</p>
 </div>
 <p>Os candidatos com <code>"passthrough"</code> são rotulados pelo tipo, <code>isinstance(v, str)</code>, porque o outro valor da grade é um objeto, o <code>FunctionTransformer</code>, e não um texto. O <code>.astype(int)</code> converte a coluna de <em>k</em> em números inteiros, o tipo com que ela é lida nas contas adiante. O negrito marca o menor erro com o logaritmo. O chunk abaixo lê o melhor candidato e o compara com os dez vizinhos da seção 17.4:</p>
-<div id="melhor" class="cell" data-execution_count="8">
-<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb11"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb11-1"><a href="#cb11-1" aria-hidden="true" tabindex="-1"></a>melhor_k <span class="op">=</span> busca.best_params_[<span class="st">"modelo__n_neighbors"</span>]</span>
-<span id="cb11-2"><a href="#cb11-2" aria-hidden="true" tabindex="-1"></a>com_log <span class="op">=</span> <span class="kw">not</span> <span class="bu">isinstance</span>(busca.best_params_[<span class="st">"preparo__assimetricas__log"</span>], <span class="bu">str</span>)</span>
-<span id="cb11-3"><a href="#cb11-3" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">"k escolhido:"</span>, melhor_k)</span>
-<span id="cb11-4"><a href="#cb11-4" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">"com log:"</span>, com_log)</span>
-<span id="cb11-5"><a href="#cb11-5" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">"RMSE de validação cruzada:"</span>, numero_br(<span class="op">-</span>busca.best_score_, <span class="dv">4</span>))</span>
-<span id="cb11-6"><a href="#cb11-6" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">"k = 10, com log:"</span>, numero_br(erro.loc[<span class="dv">10</span>, <span class="st">"com log"</span>], <span class="dv">4</span>))</span>
-<span id="cb11-7"><a href="#cb11-7" aria-hidden="true" tabindex="-1"></a>perto <span class="op">=</span> erro.index[erro[<span class="st">"com log"</span>] <span class="op">&lt;=</span> <span class="fl">1.005</span> <span class="op">*</span> erro[<span class="st">"com log"</span>].<span class="bu">min</span>()]</span>
-<span id="cb11-8"><a href="#cb11-8" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">"a 0,5</span><span class="sc">% d</span><span class="st">o mínimo: k de"</span>, perto.<span class="bu">min</span>(), <span class="st">"a"</span>, perto.<span class="bu">max</span>())</span>
-<span id="cb11-9"><a href="#cb11-9" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">"mínimo fora da borda:"</span>, <span class="bu">bool</span>(<span class="dv">5</span> <span class="op">&lt;</span> melhor_k <span class="op">&lt;</span> <span class="dv">60</span>))</span></code></pre></div><button title="Copiar para a área de transferência" class="code-copy-button"><i class="bi"></i></button></div>
+<div id="melhor" class="cell" data-execution_count="7">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb10"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb10-1"><a href="#cb10-1" aria-hidden="true" tabindex="-1"></a>melhor_k <span class="op">=</span> busca.best_params_[<span class="st">"modelo__n_neighbors"</span>]</span>
+<span id="cb10-2"><a href="#cb10-2" aria-hidden="true" tabindex="-1"></a>com_log <span class="op">=</span> <span class="kw">not</span> <span class="bu">isinstance</span>(busca.best_params_[<span class="st">"preparo__assimetricas__log"</span>], <span class="bu">str</span>)</span>
+<span id="cb10-3"><a href="#cb10-3" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">"k escolhido:"</span>, melhor_k)</span>
+<span id="cb10-4"><a href="#cb10-4" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">"com log:"</span>, com_log)</span>
+<span id="cb10-5"><a href="#cb10-5" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">"RMSE de validação cruzada:"</span>, <span class="bu">round</span>(<span class="op">-</span>busca.best_score_, <span class="dv">4</span>))</span>
+<span id="cb10-6"><a href="#cb10-6" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">"k = 10, com log:"</span>, <span class="bu">round</span>(erro.loc[<span class="dv">10</span>, <span class="st">"com log"</span>], <span class="dv">4</span>))</span>
+<span id="cb10-7"><a href="#cb10-7" aria-hidden="true" tabindex="-1"></a>perto <span class="op">=</span> erro.index[erro[<span class="st">"com log"</span>] <span class="op">&lt;=</span> <span class="fl">1.005</span> <span class="op">*</span> erro[<span class="st">"com log"</span>].<span class="bu">min</span>()]</span>
+<span id="cb10-8"><a href="#cb10-8" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">"a 0.5</span><span class="sc">% d</span><span class="st">o mínimo: k de"</span>, perto.<span class="bu">min</span>(), <span class="st">"a"</span>, perto.<span class="bu">max</span>())</span>
+<span id="cb10-9"><a href="#cb10-9" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">"mínimo fora da borda:"</span>, <span class="bu">bool</span>(<span class="dv">5</span> <span class="op">&lt;</span> melhor_k <span class="op">&lt;</span> <span class="dv">60</span>))</span></code></pre></div><button title="Copiar para a área de transferência" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-stdout">
 <pre><code>k escolhido: 25
 com log: True
-RMSE de validação cruzada: 0,4184
-k = 10, com log: 0,4216
-a 0,5% do mínimo: k de 15 a 40
+RMSE de validação cruzada: 0.4184
+k = 10, com log: 0.4216
+a 0.5% do mínimo: k de 15 a 40
 mínimo fora da borda: True</code></pre>
 </div>
 </div>
@@ -1411,25 +1404,23 @@ mínimo fora da borda: True</code></pre>
 </div>
 <p>O escolhido é <em>k</em> = 25, acima de dez, com o logaritmo, e o erro de validação cruzada dele é 0,4184. Com os dez vizinhos fixados de antemão, o erro era 0,4217: a busca ganhou 0,0033 (0,4217 − 0,4184). Os valores de <em>k</em> de 15 a 40 ficam a menos de 0,5% do mínimo, e o mínimo não está numa ponta da grade, então estendê-la não deve mudar a escolha.</p>
 <p>A figura abaixo mostra as 24 medidas. A cor separa as duas versões do preparo:</p>
-<div id="cell-fig-busca" class="cell" data-execution_count="9">
-<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb13"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb13-1"><a href="#cb13-1" aria-hidden="true" tabindex="-1"></a>cores <span class="op">=</span> {<span class="st">"com log"</span>: <span class="st">"C0"</span>, <span class="st">"sem log"</span>: <span class="st">"C1"</span>}</span>
-<span id="cb13-2"><a href="#cb13-2" aria-hidden="true" tabindex="-1"></a>em_br <span class="op">=</span> <span class="kw">lambda</span> v, pos: numero_br(v, <span class="dv">3</span>)</span>
-<span id="cb13-3"><a href="#cb13-3" aria-hidden="true" tabindex="-1"></a>fig, ax <span class="op">=</span> plt.subplots(figsize<span class="op">=</span>(<span class="fl">4.8</span>, <span class="fl">3.6</span>))</span>
-<span id="cb13-4"><a href="#cb13-4" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> preparo_nome, cor <span class="kw">in</span> cores.items():</span>
-<span id="cb13-5"><a href="#cb13-5" aria-hidden="true" tabindex="-1"></a>    ax.plot(erro.index, erro[preparo_nome], color<span class="op">=</span>cor, marker<span class="op">=</span><span class="st">"o"</span>, markersize<span class="op">=</span><span class="dv">4</span>,</span>
-<span id="cb13-6"><a href="#cb13-6" aria-hidden="true" tabindex="-1"></a>            linewidth<span class="op">=</span><span class="dv">2</span>, label<span class="op">=</span>preparo_nome)</span>
-<span id="cb13-7"><a href="#cb13-7" aria-hidden="true" tabindex="-1"></a>ax.scatter(melhor_k, <span class="op">-</span>busca.best_score_, marker<span class="op">=</span><span class="st">"x"</span>, s<span class="op">=</span><span class="dv">90</span>, color<span class="op">=</span><span class="st">"C0"</span>,</span>
-<span id="cb13-8"><a href="#cb13-8" aria-hidden="true" tabindex="-1"></a>           linewidths<span class="op">=</span><span class="fl">2.5</span>, zorder<span class="op">=</span><span class="dv">4</span>, label<span class="op">=</span><span class="st">"_nolegend_"</span>)</span>
-<span id="cb13-9"><a href="#cb13-9" aria-hidden="true" tabindex="-1"></a>ax.scatter(<span class="dv">10</span>, erro.loc[<span class="dv">10</span>, <span class="st">"com log"</span>], s<span class="op">=</span><span class="dv">110</span>, facecolors<span class="op">=</span><span class="st">"none"</span>,</span>
-<span id="cb13-10"><a href="#cb13-10" aria-hidden="true" tabindex="-1"></a>           edgecolors<span class="op">=</span><span class="st">"0.45"</span>, linewidths<span class="op">=</span><span class="dv">2</span>, zorder<span class="op">=</span><span class="dv">4</span>, label<span class="op">=</span><span class="st">"_nolegend_"</span>)</span>
-<span id="cb13-11"><a href="#cb13-11" aria-hidden="true" tabindex="-1"></a>ax.set_xticks(<span class="bu">range</span>(<span class="dv">10</span>, <span class="dv">61</span>, <span class="dv">10</span>))</span>
-<span id="cb13-12"><a href="#cb13-12" aria-hidden="true" tabindex="-1"></a>ax.set_xlim(<span class="dv">2</span>, <span class="dv">63</span>)</span>
-<span id="cb13-13"><a href="#cb13-13" aria-hidden="true" tabindex="-1"></a>ax.set_xlabel(<span class="st">"k (número de vizinhos)"</span>)</span>
-<span id="cb13-14"><a href="#cb13-14" aria-hidden="true" tabindex="-1"></a>ax.set_ylabel(<span class="st">"RMSE de validação cruzada"</span>)</span>
-<span id="cb13-15"><a href="#cb13-15" aria-hidden="true" tabindex="-1"></a>ax.yaxis.set_major_formatter(em_br)</span>
-<span id="cb13-16"><a href="#cb13-16" aria-hidden="true" tabindex="-1"></a>ax.legend(loc<span class="op">=</span><span class="st">"center right"</span>)</span>
-<span id="cb13-17"><a href="#cb13-17" aria-hidden="true" tabindex="-1"></a>plt.tight_layout()</span>
-<span id="cb13-18"><a href="#cb13-18" aria-hidden="true" tabindex="-1"></a>plt.show()</span></code></pre></div><button title="Copiar para a área de transferência" class="code-copy-button"><i class="bi"></i></button></div>
+<div id="cell-fig-busca" class="cell" data-execution_count="8">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb12"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb12-1"><a href="#cb12-1" aria-hidden="true" tabindex="-1"></a>cores <span class="op">=</span> {<span class="st">"com log"</span>: <span class="st">"C0"</span>, <span class="st">"sem log"</span>: <span class="st">"C1"</span>}</span>
+<span id="cb12-2"><a href="#cb12-2" aria-hidden="true" tabindex="-1"></a>fig, ax <span class="op">=</span> plt.subplots(figsize<span class="op">=</span>(<span class="fl">4.8</span>, <span class="fl">3.6</span>))</span>
+<span id="cb12-3"><a href="#cb12-3" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> preparo_nome, cor <span class="kw">in</span> cores.items():</span>
+<span id="cb12-4"><a href="#cb12-4" aria-hidden="true" tabindex="-1"></a>    ax.plot(erro.index, erro[preparo_nome], color<span class="op">=</span>cor, marker<span class="op">=</span><span class="st">"o"</span>, markersize<span class="op">=</span><span class="dv">4</span>,</span>
+<span id="cb12-5"><a href="#cb12-5" aria-hidden="true" tabindex="-1"></a>            linewidth<span class="op">=</span><span class="dv">2</span>, label<span class="op">=</span>preparo_nome)</span>
+<span id="cb12-6"><a href="#cb12-6" aria-hidden="true" tabindex="-1"></a>ax.scatter(melhor_k, <span class="op">-</span>busca.best_score_, marker<span class="op">=</span><span class="st">"x"</span>, s<span class="op">=</span><span class="dv">90</span>, color<span class="op">=</span><span class="st">"C0"</span>,</span>
+<span id="cb12-7"><a href="#cb12-7" aria-hidden="true" tabindex="-1"></a>           linewidths<span class="op">=</span><span class="fl">2.5</span>, zorder<span class="op">=</span><span class="dv">4</span>, label<span class="op">=</span><span class="st">"_nolegend_"</span>)</span>
+<span id="cb12-8"><a href="#cb12-8" aria-hidden="true" tabindex="-1"></a>ax.scatter(<span class="dv">10</span>, erro.loc[<span class="dv">10</span>, <span class="st">"com log"</span>], s<span class="op">=</span><span class="dv">110</span>, facecolors<span class="op">=</span><span class="st">"none"</span>,</span>
+<span id="cb12-9"><a href="#cb12-9" aria-hidden="true" tabindex="-1"></a>           edgecolors<span class="op">=</span><span class="st">"0.45"</span>, linewidths<span class="op">=</span><span class="dv">2</span>, zorder<span class="op">=</span><span class="dv">4</span>, label<span class="op">=</span><span class="st">"_nolegend_"</span>)</span>
+<span id="cb12-10"><a href="#cb12-10" aria-hidden="true" tabindex="-1"></a>ax.set_xticks(<span class="bu">range</span>(<span class="dv">10</span>, <span class="dv">61</span>, <span class="dv">10</span>))</span>
+<span id="cb12-11"><a href="#cb12-11" aria-hidden="true" tabindex="-1"></a>ax.set_xlim(<span class="dv">2</span>, <span class="dv">63</span>)</span>
+<span id="cb12-12"><a href="#cb12-12" aria-hidden="true" tabindex="-1"></a>ax.set_xlabel(<span class="st">"k (número de vizinhos)"</span>)</span>
+<span id="cb12-13"><a href="#cb12-13" aria-hidden="true" tabindex="-1"></a>ax.set_ylabel(<span class="st">"RMSE de validação cruzada"</span>)</span>
+<span id="cb12-14"><a href="#cb12-14" aria-hidden="true" tabindex="-1"></a>ax.legend(loc<span class="op">=</span><span class="st">"center right"</span>)</span>
+<span id="cb12-15"><a href="#cb12-15" aria-hidden="true" tabindex="-1"></a>plt.tight_layout()</span>
+<span id="cb12-16"><a href="#cb12-16" aria-hidden="true" tabindex="-1"></a>plt.show()</span></code></pre></div><button title="Copiar para a área de transferência" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-display">
 <div id="fig-busca" class="quarto-float quarto-figure quarto-figure-center anchored" alt="Gráfico de linhas com k de 5 a 60 no eixo horizontal e o RMSE de validação cruzada no vertical. A linha laranja, sem log, fica inteira acima da azul, com log. A azul desce de k = 5 até um vale largo e raso entre 15 e 40, com um x no fundo, em k = 25, e volta a subir devagar até 60; um círculo vazio sobre ela em k = 10 fica pouco acima do vale.">
 <figure class="quarto-float quarto-float-fig figure">
@@ -1445,38 +1436,38 @@ Figura&nbsp;1: Erro de validação cruzada (RMSE na escala log) do k-NN para cad
 </div>
 <p>No código, <code>marker="o"</code> põe um ponto em cada valor medido da linha, e <code>facecolors="none"</code> deixa o círculo vazio, só com o contorno na cor de <code>edgecolors</code>.</p>
 <p>Duas leituras, com pesos diferentes. O logaritmo ajuda em todo <em>k</em> da grade, por uma margem que a conta abaixo mede. O <em>k</em>, por sua vez, cai num vale largo: de 15 a 40 a curva azul quase não se mexe.</p>
-<div id="log-em-todo-k" class="cell" data-execution_count="10">
-<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb14"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb14-1"><a href="#cb14-1" aria-hidden="true" tabindex="-1"></a>ganho_log <span class="op">=</span> erro[<span class="st">"sem log"</span>] <span class="op">-</span> erro[<span class="st">"com log"</span>]</span>
-<span id="cb14-2"><a href="#cb14-2" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">"log ganha em todo k:"</span>, <span class="bu">bool</span>((ganho_log <span class="op">&gt;</span> <span class="dv">0</span>).<span class="bu">all</span>()))</span>
-<span id="cb14-3"><a href="#cb14-3" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">"ganho, menor:"</span>, numero_br(ganho_log.<span class="bu">min</span>(), <span class="dv">3</span>))</span>
-<span id="cb14-4"><a href="#cb14-4" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">"ganho, maior:"</span>, numero_br(ganho_log.<span class="bu">max</span>(), <span class="dv">3</span>))</span></code></pre></div><button title="Copiar para a área de transferência" class="code-copy-button"><i class="bi"></i></button></div>
+<div id="log-em-todo-k" class="cell" data-execution_count="9">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb13"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb13-1"><a href="#cb13-1" aria-hidden="true" tabindex="-1"></a>ganho_log <span class="op">=</span> erro[<span class="st">"sem log"</span>] <span class="op">-</span> erro[<span class="st">"com log"</span>]</span>
+<span id="cb13-2"><a href="#cb13-2" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">"log ganha em todo k:"</span>, <span class="bu">bool</span>((ganho_log <span class="op">&gt;</span> <span class="dv">0</span>).<span class="bu">all</span>()))</span>
+<span id="cb13-3"><a href="#cb13-3" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">"ganho, menor:"</span>, <span class="bu">round</span>(ganho_log.<span class="bu">min</span>(), <span class="dv">3</span>))</span>
+<span id="cb13-4"><a href="#cb13-4" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">"ganho, maior:"</span>, <span class="bu">round</span>(ganho_log.<span class="bu">max</span>(), <span class="dv">3</span>))</span></code></pre></div><button title="Copiar para a área de transferência" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-stdout">
 <pre><code>log ganha em todo k: True
-ganho, menor: 0,022
-ganho, maior: 0,028</code></pre>
+ganho, menor: 0.022
+ganho, maior: 0.028</code></pre>
 </div>
 </div>
 <p>As duas perguntas de antes da busca têm resposta. Sim, o logaritmo baixa o erro de validação cruzada em todo <em>k</em>, com um ganho de 0,022 a 0,028; e o melhor <em>k</em>, 25, ficou acima de dez. Mesmo o menor ganho do logaritmo é mais de seis vezes os 0,0033 que a troca de <em>k</em> = 10 por <em>k</em> = 25 rendeu (0,022 ÷ 0,0033 ≈ 6,7).</p>
 <p>Quanto a área pesa na distância entre dois anúncios comuns? A distância do <em>k</em>-NN é a raiz da soma dos quadrados das diferenças, coluna a coluna, entre os dois anúncios; o peso de uma coluna é a fatia dela nessa soma. Na seção 17.1, entre o imóvel gigante e um mediano, o logaritmo tirou da área o monopólio da distância. Para os anúncios comuns, o problema sem ele é o avesso desse: os poucos imóveis enormes inflam o desvio padrão da área, e, dividida por esse desvio, a área dos anúncios comuns fica espremida perto da média e quase não pesa na distância entre eles. A conta abaixo mede a fatia mediana da área, com e sem o logaritmo, e também até quantos desvios da média ficam 95% dos anúncios. Os pares são cada linha do treino com a anterior; como a ordem das linhas é a do sorteio da divisão, eles são só uma amostra de pares quaisquer:</p>
-<div id="area-na-distancia" class="cell" data-execution_count="11">
-<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb16"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb16-1"><a href="#cb16-1" aria-hidden="true" tabindex="-1"></a>area <span class="op">=</span> X_treino[<span class="st">"area_m2"</span>]</span>
-<span id="cb16-2"><a href="#cb16-2" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">"área, desvio:"</span>, numero_br(area.std(), <span class="dv">0</span>), <span class="st">"m²"</span>)</span>
-<span id="cb16-3"><a href="#cb16-3" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">"área, mediana:"</span>, numero_br(area.median(), <span class="dv">0</span>), <span class="st">"m²"</span>)</span>
-<span id="cb16-4"><a href="#cb16-4" aria-hidden="true" tabindex="-1"></a>sem_log <span class="op">=</span> clone(preparo).set_params(assimetricas__log<span class="op">=</span><span class="st">"passthrough"</span>)</span>
-<span id="cb16-5"><a href="#cb16-5" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> nome, versao <span class="kw">in</span> [(<span class="st">"com log"</span>, clone(preparo)), (<span class="st">"sem log"</span>, sem_log)]:</span>
-<span id="cb16-6"><a href="#cb16-6" aria-hidden="true" tabindex="-1"></a>    Z <span class="op">=</span> versao.fit_transform(X_treino)</span>
-<span id="cb16-7"><a href="#cb16-7" aria-hidden="true" tabindex="-1"></a>    quadrados <span class="op">=</span> Z.diff().iloc[<span class="dv">1</span>:] <span class="op">**</span> <span class="dv">2</span></span>
-<span id="cb16-8"><a href="#cb16-8" aria-hidden="true" tabindex="-1"></a>    fatia <span class="op">=</span> quadrados[<span class="st">"assimetricas__area_m2"</span>] <span class="op">/</span> quadrados.<span class="bu">sum</span>(axis<span class="op">=</span><span class="dv">1</span>)</span>
-<span id="cb16-9"><a href="#cb16-9" aria-hidden="true" tabindex="-1"></a>    faixa <span class="op">=</span> Z[<span class="st">"assimetricas__area_m2"</span>].<span class="bu">abs</span>().quantile(<span class="fl">0.95</span>)</span>
-<span id="cb16-10"><a href="#cb16-10" aria-hidden="true" tabindex="-1"></a>    <span class="bu">print</span>(<span class="ss">f"</span><span class="sc">{</span>nome<span class="sc">}</span><span class="ss">, 95% até:"</span>, numero_br(faixa, <span class="dv">2</span>), <span class="st">"desvio"</span>)</span>
-<span id="cb16-11"><a href="#cb16-11" aria-hidden="true" tabindex="-1"></a>    <span class="bu">print</span>(<span class="ss">f"</span><span class="sc">{</span>nome<span class="sc">}</span><span class="ss">, fatia da área:"</span>, numero_br(<span class="dv">100</span> <span class="op">*</span> fatia.median(), <span class="dv">1</span>) <span class="op">+</span> <span class="st">"%"</span>)</span></code></pre></div><button title="Copiar para a área de transferência" class="code-copy-button"><i class="bi"></i></button></div>
+<div id="area-na-distancia" class="cell" data-execution_count="10">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb15"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb15-1"><a href="#cb15-1" aria-hidden="true" tabindex="-1"></a>area <span class="op">=</span> X_treino[<span class="st">"area_m2"</span>]</span>
+<span id="cb15-2"><a href="#cb15-2" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">"área, desvio:"</span>, <span class="bu">round</span>(area.std()), <span class="st">"m²"</span>)</span>
+<span id="cb15-3"><a href="#cb15-3" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">"área, mediana:"</span>, <span class="bu">round</span>(area.median()), <span class="st">"m²"</span>)</span>
+<span id="cb15-4"><a href="#cb15-4" aria-hidden="true" tabindex="-1"></a>sem_log <span class="op">=</span> clone(preparo).set_params(assimetricas__log<span class="op">=</span><span class="st">"passthrough"</span>)</span>
+<span id="cb15-5"><a href="#cb15-5" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> nome, versao <span class="kw">in</span> [(<span class="st">"com log"</span>, clone(preparo)), (<span class="st">"sem log"</span>, sem_log)]:</span>
+<span id="cb15-6"><a href="#cb15-6" aria-hidden="true" tabindex="-1"></a>    Z <span class="op">=</span> versao.fit_transform(X_treino)</span>
+<span id="cb15-7"><a href="#cb15-7" aria-hidden="true" tabindex="-1"></a>    quadrados <span class="op">=</span> Z.diff().iloc[<span class="dv">1</span>:] <span class="op">**</span> <span class="dv">2</span></span>
+<span id="cb15-8"><a href="#cb15-8" aria-hidden="true" tabindex="-1"></a>    fatia <span class="op">=</span> quadrados[<span class="st">"assimetricas__area_m2"</span>] <span class="op">/</span> quadrados.<span class="bu">sum</span>(axis<span class="op">=</span><span class="dv">1</span>)</span>
+<span id="cb15-9"><a href="#cb15-9" aria-hidden="true" tabindex="-1"></a>    faixa <span class="op">=</span> Z[<span class="st">"assimetricas__area_m2"</span>].<span class="bu">abs</span>().quantile(<span class="fl">0.95</span>)</span>
+<span id="cb15-10"><a href="#cb15-10" aria-hidden="true" tabindex="-1"></a>    <span class="bu">print</span>(<span class="ss">f"</span><span class="sc">{</span>nome<span class="sc">}</span><span class="ss">, 95% até:"</span>, <span class="bu">round</span>(faixa, <span class="dv">2</span>), <span class="st">"desvio"</span>)</span>
+<span id="cb15-11"><a href="#cb15-11" aria-hidden="true" tabindex="-1"></a>    <span class="bu">print</span>(<span class="ss">f"</span><span class="sc">{</span>nome<span class="sc">}</span><span class="ss">, fatia da área: </span><span class="sc">{</span><span class="dv">100</span> <span class="op">*</span> fatia<span class="sc">.</span>median()<span class="sc">:.1f}</span><span class="ss">%"</span>)</span></code></pre></div><button title="Copiar para a área de transferência" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-stdout">
 <pre><code>área, desvio: 606 m²
 área, mediana: 95 m²
-com log, 95% até: 1,84 desvio
-com log, fatia da área: 7,3%
-sem log, 95% até: 0,41 desvio
-sem log, fatia da área: 0,2%</code></pre>
+com log, 95% até: 1.84 desvio
+com log, fatia da área: 7.3%
+sem log, 95% até: 0.41 desvio
+sem log, fatia da área: 0.2%</code></pre>
 </div>
 </div>
 <div class="funcao">
@@ -1487,15 +1478,15 @@ sem log, fatia da área: 0,2%</code></pre>
 <section id="o-vale-é-raso" class="level2">
 <h2 class="anchored" data-anchor-id="o-vale-é-raso">O vale é raso</h2>
 <p>Todos os candidatos foram medidos nos mesmos dez grupos, então a comparação pode ser feita grupo a grupo, como na seção 17.4. O <code>cv_results_</code> guarda o erro de cada candidato em cada grupo:</p>
-<div id="por-grupo" class="cell" data-execution_count="12">
-<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb18"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb18-1"><a href="#cb18-1" aria-hidden="true" tabindex="-1"></a>por_grupo <span class="op">=</span> pd.DataFrame(</span>
-<span id="cb18-2"><a href="#cb18-2" aria-hidden="true" tabindex="-1"></a>    [<span class="op">-</span>busca.cv_results_[<span class="ss">f"split</span><span class="sc">{</span>g<span class="sc">}</span><span class="ss">_test_score"</span>] <span class="cf">for</span> g <span class="kw">in</span> <span class="bu">range</span>(<span class="dv">10</span>)],</span>
-<span id="cb18-3"><a href="#cb18-3" aria-hidden="true" tabindex="-1"></a>    columns<span class="op">=</span><span class="bu">list</span>(<span class="bu">zip</span>(resultados[<span class="st">"k"</span>], resultados[<span class="st">"preparo"</span>])),</span>
-<span id="cb18-4"><a href="#cb18-4" aria-hidden="true" tabindex="-1"></a>)</span>
-<span id="cb18-5"><a href="#cb18-5" aria-hidden="true" tabindex="-1"></a>k25_vence_k10 <span class="op">=</span> por_grupo[(melhor_k, <span class="st">"com log"</span>)] <span class="op">&lt;</span> por_grupo[(<span class="dv">10</span>, <span class="st">"com log"</span>)]</span>
-<span id="cb18-6"><a href="#cb18-6" aria-hidden="true" tabindex="-1"></a>log_vence <span class="op">=</span> por_grupo[(melhor_k, <span class="st">"com log"</span>)] <span class="op">&lt;</span> por_grupo[(melhor_k, <span class="st">"sem log"</span>)]</span>
-<span id="cb18-7"><a href="#cb18-7" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="ss">f"erro k = </span><span class="sc">{</span>melhor_k<span class="sc">}</span><span class="ss"> &lt; erro k = 10:"</span>, <span class="bu">int</span>(k25_vence_k10.<span class="bu">sum</span>()), <span class="st">"de 10"</span>)</span>
-<span id="cb18-8"><a href="#cb18-8" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">"erro com log &lt; sem log:"</span>, <span class="bu">int</span>(log_vence.<span class="bu">sum</span>()), <span class="st">"de 10"</span>)</span></code></pre></div><button title="Copiar para a área de transferência" class="code-copy-button"><i class="bi"></i></button></div>
+<div id="por-grupo" class="cell" data-execution_count="11">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb17"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb17-1"><a href="#cb17-1" aria-hidden="true" tabindex="-1"></a>por_grupo <span class="op">=</span> pd.DataFrame(</span>
+<span id="cb17-2"><a href="#cb17-2" aria-hidden="true" tabindex="-1"></a>    [<span class="op">-</span>busca.cv_results_[<span class="ss">f"split</span><span class="sc">{</span>g<span class="sc">}</span><span class="ss">_test_score"</span>] <span class="cf">for</span> g <span class="kw">in</span> <span class="bu">range</span>(<span class="dv">10</span>)],</span>
+<span id="cb17-3"><a href="#cb17-3" aria-hidden="true" tabindex="-1"></a>    columns<span class="op">=</span><span class="bu">list</span>(<span class="bu">zip</span>(resultados[<span class="st">"k"</span>], resultados[<span class="st">"preparo"</span>])),</span>
+<span id="cb17-4"><a href="#cb17-4" aria-hidden="true" tabindex="-1"></a>)</span>
+<span id="cb17-5"><a href="#cb17-5" aria-hidden="true" tabindex="-1"></a>k25_vence_k10 <span class="op">=</span> por_grupo[(melhor_k, <span class="st">"com log"</span>)] <span class="op">&lt;</span> por_grupo[(<span class="dv">10</span>, <span class="st">"com log"</span>)]</span>
+<span id="cb17-6"><a href="#cb17-6" aria-hidden="true" tabindex="-1"></a>log_vence <span class="op">=</span> por_grupo[(melhor_k, <span class="st">"com log"</span>)] <span class="op">&lt;</span> por_grupo[(melhor_k, <span class="st">"sem log"</span>)]</span>
+<span id="cb17-7"><a href="#cb17-7" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="ss">f"erro k = </span><span class="sc">{</span>melhor_k<span class="sc">}</span><span class="ss"> &lt; erro k = 10:"</span>, <span class="bu">int</span>(k25_vence_k10.<span class="bu">sum</span>()), <span class="st">"de 10"</span>)</span>
+<span id="cb17-8"><a href="#cb17-8" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">"erro com log &lt; sem log:"</span>, <span class="bu">int</span>(log_vence.<span class="bu">sum</span>()), <span class="st">"de 10"</span>)</span></code></pre></div><button title="Copiar para a área de transferência" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-stdout">
 <pre><code>erro k = 25 &lt; erro k = 10: 6 de 10
 erro com log &lt; sem log: 10 de 10</code></pre>
@@ -1505,29 +1496,29 @@ erro com log &lt; sem log: 10 de 10</code></pre>
 <p><strong><code>busca.cv_results_[f"split{g}_test_score"]</code></strong> — a pontuação de cada candidato no grupo <code>g</code>, de 0 a 9. Empilhadas, formam uma tabela com uma linha por grupo e uma coluna por candidato.</p>
 </div>
 <p>O erro de <em>k</em> = 25 fica abaixo do de <em>k</em> = 10 em só 6 dos 10 grupos; o erro com o logaritmo fica abaixo do erro sem ele, com o mesmo <em>k</em>, em 10 de 10. Se em quatro grupos a ordem se inverte, outro sorteio dos grupos poderia escolher outro <em>k</em>? A mesma busca, só com o logaritmo, repetida com as sementes de 0 a 4:</p>
-<div id="outras-sementes" class="cell" data-execution_count="13">
-<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb20"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb20-1"><a href="#cb20-1" aria-hidden="true" tabindex="-1"></a>so_k <span class="op">=</span> {<span class="st">"modelo__n_neighbors"</span>: grade[<span class="st">"modelo__n_neighbors"</span>]}</span>
-<span id="cb20-2"><a href="#cb20-2" aria-hidden="true" tabindex="-1"></a>escolhidos, menores <span class="op">=</span> [], []</span>
-<span id="cb20-3"><a href="#cb20-3" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> semente <span class="kw">in</span> <span class="bu">range</span>(<span class="dv">5</span>):</span>
-<span id="cb20-4"><a href="#cb20-4" aria-hidden="true" tabindex="-1"></a>    outros_grupos <span class="op">=</span> KFold(<span class="dv">10</span>, shuffle<span class="op">=</span><span class="va">True</span>, random_state<span class="op">=</span>semente)</span>
-<span id="cb20-5"><a href="#cb20-5" aria-hidden="true" tabindex="-1"></a>    outra_busca <span class="op">=</span> GridSearchCV(knn, so_k, cv<span class="op">=</span>outros_grupos,</span>
-<span id="cb20-6"><a href="#cb20-6" aria-hidden="true" tabindex="-1"></a>                               scoring<span class="op">=</span><span class="st">"neg_root_mean_squared_error"</span>)</span>
-<span id="cb20-7"><a href="#cb20-7" aria-hidden="true" tabindex="-1"></a>    outra_busca.fit(X_treino, y_treino)</span>
-<span id="cb20-8"><a href="#cb20-8" aria-hidden="true" tabindex="-1"></a>    k_semente <span class="op">=</span> outra_busca.best_params_[<span class="st">"modelo__n_neighbors"</span>]</span>
-<span id="cb20-9"><a href="#cb20-9" aria-hidden="true" tabindex="-1"></a>    escolhidos.append(k_semente)</span>
-<span id="cb20-10"><a href="#cb20-10" aria-hidden="true" tabindex="-1"></a>    menores.append(<span class="op">-</span>outra_busca.best_score_)</span>
-<span id="cb20-11"><a href="#cb20-11" aria-hidden="true" tabindex="-1"></a>    <span class="bu">print</span>(<span class="ss">f"semente </span><span class="sc">{</span>semente<span class="sc">}</span><span class="ss">: k ="</span>, k_semente,</span>
-<span id="cb20-12"><a href="#cb20-12" aria-hidden="true" tabindex="-1"></a>          <span class="st">"| RMSE"</span>, numero_br(<span class="op">-</span>outra_busca.best_score_, <span class="dv">4</span>))</span>
-<span id="cb20-13"><a href="#cb20-13" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">"todos de 15 a 40:"</span>, <span class="bu">all</span>(<span class="dv">15</span> <span class="op">&lt;=</span> k <span class="op">&lt;=</span> <span class="dv">40</span> <span class="cf">for</span> k <span class="kw">in</span> escolhidos))</span>
-<span id="cb20-14"><a href="#cb20-14" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">"RMSE de"</span>, numero_br(<span class="bu">min</span>(menores), <span class="dv">4</span>), <span class="st">"a"</span>, numero_br(<span class="bu">max</span>(menores), <span class="dv">4</span>))</span></code></pre></div><button title="Copiar para a área de transferência" class="code-copy-button"><i class="bi"></i></button></div>
+<div id="outras-sementes" class="cell" data-execution_count="12">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb19"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb19-1"><a href="#cb19-1" aria-hidden="true" tabindex="-1"></a>so_k <span class="op">=</span> {<span class="st">"modelo__n_neighbors"</span>: grade[<span class="st">"modelo__n_neighbors"</span>]}</span>
+<span id="cb19-2"><a href="#cb19-2" aria-hidden="true" tabindex="-1"></a>escolhidos, menores <span class="op">=</span> [], []</span>
+<span id="cb19-3"><a href="#cb19-3" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> semente <span class="kw">in</span> <span class="bu">range</span>(<span class="dv">5</span>):</span>
+<span id="cb19-4"><a href="#cb19-4" aria-hidden="true" tabindex="-1"></a>    outros_grupos <span class="op">=</span> KFold(<span class="dv">10</span>, shuffle<span class="op">=</span><span class="va">True</span>, random_state<span class="op">=</span>semente)</span>
+<span id="cb19-5"><a href="#cb19-5" aria-hidden="true" tabindex="-1"></a>    outra_busca <span class="op">=</span> GridSearchCV(knn, so_k, cv<span class="op">=</span>outros_grupos,</span>
+<span id="cb19-6"><a href="#cb19-6" aria-hidden="true" tabindex="-1"></a>                               scoring<span class="op">=</span><span class="st">"neg_root_mean_squared_error"</span>)</span>
+<span id="cb19-7"><a href="#cb19-7" aria-hidden="true" tabindex="-1"></a>    outra_busca.fit(X_treino, y_treino)</span>
+<span id="cb19-8"><a href="#cb19-8" aria-hidden="true" tabindex="-1"></a>    k_semente <span class="op">=</span> outra_busca.best_params_[<span class="st">"modelo__n_neighbors"</span>]</span>
+<span id="cb19-9"><a href="#cb19-9" aria-hidden="true" tabindex="-1"></a>    escolhidos.append(k_semente)</span>
+<span id="cb19-10"><a href="#cb19-10" aria-hidden="true" tabindex="-1"></a>    menores.append(<span class="op">-</span>outra_busca.best_score_)</span>
+<span id="cb19-11"><a href="#cb19-11" aria-hidden="true" tabindex="-1"></a>    <span class="bu">print</span>(<span class="ss">f"semente </span><span class="sc">{</span>semente<span class="sc">}</span><span class="ss">: k ="</span>, k_semente,</span>
+<span id="cb19-12"><a href="#cb19-12" aria-hidden="true" tabindex="-1"></a>          <span class="st">"| RMSE"</span>, <span class="bu">round</span>(<span class="op">-</span>outra_busca.best_score_, <span class="dv">4</span>))</span>
+<span id="cb19-13"><a href="#cb19-13" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">"todos de 15 a 40:"</span>, <span class="bu">all</span>(<span class="dv">15</span> <span class="op">&lt;=</span> k <span class="op">&lt;=</span> <span class="dv">40</span> <span class="cf">for</span> k <span class="kw">in</span> escolhidos))</span>
+<span id="cb19-14"><a href="#cb19-14" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">"RMSE de"</span>, <span class="bu">round</span>(<span class="bu">min</span>(menores), <span class="dv">4</span>), <span class="st">"a"</span>, <span class="bu">round</span>(<span class="bu">max</span>(menores), <span class="dv">4</span>))</span></code></pre></div><button title="Copiar para a área de transferência" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-stdout">
-<pre><code>semente 0: k = 15 | RMSE 0,4179
-semente 1: k = 25 | RMSE 0,4186
-semente 2: k = 20 | RMSE 0,4181
-semente 3: k = 15 | RMSE 0,4187
-semente 4: k = 25 | RMSE 0,4189
+<pre><code>semente 0: k = 15 | RMSE 0.4179
+semente 1: k = 25 | RMSE 0.4186
+semente 2: k = 20 | RMSE 0.4181
+semente 3: k = 15 | RMSE 0.4187
+semente 4: k = 25 | RMSE 0.4189
 todos de 15 a 40: True
-RMSE de 0,4179 a 0,4189</code></pre>
+RMSE de 0.4179 a 0.4189</code></pre>
 </div>
 </div>
 <p>O <em>k</em> escolhido muda com o sorteio dos grupos e fica, nas cinco sementes, dentro da faixa de 15 a 40 que a semente 17 mostrou. O resultado firme da busca é o logaritmo; o <em>k</em> exato é uma escolha dentro de um vale em que os vizinhos ao redor dão quase o mesmo erro, e trocar 25 por 20 quase não muda o erro.</p>
@@ -1538,12 +1529,12 @@ RMSE de 0,4179 a 0,4189</code></pre>
 <p>O segundo vem do tamanho de cada ajuste. Na validação cruzada, cada ajuste usa nove décimos do treino; o modelo final usa o treino inteiro e tem mais anúncios entre os quais procurar vizinhos. Por esse lado, o erro da validação cruzada tende a superestimar o do modelo final.</p>
 <p>O saldo dos dois não se conhece de antemão, e por isso o <code>best_score_</code> não é a estimativa final do erro. Quem a dá é um conjunto que não participou da escolha, e o <code>teste</code> continua fechado.</p>
 <p>O modelo escolhido já existe. O <code>GridSearchCV</code> reajustou o <code>Pipeline</code> com <em>k</em> = 25 e o logaritmo em todos os anúncios de treino:</p>
-<div id="reajuste" class="cell" data-execution_count="14">
-<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb22"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb22-1"><a href="#cb22-1" aria-hidden="true" tabindex="-1"></a>escolhido <span class="op">=</span> busca.best_estimator_</span>
-<span id="cb22-2"><a href="#cb22-2" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">"anúncios no reajuste:"</span>, numero_br(escolhido[<span class="st">"modelo"</span>].n_samples_fit_, <span class="dv">0</span>))</span>
-<span id="cb22-3"><a href="#cb22-3" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">"vizinhos:"</span>, escolhido[<span class="st">"modelo"</span>].n_neighbors)</span></code></pre></div><button title="Copiar para a área de transferência" class="code-copy-button"><i class="bi"></i></button></div>
+<div id="reajuste" class="cell" data-execution_count="13">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb21"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb21-1"><a href="#cb21-1" aria-hidden="true" tabindex="-1"></a>escolhido <span class="op">=</span> busca.best_estimator_</span>
+<span id="cb21-2"><a href="#cb21-2" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">"anúncios no reajuste:"</span>, escolhido[<span class="st">"modelo"</span>].n_samples_fit_)</span>
+<span id="cb21-3"><a href="#cb21-3" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">"vizinhos:"</span>, escolhido[<span class="st">"modelo"</span>].n_neighbors)</span></code></pre></div><button title="Copiar para a área de transferência" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-stdout">
-<pre><code>anúncios no reajuste: 8.267
+<pre><code>anúncios no reajuste: 8267
 vizinhos: 25</code></pre>
 </div>
 </div>
