@@ -425,7 +425,8 @@ function fmt(x, casas) {
 const DADOS = JSON.parse(document.getElementById("dados").textContent);
 const N = DADOS.n_treino;
 const ULTIMO = DADOS.degraus.length;
-const CABE_TEXTO = 8;        // até quantas folhas a árvore vira caixas com texto
+const FATIA_MINIMA = 48;     // largura mínima, em px, da fatia de uma folha para caixas com texto
+const APERTO_MAXIMO = 1.3;   // quanto um texto pode ser comprimido antes de a árvore virar miniatura
 const MOSTRA = 5;            // quantos galhos candidatos aparecem
 
 let j = 0;
@@ -443,11 +444,18 @@ function texto(conteudo, attrs, pai) {
   t.textContent = conteudo;
   return t;
 }
-function cabeEm(t, largura) {
-  if (t.getComputedTextLength() > largura) {
-    t.setAttribute("textLength", largura);
-    t.setAttribute("lengthAdjust", "spacingAndGlyphs");
+/* Escreve a primeira opção que cabe na largura; se nenhuma cabe, aperta a
+ * última e devolve quanto apertou (1 = nada). */
+function escreve(opcoes, attrs, pai, largura) {
+  const t = texto(opcoes[0], attrs, pai);
+  for (const opcao of opcoes) {
+    t.textContent = opcao;
+    if (t.getComputedTextLength() <= largura) return 1;
   }
+  const aperto = t.getComputedTextLength() / largura;
+  t.setAttribute("textLength", largura);
+  t.setAttribute("lengthAdjust", "spacingAndGlyphs");
+  return aperto;
 }
 
 /* Folhas por estado: o tamanho da subárvore depois de j degraus. */
@@ -457,8 +465,9 @@ const folhasTxt = n => (n === 1 ? "1 folha" : `${n} folhas`);
 
 /* --------------------------------- árvore ------------------------------ */
 
-/* Desenha a subárvore com `cortados`; `destaque` = {no, tipo: "cai" | "nova"}. */
-function desenhaArvore(svg, cortados, destaque) {
+/* Desenha a subárvore com `cortados`; `destaque` = {no, tipo: "cai" | "nova"}.
+ * Com caixas e texto quando cabem; senão, em miniatura (pontos e traços). */
+function desenhaArvore(svg, cortados, destaque, miniatura = false) {
   svg.replaceChildren();
   const conjunto = new Set(cortados);
   const W = svg.clientWidth || 440;
@@ -491,9 +500,10 @@ function desenhaArvore(svg, cortados, destaque) {
   }
 
   const folhas = proxima;
-  const comTexto = folhas <= CABE_TEXTO;
-  const MX = 8, TOPO = comTexto ? 34 : 38;
+  const MX = 8;
   const largura = Math.min((W - 2 * MX) / folhas, 170);
+  const comTexto = !miniatura && largura >= FATIA_MINIMA;
+  const TOPO = comTexto ? 34 : 38;
   const x0 = (W - folhas * largura) / 2;
   const profundidade = Math.max(...nivel.values());
   const passoY = comTexto
@@ -534,6 +544,7 @@ function desenhaArvore(svg, cortados, destaque) {
     return n;
   })(0);
 
+  let aperto = 1;
   for (const i of vistos) {
     const no = DADOS.nos[i];
     const folha = ehFolha(i);
@@ -545,16 +556,20 @@ function desenhaArvore(svg, cortados, destaque) {
     const g = el("g", {class: classes.join(" "), transform: `translate(${px(i) - bw / 2},${py(i)})`}, svg);
     el("rect", {width: bw, height: bh, rx: 4}, g);
     if (folha) {
-      cabeEm(texto(`${no.n} jog.`, {x: bw / 2, y: 15, "text-anchor": "middle"}, g), bw - 8);
-      cabeEm(texto(`média ${fmt(no.media, 2)}`, {x: bw / 2, y: 29, "text-anchor": "middle", class: "num fraco"}, g), bw - 8);
+      aperto = Math.max(aperto,
+        escreve([`${no.n} jog.`, String(no.n)], {x: bw / 2, y: 15, "text-anchor": "middle"}, g, bw - 8),
+        escreve([`média ${fmt(no.media, 2)}`, fmt(no.media, 2)], {x: bw / 2, y: 29, "text-anchor": "middle", class: "num fraco"}, g, bw - 8));
     } else {
-      cabeEm(texto(no.coluna, {x: bw / 2, y: 15, "text-anchor": "middle"}, g), bw - 8);
-      cabeEm(texto(`≤ ${fmt(no.limiar, 1)} · ${no.n} jog.`, {x: bw / 2, y: 29, "text-anchor": "middle", class: "num fraco"}, g), bw - 8);
+      aperto = Math.max(aperto,
+        escreve([no.coluna], {x: bw / 2, y: 15, "text-anchor": "middle"}, g, bw - 8),
+        escreve([`≤ ${fmt(no.limiar, 1)} · ${no.n} jog.`, `≤ ${fmt(no.limiar, 1)}`], {x: bw / 2, y: 29, "text-anchor": "middle", class: "num fraco"}, g, bw - 8));
     }
     el("title", {}, g).textContent = folha
       ? `${no.n} jogadores, média ${fmt(no.media, 2)}`
       : `${no.coluna} ≤ ${fmt(no.limiar, 1)}, ${no.n} jogadores`;
   }
+  // texto comprimido demais não se lê no projetor: melhor a miniatura
+  if (aperto > APERTO_MAXIMO) desenhaArvore(svg, cortados, destaque, true);
 }
 
 /* ------------------------------ candidatos ----------------------------- */
@@ -605,7 +620,7 @@ function desenhaCandidatos() {
 
 /* --------------------------------- erro -------------------------------- */
 
-const ME = {esq: 56, dir: 150, topo: 34, base: 40};
+const ME = {esq: 56, dir: 150, topo: 56, base: 40};
 
 function escalasDoErro() {
   const svg = $("erro");
@@ -692,7 +707,7 @@ function desenhaAgora() {
   const rotulo = texto(
     e === null ? `agora: ${folhasTxt(f)} · sem validação cruzada neste tamanho`
                : `agora: ${folhasTxt(f)} · validação cruzada ${fmt(e.cv, 4)}`,
-    {x: sx(f) + 8, y: ME.topo - 12, class: "num"}, g);
+    {x: sx(f) + 8, y: ME.topo - 16, class: "num"}, g);
   if (sx(f) + 8 + rotulo.getComputedTextLength() > W - 8) {
     rotulo.setAttribute("x", sx(f) - 8);
     rotulo.setAttribute("text-anchor", "end");

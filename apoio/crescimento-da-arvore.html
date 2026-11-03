@@ -501,6 +501,17 @@ function texto(conteudo, attrs, pai) {
   t.textContent = conteudo;
   return t;
 }
+/* Escreve a primeira opção que cabe na largura; se nenhuma cabe, aperta a última. */
+function escreve(opcoes, attrs, pai, largura) {
+  const t = texto(opcoes[0], attrs, pai);
+  for (const opcao of opcoes) {
+    t.textContent = opcao;
+    if (t.getComputedTextLength() <= largura) return t;
+  }
+  t.setAttribute("textLength", largura);
+  t.setAttribute("lengthAdjust", "spacingAndGlyphs");
+  return t;
+}
 
 function atual() { return S.pilha[S.pilha.length - 1]; }
 
@@ -665,13 +676,13 @@ function desenhaArvore() {
     const g = el("g", {class: classes.join(" "), transform: `translate(${px(i) - bw / 2},${py(i)})`}, svg);
     el("rect", {width: bw, height: bh, rx: 4}, g);
     if (folha) {
-      texto(`${no.n} jog.`, {x: bw / 2, y: 16, "text-anchor": "middle"}, g);
-      texto(`média ${fmt(no.media, 2)}`, {x: bw / 2, y: 32, "text-anchor": "middle", class: "num fraco"}, g);
+      escreve([`${no.n} jog.`, String(no.n)], {x: bw / 2, y: 16, "text-anchor": "middle"}, g, bw - 6);
+      escreve([`média ${fmt(no.media, 2)}`, fmt(no.media, 2)], {x: bw / 2, y: 32, "text-anchor": "middle", class: "num fraco"}, g, bw - 6);
       g.addEventListener("click", () => { selecionar(i); desenhaTudo(); });
       el("title", {}, g).textContent = "selecionar esta folha";
     } else {
-      texto(no.coluna, {x: bw / 2, y: 16, "text-anchor": "middle"}, g);
-      texto(`< ${fmt(no.corte, 1)}`, {x: bw / 2, y: 32, "text-anchor": "middle", class: "num"}, g);
+      escreve([no.coluna], {x: bw / 2, y: 16, "text-anchor": "middle"}, g, bw - 6);
+      escreve([`< ${fmt(no.corte, 1)}`], {x: bw / 2, y: 32, "text-anchor": "middle", class: "num"}, g, bw - 6);
     }
   });
 
@@ -683,16 +694,15 @@ function desenhaArvore() {
     const g = el("g", {class: "fantasma" + (ehMelhor ? " melhor" : ""), transform: `translate(${px(i) - bw / 2},${py(i) + bh})`}, svg);
     el("line", {x1: bw / 2, y1: 0, x2: bw / 2, y2: 14}, g);
     el("rect", {y: 14, width: bw, height: ehMelhor ? 66 : 52, rx: 4}, g);
-    texto(m.coluna, {x: bw / 2, y: 28, "text-anchor": "middle", class: "fraco", "font-size": 11}, g);
-    texto(`< ${fmt(m.corte, 1)}`, {x: bw / 2, y: 42, "text-anchor": "middle", class: "num fraco"}, g);
-    texto(`−${fmt(m.queda, 2)}`, {x: bw / 2, y: 58, "text-anchor": "middle", class: "num"}, g);
-    if (ehMelhor) texto("melhor", {x: bw / 2, y: 74, "text-anchor": "middle", "font-weight": 600}, g);
+    escreve([m.coluna], {x: bw / 2, y: 28, "text-anchor": "middle", class: "fraco", "font-size": 11}, g, bw - 6);
+    escreve([`< ${fmt(m.corte, 1)}`], {x: bw / 2, y: 42, "text-anchor": "middle", class: "num fraco"}, g, bw - 6);
+    escreve([`−${fmt(m.queda, 2)}`], {x: bw / 2, y: 58, "text-anchor": "middle", class: "num"}, g, bw - 6);
+    if (ehMelhor) escreve(["melhor"], {x: bw / 2, y: 74, "text-anchor": "middle", "font-weight": 600}, g, bw - 6);
   }
 
   // o corte em teste, junto da folha selecionada
-  const testeG = el("g", {id: "teste-arvore", transform: `translate(${px(S.sel) - bw / 2},${py(S.sel) + bh + (S.sel === melhor ? 86 : 72)})`}, svg);
-  el("line", {class: "teste-marca", x1: 4, y1: 8, x2: 16, y2: 8}, testeG);
-  texto("", {id: "teste-texto", x: 22, y: 12, class: "num"}, testeG);
+  el("g", {id: "teste-arvore", "data-largura": bw - 6,
+    transform: `translate(${px(S.sel)},${py(S.sel) + bh + (S.sel === melhor ? 86 : 72)})`}, svg);
 }
 
 /* -------------------------------- plano -------------------------------- */
@@ -865,12 +875,14 @@ function desenhaTesteCurva() {
 function atualizaTeste() {
   desenhaTestePlano();
   desenhaTesteCurva();
-  const t = $("teste-texto");
-  if (!t) return;
-  if (!S.col) { t.textContent = ""; return; }
+  const g = $("teste-arvore");
+  if (!g) return;
+  g.replaceChildren();
+  if (!S.col) return;
   const no = atual().nos[S.sel];
   const curva = curvaDe(no, S.col);
-  t.textContent = `em teste −${fmt(no.rss - curva.rss[S.k], 2)}`;
+  el("line", {class: "teste-marca", x1: -8, y1: 4, x2: 8, y2: 4}, g);
+  escreve([`−${fmt(no.rss - curva.rss[S.k], 2)}`], {x: 0, y: 20, "text-anchor": "middle", class: "num"}, g, +g.dataset.largura);
 }
 
 function atualizaControles() {
