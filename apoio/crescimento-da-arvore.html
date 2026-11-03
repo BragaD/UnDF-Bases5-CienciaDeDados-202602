@@ -235,21 +235,7 @@ svg text.eixo{ font-family: var(--cond); font-size: 11px; font-weight: 600; lett
 .minimo{ fill: none; stroke: var(--marca); stroke-width: 2; }
 .marca-teste{ fill: var(--ajuste); stroke: var(--panel); stroke-width: 2; }
 
-.legenda{
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 0 16px 12px 56px;
-  font-family: var(--cond);
-  font-size: 11.5px;
-  font-weight: 600;
-  letter-spacing: .06em;
-  text-transform: uppercase;
-  color: var(--ink-3);
-}
-.legenda .barra{ display: block; height: 10px; border-radius: 2px; }
-.legenda .escala{ display: flex; justify-content: space-between; font-family: var(--mono); font-size: 11px; letter-spacing: 0; text-transform: none; color: var(--ink-2); }
-.legenda .bloco{ display: flex; flex-direction: column; gap: 3px; flex: 0 1 260px; }
+.marca-escala{ stroke: var(--ink-3); stroke-width: 1; }
 
 footer{
   border-top: 1px solid var(--rule);
@@ -273,7 +259,7 @@ code{ font-family: var(--mono); font-size: .92em; }
     </div>
     <div class="relogio">
       <span class="n" id="n-folhas">1</span>
-      <span class="u">folhas</span>
+      <span class="u" id="u-folhas">folhas</span>
       <span class="r">RSS <b id="rss-total">—</b></span>
     </div>
   </header>
@@ -295,13 +281,7 @@ code{ font-family: var(--mono); font-size: .92em; }
       <div class="plate">
         <span class="tag" id="tag-plano">os jogadores</span>
         <svg id="plano" tabindex="0" role="img" aria-label="Os jogadores no plano de anos de liga e rebatidas, com a cor do salário e as regiões das folhas"></svg>
-        <div class="legenda">
-          <span>salário, mil US$</span>
-          <div class="bloco">
-            <span class="barra" id="barra"></span>
-            <span class="escala"><span id="leg-min"></span><span id="leg-meio"></span><span id="leg-max"></span></span>
-          </div>
-        </div>
+        <svg id="legenda" role="img" aria-label="Legenda da cor: o logaritmo do salário, de 4,2 a 7,8, com os mil dólares correspondentes"></svg>
       </div>
       <div class="transport">
         <span class="rotulo">cortar em</span>
@@ -317,7 +297,7 @@ code{ font-family: var(--mono); font-size: .92em; }
   </section>
 
   <footer>
-    <p><strong>O dado.</strong> Os 263 jogadores de <code>Hitters</code> com salário registrado. A resposta é o logaritmo do salário de 1987; os preditores são <code>anos</code>, o número de anos nas grandes ligas, e <code>rebatidas</code>, o número de rebatidas na temporada de 1986. Como <code>anos</code> é inteiro, os pontos estão espalhados na horizontal por menos de um quarto de ano, só para não se sobreporem; a região de cada jogador usa o valor exato.</p>
+    <p><strong>O dado.</strong> Os 263 jogadores de <code>Hitters</code> com salário registrado. A resposta é o logaritmo do salário de 1987; os preditores são <code>anos</code>, o número de anos nas grandes ligas, e <code>rebatidas</code>, o número de rebatidas na temporada de 1986. A cor de cada ponto segue o logaritmo do salário, a mesma escala da média de cada folha. Como <code>anos</code> é inteiro, os pontos estão espalhados na horizontal por menos de um quarto de ano, só para não se sobreporem; a região de cada jogador usa o valor exato.</p>
     <p><strong>As contas.</strong> Numa região, os pontos de corte de uma coluna são os pontos médios entre valores vizinhos, e o RSS de um corte é a soma dos quadrados das distâncias de cada jogador à média do seu lado (8.3). O próximo corte divide a folha cujo melhor corte mais derruba o RSS, a mesma sequência do <code>DecisionTreeRegressor(max_leaf_nodes=k, random_state=12)</code>.</p>
   </footer>
 </div>
@@ -778,7 +758,7 @@ function desenhaPlano() {
       fill: corDoSalario(y[i]),
     }, pontos);
     el("title", {}, c).textContent =
-      `${X.anos[i]} anos · ${X.rebatidas[i]} rebatidas · salário ${fmt(Math.exp(y[i]), 1)} mil US$`;
+      `${X.anos[i]} anos · ${X.rebatidas[i]} rebatidas · salário ${fmt(Math.exp(y[i]), 1)} mil US$ (log ${fmt(y[i], 2)})`;
   }
 
   el("g", {id: "teste-plano"}, svg);
@@ -897,6 +877,7 @@ function atualizaControles() {
   const arvore = atual();
   const folhas = indicesDasFolhas(arvore).length;
   $("n-folhas").textContent = folhas;
+  $("u-folhas").textContent = folhas === 1 ? "folha" : "folhas";
   $("rss-total").textContent = fmt(rssTotal(arvore), 2);
   $("btn-desfazer").disabled = S.pilha.length === 1;
   $("btn-proximo").disabled = folhas >= MAX_FOLHAS || folhaDoMelhor(arvore) < 0;
@@ -909,12 +890,28 @@ function atualizaControles() {
   $("btn-melhor").disabled = !S.col;
 }
 
+/* A legenda está na escala da cor, o log do salário, que é a mesma unidade
+ * da média de cada folha; os mil dólares vêm embaixo, na mesma posição. */
 function desenhaLegenda() {
+  const svg = $("legenda");
+  svg.replaceChildren();
+  const W = svg.clientWidth || 560;
+  const H = 56;
+  svg.setAttribute("viewBox", `0 0 ${W} ${H}`);
+  svg.setAttribute("height", H);
+  const x0 = MP.esq, x1 = Math.min(MP.esq + 380, W - 150);
+  const sx = v => x0 + (v - LOG_MIN) / (LOG_MAX - LOG_MIN) * (x1 - x0);
   const paradas = RAMPA[escuro() ? "escuro" : "claro"];
-  $("barra").style.background = `linear-gradient(90deg, ${paradas.join(", ")})`;
-  $("leg-min").textContent = fmt(Math.exp(LOG_MIN), 1);
-  $("leg-meio").textContent = fmt(Math.exp((LOG_MIN + LOG_MAX) / 2), 0);
-  $("leg-max").textContent = fmt(Math.exp(LOG_MAX), 0);
+  const grad = el("linearGradient", {id: "grad-salario", x1: "0", x2: "1", y1: "0", y2: "0"}, el("defs", {}, svg));
+  paradas.forEach((c, k) => el("stop", {offset: k / (paradas.length - 1), "stop-color": c}, grad));
+  el("rect", {x: x0, y: 4, width: x1 - x0, height: 10, rx: 2, fill: "url(#grad-salario)"}, svg);
+  for (let v = 4.5; v <= LOG_MAX; v += 0.5) {
+    el("line", {class: "marca-escala", x1: sx(v), x2: sx(v), y1: 14, y2: 19}, svg);
+    texto(fmt(v, 1), {x: sx(v), y: 32, "text-anchor": "middle", class: "num"}, svg);
+    texto(fmt(Math.exp(v), 0), {x: sx(v), y: 48, "text-anchor": "middle", class: "num fraco"}, svg);
+  }
+  texto("log do salário", {x: x1 + 14, y: 32, class: "eixo"}, svg);
+  texto("mil US$", {x: x1 + 14, y: 48, class: "eixo"}, svg);
 }
 
 function desenhaTudo() {
