@@ -123,22 +123,13 @@ São 358 linhas que repetem outra linha inteira, coluna por coluna. O arquivo n�
 
 ## Valores extremos
 
-O resumo de `area_m2`, `condominio`, `iptu` e `andar` sai de um método só. Antes, uma função curta, `numero_br`, que só troca a pontuação de um número para o padrão brasileiro: o Python escreve `1,117,000.00`, com vírgula no milhar e ponto na decimal, e ela troca uma pela outra, sem mudar o valor. O argumento `casas` diz quantas casas decimais ficam.
-
-```{python}
-#| label: numero-br
-numero_br = lambda valor, casas=2: (
-    f"{valor:,.{casas}f}".replace(",", "_").replace(".", ",").replace("_", ".")
-    .replace("-", "−")
-)
-print(numero_br(1117000, 0))
-```
+O resumo de `area_m2`, `condominio`, `iptu` e `andar` sai de um método só:
 
 ```{python}
 #| label: extremos
 resumo = alugueis[["area_m2", "condominio", "iptu", "andar"]].describe()
-resumo.style.set_uuid("resumo").format(lambda v: numero_br(v, 1)).format(
-    lambda v: numero_br(v, 0), subset=pd.IndexSlice[["count"], :]
+resumo.style.set_uuid("resumo").format(precision=1).format(
+    precision=0, subset=pd.IndexSlice[["count"], :]
 )
 ```
 
@@ -147,7 +138,7 @@ resumo.style.set_uuid("resumo").format(lambda v: numero_br(v, 1)).format(
 
 **`df.describe()`** — por coluna numérica: contagem de não nulos (`count`), média, desvio padrão, mínimo, os quartis `25%`, `50%` (a mediana) e `75%`, e o máximo.
 
-**`df.style.format(funcao, subset)`** — escreve cada célula com `funcao`, sem mudar o número guardado; com `subset`, só no recorte indicado. Aqui, `pd.IndexSlice[["count"], :]` recorta a linha `count` em todas as colunas, escrita sem casa decimal. **`.set_uuid(nome)`** fixa o identificador que o HTML da tabela usa.
+**`df.style.format(precision, subset)`** — escreve cada célula com `precision` casas decimais, sem mudar o número guardado; com `subset`, só no recorte indicado. Aqui, `pd.IndexSlice[["count"], :]` recorta a linha `count` em todas as colunas, escrita sem casa decimal. **`.set_uuid(nome)`** fixa o identificador que o HTML da tabela usa.
 :::
 
 A mediana de `area_m2` é 90 m² e o máximo é 46.335 m². A de `condominio` é R$ 560, e o máximo, R$ 1.117.000. O IPTU vai de uma mediana de R$ 125 a um máximo de R$ 313.700, e `andar`, de uma mediana de 5 a um máximo de 301. A contagem de `andar` é menor que a das outras porque os 2.461 nulos ficam de fora.
@@ -164,8 +155,8 @@ for coluna in colunas:
                    primeiro / alugueis[coluna].median()])
 extremos = pd.DataFrame(linhas, index=colunas,
                         columns=["maior", "2º", "3º", "÷ 2º", "÷ mediana"])
-extremos.style.set_uuid("extremos").format(lambda v: numero_br(v, 0)).format(
-    lambda v: numero_br(v, 1), subset=["÷ 2º"]
+extremos.style.set_uuid("extremos").format(precision=0).format(
+    precision=1, subset=["÷ 2º"]
 ).set_table_styles(
     [{"selector": "th, td", "props": "padding: 0.15em 0.3em; font-size: 0.8em"}]
 )
@@ -205,8 +196,8 @@ Nenhum desses extremos sai da tabela. Só pelo arquivo, não há como confirmar 
 ```{python}
 #| label: zeros
 zero_condominio = alugueis["condominio"] == 0
-print("condomínio zero:", numero_br(zero_condominio.sum(), 0))
-print("IPTU zero:", numero_br((alugueis["iptu"] == 0).sum(), 0))
+print("condomínio zero:", zero_condominio.sum())
+print("IPTU zero:", (alugueis["iptu"] == 0).sum())
 print("com andar e condomínio zero:", (zero_condominio & ~sem_andar).sum())
 ```
 
@@ -226,7 +217,6 @@ Um histograma de `area_m2` com o eixo em metros quadrados precisa ir de 11 a 46.
 #| fig-alt: "Dois histogramas azuis empilhados da área dos imóveis. No de cima, com eixo linear de zero a cerca de 46 mil metros quadrados, há uma única barra alta junto ao zero, com mais de dez mil anúncios, e o resto do eixo parece vazio. No de baixo, com eixo logarítmico a partir de 10 metros quadrados, as barras formam um morro, com o pico entre 69 e 82 metros quadrados, que desce para a direita até barras quase sem altura. Nos dois painéis, três triângulos cinza junto à base marcam os três imóveis acima de 10 mil metros quadrados: em cima, espalhados pelo eixo vazio; embaixo, isolados na ponta direita, longe do morro."
 fig, (ax_linear, ax_log) = plt.subplots(2, 1, figsize=(6.4, 6.4))
 gigantes = alugueis.loc[alugueis["area_m2"] > 10_000, "area_m2"]
-em_br = lambda v, pos: numero_br(v, 0)
 
 ax_linear.hist(alugueis["area_m2"], bins=50,
                color="C0", edgecolor="white", linewidth=0.3)
@@ -247,8 +237,6 @@ for ax in (ax_linear, ax_log):
     topo = ax.get_ylim()[1]
     ax.scatter(gigantes, np.full(len(gigantes), 0.06 * topo), marker="v",
                s=40, color="0.45", zorder=3, label="_nolegend_")
-    ax.xaxis.set_major_formatter(em_br)
-    ax.yaxis.set_major_formatter(em_br)
     ax.set_ylabel("anúncios")
 
 plt.tight_layout()
@@ -272,8 +260,6 @@ plt.show()
 
 **`ax.scatter(x, y, marker, s, color, zorder, label)`** — um ponto em cada par (`x`, `y`); `marker="v"` desenha um triângulo e `s` é o tamanho. `color="0.45"` é um cinza, `zorder=3` desenha os triângulos por cima das barras e `label="_nolegend_"` os deixa fora de qualquer legenda. Aqui, `y` é um array de `np.full(n, valor)`, `n` cópias do mesmo número, para os três triângulos ficarem na mesma altura.
 
-**`ax.xaxis.set_major_formatter(funcao)`** — escreve os rótulos do eixo com `funcao(valor, posicao)`; aqui, `numero_br`, com ponto de milhar.
-
 **`plt.tight_layout()`** e **`plt.show()`** — ajustam os espaços entre os painéis para os rótulos não se sobreporem, e exibem a figura.
 :::
 
@@ -282,18 +268,17 @@ As barras se contam com a mesma conta que o histograma faz antes de desenhar:
 ```{python}
 #| label: primeira-barra
 contagens, bordas = np.histogram(alugueis["area_m2"], bins=50)
-print("primeira barra (m²):", numero_br(bordas[0], 0), "a", numero_br(bordas[1], 0))
-print("anúncios nela:", numero_br(contagens[0], 0), "de", numero_br(len(alugueis), 0))
-print(f"fração: {numero_br(100 * contagens[0] / len(alugueis), 1)}%")
+print("primeira barra (m²):", round(bordas[0]), "a", round(bordas[1]))
+print("anúncios nela:", contagens[0], "de", len(alugueis))
+print(f"fração: {100 * contagens[0] / len(alugueis):.1f}%")
 print("barras com anúncio:", (contagens > 0).sum(), "de 50")
 print("acima de 10 mil m²:", (alugueis["area_m2"] > 10_000).sum())
-print("quarto maior (m²):", numero_br(alugueis["area_m2"].nlargest(4).iloc[3], 0))
+print("quarto maior (m²):", alugueis["area_m2"].nlargest(4).iloc[3])
 
 contagens_log, _ = np.histogram(alugueis["area_m2"], bins=bordas_log)
 pico = contagens_log.argmax()
-print("pico no eixo log (m²):", numero_br(bordas_log[pico], 0), "a",
-      numero_br(bordas_log[pico + 1], 0))
-print("anúncios no pico:", numero_br(contagens_log[pico], 0))
+print("pico no eixo log (m²):", round(bordas_log[pico]), "a", round(bordas_log[pico + 1]))
+print("anúncios no pico:", contagens_log[pico])
 ```
 
 ::: {.funcao}
@@ -314,11 +299,11 @@ contagens_imovel = ["area_m2", "quartos", "banheiros", "vagas"]
 gigante = alugueis.loc[alugueis["area_m2"].idxmax(), contagens_imovel].astype(float)
 mediano = alugueis[contagens_imovel].median()
 diferenca = (gigante - mediano).abs()
-print("área ÷ quartos:", numero_br(diferenca["area_m2"] / diferenca["quartos"], 1))
+print("área ÷ quartos:", round(diferenca["area_m2"] / diferenca["quartos"], 1))
 comparacao = pd.DataFrame(
     {"gigante": gigante, "mediano": mediano, "diferença": diferenca}
 ).T
-comparacao.style.set_uuid("gigante").format(lambda v: numero_br(v, 0)).set_table_styles(
+comparacao.style.set_uuid("gigante").format(precision=0).set_table_styles(
     [{"selector": "th, td", "props": "padding: 0.15em 0.3em; font-size: 0.8em"}]
 )
 ```
@@ -348,9 +333,9 @@ def fatia_da_area(tabela, padronizar):
     quadrados = dif ** 2
     return 100 * quadrados["area_m2"] / quadrados.sum()
 
-print(f"sem escala: {numero_br(fatia_da_area(imoveis, False), 1)}%")
-print(f"padronizada: {numero_br(fatia_da_area(imoveis, True), 1)}%")
-print(f"área em log, padronizada: {numero_br(fatia_da_area(area_em_log, True), 1)}%")
+print(f"sem escala: {fatia_da_area(imoveis, False):.1f}%")
+print(f"padronizada: {fatia_da_area(imoveis, True):.1f}%")
+print(f"área em log, padronizada: {fatia_da_area(area_em_log, True):.1f}%")
 ```
 
 ::: {.funcao}

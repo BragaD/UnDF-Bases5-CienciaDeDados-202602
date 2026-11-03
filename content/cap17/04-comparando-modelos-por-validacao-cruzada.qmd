@@ -22,16 +22,6 @@ plt.style.use("estilo-figuras.mplstyle")
 pd.set_option("display.max_columns", None)
 ```
 
-A função `numero_br` escreve os números com a pontuação brasileira:
-
-```{python}
-#| label: numero-br
-numero_br = lambda valor, casas=2: (
-    f"{valor:,.{casas}f}".replace(",", "_").replace(".", ",").replace("_", ".")
-    .replace("-", "−")
-)
-```
-
 O ponto de partida é a tabela sem linhas repetidas, a divisão estratificada por cidade, os dez preditores e o logaritmo do aluguel como resposta. O `preparo` é o da seção 17.3: as colunas categóricas viram colunas de 0 e 1; área, condomínio e IPTU passam por `np.log1p` e são padronizados; o andar ausente vira 0, com uma coluna que marca onde ele faltava; e as contagens são padronizadas.
 
 ```{python}
@@ -87,9 +77,9 @@ A resposta poderia ficar em reais, sem o logaritmo. A validação cruzada mostra
 #| label: reais-negativos
 linear_em_reais = Pipeline([("preparo", preparo), ("modelo", LinearRegression())])
 previsto = cross_val_predict(linear_em_reais, X_treino, treino["aluguel"], cv=grupos)
-print("previsões:", numero_br(len(previsto), 0))
-print("negativas:", numero_br((previsto < 0).sum(), 0))
-print("menor: R$", numero_br(previsto.min()))
+print("previsões:", len(previsto))
+print("negativas:", (previsto < 0).sum())
+print("menor: R$", round(previsto.min(), 2))
 ```
 
 ::: {.funcao}
@@ -104,10 +94,8 @@ colunas = ["area_m2", "condominio"]
 negativas = X_treino.loc[previsto < 0, colunas].median()
 todas = X_treino[colunas].median()
 print("mediana: negativas / treino")
-print("  área (m²):", numero_br(negativas["area_m2"], 0), "/",
-      numero_br(todas["area_m2"], 0))
-print("  condomínio (R$):", numero_br(negativas["condominio"], 0), "/",
-      numero_br(todas["condominio"], 0))
+print("  área (m²):", round(negativas["area_m2"]), "/", round(todas["area_m2"]))
+print("  condomínio (R$):", round(negativas["condominio"]), "/", round(todas["condominio"]))
 ```
 
 As previsões negativas vêm de anúncios pequenos: área mediana de 26 m² contra 95 no treino inteiro, condomínio mediano de R$ 140 contra R$ 568. Uma reta em reais não tem piso, e nada impede que, num anúncio pequeno o bastante, a soma dos termos fique abaixo de zero. Por que a regressão linear sobre o logaritmo do aluguel não pode sugerir um preço negativo, qualquer que seja o anúncio?
@@ -122,8 +110,8 @@ em que $\log$ é o logaritmo natural, o `np.log`. Cada diferença $\log y_i - \l
 
 ```{python}
 #| label: mesmo-fator
-print("log(1.500 / 1.000):", numero_br(np.log(1500 / 1000), 4))
-print("log(15.000 / 10.000):", numero_br(np.log(15000 / 10000), 4))
+print("log(1500 / 1000):", round(np.log(1500 / 1000), 4))
+print("log(15000 / 10000):", round(np.log(15000 / 10000), 4))
 ```
 
 Em reais, um erro é de R$ 500 e o outro de R$ 5.000; na escala log, os dois valem o mesmo, porque a previsão ficou abaixo do aluguel pelo mesmo fator, 1,5. Errar pelo mesmo fator conta o mesmo num aluguel barato e num caro, como a seção 17.2 mediu. É na escala log que os três candidatos são comparados: é nela que eles são ajustados, e nela o erro é relativo.
@@ -149,7 +137,7 @@ A média não usa o preparo, mas passar por ele não muda nada nela, e assim os 
 
 ```{python}
 #| label: desvio-y
-print("desvio padrão de y_treino:", numero_br(y_treino.std(ddof=0), 4))
+print("desvio padrão de y_treino:", round(y_treino.std(ddof=0), 4))
 ```
 
 ::: {.funcao}
@@ -166,11 +154,13 @@ rmse = pd.DataFrame({
                            scoring="neg_root_mean_squared_error")
     for nome, modelo in candidatos.items()
 }, index=range(1, 11))
-rmse.style.format(lambda v: numero_br(v, 4))
+rmse.round(4)
 ```
 
 ::: {.funcao}
 **`cross_val_score(estimador, X, y, cv, scoring)`** — para cada grupo de `cv`, ajusta o estimador nos outros e mede o erro no grupo; devolve um número por grupo. `scoring="neg_root_mean_squared_error"` pede o RMSE com o sinal trocado: o `scikit-learn` trata toda pontuação como "maior é melhor", e o `-` na frente desfaz a troca.
+
+**`df.round(casas)`** — a tabela com cada número arredondado a `casas` casas decimais.
 :::
 
 Cada linha é um grupo de validação, e as três colunas foram medidas nos mesmos anúncios. As médias dos dez grupos, o desvio padrão entre eles e o fator correspondente, $e^{\text{média}}$:
@@ -180,9 +170,9 @@ Cada linha é um grupo de validação, e as três colunas foram medidas nos mesm
 for nome in rmse:
     media = rmse[nome].mean()
     print(nome)
-    print("  média:", numero_br(media, 4))
-    print("  desvio entre grupos:", numero_br(rmse[nome].std(), 4))
-    print("  fator e^média:", numero_br(np.exp(media), 2))
+    print("  média:", round(media, 4))
+    print("  desvio entre grupos:", round(rmse[nome].std(), 4))
+    print("  fator e^média:", round(np.exp(media), 2))
 ```
 
 A média erra 0,7902, e o desvio padrão de `y_treino` também é 0,7902: os dois coincidem até a quarta casa, como esperado. A regressão linear erra 0,4458 e o *k*-NN, 0,4217, os dois bem abaixo da média, e o *k*-NN um pouco abaixo da linear.
@@ -198,8 +188,8 @@ A diferença entre a linear e o *k*-NN, 0,0241 (0,4458 − 0,4217), é só cerca
 ```{python}
 #| label: sobreposicao
 pior_knn, melhor_linear = rmse["k-NN"].max(), rmse["linear"].min()
-print("pior grupo do k-NN:", numero_br(pior_knn, 4))
-print("melhor grupo da linear:", numero_br(melhor_linear, 4))
+print("pior grupo do k-NN:", round(pior_knn, 4))
+print("melhor grupo da linear:", round(melhor_linear, 4))
 print("se sobrepõem:", bool(pior_knn > melhor_linear))
 ```
 
@@ -210,7 +200,6 @@ Olhando as duas colunas como dois montes de dez números, o erro do *k*-NN em al
 #| fig-cap: "RMSE na escala log dos três candidatos nos dez grupos da validação cruzada; a linha cinza liga os erros do mesmo grupo, e o traço horizontal marca a média dos dez. Em cima, os três modelos, com o eixo desde zero; embaixo, só a linear e o k-NN, com o eixo ampliado."
 #| fig-alt: "Dois painéis empilhados. No de cima, três colunas de dez pontos: a média, em cinza, perto de 0,8; a linear, em azul, e o k-NN, em laranja, os dois perto de 0,4 a 0,45; linhas cinza finas descem da média para a linear e seguem quase na horizontal até o k-NN. No de baixo, com o eixo ampliado, só a linear e o k-NN: as dez linhas cinza descem da esquerda para a direita, cada uma ligando um ponto azul a um ponto laranja mais baixo; os pontos de cada coluna se espalham de cima a baixo do eixo, e as duas colunas se sobrepõem na altura."
 cores = {"média": "0.45", "linear": "C0", "k-NN": "C1"}
-em_br = lambda v, pos: numero_br(v, 2)
 fig, (ax_todos, ax_zoom) = plt.subplots(2, 1, figsize=(6.4, 6.4))
 for ax, nomes in ((ax_todos, list(cores)), (ax_zoom, ["linear", "k-NN"])):
     posicoes = list(range(len(nomes)))
@@ -223,7 +212,6 @@ for ax, nomes in ((ax_todos, list(cores)), (ax_zoom, ["linear", "k-NN"])):
     ax.set_xticks(posicoes, nomes)
     ax.set_xlim(-0.5, len(nomes) - 0.5)
     ax.set_ylabel("RMSE (escala log)")
-    ax.yaxis.set_major_formatter(em_br)
 ax_todos.set_ylim(0, 0.9)
 ax_todos.set_title("os três candidatos")
 ax_zoom.set_title("linear e k-NN, eixo ampliado")
@@ -242,10 +230,10 @@ No painel de cima, a queda da média para a linear é o ganho que os preditores 
 ganho = rmse["linear"] - rmse["k-NN"]
 print("linear abaixo da média nos 10:", bool((rmse["linear"] < rmse["média"]).all()))
 print("k-NN abaixo da linear nos 10:", bool((ganho > 0).all()))
-print("ganho do k-NN, menor:", numero_br(ganho.min(), 4))
-print("ganho do k-NN, maior:", numero_br(ganho.max(), 4))
-print("desvio do ganho:", numero_br(ganho.std(), 4))
-print("correlação dos erros:", numero_br(rmse["linear"].corr(rmse["k-NN"]), 2))
+print("ganho do k-NN, menor:", round(ganho.min(), 4))
+print("ganho do k-NN, maior:", round(ganho.max(), 4))
+print("desvio do ganho:", round(ganho.std(), 4))
+print("correlação dos erros:", round(rmse["linear"].corr(rmse["k-NN"]), 2))
 ```
 
 ::: {.funcao}
@@ -274,10 +262,10 @@ for semente in range(5):
     vitorias.append(int((ganho_semente > 0).sum()))
     ganhos_medios.append(ganho_semente.mean())
     print(f"semente {semente}: k-NN vence em", vitorias[-1], "de 10")
-    print("  ganho médio:", numero_br(ganhos_medios[-1], 4))
+    print("  ganho médio:", round(ganhos_medios[-1], 4))
 print("vence nos 10 em todas:", all(v == 10 for v in vitorias))
-print("ganho médio, menor:", numero_br(min(ganhos_medios), 4))
-print("ganho médio, maior:", numero_br(max(ganhos_medios), 4))
+print("ganho médio, menor:", round(min(ganhos_medios), 4))
+print("ganho médio, maior:", round(max(ganhos_medios), 4))
 ```
 
 Nas cinco sementes, o *k*-NN erra menos que a linear nos dez grupos, e o ganho médio fica entre 0,0243 e 0,0258, perto dos 0,0241 da semente 17. O *k*-NN fica à frente e segue como candidato, e o teste continua fechado.

@@ -14,16 +14,6 @@ import matplotlib.pyplot as plt
 plt.style.use("estilo-figuras.mplstyle")
 ```
 
-A função `numero_br` escreve os números com a pontuação brasileira:
-
-```{python}
-#| label: numero-br
-def numero_br(valor, casas=2):
-    texto = f"{valor:,.{casas}f}"
-    texto = texto.replace(",", "_").replace(".", ",").replace("_", ".")
-    return texto.replace("-", "−")
-```
-
 Os pontos são os mesmos 40 sorteios da seção 16.1, com a classe $1$ deslocada de 1 nas duas coordenadas, o que mistura as nuvens. Depois deles, o mesmo gerador sorteia 10.000 pontos de teste, 5.000 de cada classe, com o mesmo deslocamento (o `_` em `10_000` só separa os milhares para quem lê):
 
 ```{python}
@@ -39,7 +29,7 @@ X_teste = rng.normal(size=(10_000, 2))
 y_teste = np.repeat([-1, 1], 5_000)
 X_teste[y_teste == 1] += 1
 print("pontos de treino:", len(X_mis))
-print("pontos de teste:", numero_br(len(X_teste), 0))
+print("pontos de teste:", len(X_teste))
 ```
 
 ## Uma margem que aceita violações
@@ -89,9 +79,9 @@ f_26 = modelo.decision_function(X_mis[[26]])[0]
 yf_26 = y[26] * f_26
 eps_26 = max(0, 1 - yf_26)
 print("classe do ponto 26:", y[26])
-print("f(x):", numero_br(f_26))
-print("y·f(x):", numero_br(yf_26))
-print("folga, max(0, 1 − y·f(x)):", numero_br(eps_26))
+print("f(x):", round(f_26, 2))
+print("y·f(x):", round(yf_26, 2))
+print("folga, max(0, 1 − y·f(x)):", round(eps_26, 2))
 ```
 
 O ponto 26 tem $y_i f(x_i) = -1{,}30$: está do lado errado do hiperplano, e a folga dele, $1 - (-1{,}30) = 2{,}30$, passa de 1. A mesma conta, para os 40 pontos de uma vez:
@@ -100,8 +90,8 @@ O ponto 26 tem $y_i f(x_i) = -1{,}30$: está do lado errado do hiperplano, e a f
 #| label: folgas
 yf = y * modelo.decision_function(X_mis)
 eps = np.maximum(0, 1 - yf)
-print("folga do ponto 26:", numero_br(eps[26]))
-print("maior folga:", numero_br(eps.max()))
+print("folga do ponto 26:", round(eps[26], 2))
+print("maior folga:", round(eps.max(), 2))
 ```
 
 ::: {.funcao}
@@ -123,7 +113,7 @@ elif yf_26 > 0:
     faixa_26 = "dentro"
 else:
     faixa_26 = "lado errado"
-print("y·f(x) do ponto 26:", numero_br(yf_26))
+print("y·f(x) do ponto 26:", round(yf_26, 2))
 print("faixa do ponto 26:", faixa_26)
 ```
 
@@ -218,7 +208,7 @@ Na margem máxima, os vetores de suporte eram os pontos sobre a borda. E agora, 
 sv = modelo.support_
 print("vetores de suporte:", len(sv))
 for classe, quantos in zip(modelo.classes_, modelo.n_support_):
-    print(f"vetores de suporte da classe {numero_br(classe, 0)}:", quantos)
+    print(f"vetores de suporte da classe {classe}:", quantos)
 e_vs = np.isin(np.arange(40), sv)
 linhas = []
 for nome in nomes:
@@ -248,10 +238,10 @@ m.fit(X_mis, y)
 yf_c = y * m.decision_function(X_mis)
 folgas_c = np.maximum(0, 1 - yf_c)
 margem_c = 1 / np.linalg.norm(m.coef_[0])
-print("C do SVC:", numero_br(0.01))
-print("margem, 1 / norma de coef_:", numero_br(margem_c))
+print("C do SVC:", round(0.01, 2))
+print("margem, 1 / norma de coef_:", round(margem_c, 2))
 print("vetores de suporte:", len(m.support_))
-print("soma das folgas:", numero_br(folgas_c.sum()))
+print("soma das folgas:", round(folgas_c.sum(), 2))
 ```
 
 A mesma conta para sete valores de `C`, de 0,01 a 10, e mais um, 100, dez vezes o último, uma linha por valor. Antes de ler a tabela, um palpite: quando o `C` do `SVC` cresce, a margem alarga ou estreita? E os vetores de suporte, aumentam ou diminuem?
@@ -273,7 +263,7 @@ for c in grade + [100]:
     })
 tabela = pd.DataFrame(linhas)
 tabela.style.format(
-    {"c_svc": "{:g}", "margem": "{:.2f}", "soma_folgas": "{:.2f}"}, decimal=","
+    {"c_svc": "{:g}", "margem": "{:.2f}", "soma_folgas": "{:.2f}"}
 ).hide()
 ```
 
@@ -304,8 +294,7 @@ for c, ax in zip([0.03, 0.1, 0.3, 1], eixos.ravel()):
     ax.set_ylim(-2.5, 3.5)
     ax.set_xticks([-2, 0, 2])
     ax.set_yticks([-2, 0, 2])
-    rotulo = f"{c:g}".replace(".", ",")
-    ax.set_title(f"C = {rotulo} · VS = {len(m.support_)}")
+    ax.set_title(f"C = {c:g} · VS = {len(m.support_)}")
 fig.supxlabel("$X_1$")
 fig.supylabel("$X_2$")
 plt.show()
@@ -313,7 +302,7 @@ plt.show()
 
 ::: {.funcao}
 - **`plt.subplots(2, 2, sharex=True, sharey=True)`** — quatro gráficos em duas linhas e duas colunas, com os mesmos limites de eixo; `eixos.ravel()` os põe numa fila, na ordem de leitura.
-- **`ax.set_title(texto)`** — o título do painel; `f"{c:g}"` escreve o número sem zeros sobrando, e `.replace(".", ",")` troca o ponto pela vírgula. **`fig.supxlabel`** e **`fig.supylabel`** — um rótulo só para os eixos de todos os painéis.
+- **`ax.set_title(texto)`** — o título do painel; `f"{c:g}"` escreve o número sem zeros sobrando. **`fig.supxlabel`** e **`fig.supylabel`** — um rótulo só para os eixos de todos os painéis.
 :::
 
 A largura da margem regula o equilíbrio entre viés e variância ([seção 7.6](../cap07/06-qualidade-do-ajuste-e-vies-variancia.qmd)). Com a margem larga, de `C` pequeno no `SVC`, muitos pontos a violam: todos eles ajudam a decidir o hiperplano, e um ponto a mais ou a menos pesa pouco. É um classificador de variância baixa, que pode ter viés alto. Com a margem estreita, de `C` grande, menos pontos decidem a fronteira, e o classificador se ajusta mais aos dados de treino.
@@ -352,9 +341,9 @@ b = m.coef_[0]
 f = b0 + X_mis @ b
 perda = np.maximum(0, 1 - y * f).sum()
 penalidade = 5 * (b**2).sum()
-print("perda dobradiça, a soma das folgas:", numero_br(perda, 4))
-print("penalidade, 5 · (β1² + β2²):", numero_br(penalidade, 4))
-print("objetivo com λ = 5:", numero_br(perda + penalidade, 4))
+print("perda dobradiça, a soma das folgas:", round(perda, 4))
+print("penalidade, 5 · (β1² + β2²):", round(penalidade, 4))
+print("objetivo com λ = 5:", round(perda + penalidade, 4))
 ```
 
 A mesma conta vira uma função, `objetivo`, para valer em outros coeficientes e outros $\lambda$. Andando 0,05 para cada lado em cada um dos três coeficientes, um de cada vez, o objetivo nos seis vizinhos, ao lado do da solução:
@@ -368,12 +357,12 @@ def objetivo(b0, b, lam):
 
 passos = {
     "solução do SVC": (0, 0, 0),
-    "β0 + 0,05": (0.05, 0, 0),
-    "β0 − 0,05": (-0.05, 0, 0),
-    "β1 + 0,05": (0, 0.05, 0),
-    "β1 − 0,05": (0, -0.05, 0),
-    "β2 + 0,05": (0, 0, 0.05),
-    "β2 − 0,05": (0, 0, -0.05),
+    "β0 + 0.05": (0.05, 0, 0),
+    "β0 − 0.05": (-0.05, 0, 0),
+    "β1 + 0.05": (0, 0.05, 0),
+    "β1 − 0.05": (0, -0.05, 0),
+    "β2 + 0.05": (0, 0, 0.05),
+    "β2 − 0.05": (0, 0, -0.05),
 }
 linhas = []
 for nome, (d0, d1, d2) in passos.items():
@@ -383,7 +372,7 @@ for nome, (d0, d1, d2) in passos.items():
         "λ = 10": objetivo(b0 + d0, b + np.array([d1, d2]), 10),
     })
 vizinhos = pd.DataFrame(linhas)
-vizinhos.style.format({"λ = 5": "{:.4f}", "λ = 10": "{:.4f}"}, decimal=",").hide()
+vizinhos.style.format({"λ = 5": "{:.4f}", "λ = 10": "{:.4f}"}).hide()
 ```
 
 ::: {.funcao}
@@ -404,8 +393,8 @@ for lam in [5, 10]:
     for e in d:
         if objetivo(b0 + e[0], b + e[1:], lam) < base:
             menores += 1
-    print(f"λ = {lam}: objetivo na solução do SVC:", numero_br(base, 4),
-          "· vizinhos menores:", menores, "de", numero_br(len(d), 0))
+    print(f"λ = {lam}: objetivo na solução do SVC:", round(base, 4),
+          "· vizinhos menores:", menores, "de", len(d))
 ```
 
 ::: {.funcao}
@@ -448,7 +437,7 @@ fora = np.setdiff1d(np.arange(40), sv)
 i = fora[np.argmax(yf[fora])]
 j = sv[np.argmax(eps[sv])]
 print("fora dos vetores de suporte, o mais afastado da margem:", i)
-print("vetor de suporte de maior folga:", j, "· folga:", numero_br(eps[j]))
+print("vetor de suporte de maior folga:", j, "· folga:", round(eps[j], 2))
 ```
 
 ::: {.funcao}
@@ -470,7 +459,7 @@ m_j = SVC(kernel="linear", C=1)
 m_j.fit(X_j, y)
 
 yf_j = y[j] * m_j.decision_function(X_j[[j]])[0]
-print(f"y·f do ponto {j} no ajuste novo:", numero_br(yf_j))
+print(f"y·f do ponto {j} no ajuste novo:", round(yf_j, 2))
 print(f"ponto {j} entre os vetores de suporte do ajuste novo:",
       "sim" if j in m_j.support_ else "não")
 coeficientes = pd.DataFrame(
@@ -481,7 +470,7 @@ coeficientes = pd.DataFrame(
     },
     index=["intercept_", "coef_ de X1", "coef_ de X2"],
 )
-coeficientes.style.format(numero_br)
+coeficientes.round(2)
 ```
 
 ::: {.funcao}
@@ -509,7 +498,7 @@ m = SVC(kernel="linear", C=0.01)
 m.fit(X_mis[treino], y[treino])
 previsto = m.predict(X_mis[validacao])
 erro = (previsto != y[validacao]).mean()
-print("erro de validação, primeira divisão:", numero_br(erro, 3))
+print("erro de validação, primeira divisão:", round(erro, 3))
 ```
 
 ::: {.funcao}
@@ -529,8 +518,8 @@ for treino, validacao in divisoes:
     previsto = m.predict(X_mis[validacao])
     erros_c.append((previsto != y[validacao]).mean())
 for k, e in enumerate(erros_c):
-    print(f"divisão {k + 1}:", numero_br(e, 3))
-print("média, o erro de validação cruzada:", numero_br(np.mean(erros_c), 3))
+    print(f"divisão {k + 1}:", round(e, 3))
+print("média, o erro de validação cruzada:", round(np.mean(erros_c), 3))
 ```
 
 O `GridSearchCV` faz esse laço para cada valor da grade, que é a mesma de antes, com os mesmos 5 grupos, e o critério é a taxa de erro média:
@@ -543,12 +532,12 @@ busca = GridSearchCV(SVC(kernel="linear"), {"C": grade}, cv=grupos)
 busca.fit(X_mis, y)
 erro_cv = 1 - busca.cv_results_["mean_test_score"]
 c_best = busca.best_params_["C"]
-print("C escolhido:", numero_br(c_best))
+print("C escolhido:", round(c_best, 2))
 previsto = busca.predict(X_teste)
 teste = (previsto != y_teste).mean()
-print("erro de teste do escolhido:", numero_br(teste, 4))
+print("erro de teste do escolhido:", round(teste, 4))
 pd.DataFrame({"c_svc": grade, "erro_cv": erro_cv}).style.format(
-    {"c_svc": "{:g}", "erro_cv": "{:.3f}"}, decimal=","
+    {"c_svc": "{:g}", "erro_cv": "{:.3f}"}
 ).hide()
 ```
 
@@ -565,29 +554,25 @@ from sklearn.model_selection import cross_val_score
 
 m01 = SVC(kernel="linear", C=0.01)
 m01.fit(X_mis, y)
-print("vetores de suporte, C = 0,01:", len(m01.support_))
+print("vetores de suporte, C = 0.01:", len(m01.support_))
 
 m001 = SVC(kernel="linear", C=0.001)
 m001.fit(X_mis, y)
 acerto = cross_val_score(SVC(kernel="linear", C=0.001), X_mis, y, cv=grupos)
-print("erro de validação cruzada, C = 0,001:", numero_br(1 - acerto.mean(), 3))
+print("erro de validação cruzada, C = 0.001:", round(1 - acerto.mean(), 3))
 
 def reta(m):
     v = np.r_[m.intercept_, m.coef_[0]]
     return v / np.linalg.norm(m.coef_[0])
 
-def tres_casas(valor):
-    return numero_br(valor, 3)
-
 pd.DataFrame(
-    {"C = 0,01": reta(m01), "C = 0,001": reta(m001)}, index=["β0", "β1", "β2"]
-).style.format(tres_casas)
+    {"C = 0.01": reta(m01), "C = 0.001": reta(m001)}, index=["β0", "β1", "β2"]
+).round(3)
 ```
 
 ::: {.funcao}
 - **`cross_val_score(estimador, X, y, cv)`**, de `sklearn.model_selection` — a taxa de acerto em cada um dos grupos de `cv`, o mesmo laço da primeira divisão, feito pela função; com os mesmos `grupos` da busca, o erro médio é comparável ao da tabela acima.
 - **`reta(m)`** — junta o intercepto e os coeficientes num vetor só e o divide pela norma de $(\beta_1, \beta_2)$, a escala de $\sum_j \beta_j^2 = 1$ da seção 16.1: a mesma reta dá o mesmo vetor, qualquer que seja a escala do ajuste.
-- **`.style.format(tres_casas)`** — escreve cada valor da tabela com a função `tres_casas`, que chama `numero_br` com três casas.
 :::
 
 Com `C` = 0,01, os 40 pontos são vetores de suporte. O orçamento é tão folgado que todo ponto entra na decisão, e diminuir o `C` para 0,001 dá a mesma reta, como mostram as duas colunas da tabela. Com os mesmos grupos, o erro de validação cruzada de `C` = 0,001 é 0,175, igual ao de 0,01: estender a grade para baixo criaria um empate, e o `GridSearchCV`, que fica com o primeiro valor da grade entre os empatados, trocaria só o valor de `C`, não o classificador escolhido.
@@ -599,8 +584,8 @@ Estes dados foram simulados, e por isso a regra de menor taxa de erro esperada �
 lado = X_teste.sum(axis=1) > 1
 regra = np.where(lado, 1, -1)
 bayes = (regra != y_teste).mean()
-print("erro de teste da regra X1 + X2 > 1:", numero_br(bayes, 4))
-print("erro de teste do SVC escolhido:", numero_br(teste, 4))
+print("erro de teste da regra X1 + X2 > 1:", round(bayes, 4))
+print("erro de teste do SVC escolhido:", round(teste, 4))
 ```
 
 Nestes pontos, a regra de Bayes erra 0,2304, e o `SVC` escolhido, 0,2317: a diferença, de 0,0013, é pequena. Mas a escolha de `C` não é firme. Com outra semente no embaralhamento dos grupos, a validação cruzada pode escolher outro valor. O código repete a busca com as sementes de 0 a 19 e mede o erro de teste de cada `C` da grade:
@@ -627,7 +612,7 @@ for c in grade:
 sementes = pd.DataFrame(linhas)
 escolhidos = (sementes["vezes escolhido"] > 0).sum()
 print("valores de C escolhidos ao menos uma vez:", escolhidos)
-sementes.style.format({"c_svc": "{:g}", "erro de teste": "{:.4f}"}, decimal=",").hide()
+sementes.style.format({"c_svc": "{:g}", "erro de teste": "{:.4f}"}).hide()
 ```
 
 ::: {.funcao}
@@ -650,17 +635,13 @@ z = np.array([-2, 0, 1, 3])
 dobra = np.maximum(0, 1 - z)
 logis = np.log1p(np.exp(-z))
 perdas = pd.DataFrame({"y·f(x)": z, "dobradiça": dobra, "logística": logis})
-
-def quatro_casas(valor):
-    return numero_br(valor, 4)
-
 perdas.style.format(
-    {"y·f(x)": numero_br, "dobradiça": numero_br, "logística": quatro_casas}
+    {"y·f(x)": "{:.2f}", "dobradiça": "{:.2f}", "logística": "{:.4f}"}
 ).hide()
 ```
 
 ::: {.funcao}
-- **`np.exp(-z)`** — $e^{-z}$, elemento a elemento. **`np.log1p(v)`** — $\log(1 + v)$, o logaritmo natural. **`quatro_casas`** — a `numero_br` com quatro casas; no `style.format`, um dicionário dá a cada coluna a sua função.
+- **`np.exp(-z)`** — $e^{-z}$, elemento a elemento. **`np.log1p(v)`** — $\log(1 + v)$, o logaritmo natural.
 :::
 
 Em $y_i f(x_i) = 1$ e em 3, a perda dobradiça é zero, e a logística, 0,3133 e 0,0486: pequena, mas não zero. O gráfico das duas:
@@ -700,12 +681,12 @@ logit = LogisticRegression(C=np.inf, solver="newton-cholesky", tol=1e-8)
 logit.fit(X_mis, y)
 p_log = logit.predict(X_teste)
 p_svc = modelo.predict(X_teste)
-print("erro de teste, logística:", numero_br((p_log != y_teste).mean(), 4))
-print("erro de teste, SVC:", numero_br((p_svc != y_teste).mean(), 4))
-print("fração com a mesma classe:", numero_br((p_log == p_svc).mean(), 4))
+print("erro de teste, logística:", round((p_log != y_teste).mean(), 4))
+print("erro de teste, SVC:", round((p_svc != y_teste).mean(), 4))
+print("fração com a mesma classe:", round((p_log == p_svc).mean(), 4))
 pd.DataFrame(
     {"logística": reta(logit), "SVC": reta(modelo)}, index=["β0", "β1", "β2"]
-).style.format(tres_casas)
+).round(3)
 ```
 
 ::: {.funcao}
@@ -737,8 +718,7 @@ for nome, m in [("SVC linear", modelo), ("LinearSVC", padrao), ("hinge", dobradi
         "mesma classe que o SVC": (previsto == p_svc).mean(),
     })
 pd.DataFrame(linhas).style.format(
-    {"β0": numero_br, "β1": numero_br, "β2": numero_br,
-     "mesma classe que o SVC": quatro_casas}
+    {"β0": "{:.2f}", "β1": "{:.2f}", "β2": "{:.2f}", "mesma classe que o SVC": "{:.4f}"}
 ).hide()
 ```
 

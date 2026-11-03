@@ -14,16 +14,6 @@ import matplotlib.pyplot as plt
 plt.style.use("estilo-figuras.mplstyle")
 ```
 
-A função `numero_br` escreve os números com a pontuação brasileira:
-
-```{python}
-#| label: numero-br
-def numero_br(valor, casas=2):
-    texto = f"{valor:,.{casas}f}"
-    texto = texto.replace(",", "_").replace(".", ",").replace("_", ".")
-    return texto.replace("-", "−")
-```
-
 ## Aprender devagar
 
 Os dados são os jogadores de `Hitters` com salário registrado, com o logaritmo do salário como resposta, as colunas de texto trocadas por indicadoras e os mesmos 132 jogadores de treino da seção 13.1:
@@ -80,7 +70,7 @@ arvore_1.fit(treino_X, residuos)
 coluna = X.columns[arvore_1.tree_.feature[0]]
 corte = arvore_1.tree_.threshold[0]
 print("raiz:", coluna)
-print("corte:", numero_br(corte, 0))
+print("corte:", round(corte))
 
 previsto_1 = arvore_1.predict(treino_X)
 abaixo = treino_X[coluna] <= corte
@@ -88,7 +78,7 @@ pd.DataFrame({
     "jogadores": [abaixo.sum(), (~abaixo).sum()],
     "folha da árvore": [previsto_1[abaixo].mean(), previsto_1[~abaixo].mean()],
     "média do log do salário": [treino_y[abaixo].mean(), treino_y[~abaixo].mean()],
-}, index=["até o corte", "acima do corte"]).style.format(precision=2, decimal=",")
+}, index=["até o corte", "acima do corte"]).style.format(precision=2)
 ```
 
 ::: {.funcao}
@@ -104,9 +94,9 @@ O resto do passo 2 soma ao modelo um centésimo da árvore e tira o mesmo centé
 modelo_a_mao = modelo_a_mao + taxa * previsto_1
 residuos = residuos - taxa * previsto_1
 mse_1 = np.mean((treino_y.to_numpy() - modelo_a_mao) ** 2)
-print("média do log do salário:", numero_br(treino_y.mean()))
-print("depois do passo, previsão média:", numero_br(modelo_a_mao.mean()))
-print("depois do passo, MSE de treino:", numero_br(mse_1))
+print("média do log do salário:", round(treino_y.mean(), 2))
+print("depois do passo, previsão média:", round(modelo_a_mao.mean(), 2))
+print("depois do passo, MSE de treino:", round(mse_1, 2))
 ```
 
 Só um centésimo da árvore entrou no modelo: depois do primeiro passo, $\hat f(x)$ vale 0,01 × 5,11 ≈ 0,05 para os jogadores de um lado e 0,01 × 6,46 ≈ 0,06 para os do outro, longe da média de 5,91.
@@ -132,9 +122,7 @@ for passo in [2, 3]:
                    "folha acima do corte": previsto_b[~abaixo_b].mean(),
                    "MSE de treino": np.mean((treino_y.to_numpy() - modelo_a_mao) ** 2)})
 a_mao = pd.DataFrame(linhas).set_index("passo")
-(a_mao.style
- .format(precision=2, decimal=",", thousands=".")
- .format(precision=0, decimal=",", thousands=".", subset=["corte"]))
+a_mao.style.format(precision=2).format(precision=0, subset=["corte"])
 ```
 
 As três primeiras árvores cortam pela mesma coluna, no mesmo ponto: depois de poucos passos de um centésimo, os resíduos ainda se parecem com o próprio log do salário, e o melhor corte continua o mesmo. As folhas encolhem um pouco a cada passo, porque os resíduos encolhem, e o MSE de treino cai devagar.
@@ -152,7 +140,7 @@ for b in range(3):
     print(f"árvore {b + 1} do GradientBoostingRegressor, raiz:",
           X.columns[boost.estimators_[b, 0].tree_.feature[0]])
 pd.DataFrame({"à mão": a_mao["MSE de treino"],
-              "train_score_": boost.train_score_[:3]}).style.format(precision=4, decimal=",")
+              "train_score_": boost.train_score_[:3]}).style.format(precision=4)
 ```
 
 ::: {.funcao}
@@ -175,10 +163,10 @@ As três árvores do `GradientBoostingRegressor` cortam pela mesma coluna das tr
 previsoes = list(boost.staged_predict(treino_X))
 linhas = []
 for b in [1, 10, 100, 1000]:
-    linhas.append({"B": numero_br(b, 0), "previsão média": previsoes[b - 1].mean(),
+    linhas.append({"B": b, "previsão média": previsoes[b - 1].mean(),
                    "MSE de treino": boost.train_score_[b - 1]})
 print("no treino, depois de B árvores:")
-pd.DataFrame(linhas).set_index("B").style.format(precision=2, decimal=",")
+pd.DataFrame(linhas).set_index("B").style.format(precision=2)
 ```
 
 ::: {.funcao}
@@ -195,7 +183,7 @@ for b, previsto in enumerate(previsoes, start=1):
     if round(previsto.mean(), 2) >= alvo:
         chega = b
         break
-print("média chega a", numero_br(treino_y.mean()), "em B =", numero_br(chega, 0))
+print("média chega a", round(treino_y.mean(), 2), "em B =", chega)
 ```
 
 ::: {.funcao}
@@ -213,10 +201,9 @@ for arvore in boost.estimators_[:, 0]:
     soma = soma + taxa * arvore.predict(teste_X.to_numpy())
 previsto_boost = boost.predict(teste_X)
 print("maior diferença entre a soma e o predict:",
-      numero_br(np.abs(soma - previsto_boost).max(), 4))
+      round(np.abs(soma - previsto_boost).max(), 4))
 pd.DataFrame({"soma das árvores": soma[:3], "predict": previsto_boost[:3]},
-             index=["jogador 1", "jogador 2", "jogador 3"]).style.format(precision=4,
-                                                                          decimal=",")
+             index=["jogador 1", "jogador 2", "jogador 3"]).style.format(precision=4)
 ```
 
 ::: {.funcao}
@@ -236,8 +223,7 @@ da_media = GradientBoostingRegressor(n_estimators=1000, learning_rate=taxa, max_
 da_media.fit(treino_X, treino_y)
 pd.DataFrame({"MSE de teste": [mean_squared_error(teste_y, previsto_boost),
                                mean_squared_error(teste_y, da_media.predict(teste_X))]},
-             index=["partindo de zero", "partindo da média"]).style.format(precision=4,
-                                                                           decimal=",")
+             index=["partindo de zero", "partindo da média"]).style.format(precision=4)
 ```
 
 Com $\lambda = 0{,}01$ e mil árvores, o caminho de zero até a média já foi percorrido, e os dois erros de teste coincidem nas quatro casas.
@@ -274,16 +260,16 @@ A tabela resume cada curva: o MSE de teste depois da primeira árvore, o menor M
 #| label: menor-por-taxa
 linhas = []
 for taxa, curva in curvas.items():
-    linhas.append({"λ": str(taxa).replace(".", ","), "em B = 1": curva[0],
-                   "menor": curva.min(), "B do menor": numero_br(np.argmin(curva) + 1, 0),
-                   "em B = 3.000": curva[-1]})
+    linhas.append({"λ": str(taxa), "em B = 1": curva[0],
+                   "menor": curva.min(), "B do menor": np.argmin(curva) + 1,
+                   "em B = 3000": curva[-1]})
 print("MSE de teste, partindo da média:")
 pd.DataFrame(linhas).set_index("λ").style.format(
-    precision=4, decimal=",", subset=["em B = 1", "menor", "em B = 3.000"])
+    precision=4, subset=["em B = 1", "menor", "em B = 3000"])
 ```
 
 ::: {.funcao}
-**`np.argmin(v)`** — a posição do menor valor de `v`, contada a partir de 0; somando 1, o número de árvores. **`str(taxa).replace(".", ",")`** — o número como texto, com vírgula no lugar do ponto: `0,001`, `0,01` e `0,1`.
+**`np.argmin(v)`** — a posição do menor valor de `v`, contada a partir de 0; somando 1, o número de árvores. **`str(taxa)`** — o número como texto, para servir de rótulo da linha: `0.001`, `0.01` e `0.1`.
 :::
 
 ```{python}
@@ -292,26 +278,19 @@ pd.DataFrame(linhas).set_index("λ").style.format(
 #| fig-alt: "Gráfico de linhas com o número de árvores, de 1 a 3.000 em escala logarítmica, no eixo horizontal, e o MSE no vertical, com marcas de 0 a 0,8. As três curvas de teste começam entre 0,75 e 0,84. A verde, λ = 0,1, desce primeiro, tem o mínimo perto de 0,29 com cerca de 50 árvores e depois sobe até perto de 0,38. A laranja, λ = 0,01, desce mais tarde, tem o mínimo perto de 0,29 com cerca de 600 árvores e sobe até cerca de 0,31. A azul, λ = 0,001, desce mais devagar e chega perto de 0,30 na última árvore. A cinza tracejada, o treino com λ = 0,01, só desce e termina perto de 0,05, bem abaixo das curvas de teste."
 import matplotlib.pyplot as plt
 
-
-def uma_casa(valor, posicao):
-    return f"{valor:.1f}".replace(".", ",")
-
-
 estagios = np.arange(1, 3001)
 fig, ax = plt.subplots(figsize=(3.8, 3.4))
 for taxa, cor in [(0.001, "C0"), (0.01, "C1"), (0.1, "C2")]:
-    nome = str(taxa).replace(".", ",")
-    ax.plot(estagios, curvas[taxa], color=cor, label=f"λ = {nome}")
+    ax.plot(estagios, curvas[taxa], color=cor, label=f"λ = {taxa}")
     melhor = np.argmin(curvas[taxa])
     ax.plot(estagios[melhor], curvas[taxa][melhor], marker="x", color=cor,
             markersize=8, label="_nolegend_")
 ax.plot(estagios, modelos[0.01].train_score_, color="0.45", linestyle="--",
-        label="treino, λ = 0,01")
+        label="treino, λ = 0.01")
 ax.set_xscale("log")
-ax.set_xticks([1, 10, 100, 1000], ["1", "10", "100", "1.000"])
+ax.set_xticks([1, 10, 100, 1000], ["1", "10", "100", "1000"])
 ax.set_xlim(0.8, 4000)
 ax.set_ylim(0, 0.9)
-ax.yaxis.set_major_formatter(uma_casa)
 ax.set_xlabel("número de árvores B")
 ax.set_ylabel("MSE (log do salário)")
 ax.legend(loc="lower center", bbox_to_anchor=(0.5, 1.0), ncol=2)
@@ -329,7 +308,7 @@ Depois do mínimo, o erro de teste sobe: com $\lambda = 0{,}01$, de 0,2851 em $B
 
 ```{python}
 #| label: treino-3000
-print("λ = 0,01, MSE de treino em B = 3.000:", numero_br(modelos[0.01].train_score_[-1], 4))
+print("λ = 0.01, MSE de treino em B = 3000:", round(modelos[0.01].train_score_[-1], 4))
 ```
 
 O erro de teste subindo é compatível com correções que, depois do mínimo, acompanham o que é particular desses 132 jogadores. No boosting, um $B$ grande demais pode sobreajustar, ao contrário do bagging, em que uma árvore a mais só entra numa média.
@@ -343,8 +322,7 @@ de_zero = GradientBoostingRegressor(n_estimators=3000, learning_rate=0.001,
                                     random_state=13)
 de_zero.fit(treino_X, treino_y)
 pd.DataFrame({"menor MSE de teste": [curvas[0.001].min(), curva_de_teste(de_zero).min()]},
-             index=["partindo da média", "partindo de zero"]).style.format(precision=4,
-                                                                           decimal=",")
+             index=["partindo da média", "partindo de zero"]).style.format(precision=4)
 ```
 
 Partindo de zero, o menor erro de teste do $\lambda = 0{,}001$ é 0,3931, contra 0,3027 partindo da média: com um passo de um milésimo por árvore, 3.000 árvores gastam boa parte do caminho só para chegar ao nível dos salários.
@@ -370,14 +348,14 @@ for d, modelo in por_d.items():
     for arvore in modelo.estimators_[:, 0]:
         folhas_por_arvore.append(arvore.get_n_leaves())
     linhas.append({"d": d, "folhas por árvore": ", ".join(map(str, np.unique(folhas_por_arvore))),
-                   "menor teste": curva.min(), "B do menor": numero_br(np.argmin(curva) + 1, 0),
-                   "treino em 3.000": modelo.train_score_[-1]})
+                   "menor teste": curva.min(), "B do menor": np.argmin(curva) + 1,
+                   "treino em 3000": modelo.train_score_[-1]})
 raizes = set()
 for arvore in por_d[1].estimators_[:, 0]:
     raizes.add(X.columns[arvore.tree_.feature[0]])
 print("colunas usadas pelos tocos:", len(raizes), "de", X.shape[1])
 pd.DataFrame(linhas).set_index("d").style.format(
-    precision=4, decimal=",", subset=["menor teste", "treino em 3.000"])
+    precision=4, subset=["menor teste", "treino em 3000"])
 ```
 
 ::: {.funcao}
@@ -386,49 +364,23 @@ pd.DataFrame(linhas).set_index("d").style.format(
 
 Com `max_leaf_nodes=d + 1` e `max_depth=None`, toda árvore tem $d + 1$ folhas: 2, 3 e 5. Os 3.000 tocos, juntos, usam 18 das 19 colunas, mas cada toco usa só uma.
 
-A primeira árvore de $d = 2$ mostra a interação. A figura desenha essa árvore com o `plot_tree`, e a função `em_portugues`, parecida com a da seção 12.1, troca os termos em inglês e escreve os números com a pontuação brasileira. Cada folha mostra o resíduo médio dos jogadores que chegam a ela, que é a previsão da árvore:
-
-```{python}
-#| label: em-portugues
-import re
-
-from sklearn.tree import plot_tree
-
-
-def numero_da_caixa(achado):
-    """Reescreve um número do texto do plot_tree com a pontuação brasileira."""
-    texto = achado.group()
-    valor = float(texto) + 0.0  # + 0.0 troca o −0,0 por 0,0
-    return numero_br(valor, len(texto.split(".")[1]))
-
-
-def em_portugues(caixas):
-    """Traduz o texto das caixas que o plot_tree desenha."""
-    for caixa in caixas:
-        texto = caixa.get_text()
-        texto = texto.replace("samples", "jogadores").replace("value", "resíduo médio")
-        texto = texto.replace("<=", "≤").replace("True", "sim").replace("False", "não")
-        caixa.set_text(re.sub(r"-?\d+\.\d+", numero_da_caixa, texto))
-        fundo = caixa.get_bbox_patch()
-        if fundo is None:
-            caixa.set_zorder(200)  # "sim" e "não" por cima das caixas
-        else:
-            fundo.set(facecolor="white", edgecolor="0.45")
-```
+A primeira árvore de $d = 2$ mostra a interação. A figura desenha essa árvore com o `plot_tree`. Em cada caixa, `samples` é o número de jogadores que chegam ao nó e `value`, o resíduo médio deles; numa folha, `value` é a previsão da árvore:
 
 ```{python}
 #| label: fig-primeira-d2
-#| fig-cap: "A primeira árvore do boosting com $d = 2$, ajustada aos resíduos do log do salário depois da partida da média. Cada caixa mostra a pergunta, o número de jogadores e o resíduo médio deles. Em cada pergunta, o ramo \"sim\" é o da esquerda, em que a condição vale."
-#| fig-alt: "Diagrama de árvore com três folhas. A caixa do topo pergunta se vezes_ao_bastao_carreira é menor ou igual a 1.452,0, com 132 jogadores e resíduo médio 0,0. O ramo sim leva a uma caixa com 54 jogadores que pergunta se impulsionadas_carreira é menor ou igual a 70,5; dela saem duas folhas, com 23 e 31 jogadores. O ramo não leva direto a uma folha com 78 jogadores."
+#| fig-cap: "A primeira árvore do boosting com $d = 2$, ajustada aos resíduos do log do salário depois da partida da média. Cada caixa mostra a pergunta, o número de jogadores (`samples`) e o resíduo médio deles (`value`). Em cada pergunta, o ramo `True` é o da esquerda, em que a condição vale."
+#| fig-alt: "Diagrama de árvore com três folhas. A caixa do topo pergunta se vezes_ao_bastao_carreira <= 1.452,0, com samples = 132 e value = -0,0, isto é, zero. O ramo True leva a uma caixa com samples = 54 que pergunta se impulsionadas_carreira <= 70,5; dela saem duas folhas, com samples = 23 e samples = 31. O ramo False leva direto a uma folha com samples = 78."
+from sklearn.tree import plot_tree
+
 fig, ax = plt.subplots(figsize=(6.4, 3.2))
-caixas = plot_tree(por_d[2].estimators_[0, 0], feature_names=list(X.columns),
-                   impurity=False, rounded=True, precision=2, fontsize=8, ax=ax)
-em_portugues(caixas)
+ax.set_facecolor("white")  # o plot_tree pinta as caixas com a cor do fundo do eixo
+plot_tree(por_d[2].estimators_[0, 0], feature_names=list(X.columns),
+          impurity=False, rounded=True, precision=2, fontsize=8, ax=ax)
 plt.show()
 ```
 
 ::: {.funcao}
-**`plot_tree(arvore, feature_names, impurity, rounded, precision, fontsize, ax)`** — desenha a árvore ajustada e devolve a lista das caixas de texto. `feature_names` dá os nomes das colunas; `impurity=False` omite o erro de cada nó; `precision` é o número de casas decimais; `rounded=True` arredonda os cantos das caixas; `fontsize` é o tamanho da letra.
+**`plot_tree(arvore, feature_names, impurity, rounded, precision, fontsize, ax)`** — desenha a árvore ajustada. `feature_names` dá os nomes das colunas; `impurity=False` omite o erro de cada nó; `precision` é o número de casas decimais; `rounded=True` arredonda os cantos das caixas; `fontsize` é o tamanho da letra. **`ax.set_facecolor(cor)`** — a cor de fundo do eixo; o `plot_tree` usa essa cor no fundo das caixas, e o branco esconde as setas atrás do texto.
 :::
 
 Na primeira árvore de $d = 2$, os jogadores com até 1.452 vezes ao bastão na carreira são divididos de novo por `impulsionadas_carreira`, e os de mais de 1.452 não: o efeito de `impulsionadas_carreira` nessa árvore existe só de um lado do primeiro corte. É uma interação entre as duas colunas, que nenhuma soma de tocos representa.
@@ -461,14 +413,14 @@ teste_001 = curvas[0.01]
 B_cv = np.argmin(curva_cv) + 1
 B_teste = np.argmin(teste_001) + 1
 entre = curva_cv[min(B_cv, B_teste) - 1:max(B_cv, B_teste)]
-print("CV entre os dois B, de", numero_br(entre.min(), 4), "a", numero_br(entre.max(), 4))
+print("CV entre os dois B, de", round(entre.min(), 4), "a", round(entre.max(), 4))
 linhas = []
 for rotulo, B in [("escolhido pela CV", B_cv), ("menor teste", B_teste), ("uma árvore", 1)]:
-    linhas.append({"B": rotulo, "número de árvores": numero_br(B, 0),
+    linhas.append({"B": rotulo, "número de árvores": B,
                    "CV": curva_cv[B - 1], "teste": teste_001[B - 1],
                    "teste − CV": teste_001[B - 1] - curva_cv[B - 1]})
 pd.DataFrame(linhas).set_index("B").style.format(
-    precision=4, decimal=",", subset=["CV", "teste", "teste − CV"])
+    precision=4, subset=["CV", "teste", "teste − CV"])
 ```
 
 ```{python}
@@ -482,10 +434,9 @@ ax.plot(B_cv, curva_cv[B_cv - 1], marker="x", color="C0", markersize=8, label="_
 ax.plot(B_teste, teste_001[B_teste - 1], marker="x", color="C1", markersize=8,
         label="_nolegend_")
 ax.set_xscale("log")
-ax.set_xticks([1, 10, 100, 1000], ["1", "10", "100", "1.000"])
+ax.set_xticks([1, 10, 100, 1000], ["1", "10", "100", "1000"])
 ax.set_xlim(0.8, 4000)
 ax.set_ylim(0, 0.9)
-ax.yaxis.set_major_formatter(uma_casa)
 ax.set_xlabel("número de árvores B")
 ax.set_ylabel("MSE (log do salário)")
 ax.legend(loc="lower center", bbox_to_anchor=(0.5, 1.0), ncol=2)

@@ -14,16 +14,6 @@ import matplotlib.pyplot as plt
 plt.style.use("estilo-figuras.mplstyle")
 ```
 
-A função `numero_br` escreve os números com a pontuação brasileira:
-
-```{python}
-#| label: numero-br
-def numero_br(valor, casas=2):
-    texto = f"{valor:,.{casas}f}"
-    texto = texto.replace(",", "_").replace(".", ",").replace("_", ".")
-    return texto.replace("-", "−")
-```
-
 ## O que as árvores têm a favor
 
 A primeira vantagem já apareceu nas figuras das seções anteriores: uma árvore pequena se desenha numa folha de papel, e quem a lê não precisa saber o que é um coeficiente, uma média ponderada ou um logaritmo da chance. Basta seguir as perguntas de cima para baixo. Explicar uma regressão linear exige mais: dizer que cada coeficiente é o efeito de uma coluna com as outras fixas, e que o efeito é o mesmo para qualquer valor delas. A clareza vale enquanto a árvore é pequena. A árvore sem poda da seção 12.2 também é uma sequência de perguntas, mas tem folhas demais para ser lida de cima para baixo.
@@ -109,9 +99,9 @@ for no in range(estrutura.node_count):
             ramo = "não"
         linhas.append({"nó": no,
                        "coluna": X_c.columns[estrutura.feature[no]],
-                       "limiar": numero_br(estrutura.threshold[no], 1),
+                       "limiar": estrutura.threshold[no],
                        "ramo da raiz": ramo})
-pd.DataFrame(linhas).style.hide(axis="index")
+pd.DataFrame(linhas).style.hide(axis="index").format(precision=1)
 ```
 
 ::: {.funcao}
@@ -157,7 +147,7 @@ perguntas_A = pd.DataFrame({
     "limiar": estrutura_A.threshold[internos_A],
 })
 print("colunas distintas na árvore A:", perguntas_A["coluna"].nunique())
-perguntas_A.style.hide(axis="index").format(precision=1, decimal=",", thousands=".")
+perguntas_A.style.hide(axis="index").format(precision=1)
 ```
 
 E as previsões da árvore A para os três primeiros jogadores da tabela, ao lado do logaritmo do salário deles:
@@ -166,7 +156,7 @@ E as previsões da árvore A para os três primeiros jogadores da tabela, ao lad
 #| label: previsao-a
 previsto_A = arvore_A.predict(X)
 pd.DataFrame({"log do salário": y.to_numpy()[:3],
-              "árvore A": previsto_A[:3]}).style.format(precision=3, decimal=",")
+              "árvore A": previsto_A[:3]}).style.format(precision=3)
 ```
 
 A metade B repete os mesmos passos, com os outros 131 jogadores:
@@ -193,16 +183,16 @@ As previsões das duas árvores para os mesmos três jogadores:
 #| label: previsao-b
 pd.DataFrame({"log do salário": y.to_numpy()[:3],
               "árvore A": previsto_A[:3],
-              "árvore B": previsto_B[:3]}).style.format(precision=3, decimal=",")
+              "árvore B": previsto_B[:3]}).style.format(precision=3)
 ```
 
 E as perguntas das duas árvores lado a lado, na mesma ordem, com a raiz na primeira linha:
 
 ```{python}
 #| label: lado-a-lado
-pergunta_A = [f"{coluna} ≤ {numero_br(limiar, 1)}"
+pergunta_A = [f"{coluna} ≤ {limiar:.1f}"
               for coluna, limiar in zip(perguntas_A["coluna"], perguntas_A["limiar"])]
-pergunta_B = [f"{coluna} ≤ {numero_br(limiar, 1)}"
+pergunta_B = [f"{coluna} ≤ {limiar:.1f}"
               for coluna, limiar in zip(perguntas_B["coluna"], perguntas_B["limiar"])]
 pd.DataFrame({"árvore A": pergunta_A, "árvore B": pergunta_B},
              index=pd.RangeIndex(1, len(pergunta_A) + 1, name="pergunta"))
@@ -210,48 +200,19 @@ pd.DataFrame({"árvore A": pergunta_A, "árvore B": pergunta_B},
 
 A metade A é o conjunto de treino da seção 12.2, e a árvore dela começa por `vezes_ao_bastao_carreira`, com corte em 1.452,0. A da metade B começa por `corridas_carreira`, com corte em 204,5. A árvore A usa 5 colunas, e a B usa 4. Na tabela lado a lado, só `impulsionadas_carreira` aparece nas duas colunas, com limiares diferentes, e nenhuma pergunta da árvore A se repete na B. As colunas `impulsionadas` e `rebatidas`, sem o sufixo, contam só a temporada, e são colunas diferentes de `impulsionadas_carreira` e `rebatidas_carreira`.
 
-Para desenhar as duas árvores, a função `em_portugues` traduz o texto das caixas do `plot_tree`, como nas seções 12.1 e 12.3, e a `numero_da_caixa` reescreve cada número com a pontuação brasileira, com as casas decimais que ele já tinha. As colunas de carreira têm nome longo, e o `_carreira` vai para a linha de baixo, para que as caixas vizinhas não se encostem:
-
-```{python}
-#| label: em-portugues
-import re
-
-
-def numero_da_caixa(achado):
-    """Reescreve um número do texto do plot_tree com a pontuação brasileira."""
-    texto = achado.group()
-    casas = len(texto.split(".")[1])
-    return numero_br(float(texto), casas)
-
-
-def em_portugues(caixas):
-    """Traduz o texto das caixas que o plot_tree desenha."""
-    for caixa in caixas:
-        texto = caixa.get_text()
-        texto = texto.replace("samples", "n").replace("value", "média")
-        texto = texto.replace("<=", "≤").replace("True", "sim").replace("False", "não")
-        texto = texto.replace("_carreira", "_\ncarreira")
-        texto = re.sub(r"\d+\.\d+", numero_da_caixa, texto)
-        caixa.set_text(texto)
-        fundo = caixa.get_bbox_patch()
-        if fundo is None:  # os rótulos "sim" e "não" não têm caixa
-            caixa.set_zorder(200)
-        else:
-            fundo.set(facecolor="white", edgecolor="0.45")
-```
+As duas árvores desenhadas, a da metade A primeiro:
 
 ```{python}
 #| label: fig-metade-a
-#| fig-cap: "A árvore de 6 folhas ajustada na metade A, com 132 jogadores, para o logaritmo do salário. Cada caixa mostra a pergunta, o número de jogadores (n) e a média do logaritmo do salário deles. O ramo \"sim\", à esquerda, é o da condição verdadeira."
-#| fig-alt: "Árvore da metade A, com 132 jogadores. A raiz pergunta se vezes_ao_bastao_carreira é menor ou igual a 1.452,0. Do lado sim, com 54 jogadores, pergunta se impulsionadas_carreira é menor ou igual a 70,5 e chega a duas folhas, de 23 jogadores com média 4,64 e de 31 com média 5,46. Do lado não, com 78 jogadores, pergunta se rebatidas é menor ou igual a 122,5; abaixo, pergunta se eliminacoes é menor ou igual a 215,5, com folhas de 28 e 14 jogadores e médias 5,99 e 6,47, e se bases_por_bolas é menor ou igual a 66,0, com folhas de 26 e 10 jogadores e médias 6,67 e 7,24."
+#| fig-cap: "A árvore de 6 folhas ajustada na metade A, com 132 jogadores, para o logaritmo do salário. Cada caixa mostra a pergunta, o número de jogadores (`samples`) e a média do logaritmo do salário deles (`value`). O ramo `True`, à esquerda, é o da condição verdadeira."
+#| fig-alt: "Árvore da metade A, com 132 jogadores. A raiz pergunta se vezes_ao_bastao_carreira é menor ou igual a 1.452,0. Do lado True, com 54 jogadores, pergunta se impulsionadas_carreira é menor ou igual a 70,5 e chega a duas folhas, de 23 jogadores com média 4,64 e de 31 com média 5,46. Do lado False, com 78 jogadores, pergunta se rebatidas é menor ou igual a 122,5; abaixo, pergunta se eliminacoes é menor ou igual a 215,5, com folhas de 28 e 14 jogadores e médias 5,99 e 6,47, e se bases_por_bolas é menor ou igual a 66,0, com folhas de 26 e 10 jogadores e médias 6,67 e 7,24."
 import matplotlib.pyplot as plt
 from sklearn.tree import plot_tree
 
-fig, ax = plt.subplots(figsize=(9.0, 5.2))
-caixas = plot_tree(arvore_A, feature_names=list(X.columns),
-                   impurity=False, rounded=True, precision=2,
-                   fontsize=9, ax=ax)
-em_portugues(caixas)
+fig, ax = plt.subplots(figsize=(10.5, 5.2))
+ax.set_facecolor("white")
+plot_tree(arvore_A, feature_names=list(X.columns), impurity=False,
+          rounded=True, precision=2, fontsize=9, ax=ax)
 ax.set_title("metade A")
 plt.show()
 ```
@@ -261,12 +222,11 @@ A árvore da metade B, desenhada da mesma forma:
 ```{python}
 #| label: fig-metade-b
 #| fig-cap: "A árvore de 6 folhas ajustada na metade B, com os outros 131 jogadores, as mesmas 19 colunas e a mesma semente. O texto das caixas segue a figura da metade A."
-#| fig-alt: "Árvore da metade B, com 131 jogadores. A raiz pergunta se corridas_carreira é menor ou igual a 204,5. Do lado sim, com 52 jogadores, pergunta se impulsionadas é menor ou igual a 5,5, com uma folha de 2 jogadores e média 7,24 e, do outro lado, uma pergunta sobre rebatidas_carreira menor ou igual a 207,5, com folhas de 31 e 19 jogadores e médias 4,7 e 5,54. Do lado não, com 79 jogadores, pergunta se impulsionadas é menor ou igual a 59,0, com uma folha de 39 jogadores e média 6,2 e uma pergunta sobre impulsionadas_carreira menor ou igual a 358,5, com folhas de 12 e 28 jogadores e médias 6,34 e 6,98. Só impulsionadas_carreira aparece também na árvore da metade A."
-fig, ax = plt.subplots(figsize=(9.0, 5.2))
-caixas = plot_tree(arvore_B, feature_names=list(X.columns),
-                   impurity=False, rounded=True, precision=2,
-                   fontsize=9, ax=ax)
-em_portugues(caixas)
+#| fig-alt: "Árvore da metade B, com 131 jogadores. A raiz pergunta se corridas_carreira é menor ou igual a 204,5. Do lado True, com 52 jogadores, pergunta se impulsionadas é menor ou igual a 5,5, com uma folha de 2 jogadores e média 7,24 e, do outro lado, uma pergunta sobre rebatidas_carreira menor ou igual a 207,5, com folhas de 31 e 19 jogadores e médias 4,7 e 5,54. Do lado False, com 79 jogadores, pergunta se impulsionadas é menor ou igual a 59,0, com uma folha de 39 jogadores e média 6,2 e uma pergunta sobre impulsionadas_carreira menor ou igual a 358,5, com folhas de 12 e 28 jogadores e médias 6,34 e 6,98. Só impulsionadas_carreira aparece também na árvore da metade A."
+fig, ax = plt.subplots(figsize=(10.5, 5.2))
+ax.set_facecolor("white")
+plot_tree(arvore_B, feature_names=list(X.columns), impurity=False,
+          rounded=True, precision=2, fontsize=9, ax=ax)
 ax.set_title("metade B")
 plt.show()
 ```
@@ -283,9 +243,9 @@ toco = DecisionTreeRegressor(max_depth=1, random_state=12)
 toco.fit(X_A[coluna], y_A)
 previsto = toco.predict(X_A[coluna])
 rss_toco = ((y_A - previsto) ** 2).sum()
-print("RSS da média, metade A:", numero_br(rss_media_A))
-print("RSS depois do corte em vezes_ao_bastao_carreira:", numero_br(rss_toco))
-print("fração do RSS removida:", numero_br(1 - rss_toco / rss_media_A, 3))
+print("RSS da média, metade A:", round(rss_media_A, 2))
+print("RSS depois do corte em vezes_ao_bastao_carreira:", round(rss_toco, 2))
+print("fração do RSS removida:", round(1 - rss_toco / rss_media_A, 3))
 ```
 
 A função `fracao_removida` repete essa conta para cada coluna de uma metade. Na tabela, a coluna A traz as frações da metade A, e a coluna B, as da metade B, para as cinco colunas de maior fração em A (`nlargest(5)`, os cinco maiores valores da série):
@@ -310,7 +270,7 @@ posicao = cortes.rank(ascending=False).astype(int)
 cortes["posição em A"] = posicao["A"]
 cortes["posição em B"] = posicao["B"]
 cinco_A = cortes["A"].nlargest(5).index
-cortes.loc[cinco_A].style.format(precision=3, decimal=",", subset=["A", "B"])
+cortes.loc[cinco_A].style.format(precision=3, subset=["A", "B"])
 ```
 
 ::: {.funcao}
@@ -334,8 +294,8 @@ Nas duas metades, a raiz da árvore é a coluna do melhor corte isolado, e as ci
 correlacoes = hitters[sorted(cinco_A)].corr()
 pares = correlacoes.to_numpy()[np.triu_indices(5, 1)]
 print("pares de colunas:", len(pares))
-print("menor correlação:", numero_br(pares.min(), 3))
-print("maior correlação:", numero_br(pares.max(), 3))
+print("menor correlação:", round(pares.min(), 3))
+print("maior correlação:", round(pares.max(), 3))
 ```
 
 ::: {.funcao}
@@ -350,7 +310,7 @@ raiz_A = X[perguntas_A.loc[0, "coluna"]] <= perguntas_A.loc[0, "limiar"]
 raiz_B = X[perguntas_B.loc[0, "coluna"]] <= perguntas_B.loc[0, "limiar"]
 iguais = (raiz_A == raiz_B).sum()
 print("mesmo lado:", iguais, "de", len(X))
-print("fração:", numero_br(iguais / len(X), 3))
+print("fração:", round(iguais / len(X), 3))
 ```
 
 As duas perguntas mandam 253 dos 263 jogadores para o mesmo lado: a raiz trocou de coluna, mas separou quase os mesmos jogadores. A diferença entre as árvores está abaixo da raiz. O corte que vence em cada nó depende só dos jogadores que chegam a ele, e as metades A e B não têm nenhum jogador em comum. E a divisão gulosa da seção 12.1 decide cada nó sem voltar atrás.
@@ -380,7 +340,7 @@ print("jogadores (colunas):", previsoes["árvore"].shape[1])
 pd.DataFrame({
     "variância média da previsão": [previsoes["árvore"].var(ddof=0).mean(),
                                     previsoes["linear"].var(ddof=0).mean()],
-}, index=["árvore", "linear"]).style.format(precision=3, decimal=",")
+}, index=["árvore", "linear"]).style.format(precision=3)
 ```
 
 ::: {.funcao}
@@ -395,12 +355,12 @@ salario_mediano = hitters["salario"].median()
 distancia = (hitters["salario"] - salario_mediano).abs()
 mediano = distancia.idxmin()
 log_real = y.loc[mediano]
-print("salário mediano, em mil dólares:", numero_br(salario_mediano, 1))
+print("salário mediano, em mil dólares:", round(salario_mediano, 1))
 print("salário do jogador, em mil dólares:",
-      numero_br(hitters.loc[mediano, "salario"], 1))
+      round(hitters.loc[mediano, "salario"], 1))
 print("jogadores com esse salário:",
       (hitters["salario"] == hitters.loc[mediano, "salario"]).sum())
-print("log do salário:", numero_br(log_real))
+print("log do salário:", round(log_real, 2))
 
 linhas = []
 for modelo in ["árvore", "linear"]:
@@ -411,8 +371,8 @@ for modelo in ["árvore", "linear"]:
                    "variância": do_jogador.var(ddof=0),
                    "abaixo do real, de 200": (do_jogador < log_real).sum()})
 (pd.DataFrame(linhas).set_index("modelo").style
- .format(precision=2, decimal=",", subset=["menor", "maior"])
- .format(precision=3, decimal=",", subset=["variância"]))
+ .format(precision=2, subset=["menor", "maior"])
+ .format(precision=3, subset=["variância"]))
 ```
 
 ::: {.funcao}
@@ -423,10 +383,6 @@ for modelo in ["árvore", "linear"]:
 #| label: fig-previsoes-jogador
 #| fig-cap: "As 200 previsões do logaritmo do salário para um jogador de salário igual à mediana, uma por amostra de 132 jogadores. Em cima, a regressão linear; embaixo, a árvore de 6 folhas. A linha tracejada é o logaritmo do salário real dele."
 #| fig-alt: "Dois histogramas empilhados, na mesma escala horizontal, das 200 previsões do logaritmo do salário para um jogador. As previsões da regressão linear, em azul, formam um monte estreito entre 4,98 e 5,80, todo à esquerda da linha tracejada cinza que marca o valor real, 6,05. As da árvore, em laranja, se espalham de 4,61 a 7,06 em grupos separados, com o pico perto do valor real."
-def virgula(valor, posicao):
-    return f"{valor:.1f}".replace(".", ",")
-
-
 linear_do_jogador = previsoes["linear"][mediano]
 arvore_do_jogador = previsoes["árvore"][mediano]
 todas = np.concatenate([linear_do_jogador, arvore_do_jogador])
@@ -442,7 +398,6 @@ for ax in eixos:
     ax.axvline(log_real, color="0.45", linestyle="--", linewidth=1.2)
     ax.set_ylabel("amostras")
 eixos[1].set_xlabel("logaritmo do salário previsto")
-eixos[1].xaxis.set_major_formatter(virgula)
 plt.show()
 ```
 

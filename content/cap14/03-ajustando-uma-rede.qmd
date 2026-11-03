@@ -14,16 +14,6 @@ import matplotlib.pyplot as plt
 plt.style.use("estilo-figuras.mplstyle")
 ```
 
-A função `numero_br` escreve os números com a pontuação brasileira:
-
-```{python}
-#| label: numero-br
-def numero_br(valor, casas=2):
-    texto = f"{valor:,.{casas}f}"
-    texto = texto.replace(",", "_").replace(".", ",").replace("_", ".")
-    return texto.replace("-", "−")
-```
-
 ## Um problema com vários mínimos
 
 O código abaixo lê os jogadores com salário e ajusta a mesma rede, cinco unidades ReLU sobre os anos padronizados, com o mesmo método de busca dos pesos, `solver="lbfgs"`, dez vezes. Só muda a semente (`random_state` de 0 a 9), e com ela os pesos sorteados no começo. Para cada ajuste, imprime o MSE de treino; no fim, mostra o maior número de iterações dos dez ajustes contra o limite de 5.000, para conferir que o `lbfgs` parou porque o MSE deixou de cair, e não porque as iterações acabaram:
@@ -54,21 +44,15 @@ for semente in range(10):
     redes[semente] = rede
     iteracoes[semente] = rede[-1].n_iter_
 mse = pd.Series(mse).round(4)
-
-
-def quatro_casas(valor):
-    return numero_br(valor, 4)
-
-
-tabela_sementes = pd.DataFrame({"MSE de treino": mse.map(quatro_casas)})
+tabela_sementes = pd.DataFrame({"MSE de treino": mse})
 tabela_sementes.index.name = "semente"
 print(tabela_sementes.to_string())
 print("maior número de iterações:", max(iteracoes.values()),
-      "(limite 5.000)")
+      "(limite 5000)")
 print("valores distintos de MSE:", mse.nunique())
-print("de", numero_br(mse.min(), 4), "a", numero_br(mse.max(), 4))
+print("de", mse.min(), "a", mse.max())
 comum = mse.value_counts()
-print("o mais repetido:", numero_br(comum.index[0], 4),
+print("o mais repetido:", comum.index[0],
       f"({comum.iloc[0]} sementes)")
 ```
 
@@ -99,10 +83,10 @@ for papel, semente in escolhidas.items():
     linhas.append({
         "semente": semente,
         "escolhida por": papel,
-        "f̂ em 1 ano": numero_br(f[0]),
-        "f̂ em 9 anos": numero_br(f[1]),
-        "f̂ em 24 anos": numero_br(f[2]),
-        "variação de 9 a 24": numero_br(np.ptp(curvas[semente][nove])),
+        "f̂ em 1 ano": round(f[0], 2),
+        "f̂ em 9 anos": round(f[1], 2),
+        "f̂ em 24 anos": round(f[2], 2),
+        "variação de 9 a 24": round(np.ptp(curvas[semente][nove]), 2),
     })
 print(pd.DataFrame(linhas).to_string(index=False))
 ```
@@ -118,11 +102,6 @@ A semente 8, a de menor MSE, começa mais alta: prevê 4,71 para um jogador de 1
 #| fig-cap: "Log do salário contra os anos de carreira e a curva ajustada pela mesma rede de cinco unidades ReLU com três sementes: a de menor MSE de treino (azul), a primeira com o MSE mais repetido (laranja) e a de maior (verde, tracejada). Em cima, todos os anos, com os jogadores em cinza, deslocados um pouco na horizontal, ao acaso, para os pontos de um mesmo ano não se sobreporem; embaixo, só as curvas, de 9 a 24 anos, com o eixo vertical ampliado."
 #| fig-alt: "Dois gráficos empilhados com os anos de carreira no eixo horizontal e o log do salário no vertical. No de cima, de 1 a 24 anos, os jogadores aparecem como pontos cinza e as três curvas sobem rápido nos primeiros anos e depois se achatam; a azul começa mais alta que as outras duas. No de baixo, só as curvas, de 9 a 24 anos, com o eixo vertical de 6,2 a 6,6: a verde tracejada fica horizontal em 6,44, e a azul e a laranja descem devagar, a azul de 6,47 para 6,32 e a laranja de 6,46 para 6,34."
 import matplotlib.pyplot as plt
-
-
-def decimal_br(valor, posicao):
-    return f"{valor:g}".replace(".", ",").replace("-", "−")
-
 
 rng = np.random.default_rng(14)
 tremor = rng.uniform(-0.25, 0.25, size=len(X))
@@ -142,7 +121,6 @@ ax_z.set_ylim(6.2, 6.6)
 for eixo in (ax, ax_z):
     eixo.set_xlabel("anos de carreira")
     eixo.set_ylabel("log do salário")
-    eixo.yaxis.set_major_formatter(decimal_br)
 ax.legend(loc="lower center", bbox_to_anchor=(0.5, 1.0), ncol=3,
           handlelength=1.5, columnspacing=1)
 plt.tight_layout()
@@ -202,16 +180,16 @@ jogador = X.iloc[[1]]
 print("anos de carreira:", jogador["anos"].iloc[0])
 f_i = ajustada.predict(jogador)[0]
 residuo = y.iloc[1] - f_i
-print("y:", numero_br(y.iloc[1], 3), "· f̂:", numero_br(f_i, 3))
-print("resíduo:", numero_br(residuo))
+print("y:", round(y.iloc[1], 3), "· f̂:", round(f_i, 3))
+print("resíduo:", round(residuo, 2))
 W, v = ajustada[-1].coefs_, ajustada[-1].intercepts_
 x_i1 = ajustada[0].transform(jogador)
 z = (x_i1 @ W[0] + v[0]).ravel()
 g_z = np.maximum(0, z)
 derivadas = pd.DataFrame(
-    {"g(z)": g_z, "derivada em β_k": -residuo * g_z + 0.0},
+    {"g(z)": g_z, "derivada em β_k": -residuo * g_z},
     index=[f"unidade {k}" for k in range(1, 6)])
-print(derivadas.map(numero_br).to_string())
+print(derivadas.round(2).to_string())
 ```
 
 ::: {.funcao}
@@ -233,15 +211,15 @@ A mesma conta, no mesmo jogador, para o peso $w_{k1}$ de cada unidade, o que mul
 
 ```{python}
 #| label: um-peso
-print("anos padronizados (x_i1):", numero_br(x_i1[0, 0], 3))
+print("anos padronizados (x_i1):", round(x_i1[0, 0], 3))
 beta = W[1].ravel()
 g_linha = (z > 0).astype(float)
 pelos_pesos = pd.DataFrame(
     {"β_k": beta,
      "g'(z)": g_linha,
-     "derivada em w_k1": -residuo * beta * g_linha * x_i1[0, 0] + 0.0},
+     "derivada em w_k1": -residuo * beta * g_linha * x_i1[0, 0]},
     index=derivadas.index)
-print(pelos_pesos.map(numero_br).to_string())
+print(pelos_pesos.round(2).to_string())
 ```
 
 ::: {.funcao}
@@ -274,13 +252,12 @@ treino_X = treino.drop(columns="digito") / 255
 treino_y = treino["digito"]
 teste_X = teste.drop(columns="digito") / 255
 teste_y = teste["digito"]
-print("treino:", numero_br(len(treino), 0),
-      "· teste:", numero_br(len(teste), 0))
+print("treino:", len(treino), "· teste:", len(teste))
 ajuste_X, valid_X, ajuste_y, valid_y = train_test_split(
     treino_X, treino_y, test_size=0.2, random_state=14,
     stratify=treino_y)
-print("ajuste:", numero_br(len(ajuste_X), 0), "imagens")
-print("validação:", numero_br(len(valid_X), 0), "imagens")
+print("ajuste:", len(ajuste_X), "imagens")
+print("validação:", len(valid_X), "imagens")
 lote = min(200, len(ajuste_X))
 print("lote:", lote, "imagens")
 print("passos por época:", len(ajuste_X) // lote)
@@ -303,17 +280,17 @@ primeira = MLPClassifier(hidden_layer_sizes=(256, 128),
                          random_state=np.random.RandomState(14))
 primeira.partial_fit(ajuste_X, ajuste_y, classes=np.arange(10))
 print("épocas feitas:", primeira.n_iter_)
-print("imagens processadas (t_):", numero_br(primeira.t_, 0))
+print("imagens processadas (t_):", primeira.t_)
 p_ajuste = primeira.predict_proba(ajuste_X)
 p_valid = primeira.predict_proba(valid_X)
 print("entropia cruzada no ajuste:",
-      numero_br(log_loss(ajuste_y, p_ajuste), 4))
+      round(log_loss(ajuste_y, p_ajuste), 4))
 print("entropia cruzada na validação:",
-      numero_br(log_loss(valid_y, p_valid), 4))
+      round(log_loss(valid_y, p_valid), 4))
 erros_ajuste = (primeira.predict(ajuste_X) != ajuste_y).sum()
 erros_valid = (primeira.predict(valid_X) != valid_y).sum()
-print("erros de ajuste:", erros_ajuste, "de", numero_br(len(ajuste_y), 0))
-print("erros de validação:", erros_valid, "de", numero_br(len(valid_y), 0))
+print("erros de ajuste:", erros_ajuste, "de", len(ajuste_y))
+print("erros de validação:", erros_valid, "de", len(valid_y))
 ```
 
 ::: {.funcao}
@@ -343,7 +320,7 @@ def treina(alpha, semente=14, epocas=30):
 rede, probs = treina(alpha=1e-4)
 print("épocas:", len(probs))
 print("passos:", len(probs) * len(ajuste_X) // lote)
-print("imagens processadas (t_):", numero_br(rede.t_, 0))
+print("imagens processadas (t_):", rede.t_)
 ```
 
 Foram 30 épocas, $30 \times 24 = 720$ passos de gradiente, e cada uma das 4.800 imagens de ajuste passou 30 vezes pela rede: $30 \times 4.800 = 144.000$ imagens processadas. Das probabilidades de cada época saem a entropia cruzada média e o número de erros em cada parte das imagens, numa tabela com uma linha por época:
@@ -367,12 +344,8 @@ def mede(probs):
     return tabela
 
 
-formatos = {}
-for nome in partes:
-    formatos[f"perda de {nome}"] = quatro_casas
-
 curva = mede(probs)
-print(curva.head(3).to_string(formatters=formatos))
+print(curva.head(3).round(4).to_string())
 ```
 
 ::: {.funcao}
@@ -385,10 +358,6 @@ Depois de 30 épocas, a entropia cruzada nas imagens de validação continua cai
 #| label: fig-epocas
 #| fig-cap: "Entropia cruzada média (em cima) e taxa de erro (embaixo) da rede de duas camadas escondidas depois de cada época, nas 4.800 imagens de ajuste (azul) e nas 1.200 de validação (laranja)."
 #| fig-alt: "Dois gráficos empilhados com as épocas, de 1 a 30, no eixo horizontal. No de cima, a entropia cruzada: a curva azul, de ajuste, desce sem parar até quase zero; a laranja, de validação, desce até cerca de 0,21 na época 10 e depois oscila e sobe devagar, terminando perto de 0,24. No de baixo, a taxa de erro: a azul desce até zero; a laranja desce e fica pouco acima de 0,05 nas últimas épocas."
-def duas_casas(valor, posicao):
-    return numero_br(valor, 2)
-
-
 fig, (ax_p, ax_e) = plt.subplots(2, 1, figsize=(3.8, 4.6), sharex=True)
 for nome, cor in [("ajuste", "C0"), ("validação", "C1")]:
     ax_p.plot(curva.index, curva[f"perda de {nome}"], color=cor,
@@ -401,8 +370,6 @@ ax_e.set_xlabel("época")
 ax_e.set_xlim(0, 31)
 ax_p.set_ylim(bottom=0)
 ax_e.set_ylim(bottom=0)
-for ax in (ax_p, ax_e):
-    ax.yaxis.set_major_formatter(duas_casas)
 ax_p.legend(loc="lower center", bbox_to_anchor=(0.5, 1.0), ncol=2)
 plt.tight_layout()
 plt.show()
@@ -418,18 +385,17 @@ Nas imagens de ajuste, as duas curvas descem até perto de zero. Nas de validaç
 #| label: sobe-depois
 colunas = ["perda de ajuste", "perda de validação",
            "erros de ajuste", "erros de validação"]
-print(curva[colunas].to_string(formatters=formatos))
+print(curva[colunas].round(4).to_string())
 quedas = (curva["perda de ajuste"].diff() < 0).sum()
 print("épocas em que a perda de ajuste caiu:", quedas, "de",
       len(curva) - 1)
 pv = curva["perda de validação"]
 melhor = pv.idxmin()
-print("menor perda de validação:", numero_br(pv.min(), 4))
+print("menor perda de validação:", round(pv.min(), 4))
 print("  na época", melhor)
-print("perda de validação na época 30:", numero_br(pv[30], 4))
+print("perda de validação na época 30:", round(pv[30], 4))
 ev = curva["erros de validação"]
-print("menos erros de validação:", ev.min(), "de",
-      numero_br(len(valid_y), 0))
+print("menos erros de validação:", ev.min(), "de", len(valid_y))
 epocas_minimas = ev.index[ev == ev.min()]
 print("  nas épocas", " e ".join(str(e) for e in epocas_minimas))
 print("erros de validação na 30:", ev[30])
@@ -456,17 +422,13 @@ def partes_da_perda(p_val):
     }
 
 
-def tres_casas(valor):
-    return numero_br(valor, 3)
-
-
 linhas = {}
 for e in (melhor, 30):
     linhas[f"época {e}"] = partes_da_perda(probs[e - 1]["validação"])
 print(pd.DataFrame(linhas).T.to_string(formatters={
     "imagens erradas": "{:.0f}".format,
-    "parte das erradas": tres_casas,
-    "parte das acertadas": tres_casas}))
+    "parte das erradas": "{:.3f}".format,
+    "parte das acertadas": "{:.3f}".format}))
 ```
 
 ::: {.funcao}
@@ -481,7 +443,7 @@ Isso sugere parar o ajuste antes do fim: acompanhar a perda de validação a cad
 #| label: parada
 tres_epocas = curva.loc[[melhor, ev.idxmin(), 30],
                         ["perda de teste", "erros de teste"]]
-print(tres_epocas.to_string(formatters=formatos))
+print(tres_epocas.round(4).to_string())
 ```
 
 Com a semente 14, parar na época 10 dá, no teste, entropia cruzada 0,2748, contra 0,2929 na época 30: pela perda, a parada ganha. Mas a rede da época 10 erra 164 imagens de teste, contra 140 da época 30. Parar pelos erros de validação, na época 23, também não resolve aqui: 144 erros. O critério de parada tem de ser o que interessa: se o que se usa são as probabilidades, a perda de validação; se é o número de acertos, a taxa de erro. O `MLPClassifier` tem a parada antecipada como opção pronta, que aparece na seção 14.4.
@@ -506,8 +468,8 @@ com $n$ imagens de ajuste e lotes de $b$ imagens. A rede ajustada até aqui usou
 ```{python}
 #| label: lambdas
 n_ajuste = len(ajuste_X)
-print("alpha 0,0001: λ =", numero_br(1e-4 * n_ajuste / (2 * lote), 4))
-print("alpha 1: λ =", numero_br(1 * n_ajuste / (2 * lote), 4))
+print("alpha 0.0001: λ =", round(1e-4 * n_ajuste / (2 * lote), 4))
+print("alpha 1: λ =", round(1 * n_ajuste / (2 * lote), 4))
 ```
 
 Com $n = 4.800$ e $b = 200$, `alpha=1` corresponde a $\lambda = 12$, e o padrão, a $\lambda = 0{,}0012$. A conta vem de como cada passo é dado: em cada lote de $b$ imagens, o passo reduz a entropia cruzada média do lote mais $\texttt{alpha}/(2b)$ vezes a soma dos quadrados dos pesos. Em média, ao longo dos lotes, isso é a entropia cruzada média das $n$ imagens de ajuste mais o mesmo termo, e multiplicar tudo por $n$ dá a fórmula acima, com $\lambda = \texttt{alpha}\cdot n / (2b)$. No `scikit-learn`, a soma dos quadrados inclui os pesos de todas as camadas, inclusive os da saída, mas não os vieses.
@@ -530,27 +492,27 @@ def soma_dos_quadrados(rede):
 def resumo(rede, probs, curva):
     pv = curva["perda de validação"]
     erradas = partes_da_perda(probs[-1]["validação"])["parte das erradas"]
-    return {
-        "menor perda de validação": quatro_casas(pv.min()),
-        "perda de validação na época 30": quatro_casas(pv[30]),
-        "subida desde o menor valor": quatro_casas(pv[30] - pv.min()),
-        "parte das erradas na perda": quatro_casas(erradas),
+    return pd.Series({
+        "menor perda de validação": round(pv.min(), 4),
+        "perda de validação na época 30": round(pv[30], 4),
+        "subida desde o menor valor": round(pv[30] - pv.min(), 4),
+        "parte das erradas na perda": round(erradas, 4),
         "erros de ajuste": curva.loc[30, "erros de ajuste"],
         "erros de validação": curva.loc[30, "erros de validação"],
         "erros de teste": curva.loc[30, "erros de teste"],
-        "soma dos quadrados dos pesos": numero_br(soma_dos_quadrados(rede), 0),
-    }
+        "soma dos quadrados dos pesos": round(soma_dos_quadrados(rede)),
+    }, dtype=object)
 
 
 comparacao = pd.DataFrame({
-    "alpha 0,0001": resumo(rede, probs, curva),
+    "alpha 0.0001": resumo(rede, probs, curva),
     "alpha 1": resumo(rede_pen, probs_pen, curva_pen),
 })
 print(comparacao.to_string())
 ```
 
 ::: {.funcao}
-**`MLPClassifier(alpha)`** — a força da penalidade sobre os pesos (sem os vieses); o padrão é `alpha=0.0001`. **`W ** 2`** — o quadrado de cada peso da camada; **`.sum()`** os soma. **`pd.DataFrame({coluna: dicionario})`** — cada dicionário de `resumo` vira uma coluna, e as chaves dele, os rótulos das linhas.
+**`MLPClassifier(alpha)`** — a força da penalidade sobre os pesos (sem os vieses); o padrão é `alpha=0.0001`. **`W ** 2`** — o quadrado de cada peso da camada; **`.sum()`** os soma. **`pd.Series(dicionario, dtype=object)`** — uma série com as chaves do dicionário como rótulos; `dtype=object` guarda cada valor como ele é, e as contagens continuam inteiras ao lado das perdas. **`pd.DataFrame({coluna: serie})`** — cada série de `resumo` vira uma coluna.
 :::
 
 A soma dos quadrados dos pesos caiu de 750 para 94, e a rede penalizada ainda erra, na época 30, 41 das 4.800 imagens de ajuste. A entropia cruzada de validação terminou em 0,1990, só 0,0018 acima do menor valor dela, contra uma subida de 0,0315 sem a penalidade. A parte das imagens de validação erradas na perda média ficou em 0,1248, contra 0,2213: com os pesos contidos, a rede não chega a ficar tão segura nas imagens que erra.
@@ -567,20 +529,18 @@ for semente in range(5):
     fim_forte = mede(probs_forte).loc[30]
     linhas.append({
         "semente": semente,
-        "perda, alpha 0,0001": fim_padrao["perda de validação"],
+        "perda, alpha 0.0001": fim_padrao["perda de validação"],
         "perda, alpha 1": fim_forte["perda de validação"],
-        "erros, alpha 0,0001": int(fim_padrao["erros de teste"]),
+        "erros, alpha 0.0001": int(fim_padrao["erros de teste"]),
         "erros, alpha 1": int(fim_forte["erros de teste"]),
     })
 fim_das_sementes = pd.DataFrame(linhas).set_index("semente")
 print("época 30: perda de validação e erros de teste")
-print(fim_das_sementes.to_string(formatters={
-    "perda, alpha 0,0001": quatro_casas,
-    "perda, alpha 1": quatro_casas}))
+print(fim_das_sementes.round(4).to_string())
 perda_menor = (fim_das_sementes["perda, alpha 1"]
-               < fim_das_sementes["perda, alpha 0,0001"]).sum()
+               < fim_das_sementes["perda, alpha 0.0001"]).sum()
 erros_a_mais = (fim_das_sementes["erros, alpha 1"]
-                > fim_das_sementes["erros, alpha 0,0001"]).sum()
+                > fim_das_sementes["erros, alpha 0.0001"]).sum()
 print("alpha 1 com perda de validação menor:", perda_menor, "de 5")
 print("alpha 1 com mais erros de teste:", erros_a_mais, "de 5")
 ```
@@ -599,14 +559,13 @@ As curvas de validação das duas penalidades com a semente 14:
 #| fig-alt: "Gráfico de linhas com as épocas, de 1 a 30, no eixo horizontal e a entropia cruzada de validação no vertical. As duas curvas começam altas e descem. A laranja, com a penalidade padrão, chega a cerca de 0,21 na época 10 e depois sobe devagar, oscilando, até cerca de 0,24 na época 30. A verde tracejada, com alpha igual a 1, oscila e termina perto de 0,20, abaixo da laranja."
 fig, ax = plt.subplots(figsize=(3.8, 3.0))
 ax.plot(curva.index, curva["perda de validação"], color="C1",
-        label="alpha 0,0001")
+        label="alpha 0.0001")
 ax.plot(curva_pen.index, curva_pen["perda de validação"], color="C2",
         linestyle="--", label="alpha 1")
 ax.set_xlim(0, 31)
 ax.set_xlabel("época")
 ax.set_ylabel("entropia cruzada")
 ax.set_ylim(bottom=0)
-ax.yaxis.set_major_formatter(duas_casas)
 ax.legend(loc="lower center", bbox_to_anchor=(0.5, 1.0), ncol=2)
 plt.tight_layout()
 plt.show()

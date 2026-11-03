@@ -37,17 +37,7 @@ Olhar também é uma decisão estimada, só que feita a olho. Examinar a distrib
 
 ## Linhas repetidas atravessam a divisão
 
-O arquivo tem linhas que repetem outra linha inteira. Se ele for dividido assim, uma cópia pode cair no treino e a outra no teste. Os números impressos adiante usam a função `numero_br` da seção 17.1, que escreve um número com a pontuação brasileira:
-
-```{python}
-#| label: numero-br
-numero_br = lambda valor, casas=2: (
-    f"{valor:,.{casas}f}".replace(",", "_").replace(".", ",").replace("_", ".")
-    .replace("-", "−")
-)
-```
-
-A divisão abaixo separa 20% dos anúncios para o teste, **sem** tirar as repetições antes:
+O arquivo tem linhas que repetem outra linha inteira. Se ele for dividido assim, uma cópia pode cair no treino e a outra no teste. A divisão abaixo separa 20% dos anúncios para o teste, **sem** tirar as repetições antes:
 
 ```{python}
 #| label: divisao-com-repeticao
@@ -57,8 +47,8 @@ treino_r, teste_r = train_test_split(
     stratify=com_repeticao["cidade"],
 )
 print("linhas repetidas:", com_repeticao.duplicated().sum())
-print("treino:", numero_br(len(treino_r), 0))
-print("teste:", numero_br(len(teste_r), 0))
+print("treino:", len(treino_r))
+print("teste:", len(teste_r))
 ```
 
 ::: {.funcao}
@@ -72,7 +62,7 @@ São 358 linhas repetidas, e a divisão põe 8.553 anúncios no treino e 2.139 n
 cruzamento = teste_r.merge(treino_r.drop_duplicates(), how="left", indicator=True)
 assert len(cruzamento) == len(teste_r)
 tem_copia = (cruzamento["_merge"] == "both").to_numpy()
-print("com cópia no treino:", tem_copia.sum(), "de", numero_br(len(teste_r), 0))
+print("com cópia no treino:", tem_copia.sum(), "de", len(teste_r))
 ```
 
 ::: {.funcao}
@@ -94,8 +84,8 @@ um_vizinho = KNeighborsRegressor(n_neighbors=1)
 um_vizinho.fit(treino_r[numericas], treino_r["aluguel"])
 erro = (um_vizinho.predict(teste_r[numericas]) - teste_r["aluguel"]).abs()
 
-print("erro mediano, cópias: R$", numero_br(erro[tem_copia].median(), 0))
-print("erro mediano, demais: R$", numero_br(erro[~tem_copia].median(), 0))
+print("erro mediano, cópias: R$", round(erro[tem_copia].median()))
+print("erro mediano, demais: R$", round(erro[~tem_copia].median()))
 print("erro zero em todas as cópias:", (erro[tem_copia] == 0).all())
 ```
 
@@ -114,8 +104,7 @@ Nas cópias, o erro mediano é zero: o vizinho mais próximo está à distância
 #| fig-cap: "Erro absoluto do *k*-NN com um vizinho nos anúncios de teste, em barras de R$ 250; a altura de cada barra é a fração do grupo. Erros acima de R$ 6.000 estão somados na última barra, e os dois painéis têm a mesma escala vertical. Em cima, os 91 anúncios com cópia no treino; embaixo, os 2.048 demais."
 #| fig-alt: "Dois histogramas empilhados, com o mesmo eixo horizontal de erro absoluto, de 0 a 6 mil reais. No de cima, laranja, das 91 cópias, mais da metade dos anúncios fica na primeira barra, que contém o erro zero, e as poucas barras restantes são baixas. No de baixo, azul, dos 2.048 demais anúncios, as barras se espalham pelo eixo inteiro, com erro mediano de mil reais."
 bordas_erro = np.arange(0, 6_001, 250)
-em_br = lambda v, pos: numero_br(v, 0)
-em_pct = lambda v, pos: numero_br(100 * v, 0) + "%"
+em_pct = lambda v, pos: f"{100 * v:.0f}%"
 grupos = [
     (erro[tem_copia], "C1", "com cópia no treino"),
     (erro[~tem_copia], "C0", "sem cópia no treino"),
@@ -125,11 +114,10 @@ for ax, (grupo, cor, nome) in zip(eixos, grupos):
     ax.hist(grupo.clip(upper=5_999), bins=bordas_erro,
             weights=np.full(len(grupo), 1 / len(grupo)),
             color=cor, edgecolor="white", linewidth=0.3)
-    ax.set_title(f"{numero_br(len(grupo), 0)} anúncios {nome}")
+    ax.set_title(f"{len(grupo)} anúncios {nome}")
     ax.set_ylabel("fração do grupo")
     ax.yaxis.set_major_formatter(em_pct)
 eixos[1].set_xlim(0, 6_000)
-eixos[1].xaxis.set_major_formatter(em_br)
 eixos[1].set_xlabel("erro absoluto (R$)")
 plt.tight_layout()
 plt.show()
@@ -143,6 +131,8 @@ plt.show()
 **`ax.hist(x, bins, weights)`** — com `weights`, cada valor soma o seu peso à barra em vez de 1. Com peso 1/n para os n anúncios do grupo, a altura da barra é a fração do grupo, e grupos de tamanhos diferentes ficam comparáveis.
 
 **`plt.subplots(..., sharex=True, sharey=True)`** — faz os dois painéis dividirem os dois eixos, e a mesma altura quer dizer a mesma fração em cima e embaixo.
+
+**`ax.yaxis.set_major_formatter(funcao)`** — escreve os rótulos do eixo vertical com `funcao(valor, posicao)`; aqui, `em_pct` escreve a fração como porcentagem.
 :::
 
 Nem todas as cópias acertam em cheio, e o booleano acima deu `False`: o treino tem anúncios iguais nas seis colunas numéricas e com aluguéis diferentes. Aí vários vizinhos empatam à distância zero, e qual deles ganha depende da ordem das linhas no treino e do algoritmo que o *k*-NN usa para buscar os vizinhos. Acertam qualquer que seja o desempate as cópias cujas seis colunas aparecem no treino com um aluguel só:
@@ -172,8 +162,8 @@ A saída é tirar as repetições **antes** de dividir. Feito depois, cada metad
 #| label: sem-repeticao
 alugueis = com_repeticao.drop_duplicates()
 depois = len(treino_r.drop_duplicates()) + len(teste_r.drop_duplicates())
-print("tirando antes de dividir:", numero_br(len(alugueis), 0))
-print("tirando depois de dividir:", numero_br(depois, 0))
+print("tirando antes de dividir:", len(alugueis))
+print("tirando depois de dividir:", depois)
 ```
 
 Antes de dividir, sobram 10.334 anúncios; depois, 10.414. A diferença, 80 (10.414 − 10.334), corresponde a linhas com cópia dos dois lados, que nenhuma das metades, olhada sozinha, reconhece como repetida. Continua valendo a ressalva da seção 6.4, que mostrou anúncios de Belo Horizonte idênticos até o último real: sem uma coluna que identifique o anúncio, não há como saber se uma repetição é o mesmo imóvel anunciado duas vezes ou dois imóveis iguais. Tirá-la supõe o primeiro caso.
@@ -195,7 +185,7 @@ proporcoes = pd.DataFrame(
 )
 (
     proporcoes.style.set_uuid("proporcoes")
-    .format(lambda v: numero_br(v, 3))
+    .format(precision=3)
     .set_table_styles([{"selector": "th, td", "props": "padding: 0.15em 0.3em"}])
 )
 ```
@@ -209,9 +199,9 @@ proporcoes = pd.DataFrame(
 diferenca_sem = (fracao(treino_s) - fracao(teste_s)).abs().max()
 diferenca_com = (fracao(treino) - fracao(teste)).abs().max()
 print("maior diferença treino × teste")
-print("  sem stratify:", numero_br(diferenca_sem, 4))
-print("  com stratify:", numero_br(diferenca_com, 4))
-print("treino:", numero_br(len(treino), 0), "| teste:", numero_br(len(teste), 0))
+print("  sem stratify:", round(diferenca_sem, 4))
+print("  com stratify:", round(diferenca_com, 4))
+print("treino:", len(treino), "| teste:", len(teste))
 menor = fracao(teste).index[-1]
 print("teste em", menor + ":", (teste["cidade"] == menor).sum())
 ```
@@ -235,13 +225,13 @@ Duas colunas só existem depois que o aluguel é fixado: `total` e `seguro_incen
 razao = treino["seguro_incendio"] / treino["aluguel"]
 fator = razao.median()
 q05, q95 = razao.quantile(0.05), razao.quantile(0.95)
-print("razão mediana:", numero_br(fator, 5))
-print("90% entre", numero_br(q05, 4), "e", numero_br(q95, 4))
+print("razão mediana:", round(fator, 5))
+print("90% entre", round(q05, 4), "e", round(q95, 4))
 
 previsto = treino["seguro_incendio"] / fator
 erro_relativo = (previsto - treino["aluguel"]).abs() / treino["aluguel"]
-print(f"erro relativo mediano: {numero_br(100 * erro_relativo.median(), 2)}%")
-print(f"a menos de 10%: {numero_br(100 * (erro_relativo < 0.10).mean(), 1)}%")
+print(f"erro relativo mediano: {100 * erro_relativo.median():.2f}%")
+print(f"a menos de 10%: {100 * (erro_relativo < 0.10).mean():.1f}%")
 ```
 
 ::: {.funcao}
@@ -261,11 +251,9 @@ ax.scatter(treino["aluguel"], treino["seguro_incendio"],
            s=6, alpha=0.15, color="C0", linewidths=0, label="anúncio de treino")
 faixa = np.geomspace(treino["aluguel"].min(), treino["aluguel"].max(), 100)
 ax.plot(faixa, fator * faixa, color="C1", linewidth=2,
-        label=f"seguro = {numero_br(fator, 5)} × aluguel")
+        label=f"seguro = {fator:.5f} × aluguel")
 ax.set_xscale("log")
 ax.set_yscale("log")
-ax.xaxis.set_major_formatter(em_br)
-ax.yaxis.set_major_formatter(em_br)
 ax.set_xlabel("aluguel (R$, escala log)")
 ax.set_ylabel("seguro-incêndio (R$, escala log)")
 ax.set_xlim(400, 30_000)
@@ -305,12 +293,12 @@ Com o teste guardado, a distribuição de `aluguel` pode ser examinada, no trein
 ```{python}
 #| label: alvo
 aluguel = treino["aluguel"]
-print("mínimo: R$", numero_br(aluguel.min(), 0))
-print("mediana: R$", numero_br(aluguel.median(), 0))
-print("média: R$", numero_br(aluguel.mean(), 0))
-print("máximo: R$", numero_br(aluguel.max(), 0))
-print("assimetria em reais:", numero_br(aluguel.skew(), 2))
-print("assimetria do log:", numero_br(np.log(aluguel).skew(), 2))
+print("mínimo: R$", round(aluguel.min()))
+print("mediana: R$", round(aluguel.median()))
+print("média: R$", round(aluguel.mean()))
+print("máximo: R$", round(aluguel.max()))
+print("assimetria em reais:", round(aluguel.skew(), 2))
+print("assimetria do log:", round(np.log(aluguel).skew(), 2))
 ```
 
 ::: {.funcao}
@@ -340,8 +328,6 @@ ax_log.set_title("eixo logarítmico")
 ax_log.set_xlabel("aluguel (R$, escala log)")
 
 for ax in (ax_reais, ax_log):
-    ax.xaxis.set_major_formatter(em_br)
-    ax.yaxis.set_major_formatter(em_br)
     ax.set_ylabel("anúncios")
 
 plt.tight_layout()
@@ -355,8 +341,8 @@ A barra mais alta de cada histograma:
 contagens, bordas = np.histogram(aluguel, bins=30)
 contagens_log, _ = np.histogram(aluguel, bins=bordas_log)
 i, j = contagens.argmax(), contagens_log.argmax()
-print("em reais: R$", numero_br(bordas[i], 0), "a", numero_br(bordas[i + 1], 0))
-print("no log: R$", numero_br(bordas_log[j], 0), "a", numero_br(bordas_log[j + 1], 0))
+print("em reais: R$", round(bordas[i]), "a", round(bordas[i + 1]))
+print("no log: R$", round(bordas_log[j]), "a", round(bordas_log[j + 1]))
 ```
 
 No eixo em reais, a barra mais alta fica bem à esquerda, de R$ 1.268 a R$ 2.087, e a cauda se estende até o máximo de R$ 25.000. No eixo log, a barra mais alta vai de R$ 1.963 a R$ 2.244.
@@ -365,8 +351,8 @@ A decisão é modelar o logaritmo do aluguel. O menor aluguel do treino é posit
 
 ```{python}
 #| label: erro-relativo
-print(numero_br(np.log(2_200) - np.log(2_000), 4))
-print(numero_br(np.log(22_000) - np.log(20_000), 4))
+print(round(np.log(2_200) - np.log(2_000), 4))
+print(round(np.log(22_000) - np.log(20_000), 4))
 ```
 
 As duas diferenças dão 0,0953, o logaritmo de 1,1. O preço dessa escolha é que a previsão sai em log, e dizer quanto o modelo erra em reais exige voltar da escala log, o que a seção 17.6 faz.

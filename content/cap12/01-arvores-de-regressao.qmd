@@ -14,16 +14,6 @@ import matplotlib.pyplot as plt
 plt.style.use("estilo-figuras.mplstyle")
 ```
 
-A função `numero_br` escreve os números com a pontuação brasileira:
-
-```{python}
-#| label: numero-br
-def numero_br(valor, casas=2):
-    texto = f"{valor:,.{casas}f}"
-    texto = texto.replace(",", "_").replace(".", ",").replace("_", ".")
-    return texto.replace("-", "−")
-```
-
 ## Os salários
 
 O conjunto `Hitters` reúne dados de jogadores das grandes ligas de beisebol norte-americanas: as estatísticas da temporada de 1986 e as mesmas estatísticas acumuladas na carreira (as colunas terminadas em `_carreira`), além do salário na temporada de 1987, em milhares de dólares. Os preditores são só duas colunas: `anos`, o número de anos do jogador nas grandes ligas, e `rebatidas`, o número de rebatidas na temporada anterior.
@@ -38,9 +28,9 @@ print("jogadores:", len(hitters))
 print("sem salário:", hitters["salario"].isna().sum())
 hitters = hitters.dropna()
 print("depois do dropna:", len(hitters))
-print("assimetria do salário:", numero_br(hitters["salario"].skew()))
+print("assimetria do salário:", round(hitters["salario"].skew(), 2))
 y = np.log(hitters["salario"])
-print("assimetria do log:", numero_br(y.skew()))
+print("assimetria do log:", round(y.skew(), 2))
 ```
 
 ::: {.funcao}
@@ -80,53 +70,28 @@ print("profundidade:", arvore.get_depth())
 **`arvore.get_n_leaves()`**, **`arvore.get_depth()`** — o número de folhas e o maior número de perguntas feitas a um jogador até chegar a uma delas.
 :::
 
-Três folhas, e no máximo duas perguntas por jogador. Quais perguntas, a figura mostra. O `plot_tree` desenha a árvore em inglês, com o ponto decimal. A função `em_portugues`, abaixo, troca os termos em inglês de cada caixa, reescreve cada número com `numero_br` (o `re.sub` acha cada trecho do texto com dígitos, ponto e dígitos, e o troca pelo que `numero_da_caixa` devolve) e pinta a caixa de branco, para que a seta não atravesse o texto. Os rótulos "sim" e "não", que não têm caixa, sobem para a frente das caixas (`set_zorder`), para que a borda de uma caixa não cubra o til:
-
-```{python}
-#| label: em-portugues
-import re
-
-
-def numero_da_caixa(achado):
-    """Reescreve um número do texto do plot_tree com a pontuação brasileira."""
-    texto = achado.group()
-    casas = len(texto.split(".")[1])
-    return numero_br(float(texto), casas)
-
-
-def em_portugues(caixas):
-    """Traduz o texto das caixas que o plot_tree desenha."""
-    for caixa in caixas:
-        texto = caixa.get_text()
-        texto = texto.replace("samples", "n").replace("value", "média")
-        texto = texto.replace("<=", "≤").replace("True", "sim").replace("False", "não")
-        texto = re.sub(r"\d+\.\d+", numero_da_caixa, texto)
-        caixa.set_text(texto)
-        fundo = caixa.get_bbox_patch()
-        if fundo is None:
-            caixa.set_zorder(200)  # "sim" e "não" por cima das caixas
-        else:
-            fundo.set(facecolor="white", edgecolor="0.45")
-```
+Três folhas, e no máximo duas perguntas por jogador. Quais perguntas, a figura mostra:
 
 ```{python}
 #| label: fig-arvore-3
-#| fig-cap: "A árvore de três folhas para o logaritmo do salário. Cada caixa mostra a pergunta, o número de jogadores (n) e a média do logaritmo do salário deles. Em cada pergunta, o ramo \"sim\" é o da esquerda, em que a condição vale."
-#| fig-alt: "Diagrama de árvore. A caixa do topo pergunta se anos é menor ou igual a 4,5, com 263 jogadores. O ramo sim leva a uma folha com 90 jogadores e média 5,107. O ramo não leva a uma caixa que pergunta se rebatidas é menor ou igual a 117,5, com 173 jogadores; dela saem duas folhas, com 90 jogadores e média 5,998 e com 83 jogadores e média 6,74."
+#| fig-cap: "A árvore de três folhas para o logaritmo do salário. Cada caixa mostra a pergunta, o número de jogadores (`samples`) e a média do logaritmo do salário deles (`value`). Em cada pergunta, o ramo `True` é o da esquerda, em que a condição vale."
+#| fig-alt: "Diagrama de árvore. A caixa do topo pergunta se anos é menor ou igual a 4,5, com 263 jogadores. O ramo True leva a uma folha com 90 jogadores e média 5,107. O ramo False leva a uma caixa que pergunta se rebatidas é menor ou igual a 117,5, com 173 jogadores; dela saem duas folhas, com 90 jogadores e média 5,998 e com 83 jogadores e média 6,74."
 import matplotlib.pyplot as plt
 from sklearn.tree import plot_tree
 
-fig, ax = plt.subplots(figsize=(4.0, 3.0))
-caixas = plot_tree(arvore, feature_names=list(X2.columns), impurity=False,
-                   rounded=True, precision=3, fontsize=10, ax=ax)
-em_portugues(caixas)
+fig, ax = plt.subplots(figsize=(4.8, 3.0))
+ax.set_facecolor("white")
+plot_tree(arvore, feature_names=list(X2.columns), impurity=False,
+          rounded=True, precision=3, fontsize=10, ax=ax)
 plt.show()
 ```
 
 ::: {.funcao}
 **`plt.subplots(figsize=(largura, altura))`** — cria uma figura, com o tamanho em polegadas, e o eixo `ax` em que se desenha. **`plt.show()`** — exibe a figura pronta.
 
-**`plot_tree(arvore, feature_names, impurity, rounded, precision, fontsize, ax)`** — desenha a árvore ajustada e devolve a lista das caixas de texto. `feature_names` dá os nomes das colunas (sem ele, sai `x[0]`); `impurity=False` omite o erro de cada nó; `precision` é o número de casas decimais; `rounded=True` arredonda os cantos das caixas; `fontsize` é o tamanho da letra.
+**`ax.set_facecolor("white")`** — a cor de fundo do eixo; o `plot_tree` esconde o eixo e usa essa cor só no fundo das caixas, que assim cobrem as setas.
+
+**`plot_tree(arvore, feature_names, impurity, rounded, precision, fontsize, ax)`** — desenha a árvore ajustada. `feature_names` dá os nomes das colunas (sem ele, sai `x[0]`); `impurity=False` omite o erro de cada nó; `precision` é o número de casas decimais; `rounded=True` arredonda os cantos das caixas; `fontsize` é o tamanho da letra.
 :::
 
 A primeira pergunta é sobre `anos`. Os jogadores com até 4 anos de liga vão para uma folha só, e nenhuma pergunta sobre rebatidas é feita a eles. Os que têm 5 anos ou mais são separados de novo pelas rebatidas da temporada anterior, em 117,5. A tabela abaixo resume as três folhas. A coluna "típico" é a exponencial da média do logaritmo, em dólares; a coluna "média" é a média dos salários da folha, também em dólares:
@@ -142,8 +107,8 @@ resumo.index = ["R1", "R2", "R3"]
 resumo.insert(2, "tipico", np.exp(resumo["log"]) * 1000)
 resumo.columns = ["n", "média do log", "típico", "média"]
 (resumo.style
- .format(precision=3, decimal=",", thousands=".")
- .format(precision=0, subset=["típico", "média"], decimal=",", thousands="."))
+ .format(precision=3)
+ .format(precision=0, subset=["típico", "média"]))
 ```
 
 ::: {.funcao}
@@ -153,7 +118,7 @@ resumo.columns = ["n", "média do log", "típico", "média"]
 
 **`np.exp(x)`** — a exponencial de cada elemento, a inversa do `np.log`. **`df.insert(posicao, nome, valores)`** — acrescenta uma coluna na posição dada.
 
-**`df.style.format(precision, subset, decimal, thousands)`** — exibe a tabela com os números formatados: `precision` casas decimais, vírgula decimal e ponto de milhar; com `subset`, só nas colunas da lista.
+**`df.style.format(precision, subset)`** — exibe a tabela com `precision` casas decimais, sem mudar os números guardados; com `subset`, só nas colunas da lista.
 :::
 
 Os novatos ($R_1$, 90 jogadores) têm média 5,107 no logaritmo, isto é, um salário típico de US$ 165.139. Os veteranos com até 117 rebatidas ($R_2$, 90) ficam em US$ 402.776, e os que rebateram mais ($R_3$, 83), em US$ 845.296. Nas três folhas o salário típico fica abaixo da média dos salários: a exponencial da média do logaritmo é a média geométrica, que os poucos salários enormes puxam menos. Nesta árvore de três folhas, os anos de liga separam primeiro; o desempenho recente só entra entre os veteranos, porque o limite de folhas acaba antes de uma pergunta sobre rebatidas chegar aos novatos. É uma simplificação, porque três médias não contam a história inteira de 263 salários, mas é uma que se explica a um dirigente de clube sem uma fórmula.
@@ -162,10 +127,6 @@ Prever com a árvore é pôr cada jogador na sua folha e devolver a média dela.
 
 ```{python}
 #| label: previsao-3
-def tres_casas(valor):
-    return numero_br(valor, 3)
-
-
 previsto = arvore.predict(X2)
 tres_jogadores = pd.DataFrame({
     "anos": X2["anos"].to_numpy()[:3],
@@ -175,15 +136,15 @@ tres_jogadores = pd.DataFrame({
 })
 tres_jogadores["erro"] = tres_jogadores["log do salário"] - tres_jogadores["previsto"]
 rss_3 = ((y - previsto) ** 2).sum()
-print("RSS de treino da árvore de 3 folhas:", numero_br(rss_3))
+print("RSS de treino da árvore de 3 folhas:", round(rss_3, 2))
 decimais = ["log do salário", "previsto", "erro"]
-tres_jogadores.style.hide(axis="index").format(tres_casas, subset=decimais)
+tres_jogadores.style.hide(axis="index").format(precision=3, subset=decimais)
 ```
 
 ::: {.funcao}
 **`modelo.predict(X)`** — a previsão da árvore para cada linha de `X`: a média da folha em que a linha cai.
 
-**`s.to_numpy()`** — os valores da série como array do `numpy`, sem os rótulos; `[:3]` fica com os três primeiros. **`.style.hide(axis="index")`** — esconde a coluna do índice na tabela exibida. **`.style.format(funcao, subset)`** — escreve cada valor das colunas de `subset` com o texto que a função devolve; aqui, `tres_casas` passa o valor ao `numero_br`, que põe a vírgula e o sinal de menos.
+**`s.to_numpy()`** — os valores da série como array do `numpy`, sem os rótulos; `[:3]` fica com os três primeiros. **`.style.hide(axis="index")`** — esconde a coluna do índice na tabela exibida.
 :::
 
 Cada previsão é uma das três médias da tabela das folhas, e o RSS de treino, 91,33, soma os quadrados dos erros dos 263 jogadores. É um erro **de treino**: a árvore é julgada nos mesmos jogadores com que foi construída. Quanto ela erra em jogadores que não viu é a pergunta da seção 12.2, que separa um conjunto de teste.
@@ -198,7 +159,7 @@ internos = arvore.tree_.feature >= 0
 colunas = X2.columns[arvore.tree_.feature[internos]]
 limiares = arvore.tree_.threshold[internos]
 for coluna, limiar in zip(colunas, limiares):
-    print(f"{coluna} ≤ {numero_br(limiar, 1)}")
+    print(f"{coluna} ≤ {limiar:.1f}")
 corte_anos = limiares[0]
 corte_rebatidas = limiares[1]
 nao_inteiros = (X2 % 1 != 0).sum()
@@ -311,9 +272,9 @@ lados = pd.DataFrame({
     "jogadores": [len(y_esq), len(y_dir)],
     "média do log": [y_esq.mean(), y_dir.mean()],
     "RSS": [rss_esq, rss_dir],
-}, index=["anos < 4,5", "anos ≥ 4,5"])
-print("RSS do corte, os dois lados somados:", numero_br(rss_esq + rss_dir))
-lados.style.format(precision=3, decimal=",").format(precision=2, subset=["RSS"], decimal=",")
+}, index=["anos < 4.5", "anos ≥ 4.5"])
+print("RSS do corte, os dois lados somados:", round(rss_esq + rss_dir, 2))
+lados.style.format(precision=3).format(precision=2, subset=["RSS"])
 ```
 
 ::: {.funcao}
@@ -343,7 +304,7 @@ def rss_do_corte(X, y, coluna):
 
 
 tss = ((y - y.mean()) ** 2).sum()
-print("RSS sem corte:", numero_br(tss))
+print("RSS sem corte:", round(tss, 2))
 curvas = {}
 linhas = []
 for coluna in X2.columns:
@@ -352,7 +313,7 @@ for coluna in X2.columns:
     linhas.append({"coluna": coluna, "cortes": len(curva),
                    "menor RSS": curva.min(), "em": curva.idxmin()})
 melhores = pd.DataFrame(linhas).set_index("coluna")
-melhores.style.format(precision=2, decimal=",").format(precision=1, subset=["em"], decimal=",")
+melhores.style.format(precision=2).format(precision=1, subset=["em"])
 ```
 
 ::: {.funcao}
@@ -371,9 +332,9 @@ Sem nenhum corte, o RSS é 207,15, a soma dos quadrados em torno da média geral
 #| label: mesma-raiz
 coluna_mao = melhores["menor RSS"].idxmin()
 pd.DataFrame({
-    "busca com pandas": [coluna_mao, numero_br(melhores.loc[coluna_mao, "em"], 1)],
+    "busca com pandas": [coluna_mao, round(float(melhores.loc[coluna_mao, "em"]), 1)],
     "DecisionTreeRegressor": [X2.columns[arvore.tree_.feature[0]],
-                              numero_br(arvore.tree_.threshold[0], 1)],
+                              round(float(arvore.tree_.threshold[0]), 1)],
 }, index=["coluna", "limiar"])
 ```
 
@@ -420,8 +381,7 @@ for nome, no_grupo in grupos.items():
                        "ganho": rss_grupo - curva.min(), "em": curva.idxmin()})
 ganhos = pd.DataFrame(linhas)
 ganhos = ganhos.sort_values(["grupo", "ganho"], ascending=[True, False])
-ganhos.style.hide(axis="index").format(precision=2, decimal=",").format(
-    precision=1, subset=["em"], decimal=",")
+ganhos.style.hide(axis="index").format(precision=2).format(precision=1, subset=["em"])
 ```
 
 ::: {.funcao}
@@ -446,7 +406,7 @@ for limite in [2, 3, 4, 5, 8, 20, 50, None]:
                    "RSS": (residuo ** 2).sum()})
 tamanhos = pd.DataFrame(linhas)
 tamanhos["queda do RSS"] = -tamanhos["RSS"].diff()
-tamanhos.style.hide(axis="index").format(precision=2, decimal=",", na_rep="")
+tamanhos.style.hide(axis="index").format(precision=2, na_rep="")
 ```
 
 ::: {.funcao}
@@ -480,7 +440,7 @@ comparacao = novos.copy()
 comparacao["3 folhas, US$"] = np.exp(arvore.predict(novos)) * 1000
 comparacao["sem limite, US$"] = np.exp(cheia.predict(novos)) * 1000
 comparacao["jogadores na folha, sem limite"] = por_folha[cheia.apply(novos)].to_numpy()
-comparacao.style.hide(axis="index").format(precision=0, thousands=".")
+comparacao.style.hide(axis="index").format(precision=0)
 ```
 
 ::: {.funcao}

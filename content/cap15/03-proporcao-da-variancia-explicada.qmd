@@ -14,16 +14,6 @@ import matplotlib.pyplot as plt
 plt.style.use("estilo-figuras.mplstyle")
 ```
 
-A função `numero_br` escreve os números com a pontuação brasileira:
-
-```{python}
-#| label: numero-br
-def numero_br(valor, casas=2):
-    texto = f"{valor:,.{casas}f}"
-    texto = texto.replace(",", "_").replace(".", ",").replace("_", ".")
-    return texto.replace("-", "−")
-```
-
 ## Quanto cada componente carrega
 
 Com as colunas padronizadas, cada uma tem variância 1, e a tabela inteira tem variância total 4, a soma das quatro. Os escores das quatro componentes também têm, cada um, uma variância. Como essas variâncias se comparam com as das colunas?
@@ -48,15 +38,14 @@ variancias = pd.DataFrame({
     "variância do escore": escores.var(axis=0),
 })
 print("soma das variâncias das colunas:",
-      numero_br(variancias["variância da coluna"].sum()))
+      round(variancias["variância da coluna"].sum(), 2))
 print("soma das variâncias dos escores:",
-      numero_br(variancias["variância do escore"].sum()))
-numericas = ["variância da coluna", "variância do escore"]
-variancias.style.format(numero_br, subset=numericas).hide(axis="index")
+      round(variancias["variância do escore"].sum(), 2))
+variancias.style.format(precision=2).hide(axis="index")
 ```
 
 ::: {.funcao}
-- **`styler.hide(axis="index")`** — mostra a tabela sem a coluna dos rótulos das linhas, que aqui seriam só 0, 1, 2 e 3.
+- **`df.style.format(precision=2)`** — mostra os números da tabela com duas casas decimais, sem mudar os valores guardados; as colunas de texto ficam como estão. **`styler.hide(axis="index")`** — mostra a tabela sem a coluna dos rótulos das linhas, que aqui seriam só 0, 1, 2 e 3.
 :::
 
 As quatro colunas têm variância 1,00 cada; os escores, não: a primeira componente fica com 2,48, e cada uma das seguintes com menos que a anterior. As duas somas dão o mesmo, 4,00. A `PCA` redistribui a variação entre as componentes sem mudar o total, e põe o máximo possível na primeira componente, depois o máximo do que sobra na segunda, e assim por diante.
@@ -65,15 +54,11 @@ A primeira componente fica, então, com 2,48 dos 4,00 da variância total, ou 0,
 
 ```{python}
 #| label: pve
-def quatro_casas(valor):
-    return numero_br(valor, 4)
-
-
 pve = pca[-1].explained_variance_ratio_
 acumulada = np.cumsum(pve)
 proporcoes = pd.DataFrame({"proporção": pve, "acumulada": acumulada},
                           index=["PC1", "PC2", "PC3", "PC4"])
-proporcoes.style.format(quatro_casas)
+proporcoes.round(4)
 ```
 
 ::: {.funcao}
@@ -112,16 +97,16 @@ O $1/n$ aparece em cima e embaixo e se cancela na razão. A conta, então, sai d
 #| label: pve-a-mao
 soma_z2_pc1 = (escores[:, 0]**2).sum()
 soma_x2 = (padr**2).sum()
-print("soma dos z² da PC1:", numero_br(soma_z2_pc1))
-print("soma dos x² da tabela:", numero_br(soma_x2))
-print("PVE da PC1, à mão:", quatro_casas(soma_z2_pc1 / soma_x2))
-print("PVE da PC1, explained_variance_ratio_:", quatro_casas(pve[0]))
+print("soma dos z² da PC1:", round(soma_z2_pc1, 2))
+print("soma dos x² da tabela:", round(soma_x2, 2))
+print("PVE da PC1, à mão:", round(soma_z2_pc1 / soma_x2, 4))
+print("PVE da PC1, explained_variance_ratio_:", round(pve[0], 4))
 
 a_mao = (escores**2).sum(axis=0) / soma_x2
 pve_lado_a_lado = pd.DataFrame({"à mão": a_mao,
                                 "explained_variance_ratio_": pve},
                                index=["PC1", "PC2", "PC3", "PC4"])
-pve_lado_a_lado.style.format(quatro_casas)
+pve_lado_a_lado.round(4)
 ```
 
 ::: {.funcao}
@@ -136,11 +121,6 @@ A conta à mão dá as mesmas proporções da `PCA`. Num gráfico das proporçõ
 #| fig-alt: "Dois gráficos empilhados, com a componente, de 1 a 4, no eixo horizontal e a proporção, de 0 a 1, no vertical. Em cima, quatro pontos azuis ligados por uma linha que desce: 0,62 na primeira componente, 0,25 na segunda, 0,09 na terceira e 0,04 na quarta. Embaixo, a proporção acumulada sobe de 0,62 para 0,87, 0,96 e 1."
 import matplotlib.pyplot as plt
 
-
-def virgula(valor, posicao):
-    return f"{valor:g}".replace(".", ",")
-
-
 ks = np.arange(1, 5)
 fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(3.8, 4.4), sharex=True)
 ax1.plot(ks, pve, "o-", color="C0")
@@ -152,7 +132,6 @@ ax2.set_xticks(ks)
 ax2.set_xlim(0.7, 4.3)
 for ax in (ax1, ax2):
     ax.set_ylim(0, 1.05)
-    ax.yaxis.set_major_formatter(virgula)
 plt.tight_layout()
 plt.show()
 ```
@@ -179,7 +158,7 @@ for M in range(1, 5):
                    "1 − RSS/TSS": 1 - rss / tss,
                    "acumulada": acumulada[M - 1]})
 erro_e_pve = pd.DataFrame(linhas).set_index("M")
-erro_e_pve.style.format(quatro_casas)
+erro_e_pve.round(4)
 ```
 
 A coluna `1 − RSS/TSS` repete a proporção acumulada, que está ao lado: a proporção acumulada é o complemento do erro relativo da aproximação, $\text{RSS}/\text{TSS}$. Com duas componentes, o erro relativo é 0,1325; com três, 0,0434, a mesma proporção que só a quarta componente explica na tabela anterior: é o que fica de fora.
@@ -212,10 +191,6 @@ Tudo até aqui usou as colunas padronizadas. A `PCA` sozinha só centra as colun
 
 ```{python}
 #| label: sem-escala
-def tres_casas(valor):
-    return numero_br(valor, 3)
-
-
 nomes = prisoes.columns
 variancia = prisoes.var()
 cru = PCA().fit(prisoes)
@@ -225,8 +200,8 @@ sem_escala = pd.DataFrame({
     "|carga| na PC1": np.abs(cru.components_[0]),
 }, index=nomes)
 print("maior |carga| na PC1:", sem_escala["|carga| na PC1"].idxmax())
-print("proporção da PC1:", tres_casas(pve_cru[0]))
-sem_escala.style.format(tres_casas)
+print("proporção da PC1:", round(pve_cru[0], 3))
+sem_escala.round(3)
 ```
 
 `agressao` tem, sozinha, 0,956 da variância total das quatro colunas, e a primeira componente é quase ela: a maior carga, em valor absoluto, é a de `agressao`, 0,995, e a componente explica 0,966 da variância.
@@ -241,8 +216,8 @@ z_cru = cru.transform(prisoes)
 aprox_cru = z_cru[:, :2] @ cru.components_[:2]
 rss = ((cent - aprox_cru)**2).sum()
 tss_cru = (cent**2).sum()
-print("1 − RSS/TSS:", quatro_casas(1 - rss / tss_cru))
-print("acumulada, M = 2:", quatro_casas(pve_cru[:2].sum()))
+print("1 − RSS/TSS:", round(1 - rss / tss_cru, 4))
+print("acumulada, M = 2:", round(pve_cru[:2].sum(), 4))
 ```
 
 ::: {.funcao}
@@ -290,15 +265,15 @@ por_100 = prisoes.assign(agressao=prisoes["agressao"] / 1000)
 cru100 = PCA().fit(por_100)
 cargas_pc1 = pd.DataFrame({
     "cru": np.abs(cru.components_[0]),
-    "÷ 1.000": np.abs(cru100.components_[0]),
+    "÷ 1000": np.abs(cru100.components_[0]),
     "padr.": np.abs(cargas[0]),
 }, index=nomes)
-print("proporção da PC1, cru:", tres_casas(pve_cru[0]))
-print("proporção da PC1, ÷ 1.000:",
-      tres_casas(cru100.explained_variance_ratio_[0]))
-print("proporção da PC1, padr.:", tres_casas(pve[0]))
-print("maior |carga| na PC1, ÷ 1.000:", cargas_pc1["÷ 1.000"].idxmax())
-cargas_pc1.style.format(tres_casas)
+print("proporção da PC1, cru:", round(pve_cru[0], 3))
+print("proporção da PC1, ÷ 1000:",
+      round(cru100.explained_variance_ratio_[0], 3))
+print("proporção da PC1, padr.:", round(pve[0], 3))
+print("maior |carga| na PC1, ÷ 1000:", cargas_pc1["÷ 1000"].idxmax())
+cargas_pc1.round(3)
 ```
 
 ::: {.funcao}
@@ -314,12 +289,12 @@ pad100.fit(por_100)
 cargas100 = pad100[-1].components_
 j = nomes.get_loc("agressao")
 antes_depois = pd.DataFrame({
-    "proporção, por 100.000": pve,
+    "proporção, por 100000": pve,
     "proporção, por 100": pad100[-1].explained_variance_ratio_,
-    "|carga| de agressao, por 100.000": np.abs(cargas[:, j]),
+    "|carga| de agressao, por 100000": np.abs(cargas[:, j]),
     "|carga| de agressao, por 100": np.abs(cargas100[:, j]),
 }, index=["PC1", "PC2", "PC3", "PC4"])
-antes_depois.style.format(tres_casas)
+antes_depois.round(3)
 ```
 
 ::: {.funcao}
@@ -334,7 +309,7 @@ diferenca = pd.DataFrame(np.abs(np.abs(cargas100) - np.abs(cargas)),
                          index=["PC1", "PC2", "PC3", "PC4"], columns=nomes)
 print("maior diferença entre as 16 |cargas| abaixo de 1e−10:",
       bool(diferenca.to_numpy().max() < 1e-10))
-diferenca.style.format(tres_casas)
+diferenca.round(3)
 ```
 
 Não muda nada: as proporções e as cargas, em valor absoluto, saem as mesmas de antes, porque padronizar divide cada coluna pelo próprio desvio padrão e apaga a unidade.
@@ -351,7 +326,7 @@ convencao = pd.DataFrame({
     "coluna de maior |carga|": nomes[maior],
     "carga": cargas[np.arange(4), maior],
 }, index=["PC1", "PC2", "PC3", "PC4"])
-convencao.style.format(tres_casas, subset=["carga"])
+convencao.round(3)
 ```
 :::
 
@@ -368,8 +343,8 @@ Quantas componentes guardar? No `USArrests`, as duas primeiras explicam 0,8675 d
 quedas_us = -np.diff(pve)
 quedas = pd.DataFrame({"queda": quedas_us},
                       index=["PC1 → PC2", "PC2 → PC3", "PC3 → PC4"])
-print("2.ª queda ÷ 3.ª:", numero_br(quedas_us[1] / quedas_us[2]))
-quedas.style.format(quatro_casas)
+print("2.ª queda ÷ 3.ª:", round(quedas_us[1] / quedas_us[2], 2))
+quedas.round(4)
 ```
 
 ::: {.funcao}
@@ -388,10 +363,10 @@ nci = pd.read_csv("dados/NCI60.csv.gz")
 genes = nci.drop(columns="tipo")
 n, p = genes.shape
 print("amostras:", n)
-print("genes:", numero_br(p, 0))
+print("genes:", p)
 v = genes.var()
-print("maior/menor variância:", numero_br(v.max() / v.min(), 0))
-print("fatia do mais variável:", quatro_casas(v.max() / v.sum()))
+print("maior/menor variância:", round(v.max() / v.min()))
+print("fatia do mais variável:", round(v.max() / v.sum(), 4))
 pca_nci = make_pipeline(StandardScaler(), PCA())
 pca_nci.fit(genes)
 pve_nci = pca_nci[-1].explained_variance_ratio_
@@ -399,7 +374,7 @@ print("componentes:", pca_nci[-1].n_components_)
 print("mín(n − 1, p):", min(n - 1, p))
 print("proporção da 64.ª abaixo de 1e−10:", bool(pve_nci[-1] < 1e-10))
 uteis = pve_nci[:63]
-print("soma das proporções das 63 primeiras:", quatro_casas(uteis.sum()))
+print("soma das proporções das 63 primeiras:", round(uteis.sum(), 4))
 ```
 
 ::: {.funcao}
@@ -420,11 +395,10 @@ primeiras = pd.DataFrame({"proporção": uteis[:10],
                          index=range(1, 11))
 primeiras.index.name = "componente"
 for M in [7, 20]:
-    print(f"acumulada, M = {M}:", tres_casas(acum_nci[M - 1]))
+    print(f"acumulada, M = {M}:", round(acum_nci[M - 1], 3))
 k = quedas_nci.argmax() + 1
 print(f"maior queda das 62: da {k}.ª para a {k + 1}.ª")
-primeiras.style.format({"proporção": tres_casas, "acumulada": tres_casas,
-                        "queda para a seguinte": quatro_casas})
+primeiras.round({"proporção": 3, "acumulada": 3, "queda para a seguinte": 4})
 ```
 
 ::: {.funcao}
@@ -441,7 +415,7 @@ de_4_em_diante = pd.DataFrame({
     "queda": quedas_nci[3:],
 })
 maiores = de_4_em_diante.sort_values("queda", ascending=False).head(5)
-maiores.style.format({"queda": quatro_casas}).hide(axis="index")
+maiores.style.format(precision=4).hide(axis="index")
 ```
 
 A primeira componente explica 0,114 da variância, contra 0,6201 no `USArrests`. As sete primeiras juntas chegam só a 0,385, e as vinte primeiras, a 0,648: mesmo com vinte componentes, fica de fora 0,352, que é 1 menos 0,648.
@@ -461,8 +435,6 @@ ax1.set_ylim(0, 0.12)
 ax2.set_ylim(0, 1.05)
 ax2.set_xticks([1, 10, 20, 30, 40, 50, 63])
 ax2.set_xlim(-1, 65)
-for ax in (ax1, ax2):
-    ax.yaxis.set_major_formatter(virgula)
 plt.tight_layout()
 plt.show()
 ```

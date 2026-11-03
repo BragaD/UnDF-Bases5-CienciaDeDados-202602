@@ -20,16 +20,6 @@ plt.style.use("estilo-figuras.mplstyle")
 pd.set_option("display.max_columns", None)
 ```
 
-A função `numero_br` escreve os números com a pontuação brasileira:
-
-```{python}
-#| label: numero-br
-numero_br = lambda valor, casas=2: (
-    f"{valor:,.{casas}f}".replace(",", "_").replace(".", ",").replace("_", ".")
-    .replace("-", "−")
-)
-```
-
 O ponto de partida é a tabela sem linhas repetidas, a divisão estratificada por cidade, os dez preditores e o logaritmo do aluguel como resposta. O `preparo` é o da seção 17.3: as colunas categóricas viram colunas de 0 e 1; área, condomínio e IPTU passam por `np.log1p` e são padronizados; o andar ausente vira 0, com uma coluna que marca onde ele faltava; e as contagens são padronizadas.
 
 ```{python}
@@ -72,7 +62,7 @@ um_vizinho = Pipeline([("preparo", preparo),
                        ("modelo", KNeighborsRegressor(n_neighbors=1))])
 um_vizinho.fit(X_treino, y_treino)
 residuo = y_treino - um_vizinho.predict(X_treino)
-print("RMSE no treino, k = 1:", numero_br(np.sqrt(np.mean(residuo**2)), 4))
+print("RMSE no treino, k = 1:", round(np.sqrt(np.mean(residuo**2)), 4))
 ```
 
 ::: {.funcao}
@@ -139,7 +129,7 @@ resultados = pd.DataFrame({
 })
 erro = resultados.pivot(index="k", columns="preparo", values="rmse")
 (erro.rename_axis(index=None, columns="k")
-     .style.format(lambda v: numero_br(v, 4))
+     .style.format(precision=4)
      .highlight_min(subset=["com log"], props="font-weight: bold"))
 ```
 
@@ -163,10 +153,10 @@ melhor_k = busca.best_params_["modelo__n_neighbors"]
 com_log = not isinstance(busca.best_params_["preparo__assimetricas__log"], str)
 print("k escolhido:", melhor_k)
 print("com log:", com_log)
-print("RMSE de validação cruzada:", numero_br(-busca.best_score_, 4))
-print("k = 10, com log:", numero_br(erro.loc[10, "com log"], 4))
+print("RMSE de validação cruzada:", round(-busca.best_score_, 4))
+print("k = 10, com log:", round(erro.loc[10, "com log"], 4))
 perto = erro.index[erro["com log"] <= 1.005 * erro["com log"].min()]
-print("a 0,5% do mínimo: k de", perto.min(), "a", perto.max())
+print("a 0.5% do mínimo: k de", perto.min(), "a", perto.max())
 print("mínimo fora da borda:", bool(5 < melhor_k < 60))
 ```
 
@@ -185,7 +175,6 @@ A figura abaixo mostra as 24 medidas. A cor separa as duas versões do preparo:
 #| fig-cap: "Erro de validação cruzada (RMSE na escala log) do k-NN para cada número de vizinhos k, com o logaritmo em área, condomínio e IPTU (azul) e sem ele (laranja). O x marca o mínimo, em k = 25 com log; o círculo vazio marca k = 10 com log, o valor fixado de antemão."
 #| fig-alt: "Gráfico de linhas com k de 5 a 60 no eixo horizontal e o RMSE de validação cruzada no vertical. A linha laranja, sem log, fica inteira acima da azul, com log. A azul desce de k = 5 até um vale largo e raso entre 15 e 40, com um x no fundo, em k = 25, e volta a subir devagar até 60; um círculo vazio sobre ela em k = 10 fica pouco acima do vale."
 cores = {"com log": "C0", "sem log": "C1"}
-em_br = lambda v, pos: numero_br(v, 3)
 fig, ax = plt.subplots(figsize=(4.8, 3.6))
 for preparo_nome, cor in cores.items():
     ax.plot(erro.index, erro[preparo_nome], color=cor, marker="o", markersize=4,
@@ -198,7 +187,6 @@ ax.set_xticks(range(10, 61, 10))
 ax.set_xlim(2, 63)
 ax.set_xlabel("k (número de vizinhos)")
 ax.set_ylabel("RMSE de validação cruzada")
-ax.yaxis.set_major_formatter(em_br)
 ax.legend(loc="center right")
 plt.tight_layout()
 plt.show()
@@ -212,8 +200,8 @@ Duas leituras, com pesos diferentes. O logaritmo ajuda em todo *k* da grade, por
 #| label: log-em-todo-k
 ganho_log = erro["sem log"] - erro["com log"]
 print("log ganha em todo k:", bool((ganho_log > 0).all()))
-print("ganho, menor:", numero_br(ganho_log.min(), 3))
-print("ganho, maior:", numero_br(ganho_log.max(), 3))
+print("ganho, menor:", round(ganho_log.min(), 3))
+print("ganho, maior:", round(ganho_log.max(), 3))
 ```
 
 As duas perguntas de antes da busca têm resposta. Sim, o logaritmo baixa o erro de validação cruzada em todo *k*, com um ganho de 0,022 a 0,028; e o melhor *k*, 25, ficou acima de dez. Mesmo o menor ganho do logaritmo é mais de seis vezes os 0,0033 que a troca de *k* = 10 por *k* = 25 rendeu (0,022 ÷ 0,0033 ≈ 6,7).
@@ -223,16 +211,16 @@ Quanto a área pesa na distância entre dois anúncios comuns? A distância do *
 ```{python}
 #| label: area-na-distancia
 area = X_treino["area_m2"]
-print("área, desvio:", numero_br(area.std(), 0), "m²")
-print("área, mediana:", numero_br(area.median(), 0), "m²")
+print("área, desvio:", round(area.std()), "m²")
+print("área, mediana:", round(area.median()), "m²")
 sem_log = clone(preparo).set_params(assimetricas__log="passthrough")
 for nome, versao in [("com log", clone(preparo)), ("sem log", sem_log)]:
     Z = versao.fit_transform(X_treino)
     quadrados = Z.diff().iloc[1:] ** 2
     fatia = quadrados["assimetricas__area_m2"] / quadrados.sum(axis=1)
     faixa = Z["assimetricas__area_m2"].abs().quantile(0.95)
-    print(f"{nome}, 95% até:", numero_br(faixa, 2), "desvio")
-    print(f"{nome}, fatia da área:", numero_br(100 * fatia.median(), 1) + "%")
+    print(f"{nome}, 95% até:", round(faixa, 2), "desvio")
+    print(f"{nome}, fatia da área: {100 * fatia.median():.1f}%")
 ```
 
 ::: {.funcao}
@@ -276,9 +264,9 @@ for semente in range(5):
     escolhidos.append(k_semente)
     menores.append(-outra_busca.best_score_)
     print(f"semente {semente}: k =", k_semente,
-          "| RMSE", numero_br(-outra_busca.best_score_, 4))
+          "| RMSE", round(-outra_busca.best_score_, 4))
 print("todos de 15 a 40:", all(15 <= k <= 40 for k in escolhidos))
-print("RMSE de", numero_br(min(menores), 4), "a", numero_br(max(menores), 4))
+print("RMSE de", round(min(menores), 4), "a", round(max(menores), 4))
 ```
 
 O *k* escolhido muda com o sorteio dos grupos e fica, nas cinco sementes, dentro da faixa de 15 a 40 que a semente 17 mostrou. O resultado firme da busca é o logaritmo; o *k* exato é uma escolha dentro de um vale em que os vizinhos ao redor dão quase o mesmo erro, e trocar 25 por 20 quase não muda o erro.
@@ -296,7 +284,7 @@ O modelo escolhido já existe. O `GridSearchCV` reajustou o `Pipeline` com *k* =
 ```{python}
 #| label: reajuste
 escolhido = busca.best_estimator_
-print("anúncios no reajuste:", numero_br(escolhido["modelo"].n_samples_fit_, 0))
+print("anúncios no reajuste:", escolhido["modelo"].n_samples_fit_)
 print("vizinhos:", escolhido["modelo"].n_neighbors)
 ```
 

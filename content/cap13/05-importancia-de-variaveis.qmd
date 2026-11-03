@@ -14,16 +14,6 @@ import matplotlib.pyplot as plt
 plt.style.use("estilo-figuras.mplstyle")
 ```
 
-A função `numero_br` escreve os números com a pontuação brasileira:
-
-```{python}
-#| label: numero-br
-def numero_br(valor, casas=2):
-    texto = f"{valor:,.{casas}f}"
-    texto = texto.replace(",", "_").replace(".", ",").replace("_", ".")
-    return texto.replace("-", "−")
-```
-
 ## Quanto cada coluna reduz a impureza
 
 Cada corte de uma árvore de classificação foi escolhido porque deixa os dois filhos mais puros que o nó, pelo índice de Gini da seção 12.3. A redução que o corte produz pesa pelo tamanho do nó: é o Gini do nó vezes o número de observações que chegam a ele, menos o mesmo produto nos dois filhos. Por causa desse peso, um corte na raiz, que separa todos os pacientes, conta mais que um corte num nó de poucos pacientes.
@@ -89,8 +79,8 @@ raiz = pd.DataFrame({
 raiz["pacientes × Gini"] = raiz["pacientes"] * raiz["Gini"]
 reducao_raiz = (raiz.loc["raiz", "pacientes × Gini"] - raiz.loc["filho ≤", "pacientes × Gini"]
                 - raiz.loc["filho >", "pacientes × Gini"])
-print("redução do corte:", numero_br(reducao_raiz))
-raiz.style.format(precision=3, decimal=",").format(precision=0, subset=["pacientes"])
+print("redução do corte:", round(reducao_raiz, 2))
+raiz.style.format(precision=3).format(precision=0, subset=["pacientes"])
 ```
 
 ::: {.funcao}
@@ -111,8 +101,7 @@ for no in range(t.node_count):
 a_mao = pd.Series(reducoes) / sum(reducoes.values())
 guardada = pd.Series(floresta.estimators_[0].feature_importances_, index=treino_ind.columns)
 primeira_arvore = pd.DataFrame({"à mão": a_mao, "feature_importances_": guardada[a_mao.index]})
-primeira_arvore.sort_values("à mão", ascending=False).head().style.format(
-    precision=4, decimal=",")
+primeira_arvore.sort_values("à mão", ascending=False).head().style.format(precision=4)
 ```
 
 ::: {.funcao}
@@ -136,13 +125,9 @@ for nome, importancia in zip(treino_ind.columns, floresta.feature_importances_):
     coluna = origem.get(nome, nome)
     mdi[coluna] = mdi.get(coluna, 0) + importancia
 mdi = pd.Series(mdi)
-print("soma das importâncias:", numero_br(mdi.sum(), 4))
-
-def uma_casa(valor):
-    return numero_br(valor, 1)
-
+print("soma das importâncias:", round(mdi.sum(), 4))
 relativa = (100 * mdi / mdi.max()).sort_values(ascending=False)
-relativa.to_frame("importância relativa").style.format(uma_casa)
+relativa.to_frame("importância relativa").style.format(precision=1)
 ```
 
 ::: {.funcao}
@@ -198,7 +183,7 @@ modelo = make_pipeline(
     RandomForestClassifier(n_estimators=300, max_features=None, random_state=13))
 modelo.fit(treino_X, treino_y)
 diferenca = np.abs(modelo[-1].feature_importances_ - floresta.feature_importances_).max()
-print("maior diferença entre as importâncias das duas florestas:", numero_br(diferenca, 4))
+print("maior diferença entre as importâncias das duas florestas:", round(diferenca, 4))
 ```
 
 ::: {.funcao}
@@ -218,9 +203,9 @@ acerto = modelo.score(teste_X, teste_y)
 embaralhado = teste_X.copy()
 embaralhado["talio"] = embaralha.permutation(teste_X["talio"].to_numpy())
 acerto_embaralhado = modelo.score(embaralhado, teste_y)
-print("acerto no teste:", numero_br(acerto, 4))
-print("acerto com talio embaralhado:", numero_br(acerto_embaralhado, 4))
-print("queda:", numero_br(acerto - acerto_embaralhado, 4))
+print("acerto no teste:", round(acerto, 4))
+print("acerto com talio embaralhado:", round(acerto_embaralhado, 4))
+print("queda:", round(acerto - acerto_embaralhado, 4))
 ```
 
 ::: {.funcao}
@@ -238,8 +223,8 @@ for _ in range(20):
     embaralhado = teste_X.copy()
     embaralhado["talio"] = embaralha.permutation(teste_X["talio"].to_numpy())
     quedas_talio.append(acerto - modelo.score(embaralhado, teste_y))
-print("talio, média das 20 quedas à mão:", numero_br(np.mean(quedas_talio), 3))
-print("talio, desvio padrão das 20 quedas:", numero_br(np.std(quedas_talio), 3))
+print("talio, média das 20 quedas à mão:", round(np.mean(quedas_talio), 3))
+print("talio, desvio padrão das 20 quedas:", round(np.std(quedas_talio), 3))
 ```
 
 ::: {.funcao}
@@ -252,17 +237,11 @@ O `permutation_importance` faz isso com o `Pipeline` inteiro, coluna por coluna,
 #| label: permutacao
 from sklearn.inspection import permutation_importance
 
-def tres_casas(valor):
-    return numero_br(valor, 3)
-
-def quatro_casas(valor):
-    return numero_br(valor, 4)
-
 perm = permutation_importance(modelo, teste_X, teste_y, n_repeats=20, random_state=13)
 queda = pd.DataFrame({"média": perm.importances_mean, "desvio": perm.importances_std},
                      index=teste_X.columns)
 queda = queda.loc[relativa.index]
-queda.style.format(tres_casas)
+queda.style.format(precision=3)
 ```
 
 ::: {.funcao}
@@ -279,7 +258,7 @@ dois_jeitos = pd.DataFrame({
     "laço à mão": [np.mean(quedas_talio), np.std(quedas_talio)],
     "permutation_importance": [queda.loc["talio", "média"], queda.loc["talio", "desvio"]],
 }, index=["média das 20 quedas", "desvio padrão das 20 quedas"])
-dois_jeitos.style.format(tres_casas)
+dois_jeitos.style.format(precision=3)
 ```
 
 As duas contas são o mesmo procedimento com outros sorteios dos embaralhamentos, e é deles que vem a diferença entre as médias, 0,061 contra 0,056. Ela é menor que o desvio padrão das 20 quedas, 0,023 nas duas contas.
@@ -293,7 +272,7 @@ ordem = pd.DataFrame({"média": perm.importances_mean,
                       "repetições com queda negativa": negativas},
                      index=teste_X.columns)
 ordem = ordem.sort_values("média", ascending=False)
-ordem.style.format(tres_casas, subset=["média"])
+ordem.style.format(precision=3, subset=["média"])
 ```
 
 ::: {.funcao}
@@ -310,9 +289,6 @@ Os cortes que as árvores fizeram em `colesterol` não ajudam a prever estes pac
 #| label: fig-permutacao
 #| fig-cap: "Queda no acerto do bagging nos 149 pacientes de teste do `Heart` quando cada coluna é embaralhada, média de 20 embaralhamentos, com um desvio padrão entre as repetições para cada lado (cinza). As colunas estão na ordem da importância por impureza da figura anterior. A linha vertical marca queda zero; à esquerda dela, o modelo acertou mais com a coluna embaralhada."
 #| fig-alt: "Gráfico de barras horizontais laranja com as mesmas 13 colunas da figura anterior, na mesma ordem, e a queda no acerto de −0,02 a 0,08 no eixo horizontal, com uma linha vertical no zero. A barra de talio, no alto, vai a cerca de 0,056; vasos_coloridos a cerca de 0,026; depressao_st a 0,015, com um traço cinza de desvio que atravessa o zero. As barras de colesterol e idade, quarta e quinta de cima, vão para a esquerda do zero, até cerca de −0,01; a de pressao_repouso, sétima, também fica à esquerda, mas quase não se vê. As barras das outras colunas de baixo são curtas, perto de 0,005."
-def marca(valor, posicao):
-    return numero_br(valor, 2)
-
 fig, ax = plt.subplots(figsize=(4.4, 4.0))
 posicoes = range(len(queda))
 ax.barh(posicoes, queda["média"], color="C1", height=0.7)
@@ -324,7 +300,6 @@ ax.set_ylim(len(queda) - 0.5, -0.5)
 ax.set_xlim(-0.03, 0.085)
 ax.xaxis.set_major_locator(plt.MultipleLocator(0.02))
 ax.set_xlabel("queda no acerto de teste")
-ax.xaxis.set_major_formatter(marca)
 plt.tight_layout()
 plt.show()
 ```
@@ -353,7 +328,7 @@ for arvore in floresta.estimators_:
             })
 cortes = pd.DataFrame(linhas)
 print("cortes nas 300 árvores:", len(cortes))
-cortes.head().style.format(precision=3, decimal=",").hide(axis="index")
+cortes.head().style.format(precision=3).hide(axis="index")
 ```
 
 ::: {.funcao}
@@ -370,9 +345,9 @@ for coluna in ["talio", "colesterol"]:
     parte = 100 * fundos["redução"].sum() / da_coluna["redução"].sum()
     print(coluna)
     print("  cortes:", len(da_coluna))
-    print("  mediana de pacientes no nó:", numero_br(da_coluna["pacientes distintos"].median(), 1))
+    print("  mediana de pacientes no nó:", round(da_coluna["pacientes distintos"].median(), 1))
     print("  cortes em nós de até 20 pacientes:", len(fundos))
-    print("  % da importância vinda desses nós:", numero_br(parte, 1))
+    print("  % da importância vinda desses nós:", round(parte, 1))
 ```
 
 `talio` tem 326 cortes, a mediana de pacientes no nó é 90,5, e só 2,1% da importância dele vem de nós com até 20 pacientes: ele separa grupos grandes. `colesterol` tem 775 cortes, a mediana de pacientes no nó é 12, e 62,7% da importância dele vem dos nós pequenos. Cada corte num nó pequeno reduz pouco o Gini, porque o peso é pequeno, mas somados eles fazem a maior parte da importância de `colesterol`.
@@ -394,7 +369,7 @@ for coluna in seis:
     })
 resumo = pd.DataFrame(resumo, index=seis)
 print("coluna com mais valores distintos no treino:", treino_X.nunique().idxmax())
-resumo.style.format(uma_casa, subset=["% da importância em nós de até 20"])
+resumo.style.format(precision=1, subset=["% da importância em nós de até 20"])
 ```
 
 ::: {.funcao}
@@ -429,8 +404,8 @@ print("colunas:", X.shape[1])
 print("treino:", len(treino_Xh))
 print("teste:", len(teste_Xh))
 print("colunas de carreira:", len(carreira))
-print("correlação entre vezes ao bastão e rebatidas na carreira:", numero_br(correlacao, 3))
-print("menor correlação entre as seis:", numero_br(X[carreira].corr().min().min(), 3))
+print("correlação entre vezes ao bastão e rebatidas na carreira:", round(correlacao, 3))
+print("menor correlação entre as seis:", round(X[carreira].corr().min().min(), 3))
 ```
 
 ::: {.funcao}
@@ -463,7 +438,7 @@ tabela = pd.DataFrame({
 tabela.index = [c.removesuffix("_carreira") for c in carreira]
 (tabela.style
  .format(precision=0, subset=["impureza, bagging", "impureza, floresta"])
- .format(quatro_casas, subset=["aumento do MSE, bagging", "aumento do MSE, floresta"]))
+ .format(precision=4, subset=["aumento do MSE, bagging", "aumento do MSE, floresta"]))
 ```
 
 ::: {.funcao}
@@ -474,9 +449,6 @@ tabela.index = [c.removesuffix("_carreira") for c in carreira]
 #| label: fig-carreira
 #| fig-cap: "As seis colunas de carreira do `Hitters` no bagging (azul) e na floresta com $m = 4$ (verde), 300 árvores cada, ajustados nos 132 jogadores de treino; nos dois painéis, a cor marca o modelo, não a medida. Em cima, a importância por impureza relativa à maior das 19 colunas; embaixo, o aumento do MSE de teste nos 131 jogadores de teste quando a coluna é embaralhada, média de 10 embaralhamentos."
 #| fig-alt: "Dois gráficos de barras horizontais empilhados, com as mesmas seis colunas de carreira no eixo vertical e duas barras por coluna, azul para o bagging e verde para a floresta. No de cima, a importância por impureza de 0 a 100: vezes_ao_bastao chega a 100 nos dois modelos; no bagging, rebatidas fica perto de 30, home_runs perto de 5 e as outras entre 20 e 55; na floresta, as outras cinco barras verdes são mais longas que as azuis, rebatidas perto de 90. No de baixo, o aumento do MSE: no bagging, só vezes_ao_bastao tem barra longa, acima de 0,05; bases_por_bolas chega perto de 0,02, e as outras ficam perto do zero; na floresta, a barra de vezes_ao_bastao fica abaixo de 0,05, a de rebatidas passa de 0,01, e o aumento se divide entre várias colunas."
-def numero_curto(valor, posicao):
-    return f"{valor:g}".replace(".", ",").replace("-", "−")
-
 posicoes = np.arange(len(carreira))
 fig, eixos = plt.subplots(2, 1, figsize=(4.4, 5.6))
 paineis = [(eixos[0], impureza, "importância relativa à maior"),
@@ -489,7 +461,6 @@ for eixo, medida, rotulo in paineis:
     eixo.set_ylim(len(carreira) - 0.5, -0.5)
     eixo.axvline(0, color="0.45", linewidth=0.8)
     eixo.set_xlabel(rotulo)
-    eixo.xaxis.set_major_formatter(numero_curto)
 eixos[0].set_xlim(0, 105)
 eixos[1].xaxis.set_major_locator(plt.MultipleLocator(0.05))
 eixos[1].legend(loc="lower right", fontsize=8)

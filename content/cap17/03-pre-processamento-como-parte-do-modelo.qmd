@@ -24,15 +24,7 @@ plt.style.use("estilo-figuras.mplstyle")
 pd.set_option("display.max_columns", None)
 ```
 
-A função `numero_br` escreve os números com a pontuação brasileira. O ponto de partida é a tabela sem linhas repetidas, a divisão estratificada por cidade, os dez preditores e o logaritmo do aluguel como resposta.
-
-```{python}
-#| label: numero-br
-numero_br = lambda valor, casas=2: (
-    f"{valor:,.{casas}f}".replace(",", "_").replace(".", ",").replace("_", ".")
-    .replace("-", "−")
-)
-```
+O ponto de partida é a tabela sem linhas repetidas, a divisão estratificada por cidade, os dez preditores e o logaritmo do aluguel como resposta.
 
 ```{python}
 #| label: estado
@@ -43,7 +35,7 @@ treino, teste = train_test_split(alugueis, test_size=0.2, random_state=17,
                                  stratify=alugueis["cidade"])
 X_treino, y_treino = treino[preditores], np.log(treino["aluguel"])
 print("X_treino:", X_treino.shape)
-print("andar nulo no treino:", numero_br(X_treino["andar"].isna().sum(), 0))
+print("andar nulo no treino:", X_treino["andar"].isna().sum())
 print("colunas com nulo:", list(X_treino.columns[X_treino.isna().any()]))
 ```
 
@@ -89,8 +81,8 @@ print("um único 1 por anúncio:", bool((cidades.sum(axis=1) == 1).all()))
 
 ```{python}
 #| label: zeros-treino
-print("condomínio zero:", numero_br((X_treino["condominio"] == 0).sum(), 0))
-print("IPTU zero:", numero_br((X_treino["iptu"] == 0).sum(), 0))
+print("condomínio zero:", (X_treino["condominio"] == 0).sum())
+print("IPTU zero:", (X_treino["iptu"] == 0).sum())
 ```
 
 Por isso a transformação é `np.log1p`, o logaritmo natural de 1 + x, que leva o zero ao zero.
@@ -117,7 +109,7 @@ assimetricas = Pipeline([
 
 ```{python}
 #| label: menor-andar
-print("menor andar no treino:", numero_br(X_treino["andar"].min(), 0))
+print("menor andar no treino:", round(X_treino["andar"].min()))
 ```
 
 Com o 0 logo abaixo do 1º andar, o *k*-NN põe a casa entre os vizinhos dos apartamentos do 1º andar, e a regressão linear prende o nível da casa à tendência do andar, prolongada até o 0. Um indicador desfaz os dois vínculos: o nulo vira 0, e uma coluna nova diz se o andar estava vazio. O modelo pode dar aos anúncios sem andar um nível próprio, sem que se precise decidir qual é casa. Dois anúncios com andar e dois sem, como estão no arquivo:
@@ -207,7 +199,7 @@ for cidade in aprendido["categoricas"].categories_[0]:
 escala = aprendido["assimetricas"]["escala"]
 print("média e desvio depois do log1p:")
 for nome, media, desvio in zip(escala.feature_names_in_, escala.mean_, escala.scale_):
-    print(f"  {nome}: {numero_br(media)} e {numero_br(desvio)}")
+    print(f"  {nome}: {media:.2f} e {desvio:.2f}")
 ```
 
 ::: {.funcao}
@@ -229,7 +221,7 @@ X_treino.iloc[0]
 #| label: primeiro-anuncio
 (
     convertido.iloc[0].to_frame("depois").style.set_uuid("primeiro")
-    .format(lambda v: numero_br(v, 2))
+    .format(precision=2)
     .set_table_styles([{"selector": "th, td", "props": "padding: 0.15em 0.3em"}])
 )
 ```
@@ -251,7 +243,6 @@ A figura mostra o que o preparo fez com as três colunas assimétricas. Antes de
 colunas_assimetricas = [("area_m2", "área (m²)"),
                         ("condominio", "condomínio (R$)"),
                         ("iptu", "IPTU (R$)")]
-em_br = lambda v, pos: numero_br(v, 0)
 bordas_depois = np.linspace(-4.5, 8.5, 53)
 fig, eixos = plt.subplots(3, 2, figsize=(6.4, 7.2))
 for (coluna, rotulo), (ax_antes, ax_depois) in zip(colunas_assimetricas, eixos):
@@ -260,20 +251,17 @@ for (coluna, rotulo), (ax_antes, ax_depois) in zip(colunas_assimetricas, eixos):
     ax_antes.hist(antes, bins=40, color="C0", edgecolor="white", linewidth=0.3)
     ax_antes.set_xlim(0, antes.max() * 1.05)
     ax_antes.xaxis.set_major_locator(MaxNLocator(3))
-    ax_antes.xaxis.set_major_formatter(em_br)
     ax_antes.set_xlabel(rotulo)
     ax_antes.set_ylabel("anúncios")
     ax_depois.hist(depois, bins=bordas_depois, color="C0",
                    edgecolor="white", linewidth=0.3)
     ax_depois.set_xlim(-4.5, 8.5)
     ax_depois.set_xticks([-4, -2, 0, 2, 4, 6, 8])
-    ax_depois.xaxis.set_major_formatter(em_br)
     ax_depois.set_xlabel(rotulo.split(" (")[0] + " (desvios padrão)")
     for ax, valores in ((ax_antes, antes), (ax_depois, depois)):
         topo = ax.get_ylim()[1]
         ax.scatter(valores.max(), 0.06 * topo, marker="v", s=40, color="0.45",
                    zorder=3, label="_nolegend_")
-        ax.yaxis.set_major_formatter(em_br)
 eixos[0, 0].set_title("no arquivo")
 eixos[0, 1].set_title("depois do preparo")
 plt.tight_layout()
@@ -299,13 +287,13 @@ for coluna, _ in colunas_assimetricas:
     depois = convertido[f"assimetricas__{coluna}"]
     maximo = X_treino[coluna].idxmax()
     print(coluna)
-    print("  máximo:", numero_br(X_treino[coluna].max(), 0))
-    print(f"  1ª barra: {numero_br(fracao, 1)}%")
-    print("  depois:", numero_br(depois.min()), "a", numero_br(depois.max()))
-    print("  máximo, depois:", numero_br(depois[maximo]))
+    print("  máximo:", round(X_treino[coluna].max()))
+    print(f"  1ª barra: {fracao:.1f}%")
+    print("  depois:", round(depois.min(), 2), "a", round(depois.max(), 2))
+    print("  máximo, depois:", round(depois[maximo], 2))
     zeros = X_treino[coluna] == 0
     if zeros.any():
-        print("  zero, depois:", numero_br(depois[zeros].iloc[0]))
+        print("  zero, depois:", round(depois[zeros].iloc[0], 2))
 ```
 
 À esquerda, a primeira barra de cada coluna leva quase todos os anúncios: 99,9% na área, 99,2% no condomínio e 99,9% no IPTU. O maior valor de cada coluna (46.335 m² de área, R$ 220.000 de condomínio e R$ 313.700 de IPTU) estica o eixo, e o resto se espreme junto ao zero.
@@ -365,8 +353,8 @@ anuncio = pd.DataFrame({
     "mobiliado": ["não"], "condominio": [0], "iptu": [150],
 })
 log_previsto = modelo.predict(anuncio)[0]
-print("previsão em log:", numero_br(log_previsto, 4))
-print("em reais: R$", numero_br(np.exp(log_previsto), 0))
+print("previsão em log:", round(log_previsto, 4))
+print("em reais: R$", round(np.exp(log_previsto)))
 ```
 
 ::: {.funcao}
@@ -386,11 +374,11 @@ escala = modelo["preparo"].named_transformers_["assimetricas"]["escala"]
 media, desvio = escala.mean_[0], escala.scale_[0]
 pelo_preparo = convertido_anuncio["assimetricas__area_m2"]
 a_mao = (np.log1p(120) - media) / desvio
-print("área, pelo preparo:", numero_br(pelo_preparo, 4))
-print("área, à mão:", numero_br(a_mao, 4))
+print("área, pelo preparo:", round(pelo_preparo, 4))
+print("área, à mão:", round(a_mao, 4))
 print("iguais:", np.isclose(pelo_preparo, a_mao))
-print("andar:", numero_br(convertido_anuncio["andar__andar"]))
-print("indicador:", numero_br(convertido_anuncio["andar__missingindicator_andar"]))
+print("andar:", round(convertido_anuncio["andar__andar"], 2))
+print("indicador:", round(convertido_anuncio["andar__missingindicator_andar"], 2))
 ```
 
 ::: {.funcao}
@@ -406,8 +394,8 @@ E a mesma casa em Brasília? Ela passa pelo preparo com as cinco colunas de cida
 cidades_vistas = modelo["preparo"].named_transformers_["categoricas"].categories_[0]
 em_cada = [modelo.predict(anuncio.assign(cidade=c))[0] for c in cidades_vistas]
 em_brasilia = modelo.predict(anuncio.assign(cidade="Brasília"))[0]
-print("Brasília:", numero_br(em_brasilia, 4))
-print("média das cinco:", numero_br(np.mean(em_cada), 4))
+print("Brasília:", round(em_brasilia, 4))
+print("média das cinco:", round(np.mean(em_cada), 4))
 ```
 
 ::: {.funcao}
@@ -422,16 +410,16 @@ outra = clone(modelo).set_params(preparo__categoricas__drop="first")
 outra = outra.fit(X_treino, y_treino)
 iguais = np.allclose(outra.predict(X_treino), modelo.predict(X_treino))
 print("mesmas previsões no treino:", iguais)
-print("São Paulo:", numero_br(outra.predict(anuncio)[0], 4))
+print("São Paulo:", round(outra.predict(anuncio)[0], 4))
 belo_horizonte = anuncio.assign(cidade="Belo Horizonte")
 em_bh = outra.predict(belo_horizonte)[0]
-print("Belo Horizonte:", numero_br(em_bh, 4))
+print("Belo Horizonte:", round(em_bh, 4))
 with warnings.catch_warnings():
     # o scikit-learn avisa que "Brasília" é categoria desconhecida,
     # codificada com todas as colunas em zero: é o que se quer ver aqui
     warnings.simplefilter("ignore", UserWarning)
     em_brasilia_outra = outra.predict(anuncio.assign(cidade="Brasília"))[0]
-print("Brasília:", numero_br(em_brasilia_outra, 4))
+print("Brasília:", round(em_brasilia_outra, 4))
 print("igual a Belo Horizonte:", em_brasilia_outra == em_bh)
 ```
 

@@ -14,16 +14,6 @@ import matplotlib.pyplot as plt
 plt.style.use("estilo-figuras.mplstyle")
 ```
 
-A função `numero_br` escreve os números com a pontuação brasileira:
-
-```{python}
-#| label: numero-br
-def numero_br(valor, casas=2):
-    texto = f"{valor:,.{casas}f}"
-    texto = texto.replace(",", "_").replace(".", ",").replace("_", ".")
-    return texto.replace("-", "−")
-```
-
 ## O problema
 
 Os pontos são simulados. Cada nuvem tem um centro, e cada ponto é o centro da sua nuvem mais um desvio sorteado, nas duas coordenadas:
@@ -107,8 +97,8 @@ distancias = pairwise_distances(grupo)
 soma_pares = (distancias**2).sum()
 print("nuvem 0, pontos:", len(grupo))
 print("nuvem 0, soma das distâncias² nos pares ordenados:",
-      numero_br(soma_pares))
-print("nuvem 0, W:", numero_br(soma_pares / len(grupo)))
+      round(soma_pares, 2))
+print("nuvem 0, W:", round(soma_pares / len(grupo), 2))
 
 
 def objetivo(X, rotulos):
@@ -124,8 +114,8 @@ ger = np.random.default_rng(15)
 sorteio = ger.integers(0, 3, 150)
 obj_nuv = objetivo(X, nuvem)
 obj_sort = objetivo(X, sorteio)
-print("objetivo das nuvens:", numero_br(obj_nuv))
-print("objetivo do sorteio:", numero_br(obj_sort))
+print("objetivo das nuvens:", round(obj_nuv, 2))
+print("objetivo do sorteio:", round(obj_sort, 2))
 print()
 print(pd.crosstab(nuvem, sorteio, rownames=["nuvem"],
                   colnames=["sorteio"]).to_string())
@@ -165,9 +155,9 @@ print()
 centroides = pd.DataFrame(km3.cluster_centers_, columns=["x1", "x2"])
 centroides["pontos no grupo"] = np.bincount(km3.labels_)
 centroides.index.name = "grupo"
-print(centroides.to_string(formatters={"x1": numero_br, "x2": numero_br}))
+print(centroides.round(2).to_string())
 print()
-print("objetivo:", numero_br(objetivo(X, km3.labels_)))
+print("objetivo:", round(objetivo(X, km3.labels_), 2))
 ```
 
 ::: {.funcao}
@@ -175,7 +165,6 @@ print("objetivo:", numero_br(objetivo(X, km3.labels_)))
 - **`km.fit(X)`** — divide as linhas de `X` em grupos. **`km.labels_`** — o rótulo do grupo de cada linha, um inteiro de 0 a `K − 1`.
 - **`km.cluster_centers_`** — o centroide de cada grupo, a média dos pontos dele: uma linha por grupo, uma coluna por coordenada.
 - **`np.bincount(arr)`** — quantas vezes aparece cada inteiro 0, 1, 2, … de `arr`: aqui, o tamanho de cada grupo.
-- **`df.to_string(formatters={coluna: funcao})`** — o texto da tabela, com cada coluna da lista escrita pela sua função.
 :::
 
 O modelo devolve um rótulo por ponto e um centroide por grupo, e os três grupos têm tamanhos parecidos. A mesma conta, para $K = 2$, $3$ e $4$, com os tamanhos dos grupos em ordem crescente:
@@ -188,18 +177,18 @@ for K in [2, 3, 4]:
     km = KMeans(n_clusters=K, n_init=20, random_state=15)
     km.fit(X)
     modelos[K] = km
-    linha = {"K": K, "objetivo": numero_br(objetivo(X, km.labels_))}
+    linha = {"K": K, "objetivo": round(objetivo(X, km.labels_), 2)}
     tamanhos = np.sort(np.bincount(km.labels_))
     for posicao, tamanho in enumerate(tamanhos, start=1):
         linha[f"{posicao}.º menor grupo"] = tamanho
     linhas.append(linha)
 tres_k = pd.DataFrame(linhas).set_index("K")
-print(tres_k.to_string(na_rep="—", float_format="{:.0f}".format))
+print(tres_k.to_string(na_rep="—", float_format="{:g}".format))
 ```
 
 ::: {.funcao}
 - **`np.sort(arr)`** — os valores em ordem crescente. Os rótulos não têm ordem, e os tamanhos, ordenados, não dependem de qual grupo recebeu qual rótulo.
-- **`df.to_string(na_rep="—", float_format=...)`** — `na_rep` escreve "—" onde não há valor (com $K = 2$ não existe 3.º grupo), e `float_format` escreve os tamanhos sem casas decimais.
+- **`df.to_string(na_rep="—", float_format=...)`** — `na_rep` escreve "—" onde não há valor (com $K = 2$ não existe 3.º grupo), e `float_format="{:g}".format` escreve cada número sem os zeros à direita: os tamanhos, sem casas decimais.
 :::
 
 O objetivo cai a cada grupo a mais: de 1.342,12 com dois grupos para 576,51 com três e 474,15 com quatro. Na melhor divisão, isso vem da construção: com um grupo a mais, dá para partir um grupo em dois sem aumentar o objetivo, como a parte sobre o algoritmo mostra. Por isso a melhor divisão com $K + 1$ grupos nunca tem objetivo maior que a melhor com $K$. O objetivo não serve, então, para escolher $K$, e a seção 15.6 volta a essa escolha.
@@ -256,8 +245,8 @@ print(maioria.to_string())
 print()
 print("fora do grupo da maioria da nuvem:",
       150 - maioria["pontos nele"].sum())
-print("objetivo do k-means:", numero_br(objetivo(X, km3.labels_)))
-print("objetivo das nuvens:", numero_br(obj_nuv))
+print("objetivo do k-means:", round(objetivo(X, km3.labels_), 2))
+print("objetivo das nuvens:", round(obj_nuv, 2))
 ```
 
 ::: {.funcao}
@@ -278,7 +267,7 @@ pontos = pd.DataFrame({
     "distância² ao da maioria": ((X - C[grupo_maioria])**2).sum(axis=1),
 })
 fora = pontos[pontos["grupo em que ficou"] != pontos["grupo da maioria"]]
-print(fora.to_string(float_format=numero_br))
+print(fora.round(2).to_string())
 ```
 
 ::: {.funcao}
@@ -304,13 +293,13 @@ O nome vem do passo 2(a): cada grupo é resumido pela média, *mean*, dos seus p
 tabela_X = pd.DataFrame(X, columns=["x1", "x2"])
 centroides_1 = tabela_X.groupby(sorteio).mean()
 centroides_1.index.name = "grupo"
-print(centroides_1.map(numero_br).to_string())
+print(centroides_1.round(2).to_string())
 cent1 = centroides_1.to_numpy()
 print("centroides, maior distância entre dois:",
-      numero_br(pairwise_distances(cent1).max()))
+      round(pairwise_distances(cent1).max(), 2))
 d_nuv = pairwise_distances(centros)
 print("centros das nuvens, menor distância entre dois:",
-      numero_br(d_nuv[d_nuv > 0].min()))
+      round(d_nuv[d_nuv > 0].min(), 2))
 ```
 
 ::: {.funcao}
@@ -322,12 +311,12 @@ Como cada grupo sorteado tem pontos das três nuvens, as médias saem quase igua
 
 ```{python}
 #| label: um-ponto
-print("ponto 0:", numero_br(X[0, 0]), numero_br(X[0, 1]))
+print("ponto 0:", round(X[0, 0], 2), round(X[0, 1], 2))
 print("rótulo sorteado do ponto 0:", sorteio[0])
 um_ponto = pd.DataFrame(
     {"distância do ponto 0": pairwise_distances(X[[0]], cent1)[0]})
 um_ponto.index.name = "centroide do grupo"
-print(um_ponto.to_string(float_format=numero_br))
+print(um_ponto.round(2).to_string())
 print("centroide mais próximo:", um_ponto["distância do ponto 0"].idxmin())
 ```
 
@@ -343,8 +332,8 @@ from sklearn.metrics import pairwise_distances_argmin
 
 rot1 = pairwise_distances_argmin(X, cent1)
 print("mudaram de grupo:", (rot1 != sorteio).sum())
-print("objetivo antes:", numero_br(obj_sort))
-print("objetivo depois:", numero_br(objetivo(X, rot1)))
+print("objetivo antes:", round(obj_sort, 2))
+print("objetivo depois:", round(objetivo(X, rot1), 2))
 ```
 
 ::: {.funcao}
@@ -359,7 +348,7 @@ Com os centroides quase juntos, 89 dos 150 pontos trocam de grupo, e o objetivo 
 cent2 = tabela_X.groupby(rot1).mean().to_numpy()
 rot2 = pairwise_distances_argmin(X, cent2)
 print("mudaram de grupo:", (rot2 != rot1).sum())
-print("objetivo:", numero_br(objetivo(X, rot2)))
+print("objetivo:", round(objetivo(X, rot2), 2))
 ```
 
 Na segunda volta mudam só 18 pontos, e o objetivo cai para 976,23. Daqui em diante, o `KMeans` repete as voltas até a divisão parar de mudar. Com `init=cent1`, ele parte dos mesmos centroides do passo 2(a):
@@ -373,7 +362,7 @@ final = objetivo(X, km_mao.labels_)
 passos = pd.DataFrame(
     {"objetivo": [obj_sort, objetivo(X, rot1), objetivo(X, rot2), final]},
     index=["sorteio", "depois da volta 1", "depois da volta 2", "final"])
-passos.style.format(numero_br)
+passos.round(2)
 ```
 
 ::: {.funcao}
@@ -419,9 +408,9 @@ em que $\bar{x}_{kj}$ é a média da coluna $j$ no grupo $k$. O 2 vem dos pares 
 ```{python}
 #| label: identidade
 inercia = km_mao.inertia_
-print("inércia:", numero_br(inercia))
-print("2 × inércia:", numero_br(2 * inercia))
-print("objetivo pelos pares:", numero_br(final))
+print("inércia:", round(inercia, 2))
+print("2 × inércia:", round(2 * inercia, 2))
+print("objetivo pelos pares:", round(final, 2))
 ```
 
 ::: {.funcao}
@@ -442,7 +431,7 @@ def S(rotulos, centr):
 cadeia = pd.DataFrame(
     {"S": [S(sorteio, cent1), S(rot1, cent1), S(rot1, cent2)]},
     index=["sorteio, cent1", "rot1, cent1", "rot1, cent2"])
-cadeia.style.format(numero_br)
+cadeia.round(2)
 ```
 
 A função `S` soma as distâncias ao quadrado de cada ponto ao centroide do seu rótulo, e `centr[rotulos]` dá a cada ponto o centroide que ele usa. No passo 2(b), os centroides ficam fixos. Cada ponto só troca o seu centroide por um mais perto, e $S$ cai de 1.114,47 para 996,80.
@@ -479,7 +468,7 @@ print()
 print("semente 2, pontos de cada nuvem em cada grupo:")
 print(pd.crosstab(nuvem, seis[2].labels_, rownames=["nuvem"],
                   colnames=["grupo"]).to_string())
-seis_inicios.style.format({"objetivo": numero_br})
+seis_inicios.round({"objetivo": 2})
 ```
 
 ::: {.funcao}
@@ -499,7 +488,7 @@ for s in range(6):
     ax = eixos.flat[s]
     km = seis[s]
     painel(ax, km.labels_, km.cluster_centers_)
-    titulo = f"semente {s}: " + numero_br(2 * km.inertia_)
+    titulo = f"semente {s}: {2 * km.inertia_:.2f}"
     ax.set_title(titulo, fontsize=10)
 plt.tight_layout()
 plt.show()
@@ -518,12 +507,12 @@ for s in range(20):
     objetivos_um.append(round(2 * km.inertia_, 2))
 print("um começo, 20 sementes; quantas sementes param em cada objetivo:")
 for obj, quantas in pd.Series(objetivos_um).value_counts().items():
-    print(f"  {numero_br(obj)}: {quantas}")
+    print(f"  {obj:.2f}: {quantas}")
 km50 = KMeans(n_clusters=3, n_init=50, random_state=15)
 km50.fit(X)
-print("50 começos, objetivo:", numero_br(2 * km50.inertia_))
+print("50 começos, objetivo:", round(2 * km50.inertia_, 2))
 print("menor objetivo dos seis sorteios:",
-      numero_br(seis_inicios["objetivo"].min()))
+      round(seis_inicios["objetivo"].min(), 2))
 t50 = pd.crosstab(nuvem, km50.labels_, rownames=["nuvem"],
                   colnames=["grupo"])
 print()

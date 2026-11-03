@@ -14,18 +14,6 @@ import matplotlib.pyplot as plt
 plt.style.use("estilo-figuras.mplstyle")
 ```
 
-A função `numero_br` escreve os números com a pontuação brasileira; um valor que arredonda para zero sai como 0, sem sinal de menos:
-
-```{python}
-#| label: numero-br
-def numero_br(valor, casas=2):
-    if round(valor, casas) == 0:
-        valor = 0.0
-    texto = f"{valor:,.{casas}f}"
-    texto = texto.replace(",", "_").replace(".", ",").replace("_", ".")
-    return texto.replace("-", "−")
-```
-
 ## A direção de maior variância
 
 Com duas colunas, dá para ver a ideia inteira num plano. As duas aqui são `homicidio` e `agressao`, padronizadas: cada coluna menos a média dela, dividida pelo desvio padrão. As duas ficam com média 0 e variância 1, e nenhuma pesa mais só por estar em números maiores. A conta, primeiro à mão para `homicidio` no Alabama e depois com o `StandardScaler` para as duas colunas:
@@ -41,23 +29,23 @@ homicidio = prisoes["homicidio"]
 media_hom = homicidio.mean()
 dp_hom = homicidio.std(ddof=0)
 alabama_a_mao = (homicidio["Alabama"] - media_hom) / dp_hom
-print("homicidio, média:", numero_br(media_hom))
-print("homicidio, desvio padrão:", numero_br(dp_hom))
-print("Alabama, homicidio padronizado à mão:", numero_br(alabama_a_mao, 3))
+print("homicidio, média:", round(media_hom, 2))
+print("homicidio, desvio padrão:", round(dp_hom, 2))
+print("Alabama, homicidio padronizado à mão:", round(alabama_a_mao, 3))
 
 colunas = ["homicidio", "agressao"]
 padronizador = StandardScaler()
 duas = padronizador.fit_transform(prisoes[colunas])
-print("Alabama, homicidio pelo StandardScaler:", numero_br(duas[0, 0], 3))
+print("Alabama, homicidio pelo StandardScaler:", round(duas[0, 0], 3))
 print("estados:", duas.shape[0], "· colunas:", duas.shape[1])
 r = np.corrcoef(duas.T)[0, 1]
-print("correlação:", numero_br(r, 3))
+print("correlação:", round(r, 3))
 
 conferencia = pd.DataFrame({
     "média": duas.mean(axis=0),
     "variância": duas.var(axis=0),
 }, index=colunas)
-conferencia.style.format(numero_br)
+conferencia.round(2)
 ```
 
 ::: {.funcao}
@@ -75,23 +63,19 @@ Com um vetor de comprimento 1, a projeção é o produto escalar da seção 4.1:
 
 ```{python}
 #| label: angulo-45
-def tres_casas(valor):
-    return numero_br(valor, 3)
-
-
 rad = np.radians(45)
 v = np.array([np.cos(rad), np.sin(rad)])
-print("v, a direção de 45°:", tres_casas(v[0]), "e", tres_casas(v[1]))
+print("v, a direção de 45°:", round(v[0], 3), "e", round(v[1], 3))
 
 alabama = duas[0]
 posicao_al = alabama @ v
 pe_al = posicao_al * v
 sobra_al = alabama - pe_al
 d2_al = (sobra_al**2).sum()
-print("Alabama, ponto:", tres_casas(alabama[0]), "e", tres_casas(alabama[1]))
-print("Alabama, posição do pé ao longo da reta:", tres_casas(posicao_al))
-print("Alabama, pé no plano:", tres_casas(pe_al[0]), "e", tres_casas(pe_al[1]))
-print("Alabama, distância² até a reta:", tres_casas(d2_al))
+print("Alabama, ponto:", round(alabama[0], 3), "e", round(alabama[1], 3))
+print("Alabama, posição do pé ao longo da reta:", round(posicao_al, 3))
+print("Alabama, pé no plano:", round(pe_al[0], 3), "e", round(pe_al[1], 3))
+print("Alabama, distância² até a reta:", round(d2_al, 3))
 ```
 
 ::: {.funcao}
@@ -109,8 +93,8 @@ posicao = duas @ v
 pe = np.outer(posicao, v)
 sobra = duas - pe
 d2 = (sobra**2).sum(axis=1)
-print("45°, variância das 50 posições:", tres_casas(posicao.var()))
-print("45°, média das 50 distâncias²:", tres_casas(d2.mean()))
+print("45°, variância das 50 posições:", round(posicao.var(), 3))
+print("45°, média das 50 distâncias²:", round(d2.mean(), 3))
 ```
 
 ::: {.funcao}
@@ -140,9 +124,9 @@ giro.index.name = "ângulo"
 giro["soma"] = giro["variância"] + giro["distância²"]
 print("maior variância em:", giro["variância"].idxmax(), "graus")
 print("menor distância² em:", giro["distância²"].idxmin(), "graus")
-print("soma, menor valor nos 180 ângulos:", tres_casas(giro["soma"].min()))
-print("soma, maior valor nos 180 ângulos:", tres_casas(giro["soma"].max()))
-giro.loc[[0, 45, 90, 135]].style.format(tres_casas)
+print("soma, menor valor nos 180 ângulos:", round(giro["soma"].min(), 3))
+print("soma, maior valor nos 180 ângulos:", round(giro["soma"].max(), 3))
+giro.loc[[0, 45, 90, 135]].round(3)
 ```
 
 ::: {.funcao}
@@ -156,11 +140,6 @@ A reta de 45 graus, a diagonal, espalha mais os pontos, com variância 1,802, e 
 #| fig-cap: "Em cima, os 50 estados em `homicidio` e `agressao`, as duas padronizadas, com os dois eixos na mesma escala: à esquerda, a reta de 45 graus, a de maior variância, e à direita, tracejada, a de 135 graus. Cada segmento cinza liga um estado ao pé dele sobre a reta. O ponto verde é o Alabama, com o triângulo formado pela origem, pelo pé e pelo ponto. Embaixo, para cada reta pela origem, do ângulo 0 ao 179, a variância das posições ao longo dela, em laranja, e a distância média ao quadrado dos pontos até ela, em cinza, com marcas nos ângulos 0, 45, 90 e 135."
 #| fig-alt: "Três painéis. Nos dois de cima, lado a lado, a mesma nuvem de 50 pontos azuis alongada ao longo da diagonal que sobe para a direita, com homicidio no eixo horizontal e agressao no vertical. No da esquerda, uma reta laranja contínua segue a diagonal, e os segmentos cinza que ligam os pontos a ela são curtos. No da direita, uma reta laranja tracejada cruza a nuvem na diagonal oposta, e os segmentos cinza são longos. Nos dois, um ponto verde à direita e acima da origem, o Alabama, forma com a origem e com o pé dele sobre a reta um triângulo retângulo verde: a hipotenusa, da origem ao ponto, é a mesma nos dois painéis, e o cateto que vai do pé ao ponto é curto à esquerda e longo à direita. No painel de baixo, o ângulo da reta de 0 a 180 graus no eixo horizontal e duas curvas que se espelham, com marcas em 0, 45, 90 e 135 graus: a laranja, da variância das posições, começa em 1, sobe até 1,802 em 45 graus, desce até 0,198 em 135 graus e volta a subir; a cinza, da distância média ao quadrado, faz o contrário. As duas valem 1 em 0 e em 90 graus."
 import matplotlib.pyplot as plt
-
-
-def virgula(valor, posicao):
-    return f"{valor:g}".replace(".", ",").replace("-", "−")
-
 
 fig, eixos = plt.subplot_mosaic([["45", "135"], ["giro", "giro"]],
                                 figsize=(3.8, 4.6), height_ratios=[1.1, 1])
@@ -185,8 +164,6 @@ for grau in [45, 135]:
     ax.set_ylim(-2.6, 2.6)
     ax.set_xticks([-2, 0, 2])
     ax.set_yticks([-2, 0, 2])
-    for eixo in [ax.xaxis, ax.yaxis]:
-        eixo.set_major_formatter(virgula)
     ax.set_aspect("equal")
     ax.set_title(f"reta de {grau}°")
     ax.set_xlabel("homicidio")
@@ -204,7 +181,6 @@ ax_giro.set_ylim(0, 2.3)
 ax_giro.set_xlim(0, 180)
 ax_giro.set_xticks([0, 45, 90, 135, 180])
 ax_giro.set_yticks([0, 0.5, 1, 1.5, 2])
-ax_giro.yaxis.set_major_formatter(virgula)
 ax_giro.set_xlabel("ângulo da reta (graus)")
 ax_giro.set_ylabel("valor (padronizado²)")
 plt.tight_layout()
@@ -217,7 +193,6 @@ plt.show()
 - **`ax.plot(xs, ys)`** — uma linha pelos pontos `(xs[k], ys[k])`; com dois pontos, um segmento. `ax.plot(*np.array(canto).T)` passa as coordenadas horizontais e as verticais dos três cantos do triângulo, com a origem repetida no fim para fechar o contorno, e com `"o"` a função desenha só os pontos, sem a linha.
 - **`ax.set_aspect("equal")`** — a mesma escala nos dois eixos, para que a perpendicular pareça perpendicular.
 - **`ax.text(x, y, texto)`** — escreve `texto` na posição `(x, y)` dos eixos; `ha="center"` o centra nessa posição. **`ax.set_xticks(lista)`** e **`ax.set_yticks(lista)`** — as marcas dos eixos.
-- **`ax.xaxis.set_major_formatter(funcao)`** — escreve cada marca do eixo com a função dada, que recebe o valor e a posição; a `virgula` troca o ponto decimal pela vírgula e o hífen pelo sinal de menos.
 :::
 
 Pelo teorema de Pitágoras, em cada estado o quadrado da distância até a origem é a posição do pé ao quadrado mais o quadrado da distância até a reta: é o triângulo verde do Alabama, em que a hipotenusa não muda com a reta e os dois catetos, sim. Na média dos 50 estados, o quadrado da distância até a origem vale 1 mais 1, a soma das variâncias das duas colunas, qualquer que seja a reta. Como as duas colunas têm média zero, as posições também têm, e a média das posições ao quadrado é a variância delas; por isso, em todo ângulo, a variância e a distância média ao quadrado somam 2, e **a direção de maior variância é também a reta mais próxima dos pontos**.
@@ -240,9 +215,7 @@ componentes2 = pd.DataFrame({
                                   "iguais", "opostos"),
     "proporção da variância": pca2.explained_variance_ratio_,
 }, index=["1.ª", "2.ª"])
-numericas = ["reta (graus)", "|carga| homicidio", "|carga| agressao",
-             "proporção da variância"]
-componentes2.style.format(tres_casas, subset=numericas)
+componentes2.round(3)
 ```
 
 ::: {.funcao}
@@ -251,7 +224,7 @@ componentes2.style.format(tres_casas, subset=numericas)
 - **`np.arctan2(y, x)`** — o ângulo, em radianos, do vetor `(x, y)`, um para cada linha de `cargas2`; **`np.degrees`** o converte em graus, e `% 180` fica com o resto da divisão por 180, que é o mesmo para a direção e para a oposta.
 - **`np.abs(arr)`** — o valor absoluto de cada elemento. **`np.sign(arr)`** — 1, −1 ou 0, conforme o sinal de cada elemento. **`np.where(condicao, a, b)`** — `a` onde a condição vale e `b` onde não vale: aqui, se as duas cargas de cada componente têm sinais iguais ou opostos. A comparação não depende do sinal da componente, porque trocá-lo troca o de todas as cargas juntas.
 - **`pca.explained_variance_ratio_`** — a proporção da variância total que cada componente carrega; a seção 15.3 trata dela.
-- **`df.style.format(funcao, subset=colunas)`** — aplica a função só às colunas da lista, e deixa a de texto como está.
+- **`df.round(3)`** — arredonda as colunas numéricas para três casas e deixa a de texto como está.
 :::
 
 A reta da `PCA` é a de 45 graus, a mesma que o giro de grau em grau achou. As cargas da primeira componente têm o mesmo tamanho, 0,707, e o mesmo sinal: o escore de cada estado é, a menos da escala e do sinal (que é arbitrário, como se vê adiante), a média de `homicidio` e `agressao` padronizadas. Um estado com as duas medidas acima da média fica de um lado da origem, tanto mais longe quanto mais acima; um com as duas abaixo, do outro.
@@ -262,7 +235,7 @@ A **segunda componente** é a direção de maior variância entre as que não t�
 
 ## As quatro colunas
 
-Com as quatro colunas padronizadas, `pop_urbana`, que está em percentual, passa a ter a mesma escala das três de crime, e a `PCA` acha quatro componentes. As duas primeiras se chamam `PC1` e `PC2`, do inglês *principal component*. As cargas delas, com cada valor passado pela `numero_br`:
+Com as quatro colunas padronizadas, `pop_urbana`, que está em percentual, passa a ter a mesma escala das três de crime, e a `PCA` acha quatro componentes. As duas primeiras se chamam `PC1` e `PC2`, do inglês *principal component*. As cargas delas:
 
 ```{python}
 #| label: pca
@@ -273,7 +246,7 @@ escores = pca.fit_transform(prisoes)
 nomes = ["PC1", "PC2", "PC3", "PC4"]
 cargas = pd.DataFrame(pca[-1].components_.T, index=prisoes.columns,
                       columns=nomes)
-cargas[["PC1", "PC2"]].style.format(tres_casas)
+cargas[["PC1", "PC2"]].round(3)
 ```
 
 ::: {.funcao}
@@ -309,17 +282,16 @@ termos = pd.DataFrame({
     "carga na PC1": cargas["PC1"],
 })
 termos["valor × carga"] = termos["valor padronizado"] * termos["carga na PC1"]
-print(termos.map(tres_casas).to_string())
+print(termos.round(3).to_string())
 soma = termos["valor × carga"].sum()
 lado_a_lado = pd.DataFrame({"soma à mão": [soma],
                             "escore do fit_transform": [escores[0, 0]]},
                            index=["Alabama"])
-lado_a_lado.style.format(tres_casas)
+lado_a_lado.round(3)
 ```
 
 ::: {.funcao}
 - **`tab_padr.loc["Alabama"]`** — a linha padronizada do Alabama, com as quatro colunas; multiplicada pela coluna `PC1` das cargas, dá um produto por coluna, alinhado pelo nome dela.
-- **`df.map(funcao)`** — aplica a função a cada valor da tabela; com `tres_casas`, cada número vira texto com três casas.
 - **`escores[0, 0]`** — o escore da primeira linha, o Alabama, na primeira componente.
 :::
 
@@ -365,7 +337,7 @@ leitura = pd.DataFrame({
         sinal_pc2 == sinal_pc2["pop_urbana"], "igual", "oposto"),
 })
 print("PC2, maior |carga|:", leitura["|carga| PC2"].idxmax())
-leitura.style.format(numero_br, subset=["|carga| PC1", "|carga| PC2"])
+leitura.round(2)
 ```
 
 ::: {.funcao}
@@ -385,7 +357,7 @@ correlacoes = pd.DataFrame(np.corrcoef(escores.T), index=nomes, columns=nomes)
 fora = correlacoes.to_numpy()[~np.eye(4, dtype=bool)]
 print("maior |correlação| fora da diagonal, abaixo de 1e−10:",
       bool(np.abs(fora).max() < 1e-10))
-correlacoes.style.format(numero_br)
+correlacoes.round(2)
 ```
 
 ::: {.funcao}
@@ -422,10 +394,6 @@ As quatro medidas desses sete estados, com duas colunas que dizem de que lado da
 
 ```{python}
 #| label: estados-tabela
-def uma_casa(valor):
-    return numero_br(valor, 1)
-
-
 destaques = (list(ordem1.index[:2]) + list(ordem1.index[-2:])
              + [ordem2.index[0], ordem2.index[-1], raio.idxmin()])
 papeis = (["ponta da 1.ª"] * 4 + ["ponta da 2.ª"] * 2
@@ -437,7 +405,7 @@ tabela["destaque"] = papeis
 tabela["z1 do lado dos crimes"] = np.where(lado_crimes[destaques], "sim", "não")
 tabela["z2 do lado de pop_urbana"] = np.where(lado_urbana[destaques], "sim",
                                               "não")
-tabela.style.format({"homicidio": uma_casa, "estupro": uma_casa})
+tabela
 ```
 
 ::: {.funcao}
@@ -452,8 +420,8 @@ Na segunda componente, as duas pontas são o Mississípi, com 44% de população
 ```{python}
 #| label: margem-havai
 topo = (np.sign(z.loc["Havaí", "z2"]) * z["z2"]).nlargest(2)
-print(topo.map(numero_br).to_string())
-print("margem do Havaí:", numero_br(topo.iloc[0] - topo.iloc[1]))
+print(topo.round(2).to_string())
+print("margem do Havaí:", round(topo.iloc[0] - topo.iloc[1], 2))
 ```
 
 ::: {.funcao}
@@ -465,8 +433,7 @@ A Califórnia, logo atrás, está a 0,03 do Havaí. Já o Vermont, com 32%, é m
 ```{python}
 #| label: pontas-pc2
 trio = ["Mississípi", "Vermont", "Havaí"]
-tab_padr.loc[trio, ["homicidio", "agressao", "pop_urbana"]].style.format(
-    numero_br)
+tab_padr.loc[trio, ["homicidio", "agressao", "pop_urbana"]].round(2)
 ```
 
 O Mississípi junta pouca urbanização, 1,50 desvio padrão abaixo da média, com muitas prisões por homicídio, 16,1, que ficam 1,93 desvio acima dela. Na segunda componente os dois efeitos vão para o mesmo lado, porque `homicidio` e `pop_urbana` têm cargas de sinais opostos. O Vermont é menos urbano, 2,34 desvios abaixo da média, mas também tem poucas prisões por homicídio e por agressão, 1,30 e 1,49 desvio abaixo, e elas o puxam de volta.
@@ -477,7 +444,7 @@ E o estado mais perto da origem, a Virgínia? Todos os escores valem zero num es
 #| label: virginia
 virginia = tab_padr.loc[["Virgínia"]].copy()
 virginia["maior |valor|"] = virginia.abs().max(axis=1)
-virginia.style.format(numero_br)
+virginia.round(2)
 ```
 
 ::: {.funcao}
@@ -545,10 +512,10 @@ zs = pca_2.fit_transform(padr)
 cargas_hom = pca_2.components_[:, 0]
 termo_1 = zs[0, 0] * cargas_hom[0]
 termo_2 = zs[0, 1] * cargas_hom[1]
-print("Alabama, homicidio padronizado (o dado):", tres_casas(padr[0, 0]))
-print("z1 do Alabama × carga de homicidio na 1.ª:", tres_casas(termo_1))
-print("z2 do Alabama × carga de homicidio na 2.ª:", tres_casas(termo_2))
-print("soma, a aproximação com M = 2:", tres_casas(termo_1 + termo_2))
+print("Alabama, homicidio padronizado (o dado):", round(padr[0, 0], 3))
+print("z1 do Alabama × carga de homicidio na 1.ª:", round(termo_1, 3))
+print("z2 do Alabama × carga de homicidio na 2.ª:", round(termo_2, 3))
+print("soma, a aproximação com M = 2:", round(termo_1 + termo_2, 3))
 ```
 
 ::: {.funcao}
@@ -574,7 +541,7 @@ volta = pca_2.inverse_transform(zs)
 alabama_m2 = pd.DataFrame([padr[0], soma_z_phi[0], volta[0]],
                           index=["dado", "soma de z·φ", "inverse_transform"],
                           columns=prisoes.columns)
-alabama_m2.style.format(numero_br)
+alabama_m2.round(2)
 ```
 
 ::: {.funcao}
@@ -586,10 +553,6 @@ As duas contas dão os mesmos números: a aproximação da `PCA` é a soma dos e
 
 ```{python}
 #| label: aproximacao
-def quatro_casas(valor):
-    return numero_br(valor, 4)
-
-
 linhas = []
 for M in range(1, 5):
     pca_m = PCA(n_components=M)
@@ -601,9 +564,9 @@ for M in range(1, 5):
         linha[f"Alabama, {coluna}"] = valor
     linhas.append(linha)
 aproximacoes = pd.DataFrame(linhas).set_index("M")
-formatos = {coluna: numero_br for coluna in aproximacoes.columns}
-formatos["erro por valor"] = quatro_casas
-aproximacoes.style.format(formatos)
+casas = {coluna: 2 for coluna in aproximacoes.columns}
+casas["erro por valor"] = 4
+aproximacoes.round(casas)
 ```
 
 ::: {.funcao}

@@ -16,20 +16,6 @@ import matplotlib.pyplot as plt
 plt.style.use("estilo-figuras.mplstyle")
 ```
 
-A função `numero_br` escreve os números com a pontuação brasileira, e `sem_casas` os escreve sem casas decimais:
-
-```{python}
-#| label: numero-br
-def numero_br(valor, casas=2):
-    texto = f"{valor:,.{casas}f}"
-    texto = texto.replace(",", "_").replace(".", ",").replace("_", ".")
-    return texto.replace("-", "−")
-
-
-def sem_casas(valor, posicao=None):
-    return numero_br(valor, 0)
-```
-
 ## Quatro modelos numa divisão
 
 A tabela `Hitters` traz as estatísticas de 1986 dos jogadores das grandes ligas e o salário de 1987, em milhares de dólares. Descartados os jogadores sem salário e trocadas as colunas de texto por indicadoras, um terço dos jogadores fica para teste:
@@ -67,7 +53,7 @@ from sklearn.metrics import mean_absolute_error
 linear = LinearRegression()
 linear.fit(treino_X, treino_y)
 previsto_linear = linear.predict(teste_X)
-print("MAE da linear:", sem_casas(mean_absolute_error(teste_y, previsto_linear)))
+print("MAE da linear:", round(mean_absolute_error(teste_y, previsto_linear)))
 print("coeficientes, com o intercepto:", linear.coef_.size + 1)
 ```
 
@@ -92,7 +78,7 @@ busca_lasso = GridSearchCV(lasso, {"lasso__alpha": grade_lasso}, cv=grupos,
                            scoring=metrica)
 busca_lasso.fit(treino_X, treino_y)
 previsto_lasso = busca_lasso.predict(teste_X)
-print("MAE do lasso:", sem_casas(mean_absolute_error(teste_y, previsto_lasso)))
+print("MAE do lasso:", round(mean_absolute_error(teste_y, previsto_lasso)))
 coeficientes = busca_lasso.best_estimator_[-1].coef_
 print("colunas com coeficiente diferente de zero:", (coeficientes != 0).sum(),
       "de", coeficientes.size)
@@ -121,10 +107,10 @@ grade_rede = {
 busca_rede = GridSearchCV(rede, grade_rede, cv=grupos, scoring=metrica)
 busca_rede.fit(treino_X, treino_y)
 previsto_rede = busca_rede.predict(teste_X)
-print("MAE da rede:", sem_casas(mean_absolute_error(teste_y, previsto_rede)))
+print("MAE da rede:", round(mean_absolute_error(teste_y, previsto_rede)))
 escolha = busca_rede.best_params_
 print("unidades escolhidas:", escolha["rede__regressor__hidden_layer_sizes"][0])
-print("alpha escolhido:", numero_br(escolha["rede__regressor__alpha"]))
+print("alpha escolhido:", round(escolha["rede__regressor__alpha"], 2))
 ajustada = busca_rede.best_estimator_[-1].regressor_
 pesos_rede = 0
 for camada in ajustada.coefs_ + ajustada.intercepts_:
@@ -143,7 +129,7 @@ floresta = RandomForestRegressor(n_estimators=200, max_features=4,
 floresta.fit(treino_X, treino_y)
 previsto_floresta = floresta.predict(teste_X)
 print("MAE da floresta:",
-      sem_casas(mean_absolute_error(teste_y, previsto_floresta)))
+      round(mean_absolute_error(teste_y, previsto_floresta)))
 ```
 
 ::: {.funcao}
@@ -168,7 +154,7 @@ for nome, previsto in previstos.items():
     maes_teste[nome] = mean_absolute_error(teste_y, previsto)
     r2_teste[nome] = r2_score(teste_y, previsto)
 tabela = pd.DataFrame({"MAE": maes_teste, "R²": r2_teste})
-print(tabela.to_string(formatters={"MAE": sem_casas, "R²": numero_br}))
+print(tabela.to_string(formatters={"MAE": "{:.0f}".format, "R²": "{:.2f}".format}))
 print("menor MAE:", tabela["MAE"].idxmin())
 ```
 
@@ -208,13 +194,13 @@ maes = pd.DataFrame(maes).T
 maes.index.name = "divisão"
 alphas = pd.Series(alphas)
 print("divisões:", len(maes))
-print("alpha do lasso: menor da grade,", numero_br(grade_lasso.min(), 3),
+print("alpha do lasso: menor da grade,", round(grade_lasso.min(), 3),
       "· escolhido em", (alphas == grade_lasso.min()).sum(), "de 20 divisões")
-print("alpha do lasso: maior da grade,", numero_br(grade_lasso.max(), 0),
+print("alpha do lasso: maior da grade,", round(grade_lasso.max()),
       "· escolhido em", (alphas == grade_lasso.max()).sum(), "de 20 divisões")
 na_ponta = alphas.idxmin()
-print(f"divisão {na_ponta}: MAE do lasso", numero_br(maes.loc[na_ponta, "lasso"]),
-      "· da linear", numero_br(maes.loc[na_ponta, "linear"]))
+print(f"divisão {na_ponta}: MAE do lasso", round(maes.loc[na_ponta, "lasso"], 2),
+      "· da linear", round(maes.loc[na_ponta, "linear"], 2))
 ```
 
 Na ponta de cima da grade, a das penalidades mais fortes, o `alpha` do lasso não cai em nenhuma divisão. Na de baixo, cai em uma, a divisão 11: nela, a validação cruzada prefere a menor penalidade da grade, e o lasso tem praticamente o mesmo MAE da regressão linear, que é o lasso sem penalidade nenhuma: 304,53 contra 304,54.
@@ -242,7 +228,6 @@ ax.scatter(maes["linear"], altura, s=40, facecolors="none", edgecolors="0.45",
 ax.set_yticks([])
 ax.set_ylabel("divisão (pelo MAE da rede)")
 ax.set_xlabel("MAE de teste (mil US$)")
-ax.xaxis.set_major_formatter(sem_casas)
 ax.legend(loc="lower center", bbox_to_anchor=(0.5, 1.0), ncol=2)
 plt.tight_layout()
 plt.show()
@@ -268,18 +253,18 @@ por_divisao = pd.DataFrame({
     "rede − floresta": maes["rede"] - maes["floresta"],
     "lineares − rede": lineares - maes["rede"],
 })
-mostra = por_divisao.map(sem_casas)
-mostra["lasso − linear"] = por_divisao["lasso − linear"].map(numero_br)
+mostra = por_divisao.round().astype(int)
+mostra["lasso − linear"] = por_divisao["lasso − linear"].round(2)
 print("MAE de teste:")
 print(mostra.to_string())
 print("menor distância da rede à floresta:",
-      sem_casas(por_divisao["rede − floresta"].min()))
+      round(por_divisao["rede − floresta"].min()))
 print("menor distância dos lineares à rede:",
-      sem_casas(por_divisao["lineares − rede"].min()))
-print("menor MAE:", sem_casas(maes.min().min()))
-print("maior MAE:", sem_casas(maes.max().max()))
+      round(por_divisao["lineares − rede"].min()))
+print("menor MAE:", round(maes.min().min()))
+print("maior MAE:", round(maes.max().max()))
 medias = pd.DataFrame({"MAE médio": maes.mean()})
-print(medias.map(sem_casas).to_string())
+print(medias.round().astype(int).to_string())
 print("menor média:", medias["MAE médio"].idxmin())
 pares = [("rede", "linear"), ("rede", "lasso"), ("floresta", "rede"),
          ("lasso", "linear")]
@@ -290,6 +275,7 @@ for a, b in pares:
 
 ::: {.funcao}
 - **`maes[["lasso", "linear"]].min(axis=1)`** — em cada divisão, o menor MAE entre os dois lineares.
+- **`df.round().astype(int)`** — arredonda cada valor ao inteiro mais próximo e guarda a tabela como inteiros, sem casas decimais.
 :::
 
 Na tabela, a rede erra menos que a regressão linear e que o lasso nas 20 divisões, por pelo menos 15 mil dólares em cada uma, e a floresta erra menos que a rede em todas, por mais de 5 mil dólares em cada uma. Entre os lineares, a coluna `lasso − linear` é negativa em 17 das 20 divisões: nelas, o lasso erra menos que a regressão linear.
@@ -312,9 +298,9 @@ dig_X = treino.drop(columns="digito") / 255
 dig_y = treino["digito"]
 dig_teste_X = teste.drop(columns="digito") / 255
 dig_teste_y = teste["digito"]
-print("imagens de treino:", numero_br(len(dig_X), 0))
+print("imagens de treino:", len(dig_X))
 print("colunas:", dig_X.shape[1])
-print("imagens de teste:", numero_br(len(dig_teste_y), 0))
+print("imagens de teste:", len(dig_teste_y))
 ```
 
 São 6.000 imagens de treino, com 784 colunas, e 2.000 de teste. Nelas, a floresta também ganha da rede, ou a ordem se inverte? E o número de imagens de treino importa? A comparação da seção 14.2 se refaz com as primeiras $n$ imagens de treino, de 150 a 6.000, com a logística e a arquitetura da rede de lá, e agora também com uma floresta de 200 árvores. Uma rede, com uma semente só, pode ter sorte ou azar no sorteio dos pesos iniciais e da ordem em que as imagens passam pelo treino; por isso entram cinco redes, com as sementes de 0 a 4. As configurações não são reescolhidas para cada $n$. O que se conta são os erros nas mesmas imagens de teste:
@@ -350,14 +336,8 @@ resumo = pd.DataFrame({
     "floresta": erros["floresta"],
     "rede": redes.mean(axis=1),
 })
-
-
-def uma_casa(valor):
-    return numero_br(valor, 1)
-
-
-print("erros nas 2.000 imagens de teste:")
-print(resumo.to_string(formatters={"rede": uma_casa}))
+print("erros nas 2000 imagens de teste:")
+print(resumo.round(1).to_string())
 quedas = (resumo.diff() < 0).sum()
 for nome in resumo.columns:
     print(f"quedas de um n ao seguinte, {nome}: {quedas[nome]} de {len(resumo) - 1}")
@@ -380,20 +360,17 @@ por_n = pd.DataFrame({
     "rede / logística": media_redes / resumo["logística"],
     "entre as redes": redes.max(axis=1) - redes.min(axis=1),
 })
-print(por_n.to_string(formatters={
-    "logística − rede": uma_casa,
-    "floresta − rede": uma_casa,
-    "rede / logística": numero_br,
-    "entre as redes": sem_casas}))
+print(por_n.round({"logística − rede": 1, "floresta − rede": 1,
+                   "rede / logística": 2}).to_string())
 print("menor distância da logística à rede:",
-      uma_casa(por_n["logística − rede"].min()))
+      round(por_n["logística − rede"].min(), 1))
 print("menor distância da floresta à rede:",
-      uma_casa(por_n["floresta − rede"].min()))
-print("maior distância entre as redes:", sem_casas(por_n["entre as redes"].max()))
+      round(por_n["floresta − rede"].min(), 1))
+print("maior distância entre as redes:", por_n["entre as redes"].max())
 ```
 
 ::: {.funcao}
-**`redes.max(axis=1) - redes.min(axis=1)`** — em cada $n$, a distância entre a rede que mais erra e a que menos erra.
+**`redes.max(axis=1) - redes.min(axis=1)`** — em cada $n$, a distância entre a rede que mais erra e a que menos erra. **`df.round({coluna: casas})`** — arredonda cada coluna do dicionário com as suas casas; as outras ficam como estão.
 :::
 
 Na figura, o que olhar é se a linha laranja, da rede, fica abaixo das outras duas em todo $n$, e como a distância entre ela e a cinza, da logística, muda com $n$:
@@ -411,18 +388,11 @@ for nome, cor in cores.items():
             label=nome)
 ax.set_xscale("log")
 marcas = [150, 600, 1500, 6000]
-rotulos = [numero_br(n, 0) for n in marcas]
+rotulos = [str(n) for n in marcas]
 ax.set_xticks(marcas, rotulos)
 ax.minorticks_off()
 ax.set_xlabel("imagens de treino (n)")
 ax.set_ylabel("taxa de erro de teste")
-
-
-def duas_casas(valor, posicao):
-    return numero_br(valor, 2)
-
-
-ax.yaxis.set_major_formatter(duas_casas)
 ax.set_ylim(bottom=0)
 ax.legend(loc="upper right")
 plt.tight_layout()

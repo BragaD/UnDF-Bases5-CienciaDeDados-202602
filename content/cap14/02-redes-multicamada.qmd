@@ -14,24 +14,6 @@ import matplotlib.pyplot as plt
 plt.style.use("estilo-figuras.mplstyle")
 ```
 
-A função `numero_br` escreve os números com a pontuação brasileira; `sem_casas` e `tres_casas` a chamam com zero e com três casas decimais:
-
-```{python}
-#| label: numero-br
-def numero_br(valor, casas=2):
-    texto = f"{valor:,.{casas}f}"
-    texto = texto.replace(",", "_").replace(".", ",").replace("_", ".")
-    return texto.replace("-", "−")
-
-
-def sem_casas(valor):
-    return numero_br(valor, 0)
-
-
-def tres_casas(valor):
-    return numero_br(valor, 3)
-```
-
 ## As imagens
 
 O MNIST é uma coleção de dígitos de 0 a 9 escritos à mão por pessoas diferentes e digitalizados em imagens de 28 × 28 pixels, em tons de cinza. Cada pixel é um inteiro de 0, o fundo, a 255, o traço mais escuro. As duas tabelas usadas aqui trazem as primeiras 6.000 imagens do conjunto de treino do MNIST e as primeiras 2.000 do conjunto de teste, uma imagem por linha: a coluna `digito` tem o rótulo, e as colunas `pixel_000` a `pixel_783` têm os pixels, lidos linha a linha da imagem, da esquerda para a direita.
@@ -45,9 +27,9 @@ import pandas as pd
 
 treino = pd.read_csv("dados/mnist_treino.csv.gz")
 teste = pd.read_csv("dados/mnist_teste.csv.gz")
-print("treino — linhas:", sem_casas(treino.shape[0]),
+print("treino — linhas:", treino.shape[0],
       "· colunas:", treino.shape[1])
-print("teste — linhas:", sem_casas(teste.shape[0]),
+print("teste — linhas:", teste.shape[0],
       "· colunas:", teste.shape[1])
 pixels = treino.drop(columns="digito")
 print("pixels: de", pixels.min().min(), "a", pixels.max().max())
@@ -55,8 +37,8 @@ treino_X = pixels / 255
 treino_y = treino["digito"]
 teste_X = teste.drop(columns="digito") / 255
 teste_y = teste["digito"]
-print("depois de dividir: de", numero_br(treino_X.min().min(), 0),
-      "a", numero_br(treino_X.max().max(), 0))
+print("depois de dividir: de", round(treino_X.min().min()),
+      "a", round(treino_X.max().max()))
 contagem = treino_y.value_counts().sort_index()
 por_digito = pd.DataFrame({"imagens no treino": contagem}).T
 por_digito.columns.name = "dígito"
@@ -218,9 +200,9 @@ camadas = pd.DataFrame({
     "unidades": [W1.shape[1], W2.shape[1], W3.shape[1]],
     "pesos": [W1.size + b1.size, W2.size + b2.size, W3.size + b3.size],
 }, index=pd.Index(["L1", "L2", "saída"], name="camada"))
-print(camadas.map(sem_casas).to_string())
+print(camadas.to_string())
 pesos = camadas["pesos"].sum()
-print("pesos da rede:", sem_casas(pesos))
+print("pesos da rede:", pesos)
 ```
 
 ::: {.funcao}
@@ -236,7 +218,7 @@ Para cada imagem, a rede devolve dez probabilidades, uma por dígito. O código 
 ```{python}
 #| label: uma-imagem
 proba = rede.predict_proba(teste_X)
-print("probabilidades:", sem_casas(proba.shape[0]), "imagens ×",
+print("probabilidades:", proba.shape[0], "imagens ×",
       proba.shape[1], "dígitos")
 previsto = rede.predict(teste_X)
 errou = (previsto != teste_y).to_numpy()
@@ -253,13 +235,13 @@ tabela = pd.DataFrame({
     f"{errada + 1}ª": proba[errada],
 }, index=pd.Index(rede.classes_, name="dígito"))
 tabela.loc["soma"] = tabela.sum()
-print(tabela.map(tres_casas).to_string())
+print(tabela.round(3).to_string())
 afastamento = np.abs(proba.sum(axis=1) - 1).max()
-print("nas 2.000, a soma fica a menos de um milionésimo de 1:",
+print("nas 2000, a soma fica a menos de um milionésimo de 1:",
       afastamento < 1e-6)
 maior = proba.argmax(axis=1)
 print("imagens em que o predict não é o dígito de maior probabilidade:",
-      (maior != previsto).sum(), "de", sem_casas(len(previsto)))
+      (maior != previsto).sum(), "de", len(previsto))
 ```
 
 ::: {.funcao}
@@ -279,7 +261,7 @@ print("unidades de L1 ligadas:", (A1 > 0).sum(), "de", A1.size)
 print("unidades de L2 ligadas:", (A2 > 0).sum(), "de", A2.size)
 Z = (A2 @ W3 + b3).ravel()
 exp_Z = np.exp(Z)
-print("soma dos e^Z:", numero_br(exp_Z.sum()))
+print("soma dos e^Z:", round(exp_Z.sum(), 2))
 softmax = exp_Z / exp_Z.sum()
 conta = pd.DataFrame({
     "Z": Z,
@@ -287,7 +269,7 @@ conta = pd.DataFrame({
     "softmax": softmax,
     "predict_proba": proba[errada],
 }, index=pd.Index(rede.classes_, name="dígito"))
-print(conta.map(tres_casas).to_string())
+print(conta.round(3).to_string())
 ```
 
 O produto `pixels_9 @ W1` dá, para cada uma das 256 unidades de $L_1$, a soma $\sum_j w^{(1)}_{kj} x_j$; somar `b1` acrescenta os vieses, e `np.maximum(0, ...)` aplica a ReLU. As duas linhas seguintes fazem o mesmo com $L_2$ e com a saída.
@@ -309,12 +291,12 @@ from sklearn.metrics import log_loss
 certa = proba[np.arange(len(teste_y)), teste_y]
 for i in duas:
     print(f"imagem {i + 1}:",
-          "p =", numero_br(certa[i], 3) + ",",
-          "parcela =", numero_br(-np.log(certa[i]), 3))
+          "p =", f"{certa[i]:.3f},",
+          "parcela =", round(-np.log(certa[i]), 3))
 media_treino = log_loss(treino_y, rede.predict_proba(treino_X))
-print("média no treino:", numero_br(media_treino, 4))
-print("alpha:", numero_br(rede.alpha, 4))
-print("perda do ajuste:", numero_br(rede.loss_, 4))
+print("média no treino:", round(media_treino, 4))
+print("alpha:", round(rede.alpha, 4))
+print("perda do ajuste:", round(rede.loss_, 4))
 ```
 
 ::: {.funcao}
@@ -332,11 +314,11 @@ A rede tem 235.146 pesos para 6.000 imagens de treino. O que esperar do erro del
 erros_treino = (rede.predict(treino_X) != treino_y).sum()
 erros_rede = (rede.predict(teste_X) != teste_y).sum()
 print("pesos por imagem de treino:",
-      numero_br(pesos / len(treino_y), 1))
-print("erros no treino:", erros_treino, "de", sem_casas(len(treino_y)))
-print("erros no teste:", erros_rede, "de", sem_casas(len(teste_y)))
+      round(pesos / len(treino_y), 1))
+print("erros no treino:", erros_treino, "de", len(treino_y))
+print("erros no teste:", erros_rede, "de", len(teste_y))
 print("entropia média no teste:",
-      numero_br(log_loss(teste_y, proba), 3))
+      round(log_loss(teste_y, proba), 3))
 ```
 
 ::: {.funcao}
@@ -358,11 +340,11 @@ lda = LinearDiscriminantAnalysis()
 lda.fit(treino_X, treino_y)
 logistica = LogisticRegression(C=0.1, max_iter=1000)
 logistica.fit(treino_X, treino_y)
-print("passos da logística:", logistica.n_iter_[0], "(limite: 1.000)")
+print("passos da logística:", logistica.n_iter_[0], "(limite: 1000)")
 print("coeficientes da logística:", logistica.coef_.shape[0],
       "classes ×", logistica.coef_.shape[1], "pixels")
 pesos_log = logistica.coef_.size + logistica.intercept_.size
-print("pesos da logística:", sem_casas(pesos_log))
+print("pesos da logística:", pesos_log)
 ```
 
 ::: {.funcao}
@@ -390,16 +372,16 @@ erros = pd.DataFrame(linhas).T
 print(erros.to_string(formatters={
     "erros de teste": "{:.0f}".format,
     "erros de treino": "{:.0f}".format,
-    "taxa de teste": tres_casas,
-    "taxa de treino": tres_casas}))
+    "taxa de teste": "{:.3f}".format,
+    "taxa de treino": "{:.3f}".format}))
 erros_rede_teste = erros.loc["rede", "erros de teste"]
 erros_log_teste = erros.loc["logística", "erros de teste"]
 razao = erros_rede_teste / erros_log_teste
-print("erros de teste, rede / logística:", numero_br(razao))
+print("erros de teste, rede / logística:", round(razao, 2))
 ```
 
 ::: {.funcao}
-**`pd.DataFrame(linhas).T`** — `linhas` é um dicionário de dicionários, um por modelo; a tabela sai com uma coluna por modelo, e o `.T` a transpõe, com um modelo por linha. **`"{:.0f}".format`** — escreve o número sem casas decimais.
+**`pd.DataFrame(linhas).T`** — `linhas` é um dicionário de dicionários, um por modelo; a tabela sai com uma coluna por modelo, e o `.T` a transpõe, com um modelo por linha. **`"{:.0f}".format`** — escreve o número sem casas decimais; **`"{:.3f}".format`**, com três.
 :::
 
 No teste, a LDA erra 400 das 2.000 imagens, a logística 232 e a rede 127: a rede erra menos que a logística, e a logística menos que a LDA. A razão entre os erros da rede e os da logística é 0,55, pouco mais que a metade. No treino, a LDA erra 519 das 6.000 imagens, a logística 290 e a rede nenhuma, e nos três modelos a taxa de treino fica abaixo da de teste:
@@ -417,19 +399,12 @@ for parte, cor, desvio in [("treino", "C0", 0.19),
     ax.barh(posicoes + desvio, valores, height=0.36,
             color=cor, label=parte)
     for y, valor in zip(posicoes + desvio, valores):
-        ax.text(valor + 0.004, y, numero_br(valor, 3),
+        ax.text(valor + 0.004, y, f"{valor:.3f}",
                 va="center", fontsize=8)
 ax.set_yticks(posicoes, ordem)
 ax.set_xlim(0, 0.25)
 ax.set_xlabel("taxa de erro")
 ax.grid(axis="y", visible=False)
-
-
-def duas_casas(valor, posicao):
-    return numero_br(valor, 2)
-
-
-ax.xaxis.set_major_formatter(duas_casas)
 ax.legend(loc="lower left", bbox_to_anchor=(0, 1.0), ncol=2)
 plt.tight_layout()
 plt.show()

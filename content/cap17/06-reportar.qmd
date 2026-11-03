@@ -21,16 +21,6 @@ plt.style.use("estilo-figuras.mplstyle")
 pd.set_option("display.max_columns", None)
 ```
 
-A função `numero_br` escreve os números com a pontuação brasileira:
-
-```{python}
-#| label: numero-br
-numero_br = lambda valor, casas=2: (
-    f"{valor:,.{casas}f}".replace(",", "_").replace(".", ",").replace("_", ".")
-    .replace("-", "−")
-)
-```
-
 O ponto de partida é o da seção 17.3: a tabela sem linhas repetidas, a divisão estratificada por cidade, os dez preditores, o logaritmo do aluguel como resposta e o `preparo`.
 
 ```{python}
@@ -76,7 +66,7 @@ escolhido = busca.best_estimator_
 com_log = not isinstance(busca.best_params_["preparo__assimetricas__log"], str)
 print("k escolhido:", busca.best_params_["modelo__n_neighbors"])
 print("com log:", com_log)
-print("RMSE de validação cruzada:", numero_br(-busca.best_score_, 4))
+print("RMSE de validação cruzada:", round(-busca.best_score_, 4))
 ```
 
 ## O teste, uma vez
@@ -88,10 +78,10 @@ Todas as decisões foram tomadas: as linhas repetidas, as colunas excluídas, o 
 X_teste, y_teste = teste[preditores], np.log(teste["aluguel"])
 log_previsto = escolhido.predict(X_teste)
 rmse_teste = root_mean_squared_error(y_teste, log_previsto)
-print("anúncios de teste:", numero_br(len(teste), 0))
-print("RMSE de validação cruzada:", numero_br(-busca.best_score_, 4))
-print("RMSE no teste:", numero_br(rmse_teste, 4))
-print("teste − validação:", numero_br(rmse_teste + busca.best_score_, 4))
+print("anúncios de teste:", len(teste))
+print("RMSE de validação cruzada:", round(-busca.best_score_, 4))
+print("RMSE no teste:", round(rmse_teste, 4))
+print("teste − validação:", round(rmse_teste + busca.best_score_, 4))
 ```
 
 ::: {.funcao}
@@ -106,9 +96,9 @@ i = busca.best_index_
 por_grupo = pd.Series([-busca.cv_results_[f"split{g}_test_score"][i]
                        for g in range(10)])
 print("grupos de validação:", len(por_grupo))
-print("RMSE, menor grupo:", numero_br(por_grupo.min(), 4))
-print("RMSE, maior grupo:", numero_br(por_grupo.max(), 4))
-print("desvio entre grupos:", numero_br(por_grupo.std(), 4))
+print("RMSE, menor grupo:", round(por_grupo.min(), 4))
+print("RMSE, maior grupo:", round(por_grupo.max(), 4))
+print("desvio entre grupos:", round(por_grupo.std(), 4))
 print("|teste − validação| < desvio:",
       bool(abs(rmse_teste + busca.best_score_) < por_grupo.std()))
 ```
@@ -153,14 +143,12 @@ def resumo(previsto):
 
 metricas = pd.DataFrame({nome: resumo(p) for nome, p in previsoes.items()}).T
 erro_knn = np.abs(previsoes["k-NN"] - real)
-print("k-NN, erro relativo médio:",
-      numero_br(100 * (erro_knn / real).mean(), 1) + "%")
-print("k-NN, erro relativo mediano:",
-      numero_br(100 * (erro_knn / real).median(), 1) + "%")
-print("k-NN, erro mediano: R$", numero_br(erro_knn.median(), 0))
+print(f"k-NN, erro relativo médio: {100 * (erro_knn / real).mean():.1f}%")
+print(f"k-NN, erro relativo mediano: {100 * (erro_knn / real).median():.1f}%")
+print("k-NN, erro mediano: R$", round(erro_knn.median()))
 (metricas.style
- .format(lambda v: numero_br(v, 1), subset=["mediano (%)", "até 25% (%)"])
- .format(lambda v: numero_br(v, 0), subset=["MAE (R$)", "RMSE (R$)"]))
+ .format(precision=1, subset=["mediano (%)", "até 25% (%)"])
+ .format(precision=0, subset=["MAE (R$)", "RMSE (R$)"]))
 ```
 
 ::: {.funcao}
@@ -178,19 +166,16 @@ A tabela traz também o RMSE em reais, que o resumo acima deixou de lado. O quad
 quadrados = (previsoes["k-NN"] - real) ** 2
 piores = quadrados.nlargest(round(0.01 * len(quadrados))).index
 print("1% dos anúncios:", len(piores))
-print("fatia da soma dos quadrados:",
-      numero_br(100 * quadrados[piores].sum() / quadrados.sum(), 1) + "%")
-print("só o pior:",
-      numero_br(100 * quadrados.max() / quadrados.sum(), 1) + "%")
+print(f"fatia da soma dos quadrados: {100 * quadrados[piores].sum() / quadrados.sum():.1f}%")
+print(f"só o pior: {100 * quadrados.max() / quadrados.sum():.1f}%")
 metade = quadrados.nsmallest(len(quadrados) // 2)
-print("metade de menor erro:", numero_br(len(metade), 0))
-print("fatia dessa metade:",
-      numero_br(100 * metade.sum() / quadrados.sum(), 1) + "%")
-print("aluguel mediano deles: R$", numero_br(real[piores].median(), 0))
-print("aluguel mediano, teste: R$", numero_br(real.median(), 0))
-print("teste com R$ 15.000:", (real == 15_000).sum())
-print("teste acima de R$ 15.000:", (real > 15_000).sum())
-print("piores com R$ 15.000:", (real[piores] == 15_000).sum())
+print("metade de menor erro:", len(metade))
+print(f"fatia dessa metade: {100 * metade.sum() / quadrados.sum():.1f}%")
+print("aluguel mediano deles: R$", round(real[piores].median()))
+print("aluguel mediano, teste: R$", round(real.median()))
+print("teste com R$ 15000:", (real == 15_000).sum())
+print("teste acima de R$ 15000:", (real > 15_000).sum())
+print("piores com R$ 15000:", (real[piores] == 15_000).sum())
 no_teto = (real == 15_000).to_numpy()
 print("previstos abaixo, todos:",
       bool((previsoes["k-NN"][no_teto] < 15_000).all()))
@@ -207,10 +192,10 @@ Falta uma pergunta sobre a volta a reais. O modelo foi ajustado para acertar o l
 ```{python}
 #| label: media-mediana
 previsto = pd.Series(previsoes["k-NN"], index=teste.index)
-print("média prevista: R$", numero_br(previsto.mean(), 0))
-print("média pedida: R$", numero_br(real.mean(), 0))
-print("mediana prevista: R$", numero_br(previsto.median(), 0))
-print("mediana pedida: R$", numero_br(real.median(), 0))
+print("média prevista: R$", round(previsto.mean()))
+print("média pedida: R$", round(real.mean()))
+print("mediana prevista: R$", round(previsto.median()))
+print("mediana pedida: R$", round(real.median()))
 ```
 
 As medianas ficam próximas, R$ 2.688 previstos contra R$ 2.740 pedidos; a média prevista, R$ 3.466, fica abaixo da média pedida, R$ 3.993. Para um anúncio, a sugestão é um preço típico, perto do meio dos anúncios parecidos. Somadas para muitos anúncios, as previsões subestimam o total. Quem quiser estimar a receita de uma carteira de imóveis precisa de outro alvo ou de uma correção que este modelo não tem.
@@ -235,8 +220,8 @@ ax.plot(linha, linha, color="0.45", linewidth=1.5)
 ax.scatter(real, previsto, s=8, color="C0", alpha=0.3, linewidths=0)
 ax.set_xscale("log")
 ax.set_yscale("log")
-ax.set_xticks(marcas_x, [numero_br(m, 0) for m in marcas_x])
-ax.set_yticks(marcas, [numero_br(m, 0) for m in marcas])
+ax.set_xticks(marcas_x, [str(m) for m in marcas_x])
+ax.set_yticks(marcas, [str(m) for m in marcas])
 ax.set_xlim(400, 50_000)
 ax.set_ylim(400, 50_000)
 ax.set_xlabel("aluguel pedido (R$)")
@@ -263,8 +248,8 @@ por_cidade["median"] = 100 * por_cidade["median"]
 (por_cidade.sort_values("median")
  .rename(columns={"median": "mediano (%)", "size": "anúncios"})
  .rename_axis(None)
- .style.format(lambda v: numero_br(v, 1), subset=["mediano (%)"])
- .format(lambda v: numero_br(v, 0), subset=["anúncios"]))
+ .style.format(precision=1, subset=["mediano (%)"])
+ .format(precision=0, subset=["anúncios"]))
 ```
 
 ::: {.funcao}
@@ -289,13 +274,13 @@ por_faixa = pd.DataFrame({
     "mediano (%)": 100 * relativo.groupby(faixa, observed=True).median(),
     "com sinal (%)": 100 * com_sinal.groupby(faixa, observed=True).median(),
 })
-por_faixa.index = [f"{numero_br(f.left, 0)} a {numero_br(f.right, 0)}"
+por_faixa.index = [f"{f.left:.0f} a {f.right:.0f}"
                    for f in por_faixa.index]
 print("maior erro:", por_faixa["mediano (%)"].idxmax())
 print("menor erro:", por_faixa["mediano (%)"].idxmin())
 print("cresce faixa a faixa:",
       por_faixa["mediano (%)"].is_monotonic_increasing)
-por_faixa.style.format(lambda v: numero_br(v, 1))
+por_faixa.round(1)
 ```
 
 ::: {.funcao}
@@ -316,13 +301,11 @@ Quanto da inclinação da nuvem vem do corte? A figura abaixo mede o erro com si
 #| fig-alt: "Gráfico de linhas com cinco faixas no eixo horizontal e o erro com sinal mediano, em porcentagem, no vertical, com uma linha cinza no zero. A linha azul, das faixas do aluguel previsto, fica perto de zero nas quatro primeiras faixas e desce na quinta. A linha laranja, das faixas do aluguel pedido, começa bem acima de zero e desce faixa a faixa até bem abaixo de zero."
 faixa_pedido = pd.qcut(real, 5)
 por_pedido = 100 * com_sinal.groupby(faixa_pedido, observed=True).median()
-print("pelo pedido, mais barata:", numero_br(por_pedido.iloc[0], 1) + "%")
-print("pelo pedido, mais cara:", numero_br(por_pedido.iloc[-1], 1) + "%")
-print("amplitude, pelo pedido:",
-      numero_br(por_pedido.max() - por_pedido.min(), 1))
+print(f"pelo pedido, mais barata: {por_pedido.iloc[0]:.1f}%")
+print(f"pelo pedido, mais cara: {por_pedido.iloc[-1]:.1f}%")
+print("amplitude, pelo pedido:", round(por_pedido.max() - por_pedido.min(), 1))
 print("amplitude, pelo previsto:",
-      numero_br(por_faixa["com sinal (%)"].max()
-                - por_faixa["com sinal (%)"].min(), 1))
+      round(por_faixa["com sinal (%)"].max() - por_faixa["com sinal (%)"].min(), 1))
 posicoes = range(1, 6)
 fig, ax = plt.subplots(figsize=(4.6, 3.4))
 ax.axhline(0, color="0.45", linewidth=1)
@@ -351,11 +334,11 @@ Resta a pergunta do começo, em reais. O chunk abaixo toma os anúncios de teste
 #| label: tres-mil
 perto = previsto.between(2_500, 3_500)
 q1, q3 = (real[perto] / previsto[perto]).quantile([0.25, 0.75])
-print("previstos de 2.500 a 3.500:", perto.sum())
-print("razão, quartil de baixo:", numero_br(q1, 2))
-print("razão, quartil de cima:", numero_br(q3, 2))
-print("quartil de baixo: R$", numero_br(3_000 * q1, 0))
-print("quartil de cima: R$", numero_br(3_000 * q3, 0))
+print("previstos de 2500 a 3500:", perto.sum())
+print("razão, quartil de baixo:", round(q1, 2))
+print("razão, quartil de cima:", round(q3, 2))
+print("quartil de baixo: R$", round(3_000 * q1))
+print("quartil de cima: R$", round(3_000 * q3))
 ```
 
 ::: {.funcao}
