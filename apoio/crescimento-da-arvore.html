@@ -136,6 +136,146 @@ h1{
 
 <script id="nucleo">
 "use strict";
+
+/* ==================================================================== *
+ * O núcleo — as contas da árvore, sem nada de tela
+ *
+ * São as contas da seção 12.1: para uma região e uma coluna, os pontos de
+ * corte são os pontos médios entre valores vizinhos distintos, e o RSS de
+ * um corte é a soma dos RSS dos dois lados, cada um em torno da própria
+ * média (8.3). A árvore cresce dividindo, a cada passo, a folha cujo melhor
+ * corte mais derruba o RSS: é o que o DecisionTreeRegressor faz com
+ * max_leaf_nodes. tests/test_apoio.py roda este bloco no node e compara
+ * cada passo com o scikit-learn.
+ *
+ * Uma árvore é {nos: [...]}, com a raiz no índice 0. Cada nó guarda as
+ * linhas (índices dos jogadores) que chegam a ele, n, a média e o RSS do
+ * log do salário; um nó interno guarda também a coluna, o corte e os
+ * índices dos filhos (esq: coluna < corte; dir: coluna ≥ corte). Numa
+ * folha, coluna, corte, esq e dir são null.
+ * ==================================================================== */
+
+const COLUNAS = ["anos", "rebatidas"];
+const MAX_FOLHAS = 8;
+
+function preparar(dados) {
+  return {
+    X: {anos: dados.anos, rebatidas: dados.rebatidas},
+    y: dados.salario.map(Math.log),
+  };
+}
+
+function media(valores) {
+  let soma = 0;
+  for (const v of valores) soma += v;
+  return soma / valores.length;
+}
+
+function rss(valores) {
+  if (valores.length === 0) return 0;
+  const m = media(valores);
+  let soma = 0;
+  for (const v of valores) soma += (v - m) ** 2;
+  return soma;
+}
+
+/* Os pontos de corte de uma coluna dentro de uma região, e o RSS de cada um. */
+function cortesDaRegiao(linhas, coluna, X, y) {
+  const valores = [...new Set(linhas.map(i => X[coluna][i]))].sort((a, b) => a - b);
+  const cortes = [];
+  for (let k = 0; k + 1 < valores.length; k++) {
+    cortes.push((valores[k] + valores[k + 1]) / 2);
+  }
+  const rssDosCortes = cortes.map(s => {
+    const esq = [];
+    const dir = [];
+    for (const i of linhas) (X[coluna][i] < s ? esq : dir).push(y[i]);
+    return rss(esq) + rss(dir);
+  });
+  return {cortes, rss: rssDosCortes};
+}
+
+/* O corte de menor RSS da região, nas duas colunas; null se nenhuma tem dois valores. */
+function melhorCorte(linhas, X, y) {
+  const semCorte = rss(linhas.map(i => y[i]));
+  let melhor = null;
+  for (const coluna of COLUNAS) {
+    const curva = cortesDaRegiao(linhas, coluna, X, y);
+    for (let k = 0; k < curva.cortes.length; k++) {
+      if (melhor === null || curva.rss[k] < melhor.rss) {
+        melhor = {coluna, corte: curva.cortes[k], rss: curva.rss[k], queda: semCorte - curva.rss[k]};
+      }
+    }
+  }
+  return melhor;
+}
+
+function folhaNova(linhas, y) {
+  const ys = linhas.map(i => y[i]);
+  return {linhas, n: linhas.length, media: media(ys), rss: rss(ys),
+          coluna: null, corte: null, esq: null, dir: null};
+}
+
+function raiz(X, y) {
+  return {nos: [folhaNova(y.map((_, i) => i), y)]};
+}
+
+/* Uma árvore nova, com a folha `indice` dividida em coluna < corte. */
+function cortar(arvore, indice, coluna, corte, X, y) {
+  const nos = arvore.nos.slice();
+  const pai = nos[indice];
+  const esq = pai.linhas.filter(i => X[coluna][i] < corte);
+  const dir = pai.linhas.filter(i => X[coluna][i] >= corte);
+  nos[indice] = {...pai, coluna, corte, esq: nos.length, dir: nos.length + 1};
+  nos.push(folhaNova(esq, y), folhaNova(dir, y));
+  return {nos};
+}
+
+/* O passo do max_leaf_nodes: divide a folha cujo melhor corte mais derruba o RSS. */
+function proximoCorte(arvore, X, y) {
+  let alvo = -1;
+  let melhor = null;
+  arvore.nos.forEach((no, i) => {
+    if (no.esq !== null) return;
+    const m = melhorCorte(no.linhas, X, y);
+    if (m !== null && m.queda > 0 && (melhor === null || m.queda > melhor.queda)) {
+      melhor = m;
+      alvo = i;
+    }
+  });
+  if (alvo < 0) return arvore;
+  return cortar(arvore, alvo, melhor.coluna, melhor.corte, X, y);
+}
+
+function folhasDe(arvore) {
+  return arvore.nos.filter(no => no.esq === null);
+}
+
+function crescer(X, y, folhas) {
+  let arvore = raiz(X, y);
+  while (folhasDe(arvore).length < folhas) {
+    const seguinte = proximoCorte(arvore, X, y);
+    if (seguinte === arvore) break;
+    arvore = seguinte;
+  }
+  return arvore;
+}
+
+function rssTotal(arvore) {
+  let soma = 0;
+  for (const folha of folhasDe(arvore)) soma += folha.rss;
+  return soma;
+}
+
+const FORMATOS = new Map();
+function fmt(x, casas) {
+  if (!FORMATOS.has(casas)) {
+    FORMATOS.set(casas, new Intl.NumberFormat("pt-BR", {
+      minimumFractionDigits: casas, maximumFractionDigits: casas,
+    }));
+  }
+  return FORMATOS.get(casas).format(x);
+}
 </script>
 
 <script>
