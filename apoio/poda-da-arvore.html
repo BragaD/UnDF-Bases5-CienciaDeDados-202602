@@ -136,6 +136,76 @@ h1{
 
 <script id="nucleo">
 "use strict";
+
+/* ==================================================================== *
+ * O núcleo — as contas da poda, sem nada de tela
+ *
+ * DADOS traz a árvore grande da seção 12.2 (nos), já ajustada pelo
+ * scikit-learn nos 132 jogadores de treino, e a sequência de podas
+ * (degraus), um nó por degrau, a mesma do cost_complexity_pruning_path.
+ * Um estado da página é a lista dos nós que já viraram folha.
+ *
+ * O custo de um nó interno é quanto o erro de treino sobe, por folha
+ * perdida, se o galho debaixo dele virar uma folha só:
+ *
+ *     (RSS do nó − RSS das folhas do galho) / (folhas do galho − 1)
+ *
+ * Na escala do RSS esse custo é o α de (8.4); dividido por n = 132, é o
+ * ccp_alpha. A conta é feita na escala do MSE e na mesma ordem que o
+ * scikit-learn, para os empates (custos de 1e−16 no começo) caírem do
+ * mesmo jeito; tests/test_apoio.py confere degrau por degrau.
+ * ==================================================================== */
+
+function cortadosAte(dados, j) {
+  return dados.degraus.slice(0, j).map(g => g.no);
+}
+
+/* Soma do erro (escala do MSE) e número de folhas do galho que começa em i. */
+function galho(dados, i, cortados) {
+  const no = dados.nos[i];
+  if (no.esq === -1 || cortados.has(i)) return {mse: no.rss / dados.n_treino, folhas: 1};
+  const e = galho(dados, no.esq, cortados);
+  const d = galho(dados, no.dir, cortados);
+  return {mse: e.mse + d.mse, folhas: e.folhas + d.folhas};
+}
+
+function subarvore(dados, cortados) {
+  const g = galho(dados, 0, new Set(cortados));
+  return {folhas: g.folhas, rss: g.mse * dados.n_treino, mse: g.mse};
+}
+
+/* Todo nó interno da subárvore, do mais barato ao mais caro; empate pelo menor índice. */
+function candidatos(dados, cortados) {
+  const conjunto = new Set(cortados);
+  const lista = [];
+  (function visita(i) {
+    const no = dados.nos[i];
+    if (no.esq === -1 || conjunto.has(i)) return;
+    const g = galho(dados, i, conjunto);
+    const custoMse = (no.rss / dados.n_treino - g.mse) / (g.folhas - 1);
+    lista.push({no: i, custo: dados.n_treino * custoMse, folhas: g.folhas, custoMse});
+    visita(no.esq);
+    visita(no.dir);
+  })(0);
+  lista.sort((a, b) => a.custoMse - b.custoMse || a.no - b.no);
+  return lista.map(({no, custo, folhas}) => ({no, custo, folhas}));
+}
+
+/* O erro de validação cruzada da subárvore com esse número de folhas, ou null. */
+function erroNaCurva(dados, folhas) {
+  const linha = dados.curva.find(c => c.folhas === folhas);
+  return linha ? {cv: linha.cv, desvio: linha.desvio, mse_treino: linha.mse_treino} : null;
+}
+
+const FORMATOS = new Map();
+function fmt(x, casas) {
+  if (!FORMATOS.has(casas)) {
+    FORMATOS.set(casas, new Intl.NumberFormat("pt-BR", {
+      minimumFractionDigits: casas, maximumFractionDigits: casas,
+    }));
+  }
+  return FORMATOS.get(casas).format(x);
+}
 </script>
 
 <script>

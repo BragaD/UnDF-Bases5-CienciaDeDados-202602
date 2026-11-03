@@ -200,3 +200,48 @@ def test_regiao_sem_corte_possivel():
 def test_formato_brasileiro():
     assert no_node(CRESCIMENTO, "fmt(1452, 1)") == "1.452,0"
     assert no_node(CRESCIMENTO, "fmt(0.26941, 4)") == "0,2694"
+
+
+@PRECISA_DE_NODE
+def test_poda_no_node_reproduz_o_elo_mais_fraco_de_cada_degrau():
+    d = dados_embutidos(PODA)
+    calculado = no_node(PODA, """DADOS.degraus.map((_, j) => {
+        const primeiro = candidatos(DADOS, cortadosAte(DADOS, j))[0];
+        return {no: primeiro.no, custo: primeiro.custo,
+                folhas: subarvore(DADOS, cortadosAte(DADOS, j + 1)).folhas};
+    })""")
+    for j, (degrau, js) in enumerate(zip(d["degraus"], calculado)):
+        assert js["no"] == degrau["no"], f"degrau {j}"
+        assert js["custo"] == pytest.approx(degrau["alpha"], rel=1e-9, abs=1e-12), f"degrau {j}"
+        assert js["folhas"] == degrau["folhas"], f"degrau {j}"
+
+
+@PRECISA_DE_NODE
+def test_poda_no_node_no_degrau_de_3_para_2_folhas():
+    d = dados_embutidos(PODA)
+    j = next(j for j, g in enumerate(d["degraus"]) if g["folhas"] == 3) + 1
+    r = no_node(PODA, f"""(() => {{
+        const cortados = cortadosAte(DADOS, {j});
+        return {{primeiro: candidatos(DADOS, cortados)[0], antes: subarvore(DADOS, cortados)}};
+    }})()""")
+    no = d["nos"][r["primeiro"]["no"]]
+    assert (no["coluna"], round(no["limiar"], 1)) == ("impulsionadas_carreira", 70.5)
+    assert round(r["primeiro"]["custo"], 2) == 8.94
+    assert round(r["primeiro"]["custo"] / d["n_treino"], 4) == 0.0677
+    assert r["antes"]["folhas"] == 3
+    assert round(r["antes"]["mse"], 4) == 0.2258
+
+
+@PRECISA_DE_NODE
+def test_erro_na_curva_devolve_nulo_fora_da_grade():
+    d = dados_embutidos(PODA)
+    sem_curva = sorted({g["folhas"] for g in d["degraus"]} - {c["folhas"] for c in d["curva"]})
+    assert 1 in sem_curva and len(sem_curva) > 1
+    r = no_node(PODA, f"""[erroNaCurva(DADOS, 4), {json.dumps(sem_curva)}.map(f => erroNaCurva(DADOS, f))]""")
+    assert round(r[0]["cv"], 4) == 0.2694
+    assert r[1] == [None] * len(sem_curva)
+
+
+@PRECISA_DE_NODE
+def test_formato_brasileiro_na_poda():
+    assert no_node(PODA, "fmt(1452, 1)") == "1.452,0"

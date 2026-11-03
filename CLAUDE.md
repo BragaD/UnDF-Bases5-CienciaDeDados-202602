@@ -12,7 +12,7 @@ O que existe hoje:
 
 - **Seis capítulos**, 27 seções + 6 `index.qmd` = **33 `.qmd`**, todos registrados em `_quarto.yml`. Os capítulos 1 a 5 (Introdução, Um Curso Rápido de Python, Visualizando Dados, Álgebra Linear, Gradiente Descendente) são da abordagem anterior — ver "Os capítulos 1 a 5", abaixo. O **capítulo 6 — Dados: Tipos, Dados Retangulares e `pandas`** é o primeiro escrito sob a spec do ISLP: não corresponde a nenhuma seção do livro-fonte, e **é o modelo de estilo da casa**, o papel que o capítulo 9 tinha na abordagem do Grus.
 - **`arquivo/grus/`** — os capítulos 6 a 17 como estavam na abordagem do Grus, os notebooks derivados deles, o pacote `scratch_np/` e os planos das reescritas que morreram. Está no `.quartoignore`, fora da suíte, e **não é fonte para nada**.
-- Container Docker (Quarto + `uv`), CI publicando em `gh-pages`, **48 testes** (`make teste`) guardando os invariantes.
+- Container Docker (Quarto + `uv`), CI publicando em `gh-pages`, **71 testes** (`make teste`) guardando os invariantes.
 - `notebooks/` com um `.ipynb` por capítulo (seis, hoje) para a aula, `atividades/` com o PID e as listas, `apoio/` com páginas HTML interativas para projetar em aula.
 
 ### Antes de escrever um capítulo
@@ -181,7 +181,7 @@ make lock             # regenera uv.lock após editar pyproject.toml
 make clean            # remove _book/, _freeze/, .quarto/ e o lixo de render abortado
 ```
 
-**`make teste` roda `pytest tests/`** — 48 testes em sete arquivos: `test_estrutura.py` (registro no `_quarto.yml`, caminhos de dados, os totais de 6 capítulos / 27 seções / 33 arquivos contra o `LIVRO` de `scripts/gerar-stubs.py`, todo link interno para `.qmd` resolvendo, a regra editorial acima, nenhuma seção inventando número do Grus, e os três guardas da spec do ISLP: nenhum chunk executável usa biblioteca proibida, toda seção dos capítulos novos tem figura, e todo chunk que desenha aplica `estilo-figuras.mplstyle`), `test_scratch.py` (o pacote vendorizado — inclusive um hash SHA-256 travando que `scratch/` continua verbatim upstream), `test_dados.py` (os conjuntos commitados, inclusive que `alugueis.csv` preserva a armadilha do `andar`), `test_freeze.py` (o cache envenenado), `test_gradiente.py` (toda subida de gradiente tem motivo registrado), `test_notebooks.py` (os notebooks de aula não podem defasar dos `.qmd`) e `test_atividades.py` (o gabarito não pode vazar para o site).
+**`make teste` roda `pytest tests/`** — 71 testes em oito arquivos: `test_estrutura.py` (registro no `_quarto.yml`, caminhos de dados, os totais de 6 capítulos / 27 seções / 33 arquivos contra o `LIVRO` de `scripts/gerar-stubs.py`, todo link interno para `.qmd` resolvendo, a regra editorial acima, nenhuma seção inventando número do Grus, e os três guardas da spec do ISLP: nenhum chunk executável usa biblioteca proibida, toda seção dos capítulos novos tem figura, e todo chunk que desenha aplica `estilo-figuras.mplstyle`), `test_scratch.py` (o pacote vendorizado — inclusive um hash SHA-256 travando que `scratch/` continua verbatim upstream), `test_dados.py` (os conjuntos commitados, inclusive que `alugueis.csv` preserva a armadilha do `andar`), `test_freeze.py` (o cache envenenado), `test_gradiente.py` (toda subida de gradiente tem motivo registrado), `test_notebooks.py` (os notebooks de aula não podem defasar dos `.qmd`), `test_atividades.py` (o gabarito não pode vazar para o site) e `test_apoio.py` (as páginas de `apoio/` do capítulo 12: os dados embutidos trazem os números das seções 12.1 e 12.2, e o núcleo de cada página roda no `node` e é conferido contra o `scikit-learn`; o container não tem `node`, então esses testes são pulados lá).
 
 É o que garante a regra "todo `.qmd` novo precisa ser registrado em `_quarto.yml`" — sem essa suíte, um arquivo esquecido no YAML só aparece quando alguém percebe a seção faltando no site publicado.
 
@@ -326,18 +326,21 @@ O link é do site para o notebook e **não** o contrário: `LINHA_COLAB`, no ger
 
 ### `apoio/` — páginas interativas de aula, servidas junto do site
 
-`apoio/` guarda páginas HTML autônomas para usar **ao vivo na aula**, ao lado do slide e do notebook. Hoje são duas, as duas do capítulo 5:
+`apoio/` guarda páginas HTML autônomas para usar **ao vivo na aula**, ao lado do slide e do notebook. Entre elas, as duas do capítulo 5 e as duas do capítulo 12:
 
 - **`gradiente-descendente.html`** (seções 5.1 a 5.4) — o aluno escolhe a função, mexe no tamanho do passo e vê, a cada iteração, a derivada, o passo e o rastro; em uma variável e em duas, com contorno e superfície 3D lado a lado.
 - **`lote-minibatch-estocastico.html`** (seção 5.6) — os três métodos treinando ao mesmo tempo na regressão da seção 5.5, com a perda (log-log) e a reta ajustada em dois painéis simultâneos. **Um interruptor troca o que o relógio conta**, e é aí que mora a lição: em *chamadas a `gradient_step`* os três gastam o mesmo e os epochs saem diferentes (5.000 / 1.000 / 50), com o estocástico sete ordens de grandeza atrás; em *epochs* os três dão o mesmo número de passadas e o gasto sai diferente (1.200 / 6.000 / 120.000 chamadas), e aí o estocástico parece ganhar de longe. A mesma corrida, duas conclusões opostas, conforme a coluna que se decide manter fixa.
 
   Trocar de modo também troca a granularidade do registro: em *epochs* a perda é medida uma vez por epoch, isto é, só nas **fronteiras** — onde a cascata do estocástico já se autocorrigiu. Por isso o serrilhado some ao virar o interruptor, e isso não é bug: é a observação que a própria seção faz ao medir "só nas fronteiras de epoch".
 
+- **`crescimento-da-arvore.html`** (seção 12.1) — a árvore de `anos` e `rebatidas` crescendo um corte por vez, com o melhor corte de cada folha "em fantasma" debaixo dela, o ponto de corte arrastável no plano (os jogadores com a cor do salário) e a curva do RSS de cada posição. As contas rodam na própria página, num `<script id="nucleo">` sem DOM, que `test_apoio.py` executa no `node` contra o `DecisionTreeRegressor(max_leaf_nodes=k)`.
+- **`poda-da-arvore.html`** (seção 12.2) — a árvore grande das 19 colunas podada um degrau por vez: antes, galhos candidatos (o custo por folha perdida, que é o α do degrau), depois, e o erro de validação cruzada contra o número de folhas. **Os dados vêm de `scripts/gerar-dados-arvores.py`, rodado no container** (`docker compose run --rm --no-deps livro python scripts/gerar-dados-arvores.py`): a árvore grande difere entre host e container (120 × 121 folhas), e a página tem de mostrar a do site. Rodar no host e commitar publica uma página que contradiz o render.
+
 **São arquivos estáticos, não conteúdo do site.** Um HTML só, sem build, sem dependência de rede, que abre com dois cliques e roda offline. Não têm `.qmd`, não entram no `book.chapters` e não aparecem no sidebar — o que os leva ao site é uma linha em `project.resources`, no `_quarto.yml`, que o Quarto copia para `_book/apoio/`. Sem essa linha, a página existe no repositório e **não** existe no site publicado.
 
 **Celular não é requisito.** As páginas de `apoio/` são projetadas na aula e abertas no computador; basta que funcionem em tela de desktop e de projetor, nos temas claro e escuro. Não gaste rodada de verificação nem de revisão com largura de celular nelas — nem nas seções do livro (ver "O livro é lido no computador", acima).
 
-As duas dividem tokens, tipografia e componentes de propósito — são irmãs, e uma terceira página deve copiar o mesmo bloco `:root` em vez de inventar outro.
+Todas dividem tokens, tipografia e componentes de propósito — são irmãs, e uma página nova deve copiar o mesmo bloco `:root` em vez de inventar outro.
 
 Quatro decisões que não são óbvias e custam tempo a redescobrir:
 
