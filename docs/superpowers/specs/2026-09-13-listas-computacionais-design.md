@@ -190,6 +190,17 @@ a 5 saem quando os capítulos delas existirem.
 capítulos 9, 10 e 11 (ISLP 4, 5 e 6), e não só o 9 e o 10. O conteúdo da lista 3,
 que pela tabela acima cobriria o 11 e o 12, fica em aberto.
 
+**Emenda de 2026-11-04.** A lista 3 cobre os capítulos 12 e 13 (ISLP 8), com
+entrega em 18/11, uma semana depois da aula do capítulo 13 (11/11), como manda a
+regra acima. Seis exercícios do ISLP 8.4, escolhidos pelo professor: os
+conceituais 2, 3, 4 e 5 e os aplicados 8 e 9. O item de BART do 8.8 sai, porque o
+BART está fora da ementa. Os dois aplicados usam `Carseats` e `OJ`, que entraram
+em `dados/` para isso, extraídos do *wheel* do ISLP e traduzidos como os demais
+(ver `dados/README.md`). A semente é 3 em toda divisão, árvore, floresta e
+`KFold`; com ela, conferido no host e no container, a validação cruzada escolhe
+uma árvore podada nos dois conjuntos, e o `export_text` com `max_depth=3` do OJ
+mostra folhas.
+
 ## Testes
 
 A suíte ganha o que o padrão da casa já cobra dos outros derivados:

@@ -535,6 +535,70 @@ amostras que não são desses quatro tipos; elas não estão no pacote, que traz
 só as 20. `khan_do_pacote()` asserta as contagens por código antes de gravar,
 e `test_khan_formato` as trava no arquivo commitado.
 
+## `Carseats.csv`, `OJ.csv` — os dois da lista computacional 3 (ISLP 8.4)
+
+Da lista computacional 3, que cobre os capítulos 12 e 13 (ISLP 8). O
+`Carseats` é o conjunto do exercício 5 da lista (o 8.8 do livro), com árvore
+de regressão, poda, bagging e floresta; o `OJ`, o do exercício 6 (o 8.9), com
+árvore de classificação e poda. Nenhum capítulo os lê.
+
+Os dois vêm do *wheel* do pacote `ISLP` **0.4.1**, pela mesma
+`extrair_do_pacote` do `Default` e do `Hitters` — ver a seção do `Default`,
+acima, sobre por que isso não torna o `ISLP` uma dependência. Chegam sem a
+coluna de índice do R e sem nenhum vazio. Depois da extração, só o cabeçalho e
+as categorias foram traduzidos; nenhum valor numérico mudou, e o **nome do
+arquivo** fica, como ponte com o livro-texto.
+
+### `Carseats.csv` — 400 lojas que vendem cadeirinhas infantis para carro
+
+**O conjunto é simulado pelos autores** de @james2023, como o `Default` — não é
+dado observado.
+
+| Original | Traduzida | Valores |
+|---|---|---|
+| `Sales` | `vendas` | unidades vendidas na loja, em milhares |
+| `CompPrice` | `preco_concorrente` | preço do concorrente na mesma praça |
+| `Income` | `renda` | renda da comunidade, em milhares de dólares |
+| `Advertising` | `propaganda` | verba local de propaganda, em milhares de dólares |
+| `Population` | `populacao` | população da região, em milhares |
+| `Price` | `preco` | preço da cadeirinha na loja |
+| `ShelveLoc` | `prateleira` | `Bad`/`Medium`/`Good` → `ruim`/`média`/`boa` |
+| `Age` | `idade_media` | idade média da população local |
+| `Education` | `escolaridade` | nível de escolaridade da região |
+| `Urban` | `urbana` | `Yes`/`No` → `sim`/`não` |
+| `US` | `eua` | `Yes`/`No` → `sim`/`não` |
+
+`renda` também existe no `Credit` e no `Default`, e `vendas` no
+`Advertising`, com outros sentidos e outras unidades. Mesmo nome de coluna,
+arquivo diferente.
+
+### `OJ.csv` — 1.070 compras de suco de laranja, Citrus Hill ou Minute Maid
+
+| Original | Traduzida | Valores |
+|---|---|---|
+| `Purchase` | `compra` | `CH` (Citrus Hill) ou `MM` (Minute Maid); as siglas das marcas ficam |
+| `WeekofPurchase` | `semana` | semana da compra, de 227 a 278 |
+| `StoreID` | `id_loja` | código da loja: 1, 2, 3, 4 ou 7 |
+| `PriceCH`, `PriceMM` | `preco_ch`, `preco_mm` | preço de tabela de cada marca |
+| `DiscCH`, `DiscMM` | `desconto_ch`, `desconto_mm` | desconto oferecido em cada marca |
+| `SpecialCH`, `SpecialMM` | `promocao_ch`, `promocao_mm` | código 0/1: houve promoção especial da marca |
+| `LoyalCH` | `fidelidade_ch` | fidelidade do cliente à Citrus Hill, entre 0 e 1 |
+| `SalePriceMM`, `SalePriceCH` | `preco_final_mm`, `preco_final_ch` | preço de tabela menos o desconto |
+| `PriceDiff` | `diferenca_preco` | `preco_final_mm` − `preco_final_ch` |
+| `Store7` | `loja_7` | `Yes`/`No` → `sim`/`não`: a compra foi na loja 7 |
+| `PctDiscMM`, `PctDiscCH` | `perc_desconto_mm`, `perc_desconto_ch` | desconto dividido pelo preço de tabela (fração, não porcentagem) |
+| `ListPriceDiff` | `diferenca_preco_tabela` | `preco_mm` − `preco_ch` |
+| `STORE` | `loja` | código da loja de 0 a 4; a loja 7 vira 0 |
+
+**Várias colunas são contas sobre outras, e a loja aparece três vezes.**
+Conferido no arquivo: `preco_final_*` = `preco_*` − `desconto_*`,
+`diferenca_preco` = `preco_final_mm` − `preco_final_ch`,
+`diferenca_preco_tabela` = `preco_mm` − `preco_ch` e `perc_desconto_mm` =
+`desconto_mm` / `preco_mm`; `id_loja`, `loja` e `loja_7` codificam a mesma loja
+(`id_loja` 1 a 4 ↔ `loja` 1 a 4, `id_loja` 7 ↔ `loja` 0 ↔ `loja_7` = `sim`). A
+redundância é do original e fica: o exercício pede todas as outras variáveis
+como preditores.
+
 ## O que saiu
 
 Os conjuntos da abordagem de obtenção de dados abandonada — `stocks.csv`,

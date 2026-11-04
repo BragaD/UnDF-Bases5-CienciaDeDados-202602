@@ -76,7 +76,9 @@ def extrair_do_pacote(nomes: list[str]) -> None:
 
 # `Hitters` entra com o capítulo 12 (ISLP 8.1.1): é o exemplo da árvore de
 # regressão e da poda. O site do livro devolve 404 para ele.
-extrair_do_pacote(["Default", "Hitters"])
+# `Carseats` e `OJ` entram com a lista computacional 3: são os conjuntos dos
+# exercícios 8.8 e 8.9 do ISLP. Nenhum capítulo os lê.
+extrair_do_pacote(["Default", "Hitters", "Carseats", "OJ"])
 
 
 # `mnist_treino.csv.gz` e `mnist_teste.csv.gz` entram com o capítulo 14 (ISLP

@@ -653,6 +653,21 @@ NOMES_ANTIGOS_DE_COLUNA = [
     # fora: "Age" já foi excluído desde o Credit pelo mesmo motivo, e os
     # outros três são genéricos ("Ca" é também o símbolo do cálcio) — o
     # custo do falso positivo supera o do guarda.
+    "Sales",
+    "CompPrice",
+    "ShelveLoc",
+    # "Advertising" (cabeçalho original de Carseats) fica de fora: é o NOME
+    # de outro conjunto, citado entre crases nos capítulos 7 e 8. "Price",
+    # "Population", "Urban" e "US" também: genéricos demais.
+    "Purchase",
+    "LoyalCH",
+    "PriceDiff",
+    "StoreID",
+    "Store7",
+    # Do OJ entram a resposta, que o enunciado do ISLP cita pelo nome, e as
+    # colunas que aparecem no alto da árvore — as que quem escreve sobre ela
+    # tende a citar. Os demais cabeçalhos ("PriceCH", "SalePriceMM",
+    # "PctDiscMM"…) ficam de fora pela regra de "Top10perc", acima.
 ]
 
 

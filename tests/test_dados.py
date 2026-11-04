@@ -22,6 +22,8 @@ ESPERADOS = [
     "USArrests.csv",
     "NCI60.csv.gz",
     "Khan.csv.gz",
+    "Carseats.csv",
+    "OJ.csv",
 ]
 
 COLUNAS_ESPERADAS = {
@@ -60,6 +62,16 @@ COLUNAS_ESPERADAS = {
         "depressao_st", "inclinacao_st", "vasos_coloridos", "talio",
         "doenca_cardiaca",
     ],    "USArrests.csv": ["estado", "homicidio", "agressao", "pop_urbana", "estupro"],
+    "Carseats.csv": [
+        "vendas", "preco_concorrente", "renda", "propaganda", "populacao",
+        "preco", "prateleira", "idade_media", "escolaridade", "urbana", "eua",
+    ],
+    "OJ.csv": [
+        "compra", "semana", "id_loja", "preco_ch", "preco_mm", "desconto_ch",
+        "desconto_mm", "promocao_ch", "promocao_mm", "fidelidade_ch",
+        "preco_final_mm", "preco_final_ch", "diferenca_preco", "loja_7",
+        "perc_desconto_mm", "perc_desconto_ch", "diferenca_preco_tabela", "loja",
+    ],
 }
 
 
