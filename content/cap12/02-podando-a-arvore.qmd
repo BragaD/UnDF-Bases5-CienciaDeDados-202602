@@ -450,7 +450,7 @@ print("erro de validação cruzada:", round(-busca.best_score_, 4))
 **`busca.best_params_`** — o valor da grade de menor erro. **`busca.best_estimator_`** — o modelo reajustado com todas as linhas de treino e esse valor. **`busca.best_score_`** — a pontuação média dos grupos nesse valor; com o sinal trocado, o erro de validação cruzada.
 :::
 
-O `cv_results_` da busca guarda o erro de cada grupo em cada ponto da grade. A célula abaixo monta com eles um array de uma linha por grupo e uma coluna por ponto e tira, para cada tamanho de árvore, a média dos 6 grupos e o desvio $s/\sqrt{6}$, com $s$ o desvio padrão dos erros dos grupos. A tabela mostra os três tamanhos de menor erro:
+O `cv_results_` da busca guarda o erro de cada grupo em cada ponto da grade. A célula abaixo monta com eles um array de uma linha por grupo e uma coluna por ponto e tira, para cada ponto da grade, a média dos 6 grupos e o desvio $s/\sqrt{6}$, com $s$ o desvio padrão dos erros dos grupos. A tabela `por_ponto` tem uma linha por ponto da grade; a `curvas` fica com uma por tamanho de árvore. A tabela mostra os três tamanhos de menor erro:
 
 ```{python}
 #| label: curvas
@@ -460,13 +460,13 @@ erros = []
 for k in range(n_grupos):
     erros.append(-resultados[f"split{k}_test_score"])
 erros = np.array(erros)
-curvas = pd.DataFrame({
+por_ponto = pd.DataFrame({
     "ccp_alpha": grade[::-1],
     "folhas": tamanhos["folhas"].to_numpy()[::-1],
     "cv": erros.mean(axis=0),
     "desvio": erros.std(axis=0, ddof=1) / np.sqrt(n_grupos),
 })
-curvas = curvas.drop_duplicates("folhas").set_index("folhas")
+curvas = por_ponto.drop_duplicates("folhas").set_index("folhas")
 curvas.sort_values("cv").head(3).style.format(precision=4)
 ```
 
@@ -485,6 +485,52 @@ pd.DataFrame({"à mão": [mse_grupo], "GridSearchCV": [erros[0, 0]]},
 ```
 
 Os dois números são o mesmo. A validação cruzada escolhe a subárvore de 4 folhas, com erro de 0,2694, em `ccp_alpha` = 0,0343, isto é, $\alpha$ = 4,53 na escala de (8.4). A segunda melhor tem 7 folhas e erro de 0,2841.
+
+O `GridSearchCV` mediu o erro em todos os pontos da grade, e não só no escolhido. A figura desenha o erro de cada ponto duas vezes: contra o `ccp_alpha`, que é o que a busca varia, e contra o número de folhas da subárvore que cada ponto dá nos 132 jogadores de treino.
+
+```{python}
+#| label: fig-cv-grade
+#| fig-cap: "O erro de validação cruzada em 6 grupos, com a faixa de um desvio para cima e para baixo. À esquerda, contra `ccp_alpha`, um ponto por valor da grade; à direita, contra o número de folhas da subárvore podada nos 132 jogadores de treino, um ponto por tamanho. Os eixos horizontais estão em escala logarítmica, e o x marca o menor erro. À esquerda de 0,0001, a grade continua até `ccp_alpha` = 0, a árvore inteira."
+#| fig-alt: "Dois gráficos de linha lado a lado, com o mesmo eixo vertical, o MSE de validação cruzada, cercados por uma faixa azul clara. À esquerda, com ccp_alpha de 0,0001 a 1 em escala log no eixo horizontal, a curva azul oscila num patamar com ccp_alpha pequeno, desce em degraus entre 0,001 e 0,01 até o mínimo em 0,0343, marcado com um x em 0,2694, e sobe nos dois últimos pontos. À direita, com o número de folhas de 2 a mais de 100 em escala log, a mesma curva espelhada: desce de 2 para 4 folhas, onde está o x, sobe entre 10 e 20 folhas e oscila num patamar mais alto dali até a árvore inteira."
+fig, (ax_alfa, ax_folhas) = plt.subplots(1, 2, figsize=(8.4, 3.4), sharey=True)
+erro_escolhida = -busca.best_score_
+
+positivos = por_ponto[por_ponto["ccp_alpha"] > 0]
+ax_alfa.fill_between(positivos["ccp_alpha"], positivos["cv"] - positivos["desvio"],
+                     positivos["cv"] + positivos["desvio"],
+                     color="C0", alpha=0.3, linewidth=0)
+ax_alfa.plot(positivos["ccp_alpha"], positivos["cv"], color="C0", linewidth=2,
+             marker="o", markersize=3)
+ax_alfa.scatter(alfa_escolhido, erro_escolhida, marker="x", s=80, color="C0",
+                linewidths=2.5, zorder=3)
+ax_alfa.set_xscale("log")
+ax_alfa.set_xlim(1e-4, 1)
+ax_alfa.set_xlabel("ccp_alpha")
+ax_alfa.set_ylabel("MSE de validação cruzada")
+
+por_tamanho = curvas.sort_index()
+ax_folhas.fill_between(por_tamanho.index, por_tamanho["cv"] - por_tamanho["desvio"],
+                       por_tamanho["cv"] + por_tamanho["desvio"],
+                       color="C0", alpha=0.3, linewidth=0)
+ax_folhas.plot(por_tamanho.index, por_tamanho["cv"], color="C0", linewidth=2,
+               marker="o", markersize=3)
+ax_folhas.scatter(escolhida.get_n_leaves(), erro_escolhida, marker="x", s=80,
+                  color="C0", linewidths=2.5, zorder=3)
+ax_folhas.set_xscale("log")
+ax_folhas.set_xlim(1.8, 150)
+ax_folhas.set_xticks([2, 5, 10, 20, 50, 100])
+ax_folhas.set_xticklabels(["2", "5", "10", "20", "50", "100"])
+ax_folhas.set_xlabel("folhas")
+
+plt.tight_layout()
+plt.show()
+```
+
+::: {.funcao}
+**`plt.subplots(1, 2, sharey=True)`** — dois painéis lado a lado com o mesmo eixo vertical. **`ax.fill_between(x, abaixo, acima, color, alpha)`** — pinta a faixa entre as curvas `abaixo` e `acima`; `alpha` é a opacidade. **`ax.plot(..., marker="o", markersize)`** — a linha com um círculo em cada ponto, do tamanho `markersize`.
+:::
+
+A curva de validação cruzada não só desce. Os dois painéis são o mesmo erro, espelhado: um `ccp_alpha` maior poda mais e deixa menos folhas, então ir para a direita no painel da esquerda é ir para a esquerda no da direita. Das 2 para as 4 folhas, o erro cai; com mais folhas, sobe, e a partir de umas vinte folhas oscila num patamar mais alto até a árvore inteira, a ponta esquerda do painel do `ccp_alpha`. A faixa de um desvio é larga em toda a grade: com 22 jogadores por grupo, o erro de um grupo para o outro varia muito.
 
 O desvio é o da regra do um desvio da seção 11.2, que fica com a menor árvore cujo erro não passa do mínimo mais um desvio:
 
@@ -562,7 +608,7 @@ plt.show()
 ```
 
 ::: {.funcao}
-**`ax.fill_between(x, abaixo, acima, color, alpha)`** — pinta a faixa entre as curvas `abaixo` e `acima`; `alpha` é a opacidade. **`ax.legend(loc, bbox_to_anchor)`** — a legenda, com o canto `loc` preso ao ponto `bbox_to_anchor`, em frações do painel.
+**`ax.legend(loc, bbox_to_anchor)`** — a legenda, com o canto `loc` preso ao ponto `bbox_to_anchor`, em frações do painel.
 :::
 
 Na tabela, o erro de treino desce a cada linha. O de validação cruzada tem o mínimo em 4 folhas e fica acima dele com mais folhas: as folhas a mais passam a acompanhar o ruído dos jogadores de treino, e a árvore pequena demais, com 2 ou 3 folhas, junta jogadores de salários muito diferentes. O erro de teste da subárvore escolhida é 0,3630, abaixo do da árvore grande e bem abaixo do 0,8393 da média do treino, e o menor erro de teste entre as subárvores também está em 4 folhas.
@@ -614,6 +660,8 @@ print("correlação entre anos e vezes_ao_bastao_carreira:", round(correlacao, 3
 :::
 
 A correlação é de 0,916. Entre os jogadores com menos tempo, a árvore pergunta pelas corridas impulsionadas na carreira, com corte em 70,5, e os dois grupos ficam com salário típico de US$ 103.316 e US$ 235.202. Entre os mais experientes, a pergunta é sobre as rebatidas da temporada anterior, com corte em 122,5, e os típicos são US$ 469.377 e US$ 925.119. A árvore grande tinha mais de uma centena de folhas; a podada tem 4, e erra menos no teste que ela.
+
+## A poda com outros sorteios do treino
 
 Com outros 132 jogadores no treino, a validação cruzada escolheria o mesmo tamanho, e a primeira pergunta seria sobre a mesma coluna? A função abaixo repete a divisão, o crescimento, a poda e a escolha por validação cruzada, e o laço a roda com cinco sementes no sorteio do treino, de 1 a 5:
 

@@ -156,6 +156,44 @@ corte = pd.DataFrame([no(grupo), no(grupo[baixa]), no(grupo[~baixa])],
 corte.style.format(precision=3)
 ```
 
+Em forma de árvore, o pai é a raiz e os dois filhos são as folhas. Uma árvore de classificação ajustada só com os 89 pacientes do pai, com todas as 18 colunas e um corte só, escolhe esse mesmo corte:
+
+```{python}
+#| label: um-corte
+from sklearn.tree import DecisionTreeClassifier, plot_tree
+
+um_corte = DecisionTreeClassifier(max_depth=1, random_state=12)
+um_corte.fit(X.loc[grupo.index], y.loc[grupo.index])
+print("classes, em ordem:", ", ".join(um_corte.classes_))
+print("coluna do corte:", X.columns[um_corte.tree_.feature[0]])
+print("maior depressao_st com ST ≤ 0.5:", grupo.loc[baixa, "depressao_st"].max())
+print("menor depressao_st com ST > 0.5:", grupo.loc[~baixa, "depressao_st"].min())
+```
+
+::: {.funcao}
+**`DecisionTreeClassifier(criterion, max_depth, random_state, ccp_alpha)`** — a árvore de classificação. `criterion` é a medida de impureza que escolhe os cortes: `"gini"`, o padrão, ou `"entropy"`, a entropia com logaritmo na base 2, o que só muda a escala. `max_depth` limita o número de perguntas entre a raiz e uma folha; com 1, a árvore faz um corte só. `random_state` e `ccp_alpha` fazem o mesmo que no `DecisionTreeRegressor`. O `predict` devolve a classe mais comum da folha.
+
+**`arvore.classes_`** — as classes que a árvore conhece, em ordem alfabética; é a ordem das contagens e das proporções que ela guarda. **`arvore.tree_.feature[0]`** — a posição, entre as colunas de `X`, da coluna que a raiz pergunta. **`X.loc[indice]`** — as linhas com esses rótulos; `grupo.index` são os rótulos dos 89 pacientes.
+:::
+
+```{python}
+#| label: fig-um-corte
+#| fig-cap: "O corte como árvore: a raiz é o pai, os 89 pacientes com tálio alterado e dor assintomática, e as folhas são os dois filhos. Cada caixa mostra a pergunta (na raiz), o índice de Gini do nó (`gini`), o número de pacientes (`samples`), entre colchetes os pacientes sem e com doença (`value`), e a classe que o nó prevê (`class`). O ramo `True`, à esquerda, é o da condição verdadeira."
+#| fig-alt: "Diagrama de árvore com um corte. A raiz pergunta se depressao_st é menor ou igual a 0,55, com Gini 0,199, 89 pacientes, 10 sem e 79 com doença, e prevê sim. O ramo True leva a uma folha com Gini 0,472, 21 pacientes, 8 sem e 13 com doença, que prevê sim. O ramo False leva a uma folha com Gini 0,057, 68 pacientes, 2 sem e 66 com doença, que também prevê sim."
+fig, ax = plt.subplots(figsize=(5.2, 2.8))
+ax.set_facecolor("white")
+plot_tree(um_corte, feature_names=list(X.columns),
+          class_names=list(um_corte.classes_), impurity=True,
+          rounded=True, precision=3, fontsize=10, ax=ax)
+plt.show()
+```
+
+::: {.funcao}
+**`plot_tree(..., class_names, impurity=True)`** — num classificador, `class_names` dá o nome de cada classe, na ordem de `classes_`; as contagens de `value` saem nessa ordem, primeiro "não", depois "sim". `impurity=True`, o padrão, mostra a impureza de cada nó pelo critério da árvore, aqui o Gini.
+:::
+
+As três caixas preveem "sim", e o Gini de cada uma é o da tabela: 0,199 no pai, 0,472 e 0,057 nos filhos. A pergunta aparece como `depressao_st` ≤ 0,55: a árvore põe o limiar no meio do caminho entre o maior valor de um lado, 0,5, e o menor do outro, 0,6, e separa os mesmos pacientes que "até 0,5". O corte não troca a classe prevista de nenhum paciente, e mesmo assim é o que a árvore escolhe entre todas as colunas. Por quê?
+
 Depois do corte, cada medida é a média ponderada das dos dois filhos, com o número de pacientes de cada um como peso. A tabela põe essa média ao lado do valor do pai:
 
 ```{python}
@@ -249,8 +287,6 @@ O `DecisionTreeClassifier` cresce a árvore com o índice de Gini por padrão. S
 
 ```{python}
 #| label: grande
-from sklearn.tree import DecisionTreeClassifier
-
 grande = DecisionTreeClassifier(random_state=12)
 grande.fit(X, y)
 print("classes, em ordem:", ", ".join(grande.classes_))
@@ -261,9 +297,7 @@ print("erro de treino:", round((previsto_treino != y).mean(), 4))
 ```
 
 ::: {.funcao}
-**`DecisionTreeClassifier(criterion, random_state, ccp_alpha)`** — a árvore de classificação. `criterion` é a medida de impureza que escolhe os cortes: `"gini"`, o padrão, ou `"entropy"`, a entropia com logaritmo na base 2, o que só muda a escala. `random_state` e `ccp_alpha` fazem o mesmo que no `DecisionTreeRegressor`. O `predict` devolve a classe mais comum da folha.
-
-**`arvore.classes_`** — as classes que a árvore conhece, em ordem alfabética; é a ordem das contagens e das proporções que ela guarda. **`(previsto != y).mean()`** — a fração de pacientes com a classe prevista errada, o erro de classificação.
+**`(previsto != y).mean()`** — a fração de pacientes com a classe prevista errada, o erro de classificação.
 :::
 
 Com erro de treino zero, a árvore grande decorou os 297 pacientes, e o remédio é o da seção 12.2: o caminho de poda, uma grade com um ponto dentro de cada intervalo, e a validação cruzada para escolher o `ccp_alpha`. No classificador, o custo que o `ccp_alpha` equilibra com o número de folhas é a média da impureza das folhas pelo critério da árvore, ponderada pela fração de pacientes de cada uma; com o critério padrão, é o índice de Gini, e não o erro de classificação. O último valor do caminho, a raiz sozinha, mostra isso:
@@ -419,7 +453,7 @@ Dos 137 doentes, 39 recebem "não" e 98 recebem "sim"; dos 160 sem doença, 19 r
 
 ## A árvore escolhida
 
-A figura adiante desenha a árvore escolhida. Num classificador, cada caixa mostra também, entre colchetes (`value`), as contagens das duas classes, na ordem de `classes_` (primeiro "não", depois "sim"), e a classe que o nó prevê (`class`); `class_names` dá ao `plot_tree` o nome de cada classe, nessa ordem.
+A figura adiante desenha a árvore escolhida, com as caixas da árvore de um corte da subseção "Um corte, a mesma classe", sem o Gini: a pergunta, os pacientes, as contagens das duas classes (`value`, primeiro "não", depois "sim") e a classe que o nó prevê (`class`).
 
 O laço da célula da figura percorre as caixas e, nas que têm moldura e nenhuma pergunta, isto é, nas folhas, acrescenta "folha 1", "folha 2" e assim por diante, da esquerda para a direita, para que a tabela que vem depois possa citá-las.
 
@@ -427,8 +461,6 @@ O laço da célula da figura percorre as caixas e, nas que têm moldura e nenhum
 #| label: fig-arvore
 #| fig-cap: "A árvore de 6 folhas escolhida por validação cruzada, com as folhas numeradas da esquerda para a direita. Cada caixa mostra a pergunta (nos nós internos), o número de pacientes (`samples`), entre colchetes os pacientes sem e com doença (`value`), e a classe que o nó prevê (`class`). O ramo `True`, à esquerda, é o da condição verdadeira: numa indicadora, \"≤ 0,5\" quer dizer que o paciente não tem aquela categoria."
 #| fig-alt: "Diagrama de árvore. A raiz pergunta se talio_normal é menor ou igual a 0,5, com 297 pacientes. O ramo True, dos pacientes com tálio alterado, pergunta se dor_no_peito_assintomática é menor ou igual a 0,5, com 133 pacientes; se sim, pergunta se vasos_coloridos é menor ou igual a 0,5, com a folha 1, de 19 não e 8 sim, que prevê não, e a folha 2, de 4 não e 13 sim, que prevê sim; se não, vai à folha 3, de 10 não e 79 sim, que prevê sim. O ramo False da raiz, dos pacientes com tálio normal, pergunta se vasos_coloridos é menor ou igual a 0,5, com 164 pacientes; se sim, vai à folha 4, de 102 não e 13 sim, que prevê não; se não, pergunta se dor_no_peito_assintomática é menor ou igual a 0,5, com a folha 5, de 22 não e 7 sim, que prevê não, e a folha 6, de 3 não e 17 sim, que prevê sim."
-from sklearn.tree import plot_tree
-
 fig, ax = plt.subplots(figsize=(11.5, 4.8))
 ax.set_facecolor("white")
 caixas = plot_tree(escolhida, feature_names=list(X.columns),
