@@ -1,0 +1,1038 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Crescendo a Árvore</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans+Condensed:wght@600&family=IBM+Plex+Sans:wght@400;500&display=swap">
+
+<style>
+/* ------------------------------------------------------------------ *
+ * Tokens — os mesmos das outras páginas de apoio/, para todas serem
+ * visivelmente irmãs. Fundo e texto do tema `cosmo`; azuis do logo da UnDF.
+ *
+ * A regra de leitura também é a mesma: azul é o que está parado, laranja
+ * é o que está mudando (o corte em teste, o galho novo).
+ * ------------------------------------------------------------------ */
+:root{
+  color-scheme: light;
+
+  --paper:    #FFFFFF;
+  --paper-2:  #EEF4FA;
+  --panel:    #FFFFFF;
+  --ink:      #373A3C;
+  --ink-2:    #5B6B76;
+  --ink-3:    #8A99A5;
+  --rule:     #DCE5EE;
+  --grid:     #EDF2F7;
+
+  --marca:    #2264AF;
+  --ajuste:   #D9480F;
+
+  --sans: "IBM Plex Sans", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --cond: "IBM Plex Sans Condensed", "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+
+  --r: 3px;
+}
+
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    color-scheme: dark;
+    --paper:   #12161B;
+    --paper-2: #1A2430;
+    --panel:   #171F27;
+    --ink:     #E6ECF2;
+    --ink-2:   #9BAAB8;
+    --ink-3:   #6E7F8D;
+    --rule:    #2A3743;
+    --grid:    #202B35;
+    --marca:   #6FB0E8;
+    --ajuste:  #FF7A45;
+  }
+}
+:root[data-theme="dark"]{
+  color-scheme: dark;
+  --paper:   #12161B;
+  --paper-2: #1A2430;
+  --panel:   #171F27;
+  --ink:     #E6ECF2;
+  --ink-2:   #9BAAB8;
+  --ink-3:   #6E7F8D;
+  --rule:    #2A3743;
+  --grid:    #202B35;
+  --marca:   #6FB0E8;
+  --ajuste:  #FF7A45;
+}
+
+*{ box-sizing: border-box; }
+[hidden]{ display: none !important; }
+
+body{
+  margin: 0;
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--sans);
+  font-size: 15px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+}
+
+:focus-visible{ outline: 2px solid var(--marca); outline-offset: 2px; }
+
+.app{
+  max-width: 1360px;
+  margin: 0 auto;
+  padding: 22px 24px 40px;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.topbar{
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 24px;
+  flex-wrap: wrap;
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--rule);
+}
+
+.eyebrow{
+  margin: 0 0 2px;
+  font-family: var(--cond);
+  font-size: 11.5px;
+  font-weight: 600;
+  letter-spacing: .14em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+}
+
+h1{
+  margin: 0;
+  font-family: var(--cond);
+  font-weight: 600;
+  font-size: clamp(26px, 3.4vw, 38px);
+  line-height: 1.04;
+  letter-spacing: -.005em;
+  text-wrap: balance;
+}
+
+.sub{ margin: 6px 0 0; max-width: 72ch; color: var(--ink-2); font-size: 14.5px; }
+
+.relogio{ text-align: right; font-family: var(--mono); font-variant-numeric: tabular-nums; }
+.relogio .n{ font-size: 30px; line-height: 1; color: var(--ink); }
+.relogio .u, .relogio .r{
+  display: block;
+  font-family: var(--cond);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+  margin-top: 4px;
+}
+.relogio .r b{ font-family: var(--mono); font-size: 15px; letter-spacing: 0; color: var(--ink); }
+
+/* -------------------------------- palco --------------------------------- */
+
+.stage{
+  display: grid;
+  grid-template-columns: minmax(0, 1.08fr) minmax(0, 1fr);
+  gap: 20px;
+  align-items: start;
+}
+.coluna{ display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+
+.plate{
+  position: relative;
+  background: var(--panel);
+  border: 1px solid var(--rule);
+  border-radius: var(--r);
+  overflow: hidden;
+}
+.plate svg{ display: block; width: 100%; user-select: none; -webkit-user-select: none; }
+
+.tag{
+  position: absolute;
+  top: 9px; left: 12px;
+  font-family: var(--cond);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+  pointer-events: none;
+}
+.tag b{ color: var(--ink); font-weight: 600; text-transform: none; letter-spacing: 0; font-family: var(--mono); }
+
+.transport{ display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+.rotulo{
+  font-family: var(--cond);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: .07em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+}
+.dica{ margin: 0; flex: 1 1 260px; font-size: 13px; color: var(--ink-2); }
+
+button.ctl{
+  font-family: var(--cond);
+  font-size: 13.5px;
+  font-weight: 600;
+  letter-spacing: .03em;
+  padding: 8px 14px;
+  border: 1px solid var(--rule);
+  border-radius: var(--r);
+  background: var(--panel);
+  color: var(--ink);
+  cursor: pointer;
+}
+button.ctl:hover:not(:disabled){ border-color: var(--ink-3); }
+button.ctl.primary{ background: var(--marca); border-color: var(--marca); color: var(--paper); }
+button.ctl.primary:hover:not(:disabled){ filter: brightness(1.08); }
+button.ctl[aria-pressed="true"]{ background: var(--paper-2); border-color: var(--ajuste); }
+button.ctl:disabled{ opacity: .4; cursor: default; }
+
+/* ------------------------------- desenhos ------------------------------- */
+
+svg text{ font-family: var(--sans); font-size: 12px; fill: var(--ink); }
+svg text.num{ font-family: var(--mono); font-size: 11.5px; }
+svg text.fraco{ fill: var(--ink-2); }
+svg text.eixo{ font-family: var(--cond); font-size: 11px; font-weight: 600; letter-spacing: .06em; fill: var(--ink-3); }
+
+.no rect{ fill: var(--panel); stroke: var(--ink-3); stroke-width: 1; }
+.no.folha rect{ fill: var(--paper-2); }
+.no.folha{ cursor: pointer; }
+.no.sel rect{ stroke: var(--ink); stroke-width: 2.25; }
+.no.novo rect{ stroke: var(--ajuste); stroke-width: 2.25; }
+.ramo{ stroke: var(--ink-3); stroke-width: 1.25; fill: none; }
+.ramo.novo{ stroke: var(--ajuste); stroke-width: 2; }
+.fantasma rect{ fill: none; stroke: var(--ink-3); stroke-width: 1; stroke-dasharray: 4 3; }
+.fantasma line{ stroke: var(--ink-3); stroke-width: 1; stroke-dasharray: 3 3; }
+.fantasma.melhor rect{ stroke: var(--ajuste); stroke-width: 2; fill: color-mix(in srgb, var(--ajuste) 9%, transparent); }
+.fantasma.melhor line{ stroke: var(--ajuste); }
+.teste-marca{ stroke: var(--ajuste); stroke-width: 3; stroke-linecap: round; }
+
+.grade line{ stroke: var(--grid); stroke-width: 1; }
+.moldura{ fill: none; stroke: var(--rule); }
+.regiao-sel{ fill: var(--paper-2); }
+.divisa{ stroke: var(--ink-2); stroke-width: 1.5; }
+.ponto{ stroke: var(--panel); stroke-width: 1; }
+.ponto.fora{ opacity: .28; }
+.linha-teste{ stroke: var(--ajuste); stroke-width: 3; }
+.alca{ fill: var(--ajuste); stroke: var(--panel); stroke-width: 2; cursor: grab; }
+#plano{ touch-action: none; cursor: crosshair; }
+#plano:focus-visible{ outline: 2px solid var(--marca); outline-offset: -2px; }
+#curva{ touch-action: none; cursor: ew-resize; }
+
+.curva-rss{ fill: none; stroke: var(--marca); stroke-width: 2; stroke-linejoin: round; }
+.sem-corte{ stroke: var(--ink-3); stroke-width: 1.25; stroke-dasharray: 5 4; }
+.minimo{ fill: none; stroke: var(--marca); stroke-width: 2; }
+.marca-teste{ fill: var(--ajuste); stroke: var(--panel); stroke-width: 2; }
+
+.marca-escala{ stroke: var(--ink-3); stroke-width: 1; }
+
+footer{
+  border-top: 1px solid var(--rule);
+  padding-top: 12px;
+  font-size: 13px;
+  color: var(--ink-2);
+  max-width: 110ch;
+}
+footer p{ margin: 0 0 6px; }
+footer strong{ color: var(--ink); }
+code{ font-family: var(--mono); font-size: .92em; }
+</style>
+</head>
+<body>
+<div class="app">
+  <header class="topbar">
+    <div>
+      <p class="eyebrow">Seção 12.1 · árvores de regressão</p>
+      <h1>Crescendo a árvore</h1>
+      <p class="sub">Prever o logaritmo do salário de um jogador com perguntas de sim ou não sobre os anos de liga e as rebatidas. Clique numa folha da árvore, ou na região dela no plano, escolha a coluna e arraste a linha laranja: a curva embaixo mostra o RSS de cada ponto de corte.</p>
+    </div>
+    <div class="relogio">
+      <span class="n" id="n-folhas">1</span>
+      <span class="u" id="u-folhas">folhas</span>
+      <span class="r">RSS <b id="rss-total">—</b></span>
+    </div>
+  </header>
+
+  <section class="stage">
+    <div class="coluna">
+      <div class="plate">
+        <span class="tag">a árvore</span>
+        <svg id="arvore" role="img" aria-label="Diagrama da árvore atual, com o melhor corte de cada folha tracejado debaixo dela"></svg>
+      </div>
+      <div class="transport">
+        <button class="ctl" id="btn-desfazer">← desfazer</button>
+        <button class="ctl primary" id="btn-proximo">próximo corte →</button>
+        <p class="dica">Tracejado debaixo de cada folha: o melhor corte dela e quanto ele derruba o RSS. O de borda laranja é o que mais derruba, e é ele que o próximo corte aplica.</p>
+      </div>
+    </div>
+
+    <div class="coluna">
+      <div class="plate">
+        <span class="tag" id="tag-plano">os jogadores</span>
+        <svg id="plano" tabindex="0" role="img" aria-label="Os jogadores no plano de anos de liga e rebatidas, com a cor do salário e as regiões das folhas"></svg>
+        <svg id="legenda" role="img" aria-label="Legenda da cor: o logaritmo do salário, de 4,2 a 7,8, com os mil dólares correspondentes"></svg>
+      </div>
+      <div class="transport">
+        <span class="rotulo">cortar em</span>
+        <button class="ctl" id="btn-anos" aria-pressed="false">anos</button>
+        <button class="ctl" id="btn-rebatidas" aria-pressed="false">rebatidas</button>
+        <button class="ctl" id="btn-melhor">ir ao melhor corte</button>
+      </div>
+      <div class="plate">
+        <span class="tag" id="tag-curva">RSS da região</span>
+        <svg id="curva" role="img" aria-label="RSS da região selecionada para cada ponto de corte na coluna escolhida"></svg>
+      </div>
+    </div>
+  </section>
+
+  <footer>
+    <p><strong>O dado.</strong> Os 263 jogadores de <code>Hitters</code> com salário registrado. A resposta é o logaritmo do salário de 1987; os preditores são <code>anos</code>, o número de anos nas grandes ligas, e <code>rebatidas</code>, o número de rebatidas na temporada de 1986. A cor de cada ponto segue o logaritmo do salário, a mesma escala da média de cada folha. Como <code>anos</code> é inteiro, os pontos estão espalhados na horizontal por menos de um quarto de ano, só para não se sobreporem; a região de cada jogador usa o valor exato.</p>
+    <p><strong>As contas.</strong> Numa região, os pontos de corte de uma coluna são os pontos médios entre valores vizinhos, e o RSS de um corte é a soma dos quadrados das distâncias de cada jogador à média do seu lado (8.3). O próximo corte divide a folha cujo melhor corte mais derruba o RSS, a mesma sequência do <code>DecisionTreeRegressor(max_leaf_nodes=k, random_state=12)</code>.</p>
+  </footer>
+</div>
+
+<script type="application/json" id="dados">{"anos":[14,3,11,2,11,2,3,2,13,10,9,4,6,13,15,5,8,1,1,6,18,6,7,10,5,14,3,5,7,14,2,2,4,6,3,5,6,17,2,9,12,6,4,12,6,1,16,4,4,17,3,4,17,14,18,15,9,4,6,4,15,5,11,9,14,2,16,4,5,4,1,3,12,14,3,7,10,8,14,5,1,14,5,13,3,6,4,16,9,8,15,20,5,5,11,5,8,5,7,7,5,18,4,9,3,6,15,2,2,4,12,17,6,14,5,11,15,2,1,10,10,5,13,3,6,3,13,14,3,4,6,4,13,3,11,5,1,8,14,13,6,10,4,2,9,10,7,3,1,7,2,12,15,6,7,10,13,3,10,1,5,7,2,2,13,6,9,1,3,6,3,3,2,7,3,3,4,7,4,5,2,2,9,7,4,14,1,9,24,5,6,5,12,5,12,16,3,18,9,8,20,5,11,6,12,10,9,1,7,4,6,6,4,3,1,12,1,10,13,6,3,4,2,2,6,18,4,2,4,6,8,8,6,4,8,4,5,7,8,4,1,7,6,17,7,3,5,10,19,4,7,2,6,7,7,5,1,1,5,12,6,8,11],"rebatidas":[81,130,141,87,169,37,73,81,92,159,53,113,60,43,158,46,32,92,109,116,168,163,73,129,152,137,108,168,49,106,60,41,46,68,132,57,146,101,53,168,101,102,58,78,177,113,44,56,53,139,53,142,81,131,122,137,119,97,103,96,70,238,163,83,174,82,41,114,83,123,78,138,119,148,115,110,151,49,154,198,51,128,76,125,152,171,118,77,94,85,96,77,139,84,126,78,120,158,169,104,54,70,99,39,40,170,103,103,144,200,55,133,132,39,183,136,70,41,86,95,147,102,94,163,174,39,200,66,76,157,92,73,91,101,47,184,58,118,150,171,147,74,161,91,159,136,85,223,64,127,127,70,141,52,149,84,128,92,157,54,179,131,56,93,148,131,65,54,71,77,120,60,1,94,43,75,167,110,76,93,137,152,144,80,163,83,135,123,52,56,154,72,77,96,56,70,108,68,110,160,101,82,145,76,52,90,135,68,119,27,68,178,86,57,101,113,149,63,163,117,66,140,112,145,159,142,96,103,122,210,169,76,152,213,103,70,211,68,141,120,4,43,47,61,147,138,113,42,32,69,112,139,186,81,124,207,117,172,127,136,126,144,170],"salario":[475.0,480.0,500.0,91.5,750.0,70.0,100.0,75.0,1100.0,517.143,512.5,550.0,700.0,240.0,775.0,175.0,135.0,100.0,115.0,600.0,776.6669999999999,765.0,708.3330000000001,750.0,625.0,900.0,110.0,612.5,300.0,850.0,90.0,67.5,180.0,305.0,215.0,247.5,815.0,875.0,70.0,1200.0,675.0,415.0,340.0,416.667,1350.0,90.0,275.0,230.0,225.0,950.0,75.0,105.0,320.0,850.0,535.0,933.333,850.0,210.0,325.0,275.0,450.0,1975.0,1900.0,600.0,1041.667,110.0,260.0,475.0,431.5,1220.0,70.0,145.0,595.0,1861.46,300.0,490.0,2460.0,375.0,750.0,1175.0,70.0,1500.0,385.0,1925.571,215.0,900.0,155.0,700.0,535.0,362.5,733.3330000000001,200.0,400.0,400.0,737.5,500.0,600.0,662.5,950.0,750.0,297.5,325.0,87.5,175.0,90.0,1237.5,430.0,100.0,165.0,250.0,1300.0,773.3330000000001,1008.333,275.0,775.0,850.0,365.0,95.0,110.0,100.0,277.5,80.0,600.0,200.0,657.0,75.0,2412.5,250.0,155.0,640.0,300.0,110.0,825.0,195.0,450.0,630.0,86.5,1300.0,1000.0,1800.0,1310.0,737.5,625.0,125.0,1043.333,725.0,300.0,365.0,75.0,1183.333,202.5,225.0,525.0,265.0,787.5,800.0,587.5,145.0,420.0,75.0,575.0,780.0,90.0,150.0,700.0,550.0,650.0,68.0,100.0,670.0,175.0,137.0,2127.333,875.0,120.0,140.0,210.0,800.0,240.0,350.0,175.0,200.0,1940.0,700.0,750.0,450.0,172.0,1260.0,750.0,190.0,580.0,130.0,450.0,300.0,250.0,1050.0,215.0,400.0,560.0,1670.0,487.5,425.0,500.0,250.0,400.0,450.0,750.0,70.0,875.0,190.0,191.0,740.0,250.0,140.0,97.5,740.0,140.0,341.667,1000.0,100.0,90.0,200.0,135.0,155.0,475.0,1450.0,150.0,105.0,350.0,90.0,530.0,341.667,940.0,350.0,326.66700000000003,250.0,740.0,425.0,925.0,185.0,920.0,286.66700000000003,245.0,235.0,1150.0,160.0,425.0,900.0,500.0,277.5,750.0,160.0,1300.0,525.0,550.0,1600.0,120.0,165.0,700.0,875.0,385.0,960.0,1000.0]}</script>
+
+<script id="nucleo">
+"use strict";
+
+/* ==================================================================== *
+ * O núcleo — as contas da árvore, sem nada de tela
+ *
+ * São as contas da seção 12.1: para uma região e uma coluna, os pontos de
+ * corte são os pontos médios entre valores vizinhos distintos, e o RSS de
+ * um corte é a soma dos RSS dos dois lados, cada um em torno da própria
+ * média (8.3). A árvore cresce dividindo, a cada passo, a folha cujo melhor
+ * corte mais derruba o RSS: é o que o DecisionTreeRegressor faz com
+ * max_leaf_nodes. tests/test_apoio.py roda este bloco no node e compara
+ * cada passo com o scikit-learn.
+ *
+ * Uma árvore é {nos: [...]}, com a raiz no índice 0. Cada nó guarda as
+ * linhas (índices dos jogadores) que chegam a ele, n, a média e o RSS do
+ * log do salário; um nó interno guarda também a coluna, o corte e os
+ * índices dos filhos (esq: coluna < corte; dir: coluna ≥ corte). Numa
+ * folha, coluna, corte, esq e dir são null.
+ * ==================================================================== */
+
+const COLUNAS = ["anos", "rebatidas"];
+const MAX_FOLHAS = 8;
+
+function preparar(dados) {
+  return {
+    X: {anos: dados.anos, rebatidas: dados.rebatidas},
+    y: dados.salario.map(Math.log),
+  };
+}
+
+function media(valores) {
+  let soma = 0;
+  for (const v of valores) soma += v;
+  return soma / valores.length;
+}
+
+function rss(valores) {
+  if (valores.length === 0) return 0;
+  const m = media(valores);
+  let soma = 0;
+  for (const v of valores) soma += (v - m) ** 2;
+  return soma;
+}
+
+/* Os pontos de corte de uma coluna dentro de uma região, e o RSS de cada um. */
+function cortesDaRegiao(linhas, coluna, X, y) {
+  const valores = [...new Set(linhas.map(i => X[coluna][i]))].sort((a, b) => a - b);
+  const cortes = [];
+  for (let k = 0; k + 1 < valores.length; k++) {
+    cortes.push((valores[k] + valores[k + 1]) / 2);
+  }
+  const rssDosCortes = cortes.map(s => {
+    const esq = [];
+    const dir = [];
+    for (const i of linhas) (X[coluna][i] < s ? esq : dir).push(y[i]);
+    return rss(esq) + rss(dir);
+  });
+  return {cortes, rss: rssDosCortes};
+}
+
+/* O corte de menor RSS da região, nas duas colunas; null se nenhuma tem dois valores. */
+function melhorCorte(linhas, X, y) {
+  const semCorte = rss(linhas.map(i => y[i]));
+  let melhor = null;
+  for (const coluna of COLUNAS) {
+    const curva = cortesDaRegiao(linhas, coluna, X, y);
+    for (let k = 0; k < curva.cortes.length; k++) {
+      if (melhor === null || curva.rss[k] < melhor.rss) {
+        melhor = {coluna, corte: curva.cortes[k], rss: curva.rss[k], queda: semCorte - curva.rss[k]};
+      }
+    }
+  }
+  return melhor;
+}
+
+function folhaNova(linhas, y) {
+  const ys = linhas.map(i => y[i]);
+  return {linhas, n: linhas.length, media: media(ys), rss: rss(ys),
+          coluna: null, corte: null, esq: null, dir: null};
+}
+
+function raiz(X, y) {
+  return {nos: [folhaNova(y.map((_, i) => i), y)]};
+}
+
+/* Uma árvore nova, com a folha `indice` dividida em coluna < corte. */
+function cortar(arvore, indice, coluna, corte, X, y) {
+  const nos = arvore.nos.slice();
+  const pai = nos[indice];
+  const esq = pai.linhas.filter(i => X[coluna][i] < corte);
+  const dir = pai.linhas.filter(i => X[coluna][i] >= corte);
+  nos[indice] = {...pai, coluna, corte, esq: nos.length, dir: nos.length + 1};
+  nos.push(folhaNova(esq, y), folhaNova(dir, y));
+  return {nos};
+}
+
+/* O passo do max_leaf_nodes: divide a folha cujo melhor corte mais derruba o RSS. */
+function proximoCorte(arvore, X, y) {
+  let alvo = -1;
+  let melhor = null;
+  arvore.nos.forEach((no, i) => {
+    if (no.esq !== null) return;
+    const m = melhorCorte(no.linhas, X, y);
+    if (m !== null && m.queda > 0 && (melhor === null || m.queda > melhor.queda)) {
+      melhor = m;
+      alvo = i;
+    }
+  });
+  if (alvo < 0) return arvore;
+  return cortar(arvore, alvo, melhor.coluna, melhor.corte, X, y);
+}
+
+function folhasDe(arvore) {
+  return arvore.nos.filter(no => no.esq === null);
+}
+
+function crescer(X, y, folhas) {
+  let arvore = raiz(X, y);
+  while (folhasDe(arvore).length < folhas) {
+    const seguinte = proximoCorte(arvore, X, y);
+    if (seguinte === arvore) break;
+    arvore = seguinte;
+  }
+  return arvore;
+}
+
+function rssTotal(arvore) {
+  let soma = 0;
+  for (const folha of folhasDe(arvore)) soma += folha.rss;
+  return soma;
+}
+
+const FORMATOS = new Map();
+function fmt(x, casas) {
+  if (!FORMATOS.has(casas)) {
+    FORMATOS.set(casas, new Intl.NumberFormat("pt-BR", {
+      minimumFractionDigits: casas, maximumFractionDigits: casas,
+    }));
+  }
+  return FORMATOS.get(casas).format(x);
+}
+</script>
+
+<script>
+"use strict";
+
+/* ==================================================================== *
+ * A tela — só desenha e responde ao mouse; toda conta vem do núcleo.
+ * ==================================================================== */
+
+const {X, y} = preparar(JSON.parse(document.getElementById("dados").textContent));
+const DOMINIO = {anos: [0, 25], rebatidas: [0, 250]};
+const ROTULO = {anos: "anos de liga", rebatidas: "rebatidas"};
+
+/* O salário em gradiente contínuo sobre o log, um matiz só: mais salário,
+ * mais contraste com o fundo. As duas rampas passaram pelo validador de
+ * rampas ordenadas da skill dataviz (luminosidade monótona, passos visíveis,
+ * ponta clara acima de 2:1 contra o fundo do tema). */
+const RAMPA = {
+  claro:  ["#7DBDEA", "#4A9BD8", "#2C7AC0", "#22579E", "#1B3570"],
+  escuro: ["#2A62A6", "#3F86CC", "#64A9E2", "#9FD0F2", "#DCEFFB"],
+};
+const LOG_MIN = Math.min(...y);
+const LOG_MAX = Math.max(...y);
+
+/* Espalhamento fixo em anos, menor que um quarto de ano: os cortes caem
+ * em meios anos, então nenhum ponto atravessa uma linha por causa dele. */
+const ESPALHA = (() => {
+  let s = 12;
+  return X.anos.map(() => {
+    s = (s * 1103515245 + 12345) % 2147483648;
+    return (s / 2147483648 - 0.5) * 0.48;
+  });
+})();
+
+const S = {
+  pilha: [raiz(X, y)],   // as árvores, da raiz até a atual (para desfazer)
+  novos: [null],         // o nó que cada passo dividiu
+  sel: 0,                // a folha selecionada
+  col: null,             // a coluna do corte em teste
+  k: 0,                  // o índice do corte em teste na curva
+};
+
+const $ = id => document.getElementById(id);
+const NS = "http://www.w3.org/2000/svg";
+function el(tag, attrs, pai) {
+  const e = document.createElementNS(NS, tag);
+  for (const [k, v] of Object.entries(attrs || {})) e.setAttribute(k, v);
+  if (pai) pai.appendChild(e);
+  return e;
+}
+function texto(conteudo, attrs, pai) {
+  const t = el("text", attrs, pai);
+  t.textContent = conteudo;
+  return t;
+}
+/* Escreve a primeira opção que cabe na largura; se nenhuma cabe, aperta a última. */
+function escreve(opcoes, attrs, pai, largura) {
+  const t = texto(opcoes[0], attrs, pai);
+  for (const opcao of opcoes) {
+    t.textContent = opcao;
+    if (t.getComputedTextLength() <= largura) return t;
+  }
+  t.setAttribute("textLength", largura);
+  t.setAttribute("lengthAdjust", "spacingAndGlyphs");
+  return t;
+}
+
+function atual() { return S.pilha[S.pilha.length - 1]; }
+
+function escuro() {
+  const tema = document.documentElement.dataset.theme;
+  if (tema === "dark") return true;
+  if (tema === "light") return false;
+  return window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches;
+}
+
+function corDoSalario(logSalario) {
+  const paradas = RAMPA[escuro() ? "escuro" : "claro"];
+  const t = (logSalario - LOG_MIN) / (LOG_MAX - LOG_MIN) * (paradas.length - 1);
+  const i = Math.min(Math.floor(t), paradas.length - 2);
+  const f = t - i;
+  const a = paradas[i], b = paradas[i + 1];
+  const canal = (c, p) => parseInt(c.slice(p, p + 2), 16);
+  const mistura = p => Math.round(canal(a, p) * (1 - f) + canal(b, p) * f).toString(16).padStart(2, "0");
+  return "#" + mistura(1) + mistura(3) + mistura(5);
+}
+
+/* ---------------------------- caches puros ---------------------------- */
+
+const MELHOR = new WeakMap();
+function melhorDe(no) {
+  if (!MELHOR.has(no)) MELHOR.set(no, melhorCorte(no.linhas, X, y));
+  return MELHOR.get(no);
+}
+const CURVAS = new WeakMap();
+function curvaDe(no, coluna) {
+  if (!CURVAS.has(no)) CURVAS.set(no, {});
+  const c = CURVAS.get(no);
+  if (!c[coluna]) c[coluna] = cortesDaRegiao(no.linhas, coluna, X, y);
+  return c[coluna];
+}
+function indiceDoMinimo(valores) {
+  let k = 0;
+  for (let i = 1; i < valores.length; i++) if (valores[i] < valores[k]) k = i;
+  return k;
+}
+
+function indicesDasFolhas(arvore) {
+  return arvore.nos.map((no, i) => (no.esq === null ? i : -1)).filter(i => i >= 0);
+}
+
+/* A folha cujo melhor corte mais derruba o RSS (a que o próximo corte divide). */
+function folhaDoMelhor(arvore) {
+  let alvo = -1;
+  let maior = 0;
+  for (const i of indicesDasFolhas(arvore)) {
+    const m = melhorDe(arvore.nos[i]);
+    if (m !== null && m.queda > maior) { maior = m.queda; alvo = i; }
+  }
+  return alvo;
+}
+
+/* Os limites de cada nó no plano, descendo da raiz. */
+function regioes(arvore) {
+  const lim = new Map();
+  (function desce(i, b) {
+    lim.set(i, b);
+    const no = arvore.nos[i];
+    if (no.esq === null) return;
+    const esq = {...b, [no.coluna]: [b[no.coluna][0], no.corte]};
+    const dir = {...b, [no.coluna]: [no.corte, b[no.coluna][1]]};
+    desce(no.esq, esq);
+    desce(no.dir, dir);
+  })(0, {anos: DOMINIO.anos, rebatidas: DOMINIO.rebatidas});
+  return lim;
+}
+
+function descricao(b) {
+  const partes = [];
+  for (const c of COLUNAS) {
+    if (b[c][0] > DOMINIO[c][0]) partes.push(`${c} ≥ ${fmt(b[c][0], 1)}`);
+    if (b[c][1] < DOMINIO[c][1]) partes.push(`${c} < ${fmt(b[c][1], 1)}`);
+  }
+  return partes.length ? partes.join(" e ") : "todos os jogadores";
+}
+
+function folhaDoPonto(arvore, anos, rebatidas) {
+  let i = 0;
+  const valor = {anos, rebatidas};
+  while (arvore.nos[i].esq !== null) {
+    const no = arvore.nos[i];
+    i = valor[no.coluna] < no.corte ? no.esq : no.dir;
+  }
+  return i;
+}
+
+/* ------------------------------- estado -------------------------------- */
+
+function selecionar(i, coluna) {
+  const no = atual().nos[i];
+  S.sel = i;
+  const possiveis = COLUNAS.filter(c => curvaDe(no, c).cortes.length > 0);
+  const m = melhorDe(no);
+  S.col = possiveis.includes(coluna) ? coluna : (m ? m.coluna : null);
+  S.k = S.col ? indiceDoMinimo(curvaDe(no, S.col).rss) : 0;
+}
+
+function selecaoPadrao() {
+  const alvo = folhaDoMelhor(atual());
+  selecionar(alvo >= 0 ? alvo : indicesDasFolhas(atual())[0]);
+}
+
+/* ------------------------------- árvore -------------------------------- */
+
+function desenhaArvore() {
+  const svg = $("arvore");
+  svg.replaceChildren();
+  const arvore = atual();
+  const W = svg.clientWidth || 640;
+  const fatia = new Map();
+  const nivel = new Map();
+  let proxima = 0;
+  (function visita(i, d) {
+    nivel.set(i, d);
+    const no = arvore.nos[i];
+    if (no.esq === null) { fatia.set(i, proxima++); return; }
+    visita(no.esq, d + 1);
+    visita(no.dir, d + 1);
+    fatia.set(i, (fatia.get(no.esq) + fatia.get(no.dir)) / 2);
+  })(0, 0);
+
+  const largura = Math.min(W / proxima, 190);
+  const x0 = (W - proxima * largura) / 2;
+  const NIVEL = 80, TOPO = 34;
+  const px = i => x0 + (fatia.get(i) + 0.5) * largura;
+  const py = i => TOPO + nivel.get(i) * NIVEL;
+  const profundidade = Math.max(...nivel.values());
+  const altura = Math.max(TOPO + (profundidade + 1) * NIVEL + 112, 420);
+  svg.setAttribute("viewBox", `0 0 ${W} ${altura}`);
+  svg.setAttribute("height", altura);
+
+  const bw = Math.min(largura - 10, 132);
+  const bh = 40;
+  const novo = S.novos[S.novos.length - 1];
+  const melhor = folhaDoMelhor(arvore);
+
+  // ramos
+  arvore.nos.forEach((no, i) => {
+    if (no.esq === null) return;
+    for (const [filho, rotulo, lado] of [[no.esq, "sim", -1], [no.dir, "não", 1]]) {
+      el("line", {
+        class: "ramo" + (i === novo ? " novo" : ""),
+        x1: px(i), y1: py(i) + bh, x2: px(filho), y2: py(filho),
+      }, svg);
+      const mx = px(i) + (px(filho) - px(i)) * 0.32 + lado * 10;
+      const my = py(i) + bh + (py(filho) - py(i) - bh) * 0.32;
+      texto(rotulo, {x: mx, y: my, "text-anchor": lado < 0 ? "end" : "start", class: "fraco", "font-size": 11}, svg);
+    }
+  });
+
+  // nós
+  arvore.nos.forEach((no, i) => {
+    const folha = no.esq === null;
+    const classes = ["no"];
+    if (folha) classes.push("folha");
+    if (folha && i === S.sel) classes.push("sel");
+    if (i === novo || (novo !== null && (arvore.nos[novo].esq === i || arvore.nos[novo].dir === i))) classes.push("novo");
+    const g = el("g", {class: classes.join(" "), transform: `translate(${px(i) - bw / 2},${py(i)})`}, svg);
+    el("rect", {width: bw, height: bh, rx: 4}, g);
+    if (folha) {
+      escreve([`${no.n} jog.`, String(no.n)], {x: bw / 2, y: 16, "text-anchor": "middle"}, g, bw - 6);
+      escreve([`média ${fmt(no.media, 2)}`, fmt(no.media, 2)], {x: bw / 2, y: 32, "text-anchor": "middle", class: "num fraco"}, g, bw - 6);
+      g.addEventListener("click", () => { selecionar(i); desenhaTudo(); });
+      el("title", {}, g).textContent = "selecionar esta folha";
+    } else {
+      escreve([no.coluna], {x: bw / 2, y: 16, "text-anchor": "middle"}, g, bw - 6);
+      escreve([`< ${fmt(no.corte, 1)}`], {x: bw / 2, y: 32, "text-anchor": "middle", class: "num"}, g, bw - 6);
+    }
+  });
+
+  // o melhor corte de cada folha, em fantasma
+  for (const i of indicesDasFolhas(arvore)) {
+    const m = melhorDe(arvore.nos[i]);
+    if (m === null) continue;
+    const ehMelhor = i === melhor;
+    const g = el("g", {class: "fantasma" + (ehMelhor ? " melhor" : ""), transform: `translate(${px(i) - bw / 2},${py(i) + bh})`}, svg);
+    el("line", {x1: bw / 2, y1: 0, x2: bw / 2, y2: 14}, g);
+    el("rect", {y: 14, width: bw, height: ehMelhor ? 66 : 52, rx: 4}, g);
+    escreve([m.coluna], {x: bw / 2, y: 28, "text-anchor": "middle", class: "fraco", "font-size": 11}, g, bw - 6);
+    escreve([`< ${fmt(m.corte, 1)}`], {x: bw / 2, y: 42, "text-anchor": "middle", class: "num fraco"}, g, bw - 6);
+    escreve([`−${fmt(m.queda, 2)}`], {x: bw / 2, y: 58, "text-anchor": "middle", class: "num"}, g, bw - 6);
+    if (ehMelhor) escreve(["melhor"], {x: bw / 2, y: 74, "text-anchor": "middle", "font-weight": 600}, g, bw - 6);
+  }
+
+  // o corte em teste, junto da folha selecionada
+  el("g", {id: "teste-arvore", "data-largura": bw - 6,
+    transform: `translate(${px(S.sel)},${py(S.sel) + bh + (S.sel === melhor ? 86 : 72)})`}, svg);
+}
+
+/* -------------------------------- plano -------------------------------- */
+
+const MP = {esq: 52, dir: 16, topo: 30, base: 40};
+
+function escalasDoPlano() {
+  const svg = $("plano");
+  const W = svg.clientWidth || 560;
+  const H = 400;
+  const sx = v => MP.esq + (v - DOMINIO.anos[0]) / (DOMINIO.anos[1] - DOMINIO.anos[0]) * (W - MP.esq - MP.dir);
+  const sy = v => H - MP.base - (v - DOMINIO.rebatidas[0]) / (DOMINIO.rebatidas[1] - DOMINIO.rebatidas[0]) * (H - MP.topo - MP.base);
+  const ix = p => DOMINIO.anos[0] + (p - MP.esq) / (W - MP.esq - MP.dir) * (DOMINIO.anos[1] - DOMINIO.anos[0]);
+  const iy = p => DOMINIO.rebatidas[0] + (H - MP.base - p) / (H - MP.topo - MP.base) * (DOMINIO.rebatidas[1] - DOMINIO.rebatidas[0]);
+  return {W, H, sx, sy, ix, iy};
+}
+
+function desenhaPlano() {
+  const svg = $("plano");
+  svg.replaceChildren();
+  const {W, H, sx, sy} = escalasDoPlano();
+  svg.setAttribute("viewBox", `0 0 ${W} ${H}`);
+  svg.setAttribute("height", H);
+  const arvore = atual();
+  const lim = regioes(arvore);
+
+  const grade = el("g", {class: "grade"}, svg);
+  for (let a = 0; a <= 25; a += 5) {
+    el("line", {x1: sx(a), x2: sx(a), y1: sy(0), y2: sy(250)}, grade);
+    texto(String(a), {x: sx(a), y: H - MP.base + 16, "text-anchor": "middle", class: "num fraco"}, svg);
+  }
+  for (let r = 0; r <= 250; r += 50) {
+    el("line", {x1: sx(0), x2: sx(25), y1: sy(r), y2: sy(r)}, grade);
+    texto(String(r), {x: MP.esq - 8, y: sy(r) + 4, "text-anchor": "end", class: "num fraco"}, svg);
+  }
+  texto(ROTULO.anos, {x: (MP.esq + W - MP.dir) / 2, y: H - 6, "text-anchor": "middle", class: "eixo"}, svg);
+  texto(ROTULO.rebatidas, {x: 14, y: (MP.topo + H - MP.base) / 2, "text-anchor": "middle", class: "eixo",
+    transform: `rotate(-90 14 ${(MP.topo + H - MP.base) / 2})`}, svg);
+
+  const b = lim.get(S.sel);
+  el("rect", {class: "regiao-sel", x: sx(b.anos[0]), y: sy(b.rebatidas[1]),
+    width: sx(b.anos[1]) - sx(b.anos[0]), height: sy(b.rebatidas[0]) - sy(b.rebatidas[1])}, svg);
+  el("rect", {class: "moldura", x: sx(0), y: sy(250), width: sx(25) - sx(0), height: sy(0) - sy(250)}, svg);
+
+  // os cortes já feitos
+  arvore.nos.forEach((no, i) => {
+    if (no.esq === null) return;
+    const bi = lim.get(i);
+    if (no.coluna === "anos") {
+      el("line", {class: "divisa", x1: sx(no.corte), x2: sx(no.corte), y1: sy(bi.rebatidas[0]), y2: sy(bi.rebatidas[1])}, svg);
+    } else {
+      el("line", {class: "divisa", x1: sx(bi.anos[0]), x2: sx(bi.anos[1]), y1: sy(no.corte), y2: sy(no.corte)}, svg);
+    }
+  });
+
+  // os jogadores
+  const naSel = new Set(arvore.nos[S.sel].linhas);
+  const pontos = el("g", {}, svg);
+  for (let i = 0; i < y.length; i++) {
+    const c = el("circle", {
+      class: "ponto" + (naSel.has(i) ? "" : " fora"),
+      cx: sx(X.anos[i] + ESPALHA[i]), cy: sy(X.rebatidas[i]), r: 4,
+      fill: corDoSalario(y[i]),
+    }, pontos);
+    el("title", {}, c).textContent =
+      `${X.anos[i]} anos · ${X.rebatidas[i]} rebatidas · salário ${fmt(Math.exp(y[i]), 1)} mil US$ (log ${fmt(y[i], 2)})`;
+  }
+
+  el("g", {id: "teste-plano"}, svg);
+  $("tag-plano").innerHTML = `os jogadores · região: <b>${descricao(b)}</b>`;
+}
+
+function desenhaTestePlano() {
+  const g = $("teste-plano");
+  if (!g) return;
+  g.replaceChildren();
+  if (!S.col) return;
+  const {sx, sy} = escalasDoPlano();
+  const b = regioes(atual()).get(S.sel);
+  const s = curvaDe(atual().nos[S.sel], S.col).cortes[S.k];
+  let x1, x2, y1, y2;
+  if (S.col === "anos") { x1 = x2 = sx(s); y1 = sy(b.rebatidas[0]); y2 = sy(b.rebatidas[1]); }
+  else { y1 = y2 = sy(s); x1 = sx(b.anos[0]); x2 = sx(b.anos[1]); }
+  el("line", {class: "linha-teste", x1, x2, y1, y2}, g);
+  el("circle", {class: "alca", cx: (x1 + x2) / 2, cy: (y1 + y2) / 2, r: 7}, g);
+}
+
+/* -------------------------------- curva -------------------------------- */
+
+const MC = {esq: 52, dir: 16, topo: 32, base: 38};
+
+function escalasDaCurva(semCorte) {
+  const svg = $("curva");
+  const W = svg.clientWidth || 560;
+  const H = 230;
+  const dom = DOMINIO[S.col || "anos"];
+  const topo = semCorte * 1.08;
+  const sx = v => MC.esq + (v - dom[0]) / (dom[1] - dom[0]) * (W - MC.esq - MC.dir);
+  const sy = v => H - MC.base - v / topo * (H - MC.topo - MC.base);
+  const ix = p => dom[0] + (p - MC.esq) / (W - MC.esq - MC.dir) * (dom[1] - dom[0]);
+  return {W, H, sx, sy, ix, topo};
+}
+
+function desenhaCurva() {
+  const svg = $("curva");
+  svg.replaceChildren();
+  const no = atual().nos[S.sel];
+  if (!S.col) {
+    const W = svg.clientWidth || 560;
+    svg.setAttribute("viewBox", `0 0 ${W} 230`);
+    svg.setAttribute("height", 230);
+    texto("Nenhum corte possível nesta folha: todos os jogadores têm os mesmos anos e rebatidas.",
+      {x: W / 2, y: 120, "text-anchor": "middle", class: "fraco"}, svg);
+    $("tag-curva").innerHTML = `RSS da folha de <b>${no.n}</b> jogadores`;
+    return;
+  }
+  const curva = curvaDe(no, S.col);
+  const {W, H, sx, sy, topo} = escalasDaCurva(no.rss);
+  svg.setAttribute("viewBox", `0 0 ${W} ${H}`);
+  svg.setAttribute("height", H);
+
+  const grade = el("g", {class: "grade"}, svg);
+  const passoX = S.col === "anos" ? 5 : 50;
+  const dom = DOMINIO[S.col];
+  for (let v = dom[0]; v <= dom[1]; v += passoX) {
+    texto(String(v), {x: sx(v), y: H - MC.base + 16, "text-anchor": "middle", class: "num fraco"}, svg);
+  }
+  const passoY = topo > 120 ? 50 : topo > 50 ? 20 : topo > 20 ? 10 : 5;
+  for (let v = 0; v <= topo; v += passoY) {
+    el("line", {x1: MC.esq, x2: W - MC.dir, y1: sy(v), y2: sy(v)}, grade);
+    texto(String(v), {x: MC.esq - 8, y: sy(v) + 4, "text-anchor": "end", class: "num fraco"}, svg);
+  }
+  texto(`ponto de corte em ${S.col}`, {x: (MC.esq + W - MC.dir) / 2, y: H - 4, "text-anchor": "middle", class: "eixo"}, svg);
+
+  el("line", {class: "sem-corte", x1: MC.esq, x2: W - MC.dir, y1: sy(no.rss), y2: sy(no.rss)}, svg);
+  texto(`sem corte: ${fmt(no.rss, 2)}`, {x: W - MC.dir - 4, y: sy(no.rss) - 6, "text-anchor": "end", class: "num fraco"}, svg);
+
+  const pontos = curva.cortes.map((s, k) => `${sx(s).toFixed(1)},${sy(curva.rss[k]).toFixed(1)}`).join(" ");
+  el("polyline", {class: "curva-rss", points: pontos}, svg);
+  const kMin = indiceDoMinimo(curva.rss);
+  el("circle", {class: "minimo", cx: sx(curva.cortes[kMin]), cy: sy(curva.rss[kMin]), r: 6}, svg);
+
+  el("g", {id: "teste-curva"}, svg);
+  $("tag-curva").innerHTML = `RSS da folha de <b>${no.n}</b> jogadores, cortando em <b>${S.col}</b> · o anel marca o mínimo`;
+}
+
+function desenhaTesteCurva() {
+  const g = $("teste-curva");
+  if (!g) return;
+  g.replaceChildren();
+  if (!S.col) return;
+  const no = atual().nos[S.sel];
+  const curva = curvaDe(no, S.col);
+  const {W, H, sx, sy} = escalasDaCurva(no.rss);
+  const s = curva.cortes[S.k];
+  const r = curva.rss[S.k];
+  el("line", {class: "linha-teste", x1: sx(s), x2: sx(s), y1: MC.topo - 6, y2: H - MC.base, "stroke-width": 1.5}, g);
+  el("circle", {class: "marca-teste", cx: sx(s), cy: sy(r), r: 6}, g);
+  const rotulo = texto(`${S.col} < ${fmt(s, 1)} · RSS ${fmt(r, 2)} (−${fmt(no.rss - r, 2)})`, {
+    x: sx(s) + 10, y: H - MC.base - 10, class: "num",
+  }, g);
+  if (sx(s) + 10 + rotulo.getComputedTextLength() > W - MC.dir) {
+    rotulo.setAttribute("x", sx(s) - 10);
+    rotulo.setAttribute("text-anchor", "end");
+  }
+}
+
+/* ------------------------------ leituras ------------------------------- */
+
+function atualizaTeste() {
+  desenhaTestePlano();
+  desenhaTesteCurva();
+  const g = $("teste-arvore");
+  if (!g) return;
+  g.replaceChildren();
+  if (!S.col) return;
+  const no = atual().nos[S.sel];
+  const curva = curvaDe(no, S.col);
+  el("line", {class: "teste-marca", x1: -8, y1: 4, x2: 8, y2: 4}, g);
+  escreve([`−${fmt(no.rss - curva.rss[S.k], 2)}`], {x: 0, y: 20, "text-anchor": "middle", class: "num"}, g, +g.dataset.largura);
+}
+
+function atualizaControles() {
+  const arvore = atual();
+  const folhas = indicesDasFolhas(arvore).length;
+  $("n-folhas").textContent = folhas;
+  $("u-folhas").textContent = folhas === 1 ? "folha" : "folhas";
+  $("rss-total").textContent = fmt(rssTotal(arvore), 2);
+  $("btn-desfazer").disabled = S.pilha.length === 1;
+  $("btn-proximo").disabled = folhas >= MAX_FOLHAS || folhaDoMelhor(arvore) < 0;
+  const no = arvore.nos[S.sel];
+  for (const c of COLUNAS) {
+    const b = $("btn-" + c);
+    b.disabled = curvaDe(no, c).cortes.length === 0;
+    b.setAttribute("aria-pressed", String(S.col === c));
+  }
+  $("btn-melhor").disabled = !S.col;
+}
+
+/* A legenda está na escala da cor, o log do salário, que é a mesma unidade
+ * da média de cada folha; os mil dólares vêm embaixo, na mesma posição. */
+function desenhaLegenda() {
+  const svg = $("legenda");
+  svg.replaceChildren();
+  const W = svg.clientWidth || 560;
+  const H = 56;
+  svg.setAttribute("viewBox", `0 0 ${W} ${H}`);
+  svg.setAttribute("height", H);
+  const x0 = MP.esq, x1 = Math.min(MP.esq + 380, W - 150);
+  const sx = v => x0 + (v - LOG_MIN) / (LOG_MAX - LOG_MIN) * (x1 - x0);
+  const paradas = RAMPA[escuro() ? "escuro" : "claro"];
+  const grad = el("linearGradient", {id: "grad-salario", x1: "0", x2: "1", y1: "0", y2: "0"}, el("defs", {}, svg));
+  paradas.forEach((c, k) => el("stop", {offset: k / (paradas.length - 1), "stop-color": c}, grad));
+  el("rect", {x: x0, y: 4, width: x1 - x0, height: 10, rx: 2, fill: "url(#grad-salario)"}, svg);
+  for (let v = 4.5; v <= LOG_MAX; v += 0.5) {
+    el("line", {class: "marca-escala", x1: sx(v), x2: sx(v), y1: 14, y2: 19}, svg);
+    texto(fmt(v, 1), {x: sx(v), y: 32, "text-anchor": "middle", class: "num"}, svg);
+    texto(fmt(Math.exp(v), 0), {x: sx(v), y: 48, "text-anchor": "middle", class: "num fraco"}, svg);
+  }
+  texto("log do salário", {x: x1 + 14, y: 32, class: "eixo"}, svg);
+  texto("mil US$", {x: x1 + 14, y: 48, class: "eixo"}, svg);
+}
+
+function desenhaTudo() {
+  desenhaArvore();
+  desenhaPlano();
+  desenhaCurva();
+  desenhaLegenda();
+  atualizaTeste();
+  atualizaControles();
+}
+
+/* ------------------------------- arrastar ------------------------------ */
+
+function moveTestePara(valor) {
+  const curva = curvaDe(atual().nos[S.sel], S.col);
+  let k = 0;
+  for (let i = 1; i < curva.cortes.length; i++) {
+    if (Math.abs(curva.cortes[i] - valor) < Math.abs(curva.cortes[k] - valor)) k = i;
+  }
+  if (k !== S.k) { S.k = k; atualizaTeste(); }
+}
+
+function pontoNoSvg(svg, evento) {
+  const r = svg.getBoundingClientRect();
+  const vb = svg.viewBox.baseVal;
+  return {x: (evento.clientX - r.left) * vb.width / r.width, y: (evento.clientY - r.top) * vb.height / r.height};
+}
+
+let arrastando = null;
+
+$("plano").addEventListener("pointerdown", e => {
+  const {ix, iy} = escalasDoPlano();
+  const p = pontoNoSvg($("plano"), e);
+  const anos = ix(p.x), rebatidas = iy(p.y);
+  if (anos < DOMINIO.anos[0] || anos > DOMINIO.anos[1] || rebatidas < DOMINIO.rebatidas[0] || rebatidas > DOMINIO.rebatidas[1]) return;
+  const folha = folhaDoPonto(atual(), anos, rebatidas);
+  if (folha !== S.sel) { selecionar(folha); desenhaTudo(); return; }
+  if (!S.col) return;
+  arrastando = "plano";
+  $("plano").setPointerCapture(e.pointerId);
+  moveTestePara(S.col === "anos" ? anos : rebatidas);
+});
+$("plano").addEventListener("pointermove", e => {
+  if (arrastando !== "plano") return;
+  const {ix, iy} = escalasDoPlano();
+  const p = pontoNoSvg($("plano"), e);
+  moveTestePara(S.col === "anos" ? ix(p.x) : iy(p.y));
+  atualizaControles();
+});
+$("curva").addEventListener("pointerdown", e => {
+  if (!S.col) return;
+  arrastando = "curva";
+  $("curva").setPointerCapture(e.pointerId);
+  const {ix} = escalasDaCurva(atual().nos[S.sel].rss);
+  moveTestePara(ix(pontoNoSvg($("curva"), e).x));
+});
+$("curva").addEventListener("pointermove", e => {
+  if (arrastando !== "curva") return;
+  const {ix} = escalasDaCurva(atual().nos[S.sel].rss);
+  moveTestePara(ix(pontoNoSvg($("curva"), e).x));
+});
+for (const alvo of ["plano", "curva"]) {
+  $(alvo).addEventListener("pointerup", () => { arrastando = null; });
+  $(alvo).addEventListener("pointercancel", () => { arrastando = null; });
+}
+
+$("plano").addEventListener("keydown", e => {
+  if (!S.col) return;
+  const n = curvaDe(atual().nos[S.sel], S.col).cortes.length;
+  const passo = {ArrowLeft: -1, ArrowDown: -1, ArrowRight: 1, ArrowUp: 1}[e.key];
+  if (!passo) return;
+  e.preventDefault();
+  S.k = Math.max(0, Math.min(n - 1, S.k + passo));
+  atualizaTeste();
+});
+
+/* ------------------------------- botões -------------------------------- */
+
+$("btn-proximo").addEventListener("click", () => {
+  const antes = atual();
+  const alvo = folhaDoMelhor(antes);
+  const depois = proximoCorte(antes, X, y);
+  if (depois === antes) return;
+  S.pilha.push(depois);
+  S.novos.push(alvo);
+  selecaoPadrao();
+  desenhaTudo();
+});
+$("btn-desfazer").addEventListener("click", () => {
+  if (S.pilha.length === 1) return;
+  S.pilha.pop();
+  S.novos.pop();
+  selecaoPadrao();
+  desenhaTudo();
+});
+for (const c of COLUNAS) {
+  $("btn-" + c).addEventListener("click", () => { selecionar(S.sel, c); desenhaTudo(); });
+}
+$("btn-melhor").addEventListener("click", () => {
+  if (!S.col) return;
+  S.k = indiceDoMinimo(curvaDe(atual().nos[S.sel], S.col).rss);
+  atualizaTeste();
+});
+
+window.addEventListener("resize", desenhaTudo);
+if (window.matchMedia) window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", desenhaTudo);
+
+selecaoPadrao();
+desenhaTudo();
+</script>
+</body>
+</html>

@@ -1,0 +1,772 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Podando a Árvore</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans+Condensed:wght@600&family=IBM+Plex+Sans:wght@400;500&display=swap">
+
+<style>
+/* ------------------------------------------------------------------ *
+ * Tokens — os mesmos das outras páginas de apoio/, para todas serem
+ * visivelmente irmãs. Fundo e texto do tema `cosmo`; azuis do logo da UnDF.
+ *
+ * A regra de leitura também é a mesma: azul é o que está parado, laranja
+ * é o que está mudando (o galho que vai cair, a folha nova, a posição atual).
+ * ------------------------------------------------------------------ */
+:root{
+  color-scheme: light;
+
+  --paper:    #FFFFFF;
+  --paper-2:  #EEF4FA;
+  --panel:    #FFFFFF;
+  --ink:      #373A3C;
+  --ink-2:    #5B6B76;
+  --ink-3:    #8A99A5;
+  --rule:     #DCE5EE;
+  --grid:     #EDF2F7;
+
+  --marca:    #2264AF;
+  --ajuste:   #D9480F;
+
+  --sans: "IBM Plex Sans", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --cond: "IBM Plex Sans Condensed", "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+
+  --r: 3px;
+}
+
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    color-scheme: dark;
+    --paper:   #12161B;
+    --paper-2: #1A2430;
+    --panel:   #171F27;
+    --ink:     #E6ECF2;
+    --ink-2:   #9BAAB8;
+    --ink-3:   #6E7F8D;
+    --rule:    #2A3743;
+    --grid:    #202B35;
+    --marca:   #6FB0E8;
+    --ajuste:  #FF7A45;
+  }
+}
+:root[data-theme="dark"]{
+  color-scheme: dark;
+  --paper:   #12161B;
+  --paper-2: #1A2430;
+  --panel:   #171F27;
+  --ink:     #E6ECF2;
+  --ink-2:   #9BAAB8;
+  --ink-3:   #6E7F8D;
+  --rule:    #2A3743;
+  --grid:    #202B35;
+  --marca:   #6FB0E8;
+  --ajuste:  #FF7A45;
+}
+
+*{ box-sizing: border-box; }
+[hidden]{ display: none !important; }
+
+body{
+  margin: 0;
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--sans);
+  font-size: 15px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+}
+
+:focus-visible{ outline: 2px solid var(--marca); outline-offset: 2px; }
+
+.app{
+  max-width: 1360px;
+  margin: 0 auto;
+  padding: 22px 24px 40px;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.topbar{
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 24px;
+  flex-wrap: wrap;
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--rule);
+}
+
+.eyebrow{
+  margin: 0 0 2px;
+  font-family: var(--cond);
+  font-size: 11.5px;
+  font-weight: 600;
+  letter-spacing: .14em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+}
+
+h1{
+  margin: 0;
+  font-family: var(--cond);
+  font-weight: 600;
+  font-size: clamp(26px, 3.4vw, 38px);
+  line-height: 1.04;
+  letter-spacing: -.005em;
+  text-wrap: balance;
+}
+
+.sub{ margin: 6px 0 0; max-width: 76ch; color: var(--ink-2); font-size: 14.5px; }
+
+.relogio{ text-align: right; font-family: var(--mono); font-variant-numeric: tabular-nums; }
+.relogio .n{ font-size: 30px; line-height: 1; color: var(--ink); }
+.relogio .u, .relogio .r{
+  display: block;
+  font-family: var(--cond);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+  margin-top: 4px;
+}
+.relogio .r b{ font-family: var(--mono); font-size: 15px; letter-spacing: 0; color: var(--ink); }
+
+/* -------------------------------- palco --------------------------------- */
+
+.tres{
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 320px minmax(0, 1fr);
+  gap: 16px;
+  align-items: stretch;
+}
+
+.plate{
+  position: relative;
+  background: var(--panel);
+  border: 1px solid var(--rule);
+  border-radius: var(--r);
+  overflow: hidden;
+}
+.plate svg{ display: block; width: 100%; user-select: none; -webkit-user-select: none; }
+
+.tag{
+  position: absolute;
+  top: 9px; left: 12px; right: 12px;
+  font-family: var(--cond);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+  pointer-events: none;
+}
+.tag b{ color: var(--ink); font-weight: 600; text-transform: none; letter-spacing: 0; font-family: var(--mono); }
+
+.transport{ display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+
+button.ctl{
+  font-family: var(--cond);
+  font-size: 13.5px;
+  font-weight: 600;
+  letter-spacing: .03em;
+  padding: 8px 14px;
+  border: 1px solid var(--rule);
+  border-radius: var(--r);
+  background: var(--panel);
+  color: var(--ink);
+  cursor: pointer;
+}
+button.ctl:hover:not(:disabled){ border-color: var(--ink-3); }
+button.ctl.primary{ background: var(--marca); border-color: var(--marca); color: var(--paper); }
+button.ctl.primary:hover:not(:disabled){ filter: brightness(1.08); }
+button.ctl:disabled{ opacity: .4; cursor: default; }
+
+.deslizante{
+  flex: 1 1 360px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-family: var(--cond);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: .07em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+  min-width: 260px;
+}
+.deslizante input[type="range"]{ flex: 1; accent-color: var(--ajuste); }
+.deslizante output{
+  font-family: var(--mono);
+  font-size: 13px;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--ink);
+  min-width: 6.5em;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+/* --------------------------- galhos candidatos -------------------------- */
+
+.candidatos{ padding: 52px 14px 14px; display: flex; flex-direction: column; gap: 12px; height: 100%; }
+.cand{ display: flex; flex-direction: column; gap: 4px; }
+.cand .q{ font-size: 12.5px; color: var(--ink); line-height: 1.3; overflow-wrap: anywhere; }
+.cand .q .n{ color: var(--ink-2); font-size: 12px; }
+.cand .linha{ display: flex; align-items: center; gap: 8px; }
+.cand .barra{ height: 12px; border-radius: 0 4px 4px 0; background: var(--marca); opacity: .7; min-width: 2px; }
+.cand.fraco .barra{ background: var(--ajuste); opacity: 1; }
+.cand .v{ font-family: var(--mono); font-size: 12.5px; color: var(--ink); white-space: nowrap; }
+.cand .selo{
+  font-family: var(--cond);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  color: var(--ink);
+  border-left: 3px solid var(--ajuste);
+  padding-left: 6px;
+}
+.degrau{
+  margin-top: auto;
+  padding-top: 10px;
+  border-top: 1px solid var(--rule);
+  font-family: var(--mono);
+  font-size: 12.5px;
+  color: var(--ink);
+}
+.degrau .nota{ display: block; font-family: var(--sans); font-size: 12px; color: var(--ink-2); margin-top: 2px; }
+.vazio{ color: var(--ink-2); font-size: 13px; }
+
+/* ------------------------------- desenhos ------------------------------- */
+
+svg text{ font-family: var(--sans); font-size: 11px; fill: var(--ink); }
+svg text.num{ font-family: var(--mono); font-size: 10.5px; }
+svg text.fraco{ fill: var(--ink-2); }
+svg text.eixo{ font-family: var(--cond); font-size: 11px; font-weight: 600; letter-spacing: .06em; fill: var(--ink-3); }
+
+.no rect{ fill: var(--panel); stroke: var(--ink-3); stroke-width: 1; }
+.no.folha rect{ fill: var(--paper-2); }
+.no.cai rect{ stroke: var(--ajuste); stroke-width: 2.25; }
+.no.some rect{ stroke: var(--ajuste); stroke-dasharray: 4 3; }
+.no.nova rect{ stroke: var(--ajuste); stroke-width: 2.25; fill: color-mix(in srgb, var(--ajuste) 10%, var(--panel)); }
+.ramo{ stroke: var(--ink-3); stroke-width: 1.1; fill: none; }
+.ramo.some{ stroke: var(--ajuste); stroke-width: 1.6; stroke-dasharray: 4 3; }
+.mini{ fill: var(--ink-3); }
+.mini.folha{ fill: var(--marca); }
+.mini.some{ fill: var(--ajuste); }
+.mini.cai, .mini.nova{ fill: var(--ajuste); stroke: var(--panel); stroke-width: 2; }
+
+.grade line{ stroke: var(--grid); stroke-width: 1; }
+.eixo-linha{ stroke: var(--rule); }
+.treino{ fill: none; stroke: var(--ink-3); stroke-width: 2; stroke-linejoin: round; }
+.cv{ fill: none; stroke: var(--marca); stroke-width: 2; stroke-linejoin: round; }
+.faixa{ fill: var(--marca); opacity: .16; }
+.ponto-cv{ fill: var(--marca); stroke: var(--panel); stroke-width: 1.5; }
+.minimo{ stroke: var(--marca); stroke-width: 2.5; stroke-linecap: round; }
+.agora{ stroke: var(--ajuste); stroke-width: 2; }
+.marca-agora{ fill: var(--ajuste); stroke: var(--panel); stroke-width: 2; }
+#erro{ cursor: pointer; }
+
+footer{
+  border-top: 1px solid var(--rule);
+  padding-top: 12px;
+  font-size: 13px;
+  color: var(--ink-2);
+  max-width: 110ch;
+}
+footer p{ margin: 0 0 6px; }
+footer strong{ color: var(--ink); }
+code{ font-family: var(--mono); font-size: .92em; }
+</style>
+</head>
+<body>
+<div class="app">
+  <header class="topbar">
+    <div>
+      <p class="eyebrow">Seção 12.2 · poda por custo-complexidade</p>
+      <h1>Podando a árvore</h1>
+      <p class="sub">A árvore crescida até o fim nos 132 jogadores de treino perde um galho por vez: cai o galho que menos aumenta o erro de treino por folha perdida, o elo mais fraco. Embaixo, o erro de treino e o de validação cruzada de cada tamanho de árvore.</p>
+    </div>
+    <div class="relogio">
+      <span class="n" id="n-folhas">—</span>
+      <span class="u" id="u-folhas">folhas</span>
+      <span class="r">MSE de treino <b id="mse-agora">—</b></span>
+    </div>
+  </header>
+
+  <section class="tres">
+    <div class="plate">
+      <span class="tag" id="tag-antes">antes</span>
+      <svg id="antes" role="img" aria-label="A árvore antes da poda, com o galho que vai cair em laranja"></svg>
+    </div>
+    <div class="plate">
+      <span class="tag">galhos candidatos · RSS a mais por folha perdida</span>
+      <div class="candidatos" id="candidatos"></div>
+    </div>
+    <div class="plate">
+      <span class="tag" id="tag-depois">depois</span>
+      <svg id="depois" role="img" aria-label="A árvore depois da poda, com a folha nova em laranja"></svg>
+    </div>
+  </section>
+
+  <div class="transport">
+    <button class="ctl" id="btn-desfazer">← desfazer</button>
+    <button class="ctl primary" id="btn-podar">próxima poda ✂</button>
+    <label class="deslizante">árvore grande
+      <input type="range" id="passo" min="0" max="1" step="1" value="0" aria-label="Número de podas aplicadas">
+      raiz <output id="passo-saida">—</output>
+    </label>
+  </div>
+
+  <div class="plate">
+    <span class="tag" id="tag-erro">erro contra o número de folhas</span>
+    <svg id="erro" role="img" aria-label="MSE de treino e erro de validação cruzada contra o número de folhas da subárvore, com a posição atual marcada"></svg>
+  </div>
+
+  <footer>
+    <p><strong>O dado.</strong> Os jogadores de <code>Hitters</code> com salário registrado, o logaritmo do salário como resposta e as 19 colunas, com as três de texto trocadas por indicadoras. São os 132 jogadores de treino da divisão com <code>random_state=12</code>; a árvore grande é o <code>DecisionTreeRegressor(random_state=12)</code> sem limite, ajustado neles.</p>
+    <p><strong>As contas.</strong> O custo de um galho é (RSS do nó − RSS das folhas do galho) / (folhas do galho − 1), o aumento do RSS de treino por folha perdida se o galho virar uma folha só. Cair o mais barato a cada degrau dá a sequência do <code>cost_complexity_pruning_path</code>, e o custo do galho que cai é o α do degrau em (8.4), com <code>ccp_alpha</code> = α/132. A validação cruzada usa 6 grupos (<code>KFold(6, shuffle=True, random_state=12)</code>), uma subárvore por trecho do caminho, como na seção; a faixa azul é o erro mais e menos um desvio. Os tamanhos em que a curva some não têm um <code>ccp_alpha</code> só deles: ou o degrau seguinte cai no mesmo α, a menos do arredondamento, e nenhum valor para nessa subárvore, ou é a raiz sozinha, que fica fora da grade.</p>
+  </footer>
+</div>
+
+<script type="application/json" id="dados">{"n_treino":132,"arvore":{"folhas":121,"rss":2.877698079828405e-13,"mse":2.180074302900307e-15},"nos":[{"esq":1,"dir":92,"coluna":"vezes_ao_bastao_carreira","limiar":1452.0,"n":132,"media":5.910447907150256,"rss":97.28498720540264},{"esq":2,"dir":39,"coluna":"impulsionadas_carreira","limiar":70.5,"n":54,"media":5.110053186645036,"rss":13.561195045408432},{"esq":3,"dir":12,"coluna":"rebatidas_carreira","limiar":81.0,"n":23,"media":4.637788617788236,"rss":1.6640113124473714},{"esq":4,"dir":7,"coluna":"anos","limiar":1.5,"n":7,"media":4.373781438849351,"rss":0.11445943416273252},{"esq":5,"dir":6,"coluna":"divisao_Oeste","limiar":0.5,"n":4,"media":4.265743459921097,"rss":0.003570012237034348},{"esq":-1,"dir":-1,"coluna":null,"limiar":null,"n":3,"media":4.248495242049359,"rss":0.0},{"esq":-1,"dir":-1,"coluna":null,"limiar":null,"n":1,"media":4.31748811353631,"rss":0.0},{"esq":8,"dir":9,"coluna":"vezes_ao_bastao","limiar":180.0,"n":3,"media":4.5178320774203575,"rss":0.001948842943917839},{"esq":-1,"dir":-1,"coluna":null,"limiar":null,"n":1,"media":4.553876891600541,"rss":0.0},{"esq":10,"dir":11,"coluna":"anos","limiar":2.5,"n":2,"media":4.499809670330265,"rss":7.105427357601002e-15},{"esq":-1,"dir":-1,"coluna":null,"limiar":null,"n":1,"media":4.499809670330265,"rss":0.0},{"esq":-1,"dir":-1,"coluna":null,"limiar":null,"n":1,"media":4.499809670330265,"rss":0.0},{"esq":13,"dir":34,"coluna":"corridas_carreira","limiar":93.5,"n":16,"media":4.753291758573998,"rss":0.8481977360637529},{"esq":14,"dir":31,"coluna":"vezes_ao_bastao_carreira","limiar":604.5,"n":13,"media":4.676126964148602,"rss":0.35834038128293955},{"esq":15,"dir":28,"coluna":"erros","limiar":10.5,"n":11,"media":4.721453191444943,"rss":0.20743082980444427},{"esq":16,"dir":27,"coluna":"rebatidas_carreira","limiar":154.5,"n":9,"media":4.680756470314388,"rss":0.12270179005247073},{"esq":17,"dir":18,"coluna":"vezes_ao_bastao","limiar":231.5,"n":8,"media":4.648145726277522,"rss":0.04613262493458592},{"esq":-1,"dir":-1,"coluna":null,"limiar":null,"n":1,"media":4.499809670330265,"rss":0.0},{"esq":19,"dir":22,"coluna":"erros","limiar":5.0,"n":7,"media":4.669336591412844,"rss":0.020985670084382235},{"esq":20,"dir":21,"coluna":"bases_por_bolas","limiar":54.5,"n":4,"media":4.711593306435125,"rss":0.001481969396763816},{"esq":-1,"dir":-1,"coluna":null,"limiar":null,"n":3,"media":4.700480365792417,"rss":0.0},{"esq":-1,"dir":-1,"coluna":null,"limiar":null,"n":1,"media":4.74493212836325,"rss":0.0},{"esq":23,"dir":26,"coluna":"rebatidas_carreira","limiar":113.0,"n":3,"media":4.612994304716472,"rss":0.002837821019177511},{"esq":24,"dir":25,"coluna":"erros","limiar":7.5,"n":2,"media":4.592511281995947,"rss":0.00032049570056358334},{"esq":-1,"dir":-1,"coluna":null,"limiar":null,"n":1,"media":4.579852378003801,"rss":0.0},{"esq":-1,"dir":-1,"coluna":null,"limiar":null,"n":1,"media":4.605170185988092,"rss":0.0},{"esq":-1,"dir":-1,"coluna":null,"limiar":null,"n":1,"media":4.653960350157523,"rss":-3.552713678800501e-15},{"esq":-1,"dir":-1,"coluna":null,"limiar":null,"n":1,"media":4.941642422609304,"rss":-1.4210854715202004e-14},{"esq":29,"dir":30,"coluna":"home_runs","limiar":3.5,"n":2,"media":4.904588436532443,"rss":0.002745995768385967},{"esq":-1,"dir":-1,"coluna":null,"limiar":null,"n":1,"media":4.867534450455582,"rss":0.0},{"esq":-1,"dir":-1,"coluna":null,"limiar":null,"n":1,"media":4.941642422609304,"rss":7.105427357601002e-15},{"esq":32,"dir":33,"coluna":"corridas","limiar":51.0,"n":2,"media":4.426832714018725,"rss":0.0040151694925327774},{"esq":-1,"dir":-1,"coluna":null,"limiar":null,"n":1,"media":4.471638793363569,"rss":0.0},{"esq":-1,"dir":-1,"coluna":null,"limiar":null,"n":1,"media":4.382026634673881,"rss":3.552713678800501e-15},{"esq":35,"dir":38,"coluna":"bases_por_bolas","limiar":44.0,"n":3,"media":5.0876725344173845,"rss":0.07701857353674413},{"esq":36,"dir":37,"coluna":"rebatidas","limiar":75.0,"n":2,"media":4.97613885835278,"rss":0.002380008157999214},{"esq":-1,"dir":-1,"coluna":null,"limiar":null,"n":1,"media":4.941642422609304,"rss":0.0},{"esq":-1,"dir":-1,"coluna":null,"limiar":null,"n":1,"media":5.0106352940962555,"rss":-3.552713678800501e-15},{"esq":-1,"dir":-1,"coluna":null,"limiar":null,"n":1,"media":5.310739886546594,"rss":-3.552713678800501e-15},{"esq":40,"dir":69,"coluna":"anos","limiar":4.5,"n":31,"media":5.460443028054915,"rss":2.9614415341578244},{"esq":41,"dir":48,"coluna":"vezes_ao_bastao_carreira","limiar":703.5,"n":19,"media":5.288150043123278,"rss":0.8735515844856572},{"esq":42,"dir":43,"coluna":"rebatidas_carreira","limiar":146.5,"n":5,"media":5.094695220757727,"rss":0.10672944542557516},{"esq":-1,"dir":-1,"coluna":null,"limiar":null,"n":1,"media":5.3706380281276624,"rss":0.0},{"esq":44,"dir":45,"coluna":"eliminacoes","limiar":238.0,"n":4,"media":5.025709518915244,"rss":0.01154890425156907},{"esq":-1,"dir":-1,"coluna":null,"limiar":null,"n":2,"media":4.976733742420574,"rss":0.0},{"esq":46,"dir":47,"coluna":"impulsionadas_carreira","limiar":112.0,"n":2,"media":5.074685295409914,"rss":0.001954397518538542},{"esq":-1,"dir":-1,"coluna":null,"limiar":null,"n":1,"media":5.043425116919247,"rss":0.0},{"esq":-1,"dir":-1,"coluna":null,"limiar":null,"n":1,"media":5.10594547390058,"rss":-1.0658141036401503e-14},{"esq":49,"dir":56,"coluna":"rebatidas","limiar":117.5,"n":14,"media":5.357241051110975,"rss":0.5128683541910348},{"esq":50,"dir":55,"coluna":"corridas_carreira","limiar":176.0,"n":5,"media":5.542116587752947,"rss":0.0705910005617838},{"esq":51,"dir":52,"coluna":"home_runs","limiar":2.5,"n":4,"media":5.590868852011816,"rss":0.023055335154467116},{"esq":-1,"dir":-1,"coluna":null,"limiar":null,"n":2,"media":5.521460917862246,"rss":0.0},{"esq":53,"dir":54,"coluna":"bases_por_bolas","limiar":45.5,"n":2,"media":5.660276786161386,"rss":0.003785489862821123},{"esq":-1,"dir":-1,"coluna":null,"limiar":null,"n":1,"media":5.616771097666572,"rss":0.0},{"esq":-1,"dir":-1,"coluna":null,"limiar":null,"n":1,"media":5.703782474656201,"rss":0.0},{"esq":-1,"dir":-1,"coluna":null,"limiar":null,"n":1,"media":5.3471075307174685,"rss":-1.7763568394002505e-14},{"esq":57,"dir":64,"coluna":"corridas","limiar":72.0,"n":9,"media":5.254532419643214,"rss":0.1764409665838258},{"esq":58,"dir":61,"coluna":"home_runs_carreira","limiar":21.5,"n":4,"media":5.125935182788728,"rss":0.01980926906799141},{"esq":59,"dir":60,"coluna":"anos","limiar":2.5,"n":2,"media":5.059299466076537,"rss":0.0005039899223362454},{"esq":-1,"dir":-1,"coluna":null,"limiar":null,"n":1,"media":5.043425116919247,"rss":0.0},{"esq":-1,"dir":-1,"coluna":null,"limiar":null,"n":1,"media":5.075173815233827,"rss":3.552713678800501e-15},{"esq":62,"dir":63,"coluna":"impulsionadas","limiar":57.5,"n":2,"media":5.19257089950092,"rss":0.0015440041786689562},{"esq":-1,"dir":-1,"coluna":null,"limiar":null,"n":1,"media":5.220355825078324,"rss":0.0},{"esq":-1,"dir":-1,"coluna":null,"limiar":null,"n":1,"media":5.1647859739235145,"rss":-1.0658141036401503e-14},{"esq":65,"dir":68,"coluna":"vezes_ao_bastao","limiar":639.5,"n":5,"media":5.357410209126804,"rss":0.03756350236432837},{"esq":66,"dir":67,"coluna":"home_runs","limiar":29.0,"n":4,"media":5.316397531942943,"rss":0.003922708568467215},{"esq":-1,"dir":-1,"coluna":null,"limiar":null,"n":3,"media":5.298317366548036,"rss":-3.197442310920451e-14},{"esq":-1,"dir":-1,"coluna":null,"limiar":null,"n":1,"media":5.3706380281276624,"rss":3.552713678800501e-15},{"esq":-1,"dir":-1,"coluna":null,"limiar":null,"n":1,"media":5.521460917862246,"rss":0.0},{"esq":70,"dir":89,"coluna":"rebatidas_carreira","limiar":332.0,"n":12,"media":5.733240254196674,"rss":0.6308574501099997},{"esq":71,"dir":82,"coluna":"rebatidas_carreira","limiar":277.5,"n":10,"media":5.643687560320915,"rss":0.11643842648432212},{"esq":72,"dir":79,"coluna":"anos","limiar":6.5,"n":6,"media":5.5793272124046,"rss":0.035785280267447206},{"esq":73,"dir":74,"coluna":"impulsionadas","limiar":28.5,"n":4,"media":5.528464884100485,"rss":0.0037082021155043776},{"esq":-1,"dir":-1,"coluna":null,"limiar":null,"n":1,"media":5.579729825986222,"rss":0.0},{"esq":75,"dir":76,"coluna":"impulsionadas","limiar":30.5,"n":3,"media":5.511376570138573,"rss":0.00020407642668018866},{"esq":-1,"dir":-1,"coluna":null,"limiar":null,"n":1,"media":5.501258210544727,"rss":0.0},{"esq":77,"dir":78,"coluna":"assistencias","limiar":2.0,"n":2,"media":5.5164357499354955,"rss":5.050462536360101e-05},{"esq":-1,"dir":-1,"coluna":null,"limiar":null,"n":1,"media":5.521460917862246,"rss":0.0},{"esq":-1,"dir":-1,"coluna":null,"limiar":null,"n":1,"media":5.511410582008745,"rss":3.552713678800501e-15},{"esq":80,"dir":81,"coluna":"liga_Nacional","limiar":0.5,"n":2,"media":5.681051869012833,"rss":0.0010333608658044113},{"esq":-1,"dir":-1,"coluna":null,"limiar":null,"n":1,"media":5.703782474656201,"rss":0.0},{"esq":-1,"dir":-1,"coluna":null,"limiar":null,"n":1,"media":5.658321263369466,"rss":-7.105427357601002e-15},{"esq":83,"dir":88,"coluna":"bases_por_bolas","limiar":40.0,"n":4,"media":5.740228082195387,"rss":0.01851933045821852},{"esq":84,"dir":87,"coluna":"impulsionadas_carreira","limiar":144.5,"n":3,"media":5.700993058099361,"rss":4.668506835514563e-05},{"esq":85,"dir":86,"coluna":"bases_por_bolas","limiar":15.0,"n":2,"media":5.703782474656201,"rss":2.842170943040401e-14},{"esq":-1,"dir":-1,"coluna":null,"limiar":null,"n":1,"media":5.703782474656201,"rss":0.0},{"esq":-1,"dir":-1,"coluna":null,"limiar":null,"n":1,"media":5.703782474656201,"rss":0.0},{"esq":-1,"dir":-1,"coluna":null,"limiar":null,"n":1,"media":5.695414224985685,"rss":1.4210854715202004e-14},{"esq":-1,"dir":-1,"coluna":null,"limiar":null,"n":1,"media":5.857933154483459,"rss":-7.105427357601002e-15},{"esq":90,"dir":91,"coluna":"assistencias","limiar":6.0,"n":2,"media":6.181003723575467,"rss":0.03323792480158261},{"esq":-1,"dir":-1,"coluna":null,"limiar":null,"n":1,"media":6.052089168924417,"rss":0.0},{"esq":-1,"dir":-1,"coluna":null,"limiar":null,"n":1,"media":6.309918278226516,"rss":0.0},{"esq":93,"dir":174,"coluna":"rebatidas","limiar":122.5,"n":78,"media":6.4645673290384895,"rss":25.179909865239324},{"esq":94,"dir":147,"coluna":"eliminacoes","limiar":215.5,"n":42,"media":6.151405454788594,"rss":9.48240908965002},{"esq":95,"dir":114,"coluna":"bases_por_bolas","limiar":20.5,"n":28,"media":5.991067593484706,"rss":5.893748789738169},{"esq":96,"dir":113,"coluna":"corridas","limiar":45.0,"n":10,"media":5.76108854082412,"rss":1.9171350013458266},{"esq":97,"dir":100,"coluna":"corridas","limiar":20.5,"n":9,"media":5.889523913583677,"rss":0.4325269535159748},{"esq":98,"dir":99,"coluna":"corridas","limiar":17.0,"n":2,"media":6.161927840593279,"rss":0.005550419129832562},{"esq":-1,"dir":-1,"coluna":null,"limiar":null,"n":1,"media":6.214608098422191,"rss":0.0},{"esq":-1,"dir":-1,"coluna":null,"limiar":null,"n":1,"media":6.1092475827643655,"rss":0.0},{"esq":101,"dir":112,"coluna":"eliminacoes","limiar":179.0,"n":7,"media":5.811694220152363,"rss":0.2361665072284822},{"esq":102,"dir":111,"coluna":"anos","limiar":14.0,"n":6,"media":5.866870102954093,"rss":0.1083026294245002},{"esq":103,"dir":108,"coluna":"impulsionadas_carreira","limiar":310.5,"n":5,"media":5.9168899040115965,"rss":0.03324321448943124},{"esq":104,"dir":107,"coluna":"impulsionadas","limiar":38.5,"n":3,"media":5.8535658771073615,"rss":0.0023354713379859504},{"esq":105,"dir":106,"coluna":"vezes_ao_bastao_carreira","limiar":2670.0,"n":2,"media":5.8338365785136785,"rss":2.842170943040401e-14},{"esq":-1,"dir":-1,"coluna":null,"limiar":null,"n":1,"media":5.8338365785136785,"rss":0.0},{"esq":-1,"dir":-1,"coluna":null,"limiar":null,"n":1,"media":5.8338365785136785,"rss":0.0},{"esq":-1,"dir":-1,"coluna":null,"limiar":null,"n":1,"media":5.893024474294729,"rss":-2.842170943040401e-14},{"esq":109,"dir":110,"coluna":"liga_Nacional","limiar":0.5,"n":2,"media":6.011875944367949,"rss":0.0008332502762300464},{"esq":-1,"dir":-1,"coluna":null,"limiar":null,"n":1,"media":5.991464547107982,"rss":0.0},{"esq":-1,"dir":-1,"coluna":null,"limiar":null,"n":1,"media":6.032287341627917,"rss":1.4210854715202004e-14},{"esq":-1,"dir":-1,"coluna":null,"limiar":null,"n":1,"media":5.616771097666572,"rss":-7.105427357601002e-15},{"esq":-1,"dir":-1,"coluna":null,"limiar":null,"n":1,"media":5.480638923341991,"rss":-1.4210854715202004e-14},{"esq":-1,"dir":-1,"coluna":null,"limiar":null,"n":1,"media":4.605170185988092,"rss":7.105427357601002e-15},{"esq":115,"dir":120,"coluna":"bases_por_bolas","limiar":26.5,"n":18,"media":6.118833733851697,"rss":3.1538747825295985},{"esq":116,"dir":117,"coluna":"bases_por_bolas","limiar":21.5,"n":3,"media":6.6658543937006485,"rss":0.0177571600211337},{"esq":-1,"dir":-1,"coluna":null,"limiar":null,"n":1,"media":6.774223886357614,"rss":0.0},{"esq":118,"dir":119,"coluna":"assistencias","limiar":113.5,"n":2,"media":6.611669647372166,"rss":0.00014123961304335353},{"esq":-1,"dir":-1,"coluna":null,"limiar":null,"n":1,"media":6.603266088213975,"rss":0.0},{"esq":-1,"dir":-1,"coluna":null,"limiar":null,"n":1,"media":6.620073206530356,"rss":7.105427357601002e-15},{"esq":121,"dir":132,"coluna":"eliminacoes","limiar":71.0,"n":15,"media":6.009429601881906,"rss":2.0588838542230903},{"esq":122,"dir":131,"coluna":"bases_por_bolas_carreira","limiar":905.0,"n":7,"media":6.232119445642458,"rss":0.7373420157347113},{"esq":123,"dir":124,"coluna":"home_runs_carreira","limiar":44.5,"n":6,"media":6.111381779390939,"rss":0.12508348555640225},{"esq":-1,"dir":-1,"coluna":null,"limiar":null,"n":1,"media":6.38856140554563,"rss":0.0},{"esq":125,"dir":126,"coluna":"corridas","limiar":33.5,"n":5,"media":6.055945854160001,"rss":0.032889231370099026},{"esq":-1,"dir":-1,"coluna":null,"limiar":null,"n":1,"media":5.8998973535824915,"rss":0.0},{"esq":127,"dir":128,"coluna":"vezes_ao_bastao_carreira","limiar":3351.5,"n":4,"media":6.094957979304379,"rss":0.0024503132045765597},{"esq":-1,"dir":-1,"coluna":null,"limiar":null,"n":1,"media":6.052089168924417,"rss":0.0},{"esq":129,"dir":130,"coluna":"home_runs_carreira","limiar":76.0,"n":3,"media":6.1092475827643655,"rss":2.1316282072803006e-14},{"esq":-1,"dir":-1,"coluna":null,"limiar":null,"n":1,"media":6.1092475827643655,"rss":0.0},{"esq":-1,"dir":-1,"coluna":null,"limiar":null,"n":2,"media":6.1092475827643655,"rss":-1.4210854715202004e-14},{"esq":-1,"dir":-1,"coluna":null,"limiar":null,"n":1,"media":6.956545443151569,"rss":5.684341886080802e-14},{"esq":133,"dir":136,"coluna":"corridas","limiar":36.5,"n":8,"media":5.814575988591425,"rss":0.6706630279907699},{"esq":134,"dir":135,"coluna":"corridas","limiar":32.5,"n":2,"media":5.389478144945014,"rss":0.016620575035886986},{"esq":-1,"dir":-1,"coluna":null,"limiar":null,"n":1,"media":5.480638923341991,"rss":0.0},{"esq":-1,"dir":-1,"coluna":null,"limiar":null,"n":1,"media":5.298317366548036,"rss":0.0},{"esq":137,"dir":140,"coluna":"eliminacoes","limiar":176.0,"n":6,"media":5.956275269806895,"rss":0.1721539818273925},{"esq":138,"dir":139,"coluna":"rebatidas","limiar":97.0,"n":2,"media":6.15774371575802,"rss":0.022325766533228375},{"esq":-1,"dir":-1,"coluna":null,"limiar":null,"n":1,"media":6.263398262591624,"rss":0.0},{"esq":-1,"dir":-1,"coluna":null,"limiar":null,"n":1,"media":6.052089168924417,"rss":7.105427357601002e-15},{"esq":141,"dir":142,"coluna":"assistencias","limiar":8.5,"n":4,"media":5.855541046831332,"rss":0.028059611152286834},{"esq":-1,"dir":-1,"coluna":null,"limiar":null,"n":1,"media":5.991464547107982,"rss":0.0},{"esq":143,"dir":144,"coluna":"rebatidas_carreira","limiar":448.0,"n":3,"media":5.810233213405783,"rss":0.0034260139156145897},{"esq":-1,"dir":-1,"coluna":null,"limiar":null,"n":1,"media":5.857933154483459,"rss":0.0},{"esq":145,"dir":146,"coluna":"impulsionadas","limiar":37.5,"n":2,"media":5.786383242866944,"rss":1.3087347397799931e-05},{"esq":-1,"dir":-1,"coluna":null,"limiar":null,"n":1,"media":5.788941303404151,"rss":0.0},{"esq":-1,"dir":-1,"coluna":null,"limiar":null,"n":1,"media":5.783825182329737,"rss":-7.105427357601002e-15},{"esq":148,"dir":159,"coluna":"liga_seguinte_Nacional","limiar":0.5,"n":14,"media":6.4720811773963645,"rss":1.4291689994400372},{"esq":149,"dir":152,"coluna":"impulsionadas_carreira","limiar":249.5,"n":6,"media":6.207042021512467,"rss":0.14033954935307236},{"esq":150,"dir":151,"coluna":"vezes_ao_bastao_carreira","limiar":1481.5,"n":2,"media":6.010255422405633,"rss":0.006500756383132966},{"esq":-1,"dir":-1,"coluna":null,"limiar":null,"n":1,"media":6.067267510523482,"rss":0.0},{"esq":-1,"dir":-1,"coluna":null,"limiar":null,"n":1,"media":5.953243334287785,"rss":1.4210854715202004e-14},{"esq":153,"dir":156,"coluna":"assistencias","limiar":33.0,"n":4,"media":6.305435321065884,"rss":0.017663896205874607},{"esq":154,"dir":155,"coluna":"bases_por_bolas_carreira","limiar":257.0,"n":2,"media":6.3624332194726705,"rss":0.0023800081580134247},{"esq":-1,"dir":-1,"coluna":null,"limiar":null,"n":1,"media":6.396929655216146,"rss":0.0},{"esq":-1,"dir":-1,"coluna":null,"limiar":null,"n":1,"media":6.327936783729195,"rss":0.0},{"esq":157,"dir":158,"coluna":"assistencias","limiar":82.5,"n":2,"media":6.248437422659099,"rss":0.0022888463566488326},{"esq":-1,"dir":-1,"coluna":null,"limiar":null,"n":1,"media":6.214608098422191,"rss":0.0},{"esq":-1,"dir":-1,"coluna":null,"limiar":null,"n":1,"media":6.282266746896006,"rss":0.0},{"esq":160,"dir":161,"coluna":"corridas","limiar":28.0,"n":8,"media":6.67086054430929,"rss":0.5512490314949332},{"esq":-1,"dir":-1,"coluna":null,"limiar":null,"n":1,"media":6.163314804034641,"rss":0.0},{"esq":162,"dir":173,"coluna":"corridas_carreira","limiar":640.0,"n":7,"media":6.743367078634241,"rss":0.25684597038507206},{"esq":163,"dir":166,"coluna":"rebatidas_carreira","limiar":505.0,"n":6,"media":6.672241667831674,"rss":0.044375359788105584},{"esq":164,"dir":165,"coluna":"bases_por_bolas","limiar":42.5,"n":2,"media":6.5569973285727325,"rss":7.002162485036934e-05},{"esq":-1,"dir":-1,"coluna":null,"limiar":null,"n":1,"media":6.562914322102062,"rss":0.0},{"esq":-1,"dir":-1,"coluna":null,"limiar":null,"n":1,"media":6.551080335043404,"rss":0.0},{"esq":167,"dir":170,"coluna":"home_runs_carreira","limiar":57.5,"n":4,"media":6.729863837461147,"rss":0.004461564969631127},{"esq":168,"dir":169,"coluna":"vezes_ao_bastao_carreira","limiar":2809.5,"n":2,"media":6.759730117920988,"rss":0.00042013864700152226},{"esq":-1,"dir":-1,"coluna":null,"limiar":null,"n":1,"media":6.774223886357614,"rss":0.0},{"esq":-1,"dir":-1,"coluna":null,"limiar":null,"n":1,"media":6.745236349484363,"rss":7.105427357601002e-15},{"esq":171,"dir":172,"coluna":"home_runs_carreira","limiar":147.5,"n":2,"media":6.6999975570013035,"rss":0.00047344748850264295},{"esq":-1,"dir":-1,"coluna":null,"limiar":null,"n":1,"media":6.715383386334681,"rss":0.0},{"esq":-1,"dir":-1,"coluna":null,"limiar":null,"n":1,"media":6.684611727667927,"rss":7.105427357601002e-15},{"esq":-1,"dir":-1,"coluna":null,"limiar":null,"n":1,"media":7.170119543449628,"rss":-1.4210854715202004e-14},{"esq":175,"dir":222,"coluna":"bases_por_bolas","limiar":66.0,"n":36,"media":6.829922848996704,"rss":6.7730980625655945},{"esq":176,"dir":221,"coluna":"impulsionadas","limiar":109.0,"n":26,"media":6.673229380932279,"rss":3.4723995125477956},{"esq":177,"dir":208,"coluna":"assistencias","limiar":350.5,"n":25,"media":6.628621802841046,"rss":2.1790060974909764},{"esq":178,"dir":187,"coluna":"impulsionadas_carreira","limiar":317.5,"n":18,"media":6.723872203379291,"rss":1.2320247717237578},{"esq":179,"dir":182,"coluna":"assistencias","limiar":19.5,"n":5,"media":6.508508341940316,"rss":0.0619621689270744},{"esq":180,"dir":181,"coluna":"assistencias","limiar":14.0,"n":2,"media":6.632972052940927,"rss":0.0013856813376236232},{"esq":-1,"dir":-1,"coluna":null,"limiar":null,"n":1,"media":6.659293919683638,"rss":0.0},{"esq":-1,"dir":-1,"coluna":null,"limiar":null,"n":1,"media":6.606650186198215,"rss":-1.4210854715202004e-14},{"esq":183,"dir":186,"coluna":"liga_Nacional","limiar":0.5,"n":3,"media":6.425532534606575,"rss":0.00893910306932355},{"esq":184,"dir":185,"coluna":"rebatidas","limiar":161.0,"n":2,"media":6.390288522979674,"rss":0.001486260935990913},{"esq":-1,"dir":-1,"coluna":null,"limiar":null,"n":1,"media":6.363028103540465,"rss":0.0},{"esq":-1,"dir":-1,"coluna":null,"limiar":null,"n":1,"media":6.417548942418882,"rss":-1.4210854715202004e-14},{"esq":-1,"dir":-1,"coluna":null,"limiar":null,"n":1,"media":6.496020557860377,"rss":0.0},{"esq":188,"dir":199,"coluna":"home_runs_carreira","limiar":158.5,"n":13,"media":6.806704457778897,"rss":0.8489592679313418},{"esq":189,"dir":196,"coluna":"anos","limiar":10.0,"n":8,"media":6.954995448191265,"rss":0.10758164192344566},{"esq":190,"dir":191,"coluna":"erros","limiar":9.0,"n":4,"media":7.042865349774836,"rss":0.026003383255272183},{"esq":-1,"dir":-1,"coluna":null,"limiar":null,"n":1,"media":6.916053751218265,"rss":0.0},{"esq":192,"dir":193,"coluna":"eliminacoes","limiar":175.5,"n":3,"media":7.085135882627026,"rss":0.004561807883973756},{"esq":-1,"dir":-1,"coluna":null,"limiar":null,"n":1,"media":7.138866999945524,"rss":0.0},{"esq":194,"dir":195,"coluna":"corridas","limiar":78.5,"n":2,"media":7.058270323967777,"rss":0.00023125843152627112},{"esq":-1,"dir":-1,"coluna":null,"limiar":null,"n":1,"media":7.047517221357296,"rss":0.0},{"esq":-1,"dir":-1,"coluna":null,"limiar":null,"n":1,"media":7.069023426578259,"rss":7.105427357601002e-15},{"esq":197,"dir":198,"coluna":"home_runs","limiar":8.0,"n":4,"media":6.867125546607693,"rss":0.019809301833817017},{"esq":-1,"dir":-1,"coluna":null,"limiar":null,"n":1,"media":6.745236349484363,"rss":0.0},{"esq":-1,"dir":-1,"coluna":null,"limiar":null,"n":3,"media":6.907755278982137,"rss":-2.1316282072803006e-14},{"esq":200,"dir":203,"coluna":"corridas","limiar":68.0,"n":5,"media":6.569438873119109,"rss":0.2839810949881638},{"esq":201,"dir":202,"coluna":"assistencias","limiar":5.5,"n":2,"media":6.295242172220252,"rss":0.013003707714545953},{"esq":-1,"dir":-1,"coluna":null,"limiar":null,"n":1,"media":6.375876246018314,"rss":0.0},{"esq":-1,"dir":-1,"coluna":null,"limiar":null,"n":1,"media":6.214608098422191,"rss":0.0},{"esq":204,"dir":207,"coluna":"bases_por_bolas_carreira","limiar":637.5,"n":3,"media":6.752236673718348,"rss":0.020364617994211187},{"esq":205,"dir":206,"coluna":"corridas_carreira","limiar":860.0,"n":2,"media":6.700124018280228,"rss":0.0040702448533380675},{"esq":-1,"dir":-1,"coluna":null,"limiar":null,"n":1,"media":6.745236349484363,"rss":0.0},{"esq":-1,"dir":-1,"coluna":null,"limiar":null,"n":1,"media":6.655011687076094,"rss":1.4210854715202004e-14},{"esq":-1,"dir":-1,"coluna":null,"limiar":null,"n":1,"media":6.856461984594587,"rss":-7.105427357601002e-15},{"esq":209,"dir":214,"coluna":"bases_por_bolas","limiar":46.5,"n":7,"media":6.383692201456983,"rss":0.36374025987904446},{"esq":210,"dir":213,"coluna":"corridas","limiar":77.0,"n":3,"media":6.626528807360639,"rss":0.0011303256093668779},{"esq":211,"dir":212,"coluna":"impulsionadas_carreira","limiar":340.5,"n":2,"media":6.613361696364286,"rss":9.008873743709955e-05},{"esq":-1,"dir":-1,"coluna":null,"limiar":null,"n":1,"media":6.620073206530356,"rss":0.0},{"esq":-1,"dir":-1,"coluna":null,"limiar":null,"n":1,"media":6.606650186198215,"rss":-7.105427357601002e-15},{"esq":-1,"dir":-1,"coluna":null,"limiar":null,"n":1,"media":6.652863029353347,"rss":0.0},{"esq":215,"dir":218,"coluna":"assistencias","limiar":433.0,"n":4,"media":6.201564747029241,"rss":0.05301944414432569},{"esq":216,"dir":217,"coluna":"erros","limiar":13.0,"n":2,"media":6.101784757656027,"rss":0.0075718932147310625},{"esq":-1,"dir":-1,"coluna":null,"limiar":null,"n":1,"media":6.040254711277414,"rss":0.0},{"esq":-1,"dir":-1,"coluna":null,"limiar":null,"n":1,"media":6.163314804034641,"rss":1.4210854715202004e-14},{"esq":219,"dir":220,"coluna":"impulsionadas_carreira","limiar":333.5,"n":2,"media":6.301344736402455,"rss":0.00562336581229772},{"esq":-1,"dir":-1,"coluna":null,"limiar":null,"n":1,"media":6.354370040797351,"rss":0.0},{"esq":-1,"dir":-1,"coluna":null,"limiar":null,"n":1,"media":6.248319432007559,"rss":0.0},{"esq":-1,"dir":-1,"coluna":null,"limiar":null,"n":1,"media":7.788418833213141,"rss":3.765876499528531e-13},{"esq":223,"dir":230,"coluna":"rebatidas","limiar":140.5,"n":10,"media":7.237325865964199,"rss":1.0025524513910966},{"esq":224,"dir":227,"coluna":"anos","limiar":9.5,"n":4,"media":6.9398287748801,"rss":0.09269498192168157},{"esq":225,"dir":226,"coluna":"bases_por_bolas_carreira","limiar":322.0,"n":2,"media":7.091348224919237,"rss":0.0004656078065181646},{"esq":-1,"dir":-1,"coluna":null,"limiar":null,"n":1,"media":7.106606137727303,"rss":0.0},{"esq":-1,"dir":-1,"coluna":null,"limiar":null,"n":1,"media":7.076090312111171,"rss":7.105427357601002e-15},{"esq":228,"dir":229,"coluna":"assistencias","limiar":193.0,"n":2,"media":6.788309324840963,"rss":0.00039679915450108183},{"esq":-1,"dir":-1,"coluna":null,"limiar":null,"n":1,"media":6.802394763324311,"rss":0.0},{"esq":-1,"dir":-1,"coluna":null,"limiar":null,"n":1,"media":6.774223886357614,"rss":-1.4210854715202004e-14},{"esq":231,"dir":236,"coluna":"rebatidas_carreira","limiar":1073.5,"n":6,"media":7.435657260020267,"rss":0.3198273414468673},{"esq":232,"dir":233,"coluna":"impulsionadas_carreira","limiar":349.0,"n":3,"media":7.235489091367731,"rss":0.03414654104694392},{"esq":-1,"dir":-1,"coluna":null,"limiar":null,"n":1,"media":7.3777589082278725,"rss":0.0},{"esq":234,"dir":235,"coluna":"rebatidas","limiar":173.5,"n":2,"media":7.164354182937661,"rss":0.003785489862835334},{"esq":-1,"dir":-1,"coluna":null,"limiar":null,"n":1,"media":7.120848494442845,"rss":0.0},{"esq":-1,"dir":-1,"coluna":null,"limiar":null,"n":1,"media":7.2078598714324755,"rss":-1.4210854715202004e-14},{"esq":237,"dir":238,"coluna":"vezes_ao_bastao","limiar":504.5,"n":3,"media":7.635825428672803,"rss":0.045277025949552296},{"esq":-1,"dir":-1,"coluna":null,"limiar":null,"n":1,"media":7.807916628926408,"rss":0.0},{"esq":239,"dir":240,"coluna":"bases_por_bolas_carreira","limiar":659.5,"n":2,"media":7.549779828546001,"rss":0.0008539541424141817},{"esq":-1,"dir":-1,"coluna":null,"limiar":null,"n":1,"media":7.570443252057374,"rss":0.0},{"esq":-1,"dir":-1,"coluna":null,"limiar":null,"n":1,"media":7.529116405034626,"rss":0.0}],"degraus":[{"no":9,"ccp_alpha":5.3828995133340925e-17,"alpha":7.105427357601002e-15,"folhas":120,"rss":2.9487523534044163e-13,"mse":2.2339032980336487e-15},{"no":84,"ccp_alpha":2.153159805333637e-16,"alpha":2.842170943040401e-14,"folhas":119,"rss":3.232969447708456e-13,"mse":2.449219278567012e-15},{"no":104,"ccp_alpha":2.153159805333637e-16,"alpha":2.842170943040401e-14,"folhas":118,"rss":3.517186542012496e-13,"mse":2.6645352591003757e-15},{"no":128,"ccp_alpha":2.691449756667046e-16,"alpha":3.552713678800501e-14,"folhas":117,"rss":3.872457909892546e-13,"mse":2.9336802347670805e-15},{"no":144,"ccp_alpha":9.914657124928301e-08,"alpha":1.3087347404905358e-05,"folhas":116,"rss":1.308734779215115e-05,"mse":9.914657418296326e-08},{"no":83,"ccp_alpha":3.536747599432808e-07,"alpha":4.668506831251307e-05,"folhas":115,"rss":5.977241610466421e-05,"mse":4.5282133412624404e-07},{"no":76,"ccp_alpha":3.826107981821841e-07,"alpha":5.05046253600483e-05,"folhas":114,"rss":0.00011027704146471251,"mse":8.354321323084282e-07},{"no":163,"ccp_alpha":5.304668549270404e-07,"alpha":7.002162485036934e-05,"folhas":113,"rss":0.00018029866631508185,"mse":1.3658989872354685e-06},{"no":210,"ccp_alpha":6.82490435183371e-07,"alpha":9.008873744420498e-05,"folhas":112,"rss":0.0002703874037592868,"mse":2.0483894224188397e-06},{"no":117,"ccp_alpha":1.069997068456425e-06,"alpha":0.0001412396130362481,"folhas":111,"rss":0.000411627016795535,"mse":3.118386490875265e-06},{"no":74,"ccp_alpha":1.1634227372468762e-06,"alpha":0.00015357180131658765,"folhas":110,"rss":0.0005651988181121226,"mse":4.281809228122141e-06},{"no":193,"ccp_alpha":1.7519578145391341e-06,"alpha":0.0002312584315191657,"folhas":109,"rss":0.0007964572496312883,"mse":6.033767042661275e-06},{"no":23,"ccp_alpha":2.4279977315422982e-06,"alpha":0.00032049570056358334,"folhas":108,"rss":0.0011169529501948716,"mse":8.461764774203573e-06},{"no":227,"ccp_alpha":3.0060542008734292e-06,"alpha":0.0003967991545152927,"folhas":107,"rss":0.0015137521047101643,"mse":1.1467818975077002e-05},{"no":167,"ccp_alpha":3.1828685378364914e-06,"alpha":0.0004201386469944169,"folhas":106,"rss":0.0019338907517045814,"mse":1.4650687512913494e-05},{"no":224,"ccp_alpha":3.527331867508024e-06,"alpha":0.00046560780651105915,"folhas":105,"rss":0.0023994985582156403,"mse":1.8178019380421517e-05},{"no":170,"ccp_alpha":3.5867233976934663e-06,"alpha":0.00047344748849553753,"folhas":104,"rss":0.0028729460467111782,"mse":2.1764742778114986e-05},{"no":58,"ccp_alpha":3.818105472217369e-06,"alpha":0.0005039899223326928,"folhas":103,"rss":0.003376935969043871,"mse":2.5582848250332354e-05},{"no":108,"ccp_alpha":6.312502092544209e-06,"alpha":0.0008332502762158356,"folhas":102,"rss":0.004210186245259707,"mse":3.189535034287657e-05},{"no":238,"ccp_alpha":6.4693495637438e-06,"alpha":0.0008539541424141817,"folhas":101,"rss":0.005064140387673888,"mse":3.836469990662036e-05},{"no":79,"ccp_alpha":7.828491407663005e-06,"alpha":0.0010333608658115168,"folhas":100,"rss":0.0060975012534854045,"mse":4.619319131428337e-05},{"no":209,"ccp_alpha":7.88058236310438e-06,"alpha":0.0010402368719297783,"folhas":99,"rss":0.007137738125415183,"mse":5.407377367738775e-05},{"no":179,"ccp_alpha":1.0497585891195712e-05,"alpha":0.001385681337637834,"folhas":98,"rss":0.008523419463053017,"mse":6.457135956858346e-05},{"no":19,"ccp_alpha":1.1227040884574363e-05,"alpha":0.001481969396763816,"folhas":97,"rss":0.010005388859816833,"mse":7.579840045315783e-05},{"no":183,"ccp_alpha":1.1259552545493362e-05,"alpha":0.0014862609360051238,"folhas":96,"rss":0.011491649795821957,"mse":8.705795299865119e-05},{"no":61,"ccp_alpha":1.1697001353633443e-05,"alpha":0.0015440041786796144,"folhas":95,"rss":0.013035653974501571,"mse":9.875495435228463e-05},{"no":7,"ccp_alpha":1.4763961696293435e-05,"alpha":0.0019488429439107335,"folhas":94,"rss":0.014984496918412304,"mse":0.00011351891604857806},{"no":45,"ccp_alpha":1.4806041807190912e-05,"alpha":0.0019543975185492,"folhas":93,"rss":0.0169388944369615,"mse":0.00012832495785576896},{"no":156,"ccp_alpha":1.733974512612752e-05,"alpha":0.0022888463566488326,"folhas":92,"rss":0.019227740793610337,"mse":0.00014566470298189648},{"no":103,"ccp_alpha":1.7692964681711746e-05,"alpha":0.0023354713379859504,"folhas":91,"rss":0.021563212131596284,"mse":0.00016335766766360823},{"no":35,"ccp_alpha":1.8030364833354294e-05,"alpha":0.002380008158002767,"folhas":90,"rss":0.023943220289599054,"mse":0.00018138803249696252},{"no":153,"ccp_alpha":1.8030364833435037e-05,"alpha":0.0023800081580134247,"folhas":89,"rss":0.02632322844761248,"mse":0.00019941839733039757},{"no":126,"ccp_alpha":1.8562978822388207e-05,"alpha":0.0024503132045552434,"folhas":88,"rss":0.028773541652167722,"mse":0.00021798137615278577},{"no":22,"ccp_alpha":1.9070646353162733e-05,"alpha":0.002517325318617481,"folhas":87,"rss":0.0312908669707852,"mse":0.00023705202250594851},{"no":28,"ccp_alpha":2.0802998245294404e-05,"alpha":0.002745995768378861,"folhas":86,"rss":0.034036862739164064,"mse":0.00025785502075124293},{"no":142,"ccp_alpha":2.585550430467265e-05,"alpha":0.0034129265682167897,"folhas":85,"rss":0.037449789307380854,"mse":0.0002837105250559156},{"no":72,"ccp_alpha":2.654640673351658e-05,"alpha":0.0035041256888241885,"folhas":84,"rss":0.04095391499620504,"mse":0.00031025693178943214},{"no":166,"ccp_alpha":2.703014268278001e-05,"alpha":0.0035679788341269614,"folhas":83,"rss":0.044521893830332004,"mse":0.00033728707447221217},{"no":4,"ccp_alpha":2.704554725026021e-05,"alpha":0.003570012237034348,"folhas":82,"rss":0.04809190606736635,"mse":0.00036433262172247237},{"no":52,"ccp_alpha":2.867795350622063e-05,"alpha":0.003785489862821123,"folhas":81,"rss":0.051877395930187475,"mse":0.00039301057522869297},{"no":233,"ccp_alpha":2.8677953506435944e-05,"alpha":0.003785489862849545,"folhas":80,"rss":0.05566288579303702,"mse":0.00042168852873512895},{"no":65,"ccp_alpha":2.9717489155269973e-05,"alpha":0.003922708568495636,"folhas":79,"rss":0.05958559436153266,"mse":0.0004514060178903989},{"no":31,"ccp_alpha":3.0417950700978974e-05,"alpha":0.004015169492529225,"folhas":78,"rss":0.06360076385406188,"mse":0.0004818239685913779},{"no":204,"ccp_alpha":3.0835188282756484e-05,"alpha":0.004070244853323856,"folhas":77,"rss":0.06767100870738574,"mse":0.0005126591568741344},{"no":191,"ccp_alpha":3.280719282157186e-05,"alpha":0.004330549452447485,"folhas":76,"rss":0.07200155815983322,"mse":0.0005454663496957062},{"no":97,"ccp_alpha":4.2048629771458806e-05,"alpha":0.005550419129832562,"folhas":75,"rss":0.07755197728966579,"mse":0.0005875149794671651},{"no":218,"ccp_alpha":4.2601256153770606e-05,"alpha":0.00562336581229772,"folhas":74,"rss":0.0831753431019635,"mse":0.0006301162356209356},{"no":149,"ccp_alpha":4.9248154417566326e-05,"alpha":0.006500756383118755,"folhas":73,"rss":0.08967609948508226,"mse":0.0006793643900385019},{"no":182,"ccp_alpha":5.6460925252519985e-05,"alpha":0.007452842133332638,"folhas":72,"rss":0.09712894161841489,"mse":0.0007358253152910219},{"no":215,"ccp_alpha":5.736282738421857e-05,"alpha":0.007571893214716851,"folhas":71,"rss":0.10470083483313174,"mse":0.0007931881426752404},{"no":43,"ccp_alpha":7.268565706841309e-05,"alpha":0.009594506733030528,"folhas":70,"rss":0.11429534156616226,"mse":0.0008658737997436535},{"no":152,"ccp_alpha":9.844728553948751e-05,"alpha":0.012995041691212352,"folhas":69,"rss":0.12729038325737463,"mse":0.0009643210852831411},{"no":200,"ccp_alpha":9.851293723140874e-05,"alpha":0.013003707714545953,"folhas":68,"rss":0.14029409097192058,"mse":0.0010628340225145498},{"no":203,"ccp_alpha":0.00012344222076424413,"alpha":0.016294373140880225,"folhas":67,"rss":0.15658846411280078,"mse":0.0011862762432787938},{"no":133,"ccp_alpha":0.00012591344724156807,"alpha":0.016620575035886986,"folhas":66,"rss":0.17320903914868777,"mse":0.0013121896905203619},{"no":18,"ccp_alpha":0.00012625666415485537,"alpha":0.01666587966844091,"folhas":65,"rss":0.1898749188171287,"mse":0.0014384463546752175},{"no":115,"ccp_alpha":0.00013345394248553293,"alpha":0.017615920408090346,"folhas":64,"rss":0.20749083922521902,"mse":0.0015719002971607502},{"no":57,"ccp_alpha":0.00013455511338625914,"alpha":0.017761274966986207,"folhas":63,"rss":0.22525211419220525,"mse":0.0017064554105470095},{"no":82,"ccp_alpha":0.00013994428325659456,"alpha":0.018472645389870482,"folhas":62,"rss":0.2437247595820757,"mse":0.0018463996938036038},{"no":50,"ccp_alpha":0.00014598367645186357,"alpha":0.019269845291645993,"folhas":61,"rss":0.26299460487372167,"mse":0.0019923833702554673},{"no":196,"ccp_alpha":0.0001500704684381692,"alpha":0.019809301833838333,"folhas":60,"rss":0.28280390670756006,"mse":0.002142453838693637},{"no":189,"ccp_alpha":0.00016243617705529112,"alpha":0.021441575371298427,"folhas":59,"rss":0.3042454820788585,"mse":0.0023048900157489277},{"no":137,"ccp_alpha":0.00016913459494864597,"alpha":0.02232576653322127,"folhas":58,"rss":0.32657124861207976,"mse":0.002474024610697574},{"no":140,"ccp_alpha":0.00018661816088388062,"alpha":0.02463359723667224,"folhas":57,"rss":0.351204845848752,"mse":0.0026606427715814545},{"no":16,"ccp_alpha":0.00019050723371366425,"alpha":0.02514695485020368,"folhas":56,"rss":0.3763518006989557,"mse":0.0028511500052951187},{"no":102,"ccp_alpha":0.0002278370672364791,"alpha":0.030074492875215242,"folhas":55,"rss":0.4064262935741709,"mse":0.003078987072531598},{"no":231,"ccp_alpha":0.00023000796351597418,"alpha":0.030361051184108593,"folhas":54,"rss":0.4367873447582795,"mse":0.003308995036047572},{"no":124,"ccp_alpha":0.0002305978648903217,"alpha":0.030438918165522463,"folhas":53,"rss":0.467226262923802,"mse":0.003539592900937894},{"no":71,"ccp_alpha":0.0002351796764101395,"alpha":0.031043717286138413,"folhas":52,"rss":0.4982699802099404,"mse":0.003774772577348033},{"no":89,"ccp_alpha":0.0002518024606180501,"alpha":0.03323792480158261,"folhas":51,"rss":0.531507905011523,"mse":0.0040265750379660835},{"no":64,"ccp_alpha":0.00025485449845349365,"alpha":0.033640793795861164,"folhas":50,"rss":0.5651486988073842,"mse":0.004281429536419577},{"no":214,"ccp_alpha":0.0003016983721007341,"alpha":0.0398241851172969,"folhas":49,"rss":0.6049728839246811,"mse":0.004583127908520311},{"no":162,"ccp_alpha":0.00030184676661836426,"alpha":0.03984377319362408,"folhas":48,"rss":0.6448166571183052,"mse":0.004884974675138675},{"no":236,"ccp_alpha":0.00033653842278134937,"alpha":0.044423071807138115,"folhas":47,"rss":0.6892397289254433,"mse":0.005221513097920025},{"no":49,"ccp_alpha":0.0003601186773282913,"alpha":0.047535665407334456,"folhas":46,"rss":0.7367753943327777,"mse":0.005581631775248316},{"no":178,"ccp_alpha":0.00039119230697066086,"alpha":0.051637384520127234,"folhas":45,"rss":0.788412778852905,"mse":0.005972824082218977},{"no":188,"ccp_alpha":0.0004679466426845186,"alpha":0.06176895683435646,"folhas":44,"rss":0.8501817356872614,"mse":0.006440770724903496},{"no":70,"ccp_alpha":0.00047071072544436663,"alpha":0.0621338157586564,"folhas":43,"rss":0.9123155514459179,"mse":0.006911481450347863},{"no":34,"ccp_alpha":0.0005654436771117308,"alpha":0.07463856537874847,"folhas":42,"rss":0.9869541168246664,"mse":0.007476925127459594},{"no":101,"ccp_alpha":0.0005686319313263339,"alpha":0.07505941493507608,"folhas":41,"rss":1.0620135317597423,"mse":0.008045557058785928},{"no":15,"ccp_alpha":0.0005800694327113562,"alpha":0.07656916511789902,"folhas":40,"rss":1.1385826968776414,"mse":0.008625626491497283},{"no":14,"ccp_alpha":0.00062108366654233,"alpha":0.08198304398358756,"folhas":39,"rss":1.2205657408612292,"mse":0.009246710158039614},{"no":223,"ccp_alpha":0.000695701325459563,"alpha":0.09183257496066231,"folhas":38,"rss":1.3123983158218913,"mse":0.009942411483499176},{"no":122,"ccp_alpha":0.0006984413195932062,"alpha":0.09219425418630323,"folhas":37,"rss":1.4045925700081947,"mse":0.010640852803092384},{"no":41,"ccp_alpha":0.0007210647058636825,"alpha":0.0951805411740061,"folhas":36,"rss":1.4997731111822006,"mse":0.011361917508956066},{"no":3,"ccp_alpha":0.0008253074165286389,"alpha":0.10894057898178033,"folhas":35,"rss":1.608713690163981,"mse":0.012187224925484704},{"no":148,"ccp_alpha":0.000880112854273218,"alpha":0.11617489676406477,"folhas":34,"rss":1.724888586928046,"mse":0.013067337779757923},{"no":56,"ccp_alpha":0.0009020317814508032,"alpha":0.11906819515150603,"folhas":33,"rss":1.8439567820795515,"mse":0.013969369561208724},{"no":136,"ccp_alpha":0.0009224894253172523,"alpha":0.1217686041418773,"folhas":32,"rss":1.965725386221429,"mse":0.014891858986525978},{"no":100,"ccp_alpha":0.0009686657409393653,"alpha":0.12786387780399622,"folhas":31,"rss":2.0935892640254257,"mse":0.015860524727465346},{"no":13,"ccp_alpha":0.0011128362271663826,"alpha":0.1468943819859625,"folhas":30,"rss":2.240483646011388,"mse":0.016973360954631728},{"no":96,"ccp_alpha":0.0014455305087701519,"alpha":0.19081002715766004,"folhas":29,"rss":2.431293673169048,"mse":0.01841889146340188},{"no":161,"ccp_alpha":0.0016096258378559144,"alpha":0.2124706105969807,"folhas":28,"rss":2.6437642837660285,"mse":0.020028517301257792},{"no":230,"ccp_alpha":0.0018212407155331145,"alpha":0.24040377445037112,"folhas":27,"rss":2.8841680582163995,"mse":0.021849758016790906},{"no":199,"ccp_alpha":0.0018985815854500507,"alpha":0.2506127692794067,"folhas":26,"rss":3.134780827495806,"mse":0.023748339602240955},{"no":40,"ccp_alpha":0.001968902166342698,"alpha":0.25989508595723615,"folhas":24,"rss":3.654570999410278,"mse":0.02768614393492635},{"no":159,"ccp_alpha":0.002230326220529251,"alpha":0.29440306110986114,"folhas":23,"rss":3.9489740605201398,"mse":0.029916470155455604},{"no":208,"ccp_alpha":0.002345382500949636,"alpha":0.30959049012535195,"folhas":22,"rss":4.258564550645492,"mse":0.03226185265640524},{"no":177,"ccp_alpha":0.002948863128352553,"alpha":0.38924993294253696,"folhas":20,"rss":5.0370644165305665,"mse":0.03815957891311035},{"no":12,"ccp_alpha":0.003127566524576282,"alpha":0.41283878124406925,"folhas":19,"rss":5.449903197774635,"mse":0.04128714543768663},{"no":69,"ccp_alpha":0.0036453113547279922,"alpha":0.481181098824095,"folhas":18,"rss":5.931084296598729,"mse":0.044932456792414616},{"no":132,"ccp_alpha":0.003650670235814321,"alpha":0.4818884711274904,"folhas":17,"rss":6.412972767726219,"mse":0.04858312702822894},{"no":176,"ccp_alpha":0.004418492923395257,"alpha":0.5832410658881739,"folhas":16,"rss":6.9962138336143935,"mse":0.053001619951624196},{"no":222,"ccp_alpha":0.004469925212292027,"alpha":0.5900301280225476,"folhas":15,"rss":7.586243961636942,"mse":0.05747154516391623},{"no":121,"ccp_alpha":0.0046383221983200915,"alpha":0.612258530178252,"folhas":14,"rss":8.198502491815194,"mse":0.06210986736223632},{"no":120,"ccp_alpha":0.0049309000795273415,"alpha":0.6508788104976091,"folhas":13,"rss":8.849381302312802,"mse":0.06704076744176365},{"no":2,"ccp_alpha":0.0053132889562188335,"alpha":0.701354142220886,"folhas":12,"rss":9.55073544453369,"mse":0.0723540563979825},{"no":147,"ccp_alpha":0.005587730443879026,"alpha":0.7375804185920315,"folhas":11,"rss":10.288315863125721,"mse":0.07794178684186152},{"no":114,"ccp_alpha":0.008160861880949808,"alpha":1.0772337682853748,"folhas":10,"rss":11.365549631411097,"mse":0.08610264872281134},{"no":94,"ccp_alpha":0.008739950960956772,"alpha":1.1536735268462939,"folhas":8,"rss":13.672896685103682,"mse":0.10358255064472487},{"no":175,"ccp_alpha":0.00979843496254881,"alpha":1.2933934150564428,"folhas":7,"rss":14.966290100160126,"mse":0.11338098560727368},{"no":39,"ccp_alpha":0.01103812499668309,"alpha":1.457032499562168,"folhas":6,"rss":16.423322599722294,"mse":0.12441911060395677},{"no":93,"ccp_alpha":0.01635978257933192,"alpha":2.1594913004718133,"folhas":5,"rss":18.582813900194104,"mse":0.14077889318328868},{"no":174,"ccp_alpha":0.017410197716868962,"alpha":2.298146098626703,"folhas":4,"rss":20.88095999882081,"mse":0.15818909090015765},{"no":92,"ccp_alpha":0.06760911146230084,"alpha":8.92440271302371,"folhas":3,"rss":29.80536271184452,"mse":0.22579820236245848},{"no":1,"ccp_alpha":0.06769501665760028,"alpha":8.935742198803236,"folhas":2,"rss":38.741104910647756,"mse":0.29349321902005876},{"no":0,"ccp_alpha":0.44351425980874915,"alpha":58.54388229475489,"folhas":1,"rss":97.28498720540264,"mse":0.7370074788288079}],"curva":[{"folhas":2,"ccp_alpha":0.1732734982784053,"cv":0.39987157879226437,"desvio":0.04456960422910132,"mse_treino":0.293493219020039},{"folhas":3,"ccp_alpha":0.06765205042455111,"cv":0.36326664975474343,"desvio":0.053294425971637346,"mse_treino":0.22579820236244105},{"folhas":4,"ccp_alpha":0.034308716064879036,"cv":0.26943187312984207,"desvio":0.049893882121500366,"mse_treino":0.15818909090018765},{"folhas":5,"ccp_alpha":0.016876819881457443,"cv":0.2866915313121356,"desvio":0.04661929372075666,"mse_treino":0.14077889318331147},{"folhas":6,"ccp_alpha":0.013438055105900713,"cv":0.2878591481694039,"desvio":0.04212289368189523,"mse_treino":0.12441911060399041},{"folhas":7,"ccp_alpha":0.01039982451238883,"cv":0.2840681460815973,"desvio":0.03764958032277275,"mse_treino":0.11338098560729298},{"folhas":8,"ccp_alpha":0.009254071593995852,"cv":0.2961568991184312,"desvio":0.030979691746929657,"mse_treino":0.10358255064473519},{"folhas":10,"ccp_alpha":0.008445444490294326,"cv":0.2933998731349646,"desvio":0.03210316956269915,"mse_treino":0.08610264872281538},{"folhas":11,"ccp_alpha":0.00675282876878091,"cv":0.29631437397155713,"desvio":0.030459707297553547,"mse_treino":0.07794178684186313},{"folhas":12,"ccp_alpha":0.005448782107754924,"cv":0.29524454513576726,"desvio":0.035434539600302496,"mse_treino":0.07235405639798193},{"folhas":13,"ccp_alpha":0.0051185248789833195,"cv":0.3191727158160375,"desvio":0.04364977437557281,"mse_treino":0.06704076744176307},{"folhas":14,"ccp_alpha":0.0047823742321748495,"cv":0.3247553059014448,"desvio":0.04486992210616939,"mse_treino":0.06210986736223624},{"folhas":15,"ccp_alpha":0.004553345290773011,"cv":0.32244069752948606,"desvio":0.04369483925857737,"mse_treino":0.05747154516391617},{"folhas":16,"ccp_alpha":0.0044441346647709,"cv":0.32295613582506794,"desvio":0.04385248986821442,"mse_treino":0.053001619951618104},{"folhas":17,"ccp_alpha":0.004016274468035678,"cv":0.3213068165698652,"desvio":0.04568858983880783,"mse_treino":0.04858312702822703},{"folhas":18,"ccp_alpha":0.003647989811249678,"cv":0.3375868929324229,"desvio":0.04941852170543346,"mse_treino":0.04493245679241232},{"folhas":19,"ccp_alpha":0.0033765298406359576,"cv":0.3459723256297473,"desvio":0.051525547586570554,"mse_treino":0.041287145437682624},{"folhas":20,"ccp_alpha":0.0030369006578735394,"cv":0.3549270730233138,"desvio":0.04572901918764903,"mse_treino":0.0381595789131057},{"folhas":22,"ccp_alpha":0.0026298691942630297,"cv":0.3615884140561094,"desvio":0.047532387475211275,"mse_treino":0.03226185265640035},{"folhas":23,"ccp_alpha":0.0022871309733022384,"cv":0.3592616919877625,"desvio":0.048604714825848744,"mse_treino":0.029916470155447777},{"folhas":24,"ccp_alpha":0.002095541487838159,"cv":0.3574823903290152,"desvio":0.05007857056494382,"mse_treino":0.027686143934920148},{"folhas":26,"ccp_alpha":0.0019334221982202852,"cv":0.3632910931163273,"desvio":0.050333975558543895,"mse_treino":0.02374833960223737},{"folhas":27,"ccp_alpha":0.0018595090979027357,"cv":0.36410737980753166,"desvio":0.04983897559093263,"mse_treino":0.02184975801678744},{"folhas":28,"ccp_alpha":0.0017121670808298163,"cv":0.36170110597901545,"desvio":0.049520067436342755,"mse_treino":0.020028517301255162},{"folhas":29,"ccp_alpha":0.0015253731531416966,"cv":0.35980108008937334,"desvio":0.04885741728071389,"mse_treino":0.018418891463399017},{"folhas":30,"ccp_alpha":0.001268321220209485,"cv":0.366710210776187,"desvio":0.05055572783460921,"mse_treino":0.016973360954627887},{"folhas":31,"ccp_alpha":0.0010382515728532711,"cv":0.3641884672338183,"desvio":0.04979456107900218,"mse_treino":0.015860524727463108},{"folhas":32,"ccp_alpha":0.0009452956694514502,"cv":0.3635277891303607,"desvio":0.049848665387329405,"mse_treino":0.01489185898652444},{"folhas":33,"ccp_alpha":0.000912203255688363,"cv":0.36361299541849657,"desvio":0.04987087815950792,"mse_treino":0.01396936956120713},{"folhas":34,"ccp_alpha":0.0008910049190761081,"cv":0.36361299541849657,"desvio":0.04987087815950792,"mse_treino":0.01306733777975574},{"folhas":35,"ccp_alpha":0.0008522697143591786,"cv":0.3703106639902754,"desvio":0.052206599276994295,"mse_treino":0.012187224925482241},{"folhas":36,"ccp_alpha":0.0007714272807895367,"cv":0.3776310070327398,"desvio":0.05215266786121063,"mse_treino":0.011361917508953824},{"folhas":37,"ccp_alpha":0.000709662866913239,"cv":0.3784429694973168,"desvio":0.05177041830087899,"mse_treino":0.010640852803090179},{"folhas":38,"ccp_alpha":0.0006970699762554114,"cv":0.37811739876846745,"desvio":0.05200254385636936,"mse_treino":0.00994241148349696},{"folhas":39,"ccp_alpha":0.0006573345647649941,"cv":0.37940904550086857,"desvio":0.05185501879266879,"mse_treino":0.009246710158037486},{"folhas":40,"ccp_alpha":0.0006002263324092825,"cv":0.3787398877451838,"desvio":0.050684999997309826,"mse_treino":0.008625626491495656},{"folhas":41,"ccp_alpha":0.0005743222108068165,"cv":0.37666516502034897,"desvio":0.049691929133182704,"mse_treino":0.008045557058784075},{"folhas":42,"ccp_alpha":0.0005670355634105391,"cv":0.37621001843212154,"desvio":0.050015946746073466,"mse_treino":0.007476925127458552},{"folhas":43,"ccp_alpha":0.0005159073593690955,"cv":0.37371541007565484,"desvio":0.049117212283132906,"mse_treino":0.006911481450345634},{"folhas":44,"ccp_alpha":0.00046932664919785406,"cv":0.37366073975941627,"desvio":0.04914518130118776,"mse_treino":0.00644077072490143},{"folhas":45,"ccp_alpha":0.00042785175784485494,"cv":0.3717288654125615,"desvio":0.048286276507749484,"mse_treino":0.005972824082216185},{"folhas":46,"ccp_alpha":0.00037533405942876715,"cv":0.3675568982462039,"desvio":0.047679454737411926,"mse_treino":0.005581631775245386},{"folhas":47,"ccp_alpha":0.0003481289584078992,"cv":0.3659785336809626,"desvio":0.04593232574788015,"mse_treino":0.005221513097917106},{"folhas":48,"ccp_alpha":0.0003187209355523957,"cv":0.36575169608769675,"desvio":0.04614431837501499,"mse_treino":0.004884974675136123},{"folhas":49,"ccp_alpha":0.0003017725602380553,"cv":0.3671396556695095,"desvio":0.04689978318886887,"mse_treino":0.004583127908517256},{"folhas":50,"ccp_alpha":0.0002772889960059145,"cv":0.36427234983952944,"desvio":0.046664350187699426,"mse_treino":0.004281429536416692},{"folhas":51,"ccp_alpha":0.0002533238832210037,"cv":0.36215816925864214,"desvio":0.04593670968421689,"mse_treino":0.0040265750379640305},{"folhas":52,"ccp_alpha":0.00024334917548130282,"cv":0.361849886796439,"desvio":0.04555177151672029,"mse_treino":0.003774772577344661},{"folhas":53,"ccp_alpha":0.00023287750266132393,"cv":0.361849886796439,"desvio":0.04555177151672029,"mse_treino":0.0035395929009341435},{"folhas":54,"ccp_alpha":0.00023030272533028056,"cv":0.361849886796439,"desvio":0.04555177151672029,"mse_treino":0.0033089950360431493},{"folhas":55,"ccp_alpha":0.00022891994200705765,"cv":0.361849886796439,"desvio":0.04555177151672029,"mse_treino":0.003078987072527034},{"folhas":56,"ccp_alpha":0.0002083377292202633,"cv":0.3613389901436421,"desvio":0.04592682206680961,"mse_treino":0.0028511500052902003},{"folhas":57,"ccp_alpha":0.00018855267060086857,"cv":0.35665677125335554,"desvio":0.04508022321055438,"mse_treino":0.002660642771576019},{"folhas":58,"ccp_alpha":0.00017766143940415544,"cv":0.3581087733452412,"desvio":0.04574665287525816,"mse_treino":0.0024740246106926215},{"folhas":59,"ccp_alpha":0.00016575155206287876,"cv":0.3576269881819108,"desvio":0.047164811155001235,"mse_treino":0.002304890015743924},{"folhas":60,"ccp_alpha":0.00015613094882819655,"cv":0.3581958120019643,"desvio":0.04738487286884446,"mse_treino":0.002142453838688642},{"folhas":61,"ccp_alpha":0.0001480129680448889,"cv":0.3576097245504665,"desvio":0.04743075214767008,"mse_treino":0.0019923833702505597},{"folhas":62,"ccp_alpha":0.00014293208516011599,"cv":0.357637546729835,"desvio":0.04744123388802233,"mse_treino":0.0018463996937987085},{"folhas":63,"ccp_alpha":0.00013722324475594447,"cv":0.357637546729835,"desvio":0.04744123388802233,"mse_treino":0.0017064554105427451},{"folhas":64,"ccp_alpha":0.00013400339683375265,"cv":0.357637546729835,"desvio":0.04744123388802233,"mse_treino":0.0015719002971564598},{"folhas":65,"ccp_alpha":0.00012980542976523486,"cv":0.35890009492807423,"desvio":0.04793147160316009,"mse_treino":0.0014384463546709128},{"folhas":66,"ccp_alpha":0.0001260849389140462,"cv":0.35890009492807423,"desvio":0.04793147160316009,"mse_treino":0.0013121896905161738},{"folhas":67,"ccp_alpha":0.00012467171111194654,"cv":0.35890009492807423,"desvio":0.04793147160316009,"mse_treino":0.0011862762432746157},{"folhas":68,"ccp_alpha":0.00011027536327690642,"cv":0.3600121345288529,"desvio":0.04840842284393253,"mse_treino":0.0010628340225104264},{"folhas":69,"ccp_alpha":9.848010591461661e-05,"cv":0.3602336290816524,"desvio":0.04876581226788182,"mse_treino":0.0009643210852790446},{"folhas":70,"ccp_alpha":8.459140403161146e-05,"cv":0.3602336290816524,"desvio":0.04876581226788182,"mse_treino":0.0008658737997399454},{"folhas":71,"ccp_alpha":6.457131561091107e-05,"cv":0.35850710536438246,"desvio":0.04827199718070444,"mse_treino":0.0007931881426715867},{"folhas":72,"ccp_alpha":5.691008969605979e-05,"cv":0.35870951737347495,"desvio":0.048158514132527815,"mse_treino":0.0007358253152874297},{"folhas":73,"ccp_alpha":5.2731360359797036e-05,"cv":0.3584204096799131,"desvio":0.04797192291181191,"mse_treino":0.0006793643900348319},{"folhas":74,"ccp_alpha":4.580429282767274e-05,"cv":0.36021092875535904,"desvio":0.04861201975989452,"mse_treino":0.0006301162356172961},{"folhas":75,"ccp_alpha":4.232404101464062e-05,"cv":0.36054788290637635,"desvio":0.0483600729585763,"mse_treino":0.0005875149794631846},{"folhas":76,"ccp_alpha":3.71415872681168e-05,"cv":0.3607905308751181,"desvio":0.04860553761094163,"mse_treino":0.0005454663496916581},{"folhas":77,"ccp_alpha":3.180591089218898e-05,"cv":0.3599795170019511,"desvio":0.0488653415220464,"mse_treino":0.000512659156870134},{"folhas":78,"ccp_alpha":3.062585896004047e-05,"cv":0.36000039282963153,"desvio":0.0488734438328163,"mse_treino":0.0004818239685872322},{"folhas":79,"ccp_alpha":3.0065680103431543e-05,"cv":0.36000039282963153,"desvio":0.0488734438328163,"mse_treino":0.00045140601788637696},{"folhas":80,"ccp_alpha":2.9193094599970842e-05,"cv":0.36000039282963153,"desvio":0.0488734438328163,"mse_treino":0.00042168852873117915},{"folhas":81,"ccp_alpha":2.8677953506328286e-05,"cv":0.3600594037478159,"desvio":0.048881033078417145,"mse_treino":0.0003930105752249991},{"folhas":82,"ccp_alpha":2.7849792577203433e-05,"cv":0.36075975416928724,"desvio":0.04897644320819163,"mse_treino":0.00036433262171881964},{"folhas":83,"ccp_alpha":2.7037843869443472e-05,"cv":0.3606750945584036,"desvio":0.048862485378850344,"mse_treino":0.0003372870744687349},{"folhas":84,"ccp_alpha":2.678718278808104e-05,"cv":0.3607148724274356,"desvio":0.04887561572424334,"mse_treino":0.0003102569317867364},{"folhas":85,"ccp_alpha":2.619867808825531e-05,"cv":0.3607148724274356,"desvio":0.04887561572424334,"mse_treino":0.0002837105250539284},{"folhas":86,"ccp_alpha":2.3192067839701295e-05,"cv":0.3602057713129614,"desvio":0.049005518740306,"mse_treino":0.000257855020749226},{"folhas":87,"ccp_alpha":1.991799745510262e-05,"cv":0.3609462843208422,"desvio":0.04917674603985128,"mse_treino":0.00023705202250401094},{"folhas":88,"ccp_alpha":1.8815100435103043e-05,"cv":0.3610572849726914,"desvio":0.049212613118907,"mse_treino":0.00021798137615084893},{"folhas":89,"ccp_alpha":1.829473368384978e-05,"cv":0.3610572849726914,"desvio":0.049212613118907,"mse_treino":0.0001994183973286967},{"folhas":90,"ccp_alpha":1.8030364833394667e-05,"cv":0.3610572849726914,"desvio":0.049212613118907,"mse_treino":0.00018138803249530646},{"folhas":91,"ccp_alpha":1.786086806946726e-05,"cv":0.3610572849726914,"desvio":0.049212613118907,"mse_treino":0.0001633576676619162},{"folhas":92,"ccp_alpha":1.751546454155463e-05,"cv":0.3610572849726914,"desvio":0.049212613118907,"mse_treino":0.00014566470298015593},{"folhas":93,"ccp_alpha":1.6022889604047047e-05,"cv":0.3610572849726914,"desvio":0.049212613118907,"mse_treino":0.0001283249578540073},{"folhas":94,"ccp_alpha":1.4784986781025064e-05,"cv":0.3611716060309562,"desvio":0.04926275233688098,"mse_treino":0.00011351891604691113},{"folhas":95,"ccp_alpha":1.3141311956822904e-05,"cv":0.36120862764175393,"desvio":0.04926388610525008,"mse_treino":9.875495435050225e-05},{"folhas":96,"ccp_alpha":1.1476192807980473e-05,"cv":0.36105585445909405,"desvio":0.04928109902242692,"mse_treino":8.70579529968366e-05},{"folhas":97,"ccp_alpha":1.12432849634912e-05,"cv":0.36105585445909405,"desvio":0.04928109902242692,"mse_treino":7.579840045135831e-05},{"folhas":98,"ccp_alpha":1.0856188372987328e-05,"cv":0.36105585445909405,"desvio":0.04928109902242692,"mse_treino":6.457135956696193e-05},{"folhas":99,"ccp_alpha":9.095443377281302e-06,"cv":0.36104463195496866,"desvio":0.04926360196334548,"mse_treino":5.407377367573397e-05},{"folhas":100,"ccp_alpha":7.85449370213913e-06,"cv":0.3609209270234368,"desvio":0.0492237154580426,"mse_treino":4.619319131253835e-05},{"folhas":101,"ccp_alpha":7.116547440503489e-06,"cv":0.36045155629217057,"desvio":0.04904147040223949,"mse_treino":3.8364699904746004e-05},{"folhas":102,"ccp_alpha":6.3904446369977036e-06,"cv":0.36077779497859996,"desvio":0.04911235076804128,"mse_treino":3.189535034095211e-05},{"folhas":103,"ccp_alpha":4.909358286265796e-06,"cv":0.3608850927291492,"desvio":0.04915418799746762,"mse_treino":2.558284824846393e-05},{"folhas":104,"ccp_alpha":3.7006064681432286e-06,"cv":0.3609909378468023,"desvio":0.04919823368207391,"mse_treino":2.1764742776228308e-05},{"folhas":105,"ccp_alpha":3.556903673227716e-06,"cv":0.3606182437719887,"desvio":0.049338817911880786,"mse_treino":1.8178019378110137e-05},{"folhas":106,"ccp_alpha":3.3506765919138366e-06,"cv":0.3606182437719887,"desvio":0.049338817911880786,"mse_treino":1.4650687510556593e-05},{"folhas":107,"ccp_alpha":3.093198237907046e-06,"cv":0.3606182437719887,"desvio":0.049338817911880786,"mse_treino":1.1467818972760699e-05},{"folhas":108,"ccp_alpha":2.7016092945897786e-06,"cv":0.3605772215920733,"desvio":0.049315663312147984,"mse_treino":8.461764771727475e-06},{"folhas":109,"ccp_alpha":2.062462023761606e-06,"cv":0.360513094022277,"desvio":0.04930687544521136,"mse_treino":6.033767040176723e-06},{"folhas":110,"ccp_alpha":1.4276790802320297e-06,"cv":0.36042994060542655,"desvio":0.049276220780477026,"mse_treino":4.2818092257593304e-06},{"folhas":111,"ccp_alpha":1.1157324581770072e-06,"cv":0.3604961325707055,"desvio":0.04923935848645419,"mse_treino":3.1183864885961204e-06},{"folhas":112,"ccp_alpha":8.545541322208657e-07,"cv":0.36049946255172594,"desvio":0.04924066400334073,"mse_treino":2.048389420032408e-06},{"folhas":113,"ccp_alpha":6.016963974210831e-07,"cv":0.3604227821441466,"desvio":0.049230817603639315,"mse_treino":1.3658989850435222e-06},{"folhas":114,"ccp_alpha":4.505134257409292e-07,"cv":0.36039116348341055,"desvio":0.04923061479588501,"mse_treino":8.354321301023597e-07},{"folhas":115,"ccp_alpha":3.6785837247341676e-07,"cv":0.3603842941083372,"desvio":0.04922791829863438,"mse_treino":4.5282133173807863e-07},{"folhas":116,"ccp_alpha":1.8725821687122184e-07,"cv":0.36040243299713043,"desvio":0.049213125695045885,"mse_treino":9.914657139416766e-08},{"folhas":117,"ccp_alpha":5.1657333948167974e-12,"cv":0.3604193922064769,"desvio":0.04921405632615718,"mse_treino":0.0},{"folhas":118,"ccp_alpha":2.4073058455731134e-16,"cv":0.3604193922064769,"desvio":0.04921405632615718,"mse_treino":0.0},{"folhas":120,"ccp_alpha":1.0765799026668185e-16,"cv":0.3604193922064769,"desvio":0.04921405632615718,"mse_treino":0.0},{"folhas":121,"ccp_alpha":0.0,"cv":0.3604193922064769,"desvio":0.04921405632615718,"mse_treino":0.0}]}</script>
+
+<script id="nucleo">
+"use strict";
+
+/* ==================================================================== *
+ * O núcleo — as contas da poda, sem nada de tela
+ *
+ * DADOS traz a árvore grande da seção 12.2 (nos), já ajustada pelo
+ * scikit-learn nos 132 jogadores de treino, e a sequência de podas
+ * (degraus), um nó por degrau, a mesma do cost_complexity_pruning_path.
+ * Um estado da página é a lista dos nós que já viraram folha.
+ *
+ * O custo de um nó interno é quanto o erro de treino sobe, por folha
+ * perdida, se o galho debaixo dele virar uma folha só:
+ *
+ *     (RSS do nó − RSS das folhas do galho) / (folhas do galho − 1)
+ *
+ * Na escala do RSS esse custo é o α de (8.4); dividido por n = 132, é o
+ * ccp_alpha. A conta é feita na escala do MSE e na mesma ordem que o
+ * scikit-learn, para os empates (custos de 1e−16 no começo) caírem do
+ * mesmo jeito; tests/test_apoio.py confere degrau por degrau.
+ * ==================================================================== */
+
+function cortadosAte(dados, j) {
+  return dados.degraus.slice(0, j).map(g => g.no);
+}
+
+/* Soma do erro (escala do MSE) e número de folhas do galho que começa em i. */
+function galho(dados, i, cortados) {
+  const no = dados.nos[i];
+  if (no.esq === -1 || cortados.has(i)) return {mse: no.rss / dados.n_treino, folhas: 1};
+  const e = galho(dados, no.esq, cortados);
+  const d = galho(dados, no.dir, cortados);
+  return {mse: e.mse + d.mse, folhas: e.folhas + d.folhas};
+}
+
+function subarvore(dados, cortados) {
+  const g = galho(dados, 0, new Set(cortados));
+  return {folhas: g.folhas, rss: g.mse * dados.n_treino, mse: g.mse};
+}
+
+/* Todo nó interno da subárvore, do mais barato ao mais caro; empate pelo menor índice. */
+function candidatos(dados, cortados) {
+  const conjunto = new Set(cortados);
+  const lista = [];
+  (function visita(i) {
+    const no = dados.nos[i];
+    if (no.esq === -1 || conjunto.has(i)) return;
+    const g = galho(dados, i, conjunto);
+    const custoMse = (no.rss / dados.n_treino - g.mse) / (g.folhas - 1);
+    lista.push({no: i, custo: dados.n_treino * custoMse, folhas: g.folhas, custoMse});
+    visita(no.esq);
+    visita(no.dir);
+  })(0);
+  lista.sort((a, b) => a.custoMse - b.custoMse || a.no - b.no);
+  return lista.map(({no, custo, folhas}) => ({no, custo, folhas}));
+}
+
+/* O erro de validação cruzada da subárvore com esse número de folhas, ou null. */
+function erroNaCurva(dados, folhas) {
+  const linha = dados.curva.find(c => c.folhas === folhas);
+  return linha ? {cv: linha.cv, desvio: linha.desvio, mse_treino: linha.mse_treino} : null;
+}
+
+const FORMATOS = new Map();
+function fmt(x, casas) {
+  if (!FORMATOS.has(casas)) {
+    FORMATOS.set(casas, new Intl.NumberFormat("pt-BR", {
+      minimumFractionDigits: casas, maximumFractionDigits: casas,
+    }));
+  }
+  return FORMATOS.get(casas).format(x);
+}
+</script>
+
+<script>
+"use strict";
+
+/* ==================================================================== *
+ * A tela — só desenha e responde ao mouse; toda conta vem do núcleo.
+ *
+ * O estado é j, o número de degraus já aplicados: j = 0 é a árvore
+ * grande, j = DADOS.degraus.length é a raiz sozinha. "Antes" é a
+ * subárvore com j degraus; "depois", com j + 1.
+ * ==================================================================== */
+
+const DADOS = JSON.parse(document.getElementById("dados").textContent);
+const N = DADOS.n_treino;
+const ULTIMO = DADOS.degraus.length;
+const FATIA_MINIMA = 48;     // largura mínima, em px, da fatia de uma folha para caixas com texto
+const APERTO_MAXIMO = 1.3;   // quanto um texto pode ser comprimido antes de a árvore virar miniatura
+const MOSTRA = 5;            // quantos galhos candidatos aparecem
+
+let j = 0;
+
+const $ = id => document.getElementById(id);
+const NS = "http://www.w3.org/2000/svg";
+function el(tag, attrs, pai) {
+  const e = document.createElementNS(NS, tag);
+  for (const [k, v] of Object.entries(attrs || {})) e.setAttribute(k, v);
+  if (pai) pai.appendChild(e);
+  return e;
+}
+function texto(conteudo, attrs, pai) {
+  const t = el("text", attrs, pai);
+  t.textContent = conteudo;
+  return t;
+}
+/* Escreve a primeira opção que cabe na largura; se nenhuma cabe, aperta a
+ * última e devolve quanto apertou (1 = nada). */
+function escreve(opcoes, attrs, pai, largura) {
+  const t = texto(opcoes[0], attrs, pai);
+  for (const opcao of opcoes) {
+    t.textContent = opcao;
+    if (t.getComputedTextLength() <= largura) return 1;
+  }
+  const aperto = t.getComputedTextLength() / largura;
+  t.setAttribute("textLength", largura);
+  t.setAttribute("lengthAdjust", "spacingAndGlyphs");
+  return aperto;
+}
+
+/* Folhas por estado: o tamanho da subárvore depois de j degraus. */
+const FOLHAS = [DADOS.arvore.folhas, ...DADOS.degraus.map(g => g.folhas)];
+const MSE = [DADOS.arvore.mse, ...DADOS.degraus.map(g => g.mse)];
+const folhasTxt = n => (n === 1 ? "1 folha" : `${n} folhas`);
+
+/* --------------------------------- árvore ------------------------------ */
+
+/* Desenha a subárvore com `cortados`; `destaque` = {no, tipo: "cai" | "nova"}.
+ * Com caixas e texto quando cabem; senão, em miniatura (pontos e traços). */
+function desenhaArvore(svg, cortados, destaque, miniatura = false) {
+  svg.replaceChildren();
+  const conjunto = new Set(cortados);
+  const W = svg.clientWidth || 440;
+  const H = 400;
+  svg.setAttribute("viewBox", `0 0 ${W} ${H}`);
+  svg.setAttribute("height", H);
+
+  const fatia = new Map();
+  const nivel = new Map();
+  const vistos = [];
+  let proxima = 0;
+  const ehFolha = i => DADOS.nos[i].esq === -1 || conjunto.has(i);
+  (function visita(i, d) {
+    vistos.push(i);
+    nivel.set(i, d);
+    if (ehFolha(i)) { fatia.set(i, proxima++); return; }
+    const no = DADOS.nos[i];
+    visita(no.esq, d + 1);
+    visita(no.dir, d + 1);
+    fatia.set(i, (fatia.get(no.esq) + fatia.get(no.dir)) / 2);
+  })(0, 0);
+
+  // os nós do galho que vai cair (só no "antes")
+  const caem = new Set();
+  if (destaque && destaque.tipo === "cai") {
+    (function marca(i) {
+      caem.add(i);
+      if (!ehFolha(i)) { marca(DADOS.nos[i].esq); marca(DADOS.nos[i].dir); }
+    })(destaque.no);
+  }
+
+  const folhas = proxima;
+  const MX = 8;
+  const largura = Math.min((W - 2 * MX) / folhas, 170);
+  const comTexto = !miniatura && largura >= FATIA_MINIMA;
+  const TOPO = comTexto ? 34 : 38;
+  const x0 = (W - folhas * largura) / 2;
+  const profundidade = Math.max(...nivel.values());
+  const passoY = comTexto
+    ? Math.min(78, (H - TOPO - 52) / Math.max(profundidade, 1))
+    : (H - TOPO - 20) / Math.max(profundidade, 1);
+  const px = i => x0 + (fatia.get(i) + 0.5) * largura;
+  const py = i => TOPO + nivel.get(i) * passoY;
+  const bh = 36;
+
+  for (const i of vistos) {
+    if (ehFolha(i)) continue;
+    const no = DADOS.nos[i];
+    for (const filho of [no.esq, no.dir]) {
+      const some = caem.has(filho);
+      el("line", {class: "ramo" + (some ? " some" : ""),
+        x1: px(i), y1: py(i) + (comTexto ? bh : 0), x2: px(filho), y2: py(filho)}, svg);
+    }
+  }
+
+  if (!comTexto) {
+    for (const i of vistos) {
+      const folha = ehFolha(i);
+      let classe = "mini" + (folha ? " folha" : "");
+      let r = folha ? 2.2 : 1.6;
+      if (caem.has(i) && i !== destaque.no) classe = "mini some";
+      if (destaque && i === destaque.no) { classe = "mini " + destaque.tipo; r = 6; }
+      el("circle", {class: classe, cx: px(i), cy: py(i), r}, svg);
+    }
+    return;
+  }
+
+  // a largura de um nó é a do trecho de folhas que ele cobre
+  const cobre = new Map();
+  (function conta(i) {
+    if (ehFolha(i)) { cobre.set(i, 1); return 1; }
+    const n = conta(DADOS.nos[i].esq) + conta(DADOS.nos[i].dir);
+    cobre.set(i, n);
+    return n;
+  })(0);
+
+  let aperto = 1;
+  for (const i of vistos) {
+    const no = DADOS.nos[i];
+    const folha = ehFolha(i);
+    const bw = Math.min(cobre.get(i) * largura - 8, folha ? 120 : 190);
+    const classes = ["no"];
+    if (folha) classes.push("folha");
+    if (destaque && i === destaque.no) classes.push(destaque.tipo);
+    else if (caem.has(i)) classes.push("some");
+    const g = el("g", {class: classes.join(" "), transform: `translate(${px(i) - bw / 2},${py(i)})`}, svg);
+    el("rect", {width: bw, height: bh, rx: 4}, g);
+    if (folha) {
+      aperto = Math.max(aperto,
+        escreve([`${no.n} jog.`, String(no.n)], {x: bw / 2, y: 15, "text-anchor": "middle"}, g, bw - 8),
+        escreve([`média ${fmt(no.media, 2)}`, fmt(no.media, 2)], {x: bw / 2, y: 29, "text-anchor": "middle", class: "num fraco"}, g, bw - 8));
+    } else {
+      aperto = Math.max(aperto,
+        escreve([no.coluna], {x: bw / 2, y: 15, "text-anchor": "middle"}, g, bw - 8),
+        escreve([`≤ ${fmt(no.limiar, 1)} · ${no.n} jog.`, `≤ ${fmt(no.limiar, 1)}`], {x: bw / 2, y: 29, "text-anchor": "middle", class: "num fraco"}, g, bw - 8));
+    }
+    el("title", {}, g).textContent = folha
+      ? `${no.n} jogadores, média ${fmt(no.media, 2)}`
+      : `${no.coluna} ≤ ${fmt(no.limiar, 1)}, ${no.n} jogadores`;
+  }
+  // texto comprimido demais não se lê no projetor: melhor a miniatura
+  if (aperto > APERTO_MAXIMO) desenhaArvore(svg, cortados, destaque, true);
+}
+
+/* ------------------------------ candidatos ----------------------------- */
+
+function pergunta(i) {
+  const no = DADOS.nos[i];
+  return `${no.coluna} ≤ ${fmt(no.limiar, 1)}`;
+}
+
+function desenhaCandidatos() {
+  const caixa = $("candidatos");
+  caixa.replaceChildren();
+  if (j >= ULTIMO) {
+    const p = document.createElement("p");
+    p.className = "vazio";
+    p.textContent = "Sobrou só a raiz: não há mais galho para podar.";
+    caixa.appendChild(p);
+    return;
+  }
+  const lista = candidatos(DADOS, cortadosAte(DADOS, j));
+  const primeiros = lista.slice(0, MOSTRA);
+  // escala com piso de 1: custos de arredondamento (1e−16) não viram barras longas
+  const maior = Math.max(...primeiros.map(c => c.custo), 1);
+  primeiros.forEach((c, k) => {
+    const item = document.createElement("div");
+    item.className = "cand" + (k === 0 ? " fraco" : "");
+    const no = DADOS.nos[c.no];
+    item.innerHTML =
+      `<span class="q">${pergunta(c.no)} <span class="n">· ${no.n} jog., ${c.folhas} folhas</span></span>` +
+      `<span class="linha"><span class="barra" style="width:${(c.custo / maior * 72).toFixed(1)}%"></span>` +
+      `<span class="v">+${fmt(c.custo, 2)}</span></span>` +
+      (k === 0 ? `<span class="selo">elo mais fraco</span>` : "");
+    caixa.appendChild(item);
+  });
+  if (lista.length > MOSTRA) {
+    const p = document.createElement("p");
+    p.className = "vazio";
+    p.textContent = `Os ${MOSTRA} mais baratos de ${lista.length} galhos.`;
+    caixa.appendChild(p);
+  }
+  const g = DADOS.degraus[j];
+  const d = document.createElement("div");
+  d.className = "degrau";
+  d.innerHTML = `α = ${fmt(g.alpha, 2)} · ccp_alpha = ${fmt(g.ccp_alpha, 4)}` +
+    `<span class="nota">o RSS de treino sobe de ${fmt(MSE[j] * N, 2)} para ${fmt(g.rss, 2)}</span>`;
+  caixa.appendChild(d);
+}
+
+/* --------------------------------- erro -------------------------------- */
+
+const ME = {esq: 56, dir: 150, topo: 56, base: 40};
+
+function escalasDoErro() {
+  const svg = $("erro");
+  const W = svg.clientWidth || 1000;
+  const H = 300;
+  const fMax = DADOS.arvore.folhas;
+  const topo = Math.max(...MSE) * 1.06;
+  const sx = f => ME.esq + Math.log(f) / Math.log(fMax) * (W - ME.esq - ME.dir);
+  const sy = v => H - ME.base - v / topo * (H - ME.topo - ME.base);
+  const ix = p => Math.exp((p - ME.esq) / (W - ME.esq - ME.dir) * Math.log(fMax));
+  return {W, H, sx, sy, ix, topo};
+}
+
+function desenhaErro() {
+  const svg = $("erro");
+  svg.replaceChildren();
+  const {W, H, sx, sy, topo} = escalasDoErro();
+  svg.setAttribute("viewBox", `0 0 ${W} ${H}`);
+  svg.setAttribute("height", H);
+
+  const grade = el("g", {class: "grade"}, svg);
+  for (let v = 0; v <= topo; v += 0.1) {
+    el("line", {x1: ME.esq, x2: W - ME.dir, y1: sy(v), y2: sy(v)}, grade);
+    texto(fmt(v, 1), {x: ME.esq - 8, y: sy(v) + 4, "text-anchor": "end", class: "num fraco"}, svg);
+  }
+  for (const f of [1, 2, 3, 4, 5, 10, 20, 50, 100, DADOS.arvore.folhas]) {
+    el("line", {x1: sx(f), x2: sx(f), y1: ME.topo, y2: H - ME.base}, grade);
+    texto(String(f), {x: sx(f), y: H - ME.base + 16, "text-anchor": "middle", class: "num fraco"}, svg);
+  }
+  texto("folhas da subárvore (escala log)", {x: (ME.esq + W - ME.dir) / 2, y: H - 6, "text-anchor": "middle", class: "eixo"}, svg);
+  texto("MSE", {x: 16, y: (ME.topo + H - ME.base) / 2, "text-anchor": "middle", class: "eixo",
+    transform: `rotate(-90 16 ${(ME.topo + H - ME.base) / 2})`}, svg);
+
+  // treino: todo estado do caminho
+  const treino = FOLHAS.map((f, k) => [f, MSE[k]]).sort((a, b) => a[0] - b[0]);
+  el("polyline", {class: "treino", points: treino.map(([f, v]) => `${sx(f).toFixed(1)},${sy(v).toFixed(1)}`).join(" ")}, svg);
+
+  // validação cruzada: trechos de tamanhos seguidos do caminho que têm valor
+  const tamanhos = [...FOLHAS].sort((a, b) => a - b);
+  const trechos = [];
+  let atual = [];
+  for (const f of tamanhos) {
+    const e = erroNaCurva(DADOS, f);
+    if (e === null) { if (atual.length) trechos.push(atual); atual = []; continue; }
+    atual.push([f, e]);
+  }
+  if (atual.length) trechos.push(atual);
+  for (const t of trechos) {
+    const cima = t.map(([f, e]) => `${sx(f).toFixed(1)},${sy(e.cv + e.desvio).toFixed(1)}`);
+    const baixo = t.slice().reverse().map(([f, e]) => `${sx(f).toFixed(1)},${sy(Math.max(e.cv - e.desvio, 0)).toFixed(1)}`);
+    el("polygon", {class: "faixa", points: cima.concat(baixo).join(" ")}, svg);
+    el("polyline", {class: "cv", points: t.map(([f, e]) => `${sx(f).toFixed(1)},${sy(e.cv).toFixed(1)}`).join(" ")}, svg);
+  }
+  for (const c of DADOS.curva) {
+    if (c.folhas > 20) continue;
+    const p = el("circle", {class: "ponto-cv", cx: sx(c.folhas), cy: sy(c.cv), r: 3.5}, svg);
+    el("title", {}, p).textContent =
+      `${c.folhas} folhas · validação cruzada ${fmt(c.cv, 4)} ± ${fmt(c.desvio, 4)} · treino ${fmt(c.mse_treino, 4)}`;
+  }
+
+  // o mínimo da validação cruzada
+  const minimo = DADOS.curva.reduce((a, b) => (b.cv < a.cv ? b : a));
+  const mx = sx(minimo.folhas), my = sy(minimo.cv);
+  el("line", {class: "minimo", x1: mx - 6, y1: my - 6, x2: mx + 6, y2: my + 6}, svg);
+  el("line", {class: "minimo", x1: mx - 6, y1: my + 6, x2: mx + 6, y2: my - 6}, svg);
+  texto(`mínimo: ${minimo.folhas} folhas, ${fmt(minimo.cv, 4)}`, {x: mx + 10, y: my + 18, class: "num"}, svg);
+
+  // rótulos diretos, na ponta direita
+  const ultimoCv = DADOS.curva[DADOS.curva.length - 1];
+  texto("validação cruzada", {x: W - ME.dir + 8, y: sy(ultimoCv.cv) + 4}, svg);
+  texto("treino", {x: W - ME.dir + 8, y: sy(MSE[0]) + 4, class: "fraco"}, svg);
+
+  el("g", {id: "erro-agora"}, svg);
+}
+
+function desenhaAgora() {
+  const g = $("erro-agora");
+  g.replaceChildren();
+  const {W, H, sx, sy} = escalasDoErro();
+  const f = FOLHAS[j];
+  const e = erroNaCurva(DADOS, f);
+  el("line", {class: "agora", x1: sx(f), x2: sx(f), y1: ME.topo - 8, y2: H - ME.base}, g);
+  if (e !== null) el("circle", {class: "marca-agora", cx: sx(f), cy: sy(e.cv), r: 6}, g);
+  const rotulo = texto(
+    e === null ? `agora: ${folhasTxt(f)} · sem validação cruzada neste tamanho`
+               : `agora: ${folhasTxt(f)} · validação cruzada ${fmt(e.cv, 4)}`,
+    {x: sx(f) + 8, y: ME.topo - 16, class: "num"}, g);
+  if (sx(f) + 8 + rotulo.getComputedTextLength() > W - 8) {
+    rotulo.setAttribute("x", sx(f) - 8);
+    rotulo.setAttribute("text-anchor", "end");
+  }
+}
+
+/* ------------------------------- conjunto ------------------------------ */
+
+function desenhaTudo() {
+  const antes = cortadosAte(DADOS, j);
+  const temDepois = j < ULTIMO;
+  const cai = temDepois ? DADOS.degraus[j].no : null;
+  desenhaArvore($("antes"), antes, temDepois ? {no: cai, tipo: "cai"} : null);
+  if (temDepois) {
+    desenhaArvore($("depois"), cortadosAte(DADOS, j + 1), {no: cai, tipo: "nova"});
+  } else {
+    $("depois").replaceChildren();
+  }
+  $("tag-antes").innerHTML = `antes · <b>${folhasTxt(FOLHAS[j])}</b> · RSS <b>${fmt(MSE[j] * N, 2)}</b> · MSE <b>${fmt(MSE[j], 4)}</b>`;
+  $("tag-depois").innerHTML = temDepois
+    ? `depois · <b>${folhasTxt(FOLHAS[j + 1])}</b> · RSS <b>${fmt(MSE[j + 1] * N, 2)}</b> · MSE <b>${fmt(MSE[j + 1], 4)}</b>`
+    : "depois · nada a podar";
+  desenhaCandidatos();
+  desenhaErro();
+  desenhaAgora();
+  $("n-folhas").textContent = FOLHAS[j];
+  $("u-folhas").textContent = FOLHAS[j] === 1 ? "folha" : "folhas";
+  $("mse-agora").textContent = fmt(MSE[j], 4);
+  $("passo").value = j;
+  $("passo-saida").textContent = folhasTxt(FOLHAS[j]);
+  $("btn-desfazer").disabled = j === 0;
+  $("btn-podar").disabled = j >= ULTIMO;
+}
+
+function vaiPara(novo) {
+  j = Math.max(0, Math.min(ULTIMO, novo));
+  desenhaTudo();
+}
+
+$("passo").max = ULTIMO;
+$("passo").addEventListener("input", e => vaiPara(+e.target.value));
+$("btn-podar").addEventListener("click", () => vaiPara(j + 1));
+$("btn-desfazer").addEventListener("click", () => vaiPara(j - 1));
+$("erro").addEventListener("click", e => {
+  const svg = $("erro");
+  const r = svg.getBoundingClientRect();
+  const x = (e.clientX - r.left) * svg.viewBox.baseVal.width / r.width;
+  const alvo = escalasDoErro().ix(x);
+  let melhor = 0;
+  FOLHAS.forEach((f, k) => {
+    if (Math.abs(Math.log(f) - Math.log(alvo)) < Math.abs(Math.log(FOLHAS[melhor]) - Math.log(alvo))) melhor = k;
+  });
+  vaiPara(melhor);
+});
+
+window.addEventListener("resize", desenhaTudo);
+if (window.matchMedia) window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", desenhaTudo);
+
+desenhaTudo();
+</script>
+</body>
+</html>
