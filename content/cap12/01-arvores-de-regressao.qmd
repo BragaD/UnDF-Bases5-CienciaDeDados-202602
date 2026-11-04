@@ -28,9 +28,6 @@ print("jogadores:", len(hitters))
 print("sem salário:", hitters["salario"].isna().sum())
 hitters = hitters.dropna()
 print("depois do dropna:", len(hitters))
-print("assimetria do salário:", round(hitters["salario"].skew(), 2))
-y = np.log(hitters["salario"])
-print("assimetria do log:", round(y.skew(), 2))
 ```
 
 ::: {.funcao}
@@ -39,13 +36,68 @@ print("assimetria do log:", round(y.skew(), 2))
 **`s.isna().sum()`** — `isna` marca com `True` cada valor ausente da série; a soma conta os `True`.
 
 **`df.dropna()`** — devolve a tabela sem as linhas que têm algum valor ausente.
-
-**`s.skew()`** — a assimetria da série: perto de zero numa distribuição simétrica, positiva quando há uma cauda longa à direita.
-
-**`np.log(x)`** — o logaritmo natural de cada elemento.
 :::
 
-Dos 322 jogadores, 59 não têm salário registrado, e sem a resposta não há o que prever: ficam 263. O salário tem assimetria de 1,59: uns poucos jogadores muito bem pagos formam uma cauda longa à direita. Como a árvore vai prever a média de cada grupo de jogadores, um grupo com um desses salários enormes teria a média puxada para cima por ele. O logaritmo do salário tem assimetria de −0,18, quase simétrico, e nele os salários enormes deixam de dominar a média. A resposta daqui em diante é `y`, o logaritmo do salário; a exponencial, `np.exp`, leva de volta à escala do salário, em milhares de dólares.
+Dos 322 jogadores, 59 não têm salário registrado, e sem a resposta não há o que prever: ficam 263. Como os salários desses 263 jogadores se distribuem? O painel da esquerda mostra o histograma do salário; o da direita, o do logaritmo natural do salário. Em cada painel, a linha laranja marca a média, e a tracejada, a mediana:
+
+```{python}
+#| label: fig-salarios
+#| fig-cap: "Os salários de 1987 dos 263 jogadores, em milhares de dólares (à esquerda) e no logaritmo natural (à direita). Em cada painel, a linha laranja marca a média e a tracejada cinza, a mediana."
+#| fig-alt: "Dois histogramas lado a lado. À esquerda, o salário em milhares de dólares: as barras mais altas ficam à esquerda, e uma cauda longa se estende para a direita até 2.460; a linha da média fica à direita da tracejada da mediana. À direita, o logaritmo do salário, de 4,21 a 7,81, sem cauda longa, com a linha da média logo à esquerda da mediana."
+import matplotlib.pyplot as plt
+
+salario = hitters["salario"]
+y = np.log(salario)
+
+fig, (ax_salario, ax_log) = plt.subplots(1, 2, figsize=(8, 3.2))
+
+ax_salario.hist(salario, bins=30, color="C0", edgecolor="none")
+ax_salario.axvline(salario.mean(), color="C1", linewidth=2, label="média")
+ax_salario.axvline(salario.median(), color="0.45", linestyle="--", linewidth=2,
+                   label="mediana")
+ax_salario.set_xlim(0, 2500)
+ax_salario.set_xlabel("salário (milhares de dólares)")
+ax_salario.set_ylabel("jogadores")
+ax_salario.legend()
+
+ax_log.hist(y, bins=30, color="C0", edgecolor="none")
+ax_log.axvline(y.mean(), color="C1", linewidth=2)
+ax_log.axvline(y.median(), color="0.45", linestyle="--", linewidth=2)
+ax_log.set_yticks([0, 5, 10, 15, 20])
+ax_log.set_xlabel("logaritmo do salário")
+ax_log.set_ylabel("jogadores")
+
+plt.tight_layout()
+plt.show()
+```
+
+A tabela põe lado a lado o resumo das duas escalas, com a ***assimetria*** de cada uma: perto de zero numa distribuição simétrica, positiva quando há uma cauda longa à direita, negativa quando a cauda é à esquerda.
+
+```{python}
+#| label: resumo-salarios
+abaixo_da_media = (salario < salario.mean()).mean()
+print("jogadores com salário abaixo da média:", f"{100 * abaixo_da_media:.1f}%")
+resumo = pd.DataFrame({
+    "mínimo": [salario.min(), y.min()],
+    "mediana": [salario.median(), y.median()],
+    "média": [salario.mean(), y.mean()],
+    "máximo": [salario.max(), y.max()],
+    "assimetria": [salario.skew(), y.skew()],
+}, index=["salário", "logaritmo do salário"])
+resumo.style.format(precision=2)
+```
+
+::: {.funcao}
+**`np.log(x)`** — o logaritmo natural de cada elemento.
+
+**`ax.hist(valores, bins, color, edgecolor)`** — o histograma: divide a faixa de `valores` em `bins` intervalos de mesma largura e desenha uma barra com quantos valores caem em cada um. **`ax.axvline(x, color, linestyle, linewidth, label)`** — uma linha vertical na posição `x`, de alto a baixo do gráfico; `linestyle="--"` a deixa tracejada, e `label` é o nome dela na legenda que `ax.legend()` desenha.
+
+**`s.min()`**, **`s.median()`**, **`s.mean()`**, **`s.max()`** — o menor valor, a mediana, a média e o maior valor da série. **`s.skew()`** — a assimetria da série.
+:::
+
+No salário, as barras mais altas ficam à esquerda, e uns poucos jogadores muito bem pagos formam uma cauda longa à direita, que vai até 2.460 mil dólares. A assimetria é de 1,59, e a cauda puxa a média, 535,93, para 110,93 acima da mediana, 425: 60,1% dos jogadores ganham menos que a média. Como a árvore vai prever a média de cada grupo de jogadores, um grupo com um desses salários enormes teria a média puxada para cima por ele.
+
+O logaritmo aproxima os salários altos uns dos outros mais do que os baixos: dobrar um salário soma sempre a mesma quantidade ao logaritmo, $\log 2$, seja ele baixo ou alto, e por isso a distância entre um salário e o dobro dele é a mesma em qualquer ponto do eixo da direita. No logaritmo, a cauda some: a assimetria cai para −0,18, e a média, 5,93, fica perto da mediana, 6,05. Os salários enormes deixam de dominar a média. A resposta daqui em diante é `y`, o logaritmo do salário; a exponencial, `np.exp`, leva de volta à escala do salário, em milhares de dólares.
 
 ## Uma árvore com três folhas
 
@@ -76,7 +128,6 @@ Três folhas, e no máximo duas perguntas por jogador. Quais perguntas, a figura
 #| label: fig-arvore-3
 #| fig-cap: "A árvore de três folhas para o logaritmo do salário. Cada caixa mostra a pergunta, o número de jogadores (`samples`) e a média do logaritmo do salário deles (`value`). Em cada pergunta, o ramo `True` é o da esquerda, em que a condição vale."
 #| fig-alt: "Diagrama de árvore. A caixa do topo pergunta se anos é menor ou igual a 4,5, com 263 jogadores. O ramo True leva a uma folha com 90 jogadores e média 5,107. O ramo False leva a uma caixa que pergunta se rebatidas é menor ou igual a 117,5, com 173 jogadores; dela saem duas folhas, com 90 jogadores e média 5,998 e com 83 jogadores e média 6,74."
-import matplotlib.pyplot as plt
 from sklearn.tree import plot_tree
 
 fig, ax = plt.subplots(figsize=(4.8, 3.0))
@@ -211,7 +262,7 @@ plt.show()
 ::: {.funcao}
 **`ax.scatter(x, y, s, alpha, c)`** — um ponto por par `(x, y)`; `s` é o tamanho, `alpha` a opacidade e `c` a cor de cada ponto.
 
-**`ax.axvline(x, color, linewidth)`** — uma linha vertical na posição `x`, de alto a baixo do gráfico. **`ax.hlines(y, xmin, xmax, color, linewidth)`** — uma linha horizontal na altura `y`, só de `xmin` a `xmax`.
+**`ax.hlines(y, xmin, xmax, color, linewidth)`** — uma linha horizontal na altura `y`, só de `xmin` a `xmax`, enquanto o `axvline` vai de alto a baixo.
 
 **`ax.text(x, y, texto, fontsize, ha, va)`** — escreve `texto` na posição `(x, y)`; `ha` e `va` alinham o texto pelo centro.
 
