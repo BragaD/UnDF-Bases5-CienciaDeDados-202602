@@ -173,24 +173,7 @@ pd.DataFrame(linhas).set_index("B").style.format(precision=2)
 **`modelo.staged_predict(X)`** — as previsões do modelo depois de cada árvore, uma de cada vez: primeiro com a árvore 1, depois com as árvores 1 e 2, e assim por diante até $B$. Um ajuste só dá a curva inteira contra $B$; `list(...)` guarda as 1.000 previsões numa lista.
 :::
 
-A célula seguinte procura a primeira árvore depois da qual a média, arredondada, chega à média do log do salário:
-
-```{python}
-#| label: chega-a-media
-alvo = round(treino_y.mean(), 2)
-chega = None
-for b, previsto in enumerate(previsoes, start=1):
-    if round(previsto.mean(), 2) >= alvo:
-        chega = b
-        break
-print("média chega a", round(treino_y.mean(), 2), "em B =", chega)
-```
-
-::: {.funcao}
-**`break`** — sai do laço na primeira vez que a condição vale; `start=1` faz o `enumerate` contar as árvores a partir de 1.
-:::
-
-Dez árvores levam a previsão média a 0,57, e cem, a 3,75. A procura acha a árvore de número 696. O MSE de treino é a média dos quadrados dos resíduos, e cai junto, de 34,97 depois da primeira árvore para 0,09 depois da milésima.
+Dez árvores levam a previsão média a 0,57, e cem, a 3,75. O MSE de treino é a média dos quadrados dos resíduos, e cai junto, de 34,97 depois da primeira árvore para 0,09 depois da milésima.
 
 O modelo final é a soma das árvores encolhidas. A célula confere isso nos jogadores de teste: soma as previsões das mil árvores, cada uma multiplicada pela taxa, e põe a soma ao lado do `predict`:
 
@@ -212,21 +195,7 @@ pd.DataFrame({"soma das árvores": soma[:3], "predict": previsto_boost[:3]},
 
 A soma das mil árvores encolhidas é a previsão do modelo, como no passo 3: as duas colunas da tabela coincidem, jogador a jogador.
 
-O modelo começou de zero e levou centenas de árvores só para chegar ao nível dos salários. O `init` padrão começa da média do log do salário no treino e poupa esse caminho. A célula ajusta o mesmo boosting partindo da média e compara os dois erros de teste:
-
-```{python}
-#| label: zero-ou-media
-from sklearn.metrics import mean_squared_error
-
-da_media = GradientBoostingRegressor(n_estimators=1000, learning_rate=taxa, max_leaf_nodes=2,
-                                     max_depth=None, random_state=13)
-da_media.fit(treino_X, treino_y)
-pd.DataFrame({"MSE de teste": [mean_squared_error(teste_y, previsto_boost),
-                               mean_squared_error(teste_y, da_media.predict(teste_X))]},
-             index=["partindo de zero", "partindo da média"]).style.format(precision=4)
-```
-
-Com $\lambda = 0{,}01$ e mil árvores, o caminho de zero até a média já foi percorrido, e os dois erros de teste coincidem nas quatro casas.
+O modelo começou de zero e levou centenas de árvores só para chegar ao nível dos salários. O `init` padrão do `scikit-learn` começa da média do log do salário no treino e poupa esse caminho; a leitura para casa, no fim da seção, compara os dois pontos de partida.
 
 ## Três parâmetros: B, λ e d
 
@@ -236,6 +205,9 @@ Daqui em diante, os modelos partem da média do log do salário no treino, o pad
 
 ```{python}
 #| label: tres-taxas
+from sklearn.metrics import mean_squared_error
+
+
 def curva_de_teste(modelo):
     """O MSE de teste do modelo depois de cada árvore."""
     curva = []
@@ -312,20 +284,6 @@ print("λ = 0.01, MSE de treino em B = 3000:", round(modelos[0.01].train_score_[
 ```
 
 O erro de teste subindo é compatível com correções que, depois do mínimo, acompanham o que é particular desses 132 jogadores. No boosting, um $B$ grande demais pode sobreajustar, ao contrário do bagging, em que uma árvore a mais só entra numa média.
-
-Com $\lambda$ pequeno, o ponto de partida pesa. A célula ajusta de novo o $\lambda = 0{,}001$, agora partindo de zero, e põe o menor erro de teste ao lado do que partiu da média:
-
-```{python}
-#| label: de-zero
-de_zero = GradientBoostingRegressor(n_estimators=3000, learning_rate=0.001,
-                                    max_leaf_nodes=2, max_depth=None, init="zero",
-                                    random_state=13)
-de_zero.fit(treino_X, treino_y)
-pd.DataFrame({"menor MSE de teste": [curvas[0.001].min(), curva_de_teste(de_zero).min()]},
-             index=["partindo da média", "partindo de zero"]).style.format(precision=4)
-```
-
-Partindo de zero, o menor erro de teste do $\lambda = 0{,}001$ é 0,3931, contra 0,3027 partindo da média: com um passo de um milésimo por árvore, 3.000 árvores gastam boa parte do caminho só para chegar ao nível dos salários.
 
 Se o menor erro quase não muda entre $\lambda = 0{,}1$ e $\lambda = 0{,}01$, o que o $\lambda$ menor compra? Nestes dados, baixou o menor erro só em 0,0005. Ele anda com um passo mais fino, de um centésimo por árvore, e cobra isso em árvores: o menor erro de teste veio com 635 árvores com $\lambda = 0{,}01$, contra 51 com $\lambda = 0{,}1$, e 635 ÷ 51 ≈ 12,5.
 
@@ -453,3 +411,52 @@ O MSE de CV no $B$ escolhido, 0,1957, fica bem abaixo do erro de teste nesse $B$
 O otimismo de ficar com o menor de 3.000 erros estimados com os mesmos 132 jogadores, que a seção 12.2 viu na poda, existe, mas pesa pouco aqui: ficar com o mínimo baixou a CV em 0,0041 em relação a $B = 635$.
 
 Em classificação, o boosting segue a mesma ideia, cada árvore corrigindo o que as anteriores ainda erram, com uma conta mais complicada para o resíduo; no `scikit-learn`, é o `GradientBoostingClassifier`, que volta na seção 13.6.
+
+## Leitura para casa
+
+### Partir de zero ou da média
+
+Partindo de zero, com $\lambda = 0{,}01$, dez árvores levaram a previsão média no treino a 0,57, e cem, a 3,75. A célula procura a primeira árvore depois da qual a média, arredondada, chega à média do log do salário:
+
+```{python}
+#| label: chega-a-media
+alvo = round(treino_y.mean(), 2)
+chega = None
+for b, previsto in enumerate(previsoes, start=1):
+    if round(previsto.mean(), 2) >= alvo:
+        chega = b
+        break
+print("média chega a", round(treino_y.mean(), 2), "em B =", chega)
+```
+
+::: {.funcao}
+**`break`** — sai do laço na primeira vez que a condição vale; `start=1` faz o `enumerate` contar as árvores a partir de 1.
+:::
+
+A procura acha a árvore de número 696. O `init` padrão começa da média do log do salário no treino e poupa esse caminho. A célula ajusta o mesmo boosting de mil tocos com $\lambda = 0{,}01$, agora partindo da média, e compara os dois erros de teste:
+
+```{python}
+#| label: zero-ou-media
+da_media = GradientBoostingRegressor(n_estimators=1000, learning_rate=0.01, max_leaf_nodes=2,
+                                     max_depth=None, random_state=13)
+da_media.fit(treino_X, treino_y)
+pd.DataFrame({"MSE de teste": [mean_squared_error(teste_y, previsto_boost),
+                               mean_squared_error(teste_y, da_media.predict(teste_X))]},
+             index=["partindo de zero", "partindo da média"]).style.format(precision=4)
+```
+
+Com $\lambda = 0{,}01$ e mil árvores, o caminho de zero até a média já foi percorrido, e os dois erros de teste coincidem nas quatro casas.
+
+Com $\lambda$ pequeno, o ponto de partida pesa mais. A célula ajusta de novo o boosting de $\lambda = 0{,}001$ com 3.000 tocos, agora partindo de zero, e põe o menor erro de teste ao lado do que partiu da média:
+
+```{python}
+#| label: de-zero
+de_zero = GradientBoostingRegressor(n_estimators=3000, learning_rate=0.001,
+                                    max_leaf_nodes=2, max_depth=None, init="zero",
+                                    random_state=13)
+de_zero.fit(treino_X, treino_y)
+pd.DataFrame({"menor MSE de teste": [curvas[0.001].min(), curva_de_teste(de_zero).min()]},
+             index=["partindo da média", "partindo de zero"]).style.format(precision=4)
+```
+
+Partindo de zero, o menor erro de teste do $\lambda = 0{,}001$ é 0,3931, contra 0,3027 partindo da média: com um passo de um milésimo por árvore, 3.000 árvores gastam boa parte do caminho só para chegar ao nível dos salários.

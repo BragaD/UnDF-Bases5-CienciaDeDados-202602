@@ -227,6 +227,167 @@ A correlação cai a cada $m$ menor, linha a linha na tabela: de 0,82 no bagging
 
 Essa correlação mostra o quanto as árvores de **um** treino se parecem, e não é o $\rho$ da fórmula: o $\rho$ fixa um jogador e se mede ao longo de muitos conjuntos de treino.
 
+## Quantas colunas sortear
+
+Com quantas colunas sorteadas por divisão a floresta erra menos? O $m$ é o parâmetro que a floresta acrescenta ao bagging, e o erro OOB da seção 13.2 permite escolhê-lo sem separar jogadores e sem validação cruzada: um ajuste por valor de $m$. No regressor, o `oob_score_` é o $R^2$, e o MSE OOB sai das previsões guardadas em `oob_prediction_`. A célula mede, para cada $m$, o MSE OOB nos 132 jogadores de treino e o MSE nos 131 do teste, com 500 árvores:
+
+```{python}
+#| label: efeito-de-m
+linhas = []
+for m in [19, 9, 6, 4, 2, 1]:
+    modelo = RandomForestRegressor(n_estimators=500, max_features=m, oob_score=True,
+                                   random_state=13)
+    modelo.fit(treino_X, treino_y)
+    linhas.append({"m": m,
+                   "oob": mean_squared_error(treino_y, modelo.oob_prediction_),
+                   "teste": mean_squared_error(teste_y, modelo.predict(teste_X))})
+erros_m = pd.DataFrame(linhas).set_index("m")
+erros_m["teste − oob"] = erros_m["teste"] - erros_m["oob"]
+erros_m["oob − oob de m = 4"] = erros_m["oob"] - erros_m.loc[4, "oob"]
+erros_m.style.format(precision=3)
+```
+
+::: {.funcao}
+**`modelo.oob_prediction_`** — num regressor ajustado com `oob_score=True`, a previsão OOB de cada linha de treino, a média das árvores que não a sortearam. **`df.loc[4, "oob"]`** — o valor da linha de rótulo 4 na coluna `oob`; a última coluna é a distância de cada OOB ao de $m = 4$.
+:::
+
+A célula seguinte lê as duas colunas de erro: o $m$ de menor valor e a amplitude, a distância entre o maior e o menor valor:
+
+```{python}
+#| label: leitura-de-m
+leitura = pd.DataFrame({
+    "m de menor erro": [erros_m["oob"].idxmin(), erros_m["teste"].idxmin()],
+    "amplitude": [erros_m["oob"].max() - erros_m["oob"].min(),
+                  erros_m["teste"].max() - erros_m["teste"].min()],
+}, index=["oob", "teste"])
+leitura.style.format(precision=3, subset=["amplitude"])
+```
+
+::: {.funcao}
+**`s.idxmin()`** — o rótulo do menor valor; aqui, o $m$ de menor erro.
+:::
+
+O MSE OOB vai de 0,167 com $m = 19$, o bagging, a 0,159 com $m = 4$. Na última coluna da tabela de erros, o OOB das duas pontas, $m = 19$ e $m = 1$, fica mais de 0,005 acima do de $m = 4$. O menor OOB está em $m = 4$ ou em $m = 6$: pelo OOB, a escolha seria um desses dois.
+
+O teste, nos 131 jogadores de fora, põe o menor erro em $m = 2$, e fica entre 0,27 e 0,30 em todos os $m$. As duas medidas variam pouco de um $m$ para outro, menos de 0,02 nas duas colunas, e com diferenças desse tamanho a ordem entre os $m$ do meio muda de uma medida para a outra. O OOB do $m$ escolhido é também o menor de seis estimativas feitas com os mesmos jogadores, com o otimismo de que a seção 13.2 falou.
+
+```{python}
+#| label: fig-m
+#| fig-cap: "O MSE da floresta aleatória de 500 árvores no `Hitters` contra o número $m$ de preditores sorteados por divisão, de 1 a 19; $m = 19$ é o bagging. Em roxo tracejado, o MSE OOB nos 132 jogadores de treino; em cinza, o MSE nos 131 jogadores de teste. Aqui as cores separam as duas medidas de erro, não o bagging e a floresta. Os valores de $m$ estão igualmente espaçados no eixo."
+#| fig-alt: "Gráfico de linhas com o número de preditores por divisão, 1, 2, 4, 6, 9 e 19, no eixo horizontal, e o MSE, de 0,10 a 0,35, no vertical. A linha cinza do teste fica quase reta perto de 0,29. A linha roxa tracejada do OOB fica perto de 0,16, com um vale raso em 4 e 6, e sobe um pouco nas duas pontas, 1 e 19."
+por_m = erros_m.sort_index()
+posicoes_m = range(len(por_m))
+fig, ax = plt.subplots(figsize=(3.8, 3.2))
+ax.plot(posicoes_m, por_m["oob"], color="C3", marker="o", linestyle="--", label="OOB")
+ax.plot(posicoes_m, por_m["teste"], color="0.45", marker="o", label="teste")
+ax.set_xticks(posicoes_m, por_m.index)
+ax.set_ylim(0.10, 0.35)
+ax.set_xlabel("preditores por divisão, m")
+ax.set_ylabel("MSE")
+ax.legend(loc="lower center", bbox_to_anchor=(0.5, 1.0), ncol=2)
+plt.tight_layout()
+plt.show()
+```
+
+::: {.funcao}
+**`df.sort_index()`** — a tabela em ordem crescente dos rótulos das linhas; aqui, de $m = 1$ a $m = 19$. Os pontos ficam nas posições 0 a 5, e `set_xticks` escreve o $m$ de cada um embaixo.
+:::
+
+O OOB fica abaixo do teste em todos os $m$: a coluna `teste − oob` da tabela é positiva em todas as linhas. Os dois medem o erro em jogadores diferentes: o OOB, nos 132 do treino, cada um previsto pelas árvores que não o sortearam; o teste, nos 131 que ficaram de fora. Com uma divisão só, um grupo pode sair mais fácil de prever que o outro, e a distância de nível vale para todo $m$, sem dizer nada sobre qual $m$ é melhor.
+
+O que se lê da figura é a ordem dentro de cada curva, e ela não é a mesma nas duas. Uma divisão só não decide entre os $m$ do meio; a leitura para casa troca de conjunto de treino 50 vezes e compara $m = 4$ com o bagging em cada um.
+
+## Bagging contra floresta nos pacientes
+
+Em classificação, a comparação se faz do mesmo jeito. Os pacientes do `Heart` estão divididos como na seção 13.2: metade para o teste, sorteada com a semente 13, e as colunas de texto trocadas por indicadoras de todas as categorias.
+
+```{python}
+#| label: dados-coracao
+coracao = pd.read_csv("dados/Heart.csv").dropna()
+y_c = coracao["doenca_cardiaca"]
+X_c = pd.get_dummies(coracao.drop(columns="doenca_cardiaca"), dtype=float)
+treino_Xc, teste_Xc, treino_yc, teste_yc = train_test_split(
+    X_c, y_c, test_size=0.5, random_state=13, stratify=y_c)
+print("treino:", len(treino_Xc))
+print("teste:", len(teste_Xc))
+print("colunas:", X_c.shape[1])
+```
+
+Com 18 colunas, $\sqrt{18} \approx 4{,}2$, e a floresta sorteia 4 colunas por divisão: o `max_features="sqrt"`, que é o padrão do `RandomForestClassifier`. A célula faz crescer o bagging e a floresta de 10 em 10 árvores, de 20 a 300, e mede o erro OOB e o de teste em cada tamanho. Com 4 colunas por divisão em vez de 18, a floresta deve errar menos em todo tamanho, ou só a partir de muitas árvores?
+
+```{python}
+#| label: bagging-e-floresta
+from sklearn.ensemble import RandomForestClassifier
+
+tamanhos = range(20, 301, 10)
+curvas = {}
+for nome, m in [("bagging", None), ("floresta", "sqrt")]:
+    modelo = RandomForestClassifier(n_estimators=20, max_features=m, oob_score=True,
+                                    warm_start=True, random_state=13)
+    curva = pd.DataFrame(index=tamanhos, columns=["oob", "teste"], dtype=float)
+    for B in tamanhos:
+        modelo.set_params(n_estimators=B)
+        modelo.fit(treino_Xc, treino_yc)
+        curva.loc[B] = [1 - modelo.oob_score_, 1 - modelo.score(teste_Xc, teste_yc)]
+    curvas[nome] = curva
+print("m da floresta:", modelo.estimators_[0].max_features_)
+em_300 = pd.DataFrame({
+    "teste": [curvas["bagging"].loc[300, "teste"], curvas["floresta"].loc[300, "teste"]],
+    "erros de teste": [round(curvas["bagging"].loc[300, "teste"] * 149),
+                       round(curvas["floresta"].loc[300, "teste"] * 149)],
+    "erros OOB": [round(curvas["bagging"].loc[300, "oob"] * 148),
+                  round(curvas["floresta"].loc[300, "oob"] * 148)],
+}, index=["bagging", "floresta"])
+em_300.style.format(precision=4, subset=["teste"])
+```
+
+::: {.funcao}
+**`warm_start=True`** — num novo `fit`, o modelo mantém as árvores já ajustadas e só acrescenta as que faltam, e **`modelo.set_params(n_estimators=B)`** muda o número de árvores antes do próximo `fit`. **`arvore.max_features_`** — o número de colunas sorteadas em cada divisão daquela árvore, já convertido de `"sqrt"` para um inteiro. **`round(x)`** — o inteiro mais próximo; a taxa de erro vezes 149, ou 148, vira um número de pacientes.
+:::
+
+Com 300 árvores, o bagging erra 37 dos 149 pacientes de teste e a floresta, 32, cinco pacientes a menos (37 − 32 = 5). Em 300 árvores, o erro OOB da floresta também fica abaixo do OOB do bagging, por quatro ou mais pacientes de treino. Nos outros tamanhos, a célula conta quantos pacientes de teste a floresta erra a menos que o bagging e agrupa os 29 tamanhos por essa diferença:
+
+```{python}
+#| label: por-tamanho
+distancia = curvas["bagging"]["teste"] - curvas["floresta"]["teste"]
+pacientes = (distancia * 149).round().astype(int)
+pacientes.value_counts().sort_index().rename_axis(
+    "erros a menos da floresta").to_frame("tamanhos")
+```
+
+::: {.funcao}
+**`s.round().astype(int)`** — arredonda cada valor para o inteiro mais próximo e o guarda como inteiro. **`s.value_counts().sort_index()`** — quantas vezes cada valor aparece, em ordem crescente do valor.
+:::
+
+Em 28 dos 29 tamanhos a floresta erra pelo menos dois pacientes a menos que o bagging, e em nenhum erra mais: a tabela não tem linha com diferença negativa, e só um tamanho fica abaixo de 2.
+
+```{python}
+#| label: fig-coracao
+#| fig-cap: "Taxa de erro nos pacientes do `Heart` contra o número de árvores $B$, do bagging (azul) e da floresta aleatória com 4 colunas sorteadas por divisão (verde). A linha contínua é o erro nos 149 pacientes de teste; a tracejada, o erro OOB nos 148 de treino."
+#| fig-alt: "Gráfico de linhas com o número de árvores, de 20 a 300, no eixo horizontal, e a taxa de erro, de 0,15 a 0,30, no vertical. Quatro linhas quebradas. A azul contínua, teste do bagging, termina em 300 árvores perto de 0,25; a verde contínua, teste da floresta, termina perto de 0,21 e em nenhum ponto fica acima da azul. Nas duas tracejadas, do OOB, a verde termina abaixo da azul."
+fig, ax = plt.subplots(figsize=(3.8, 3.6))
+for nome, cor in [("bagging", "C0"), ("floresta", "C2")]:
+    ax.plot(curvas[nome].index, curvas[nome]["teste"], color=cor, label=f"{nome}, teste")
+    ax.plot(curvas[nome].index, curvas[nome]["oob"], color=cor, linestyle="--",
+            label=f"{nome}, OOB")
+ax.set_xlim(0, 320)
+ax.set_ylim(0.15, 0.30)
+ax.set_yticks(np.arange(0.15, 0.31, 0.05))
+ax.set_xlabel("número de árvores B")
+ax.set_ylabel("taxa de erro")
+ax.legend(loc="lower center", bbox_to_anchor=(0.5, 1.0), ncol=2)
+plt.tight_layout()
+plt.show()
+```
+
+Cinco pacientes de 149 são uma diferença de 5/149 = 0,034 na taxa de erro, e outra divisão dos 297 pacientes daria outros erros aos dois modelos; a leitura para casa, no fim da seção, refaz a comparação em 20 divisões.
+
+Sortear as colunas troca árvores melhores por árvores menos parecidas. Um $m$ pequeno costuma ajudar quando há muitos preditores correlacionados entre si, como as colunas de carreira do `Hitters`, cujas correlações a seção 12.5 mediu: quando `vezes_ao_bastao_carreira` fica fora do sorteio, outra coluna de carreira quase igual a ela pode entrar no lugar. Um $m$ pequeno pode atrapalhar, num caso não medido aqui, quando há poucas colunas com sinal entre muitas de ruído: muitas divisões ficam só com colunas de ruído para escolher [@hastie2009, seção 15.3.4]. Por isso o $m$ é um parâmetro a escolher, e $m = p$, o bagging, é um dos valores da escolha.
+
+## Leitura para casa
+
+### A variância da média, em 50 treinos
+
 A variância da média cai, então? Quem responde é a medição da seção 13.1: 50 conjuntos de treino de 132 jogadores sorteados entre os 263 e, em cada um, o bagging e a floresta com $m = 4$, de 50 árvores cada, prevendo os jogadores que ficaram de fora.
 
 A matriz de previsões tem uma linha por conjunto de treino e uma coluna por jogador, e começa toda `nan`; cada treino preenche só as colunas dos jogadores que ficaram de fora, como na seção 13.1:
@@ -352,160 +513,9 @@ A variância é menor na floresta em mais de 200 dos 263 jogadores, e a floresta
 
 Na divisão da semente 12, uma árvore da floresta, em média, errou mais no teste que uma árvore do bagging; nos 50 treinos, a média da floresta errou menos que a do bagging na maior parte deles. Nessas duas medições, o que a média ganhou por juntar árvores menos parecidas compensou o que uma árvore, em média, perdeu.
 
-## Quantas colunas sortear
+### Bagging contra floresta em 20 divisões
 
-Com quantas colunas sorteadas por divisão a floresta erra menos? O $m$ é o parâmetro que a floresta acrescenta ao bagging, e o erro OOB da seção 13.2 permite escolhê-lo sem separar jogadores e sem validação cruzada: um ajuste por valor de $m$. No regressor, o `oob_score_` é o $R^2$, e o MSE OOB sai das previsões guardadas em `oob_prediction_`. A célula mede, para cada $m$, o MSE OOB nos 132 jogadores de treino e o MSE nos 131 do teste, com 500 árvores:
-
-```{python}
-#| label: efeito-de-m
-linhas = []
-for m in [19, 9, 6, 4, 2, 1]:
-    modelo = RandomForestRegressor(n_estimators=500, max_features=m, oob_score=True,
-                                   random_state=13)
-    modelo.fit(treino_X, treino_y)
-    linhas.append({"m": m,
-                   "oob": mean_squared_error(treino_y, modelo.oob_prediction_),
-                   "teste": mean_squared_error(teste_y, modelo.predict(teste_X))})
-erros_m = pd.DataFrame(linhas).set_index("m")
-erros_m["teste − oob"] = erros_m["teste"] - erros_m["oob"]
-erros_m["oob − oob de m = 4"] = erros_m["oob"] - erros_m.loc[4, "oob"]
-erros_m.style.format(precision=3)
-```
-
-::: {.funcao}
-**`modelo.oob_prediction_`** — num regressor ajustado com `oob_score=True`, a previsão OOB de cada linha de treino, a média das árvores que não a sortearam. **`df.loc[4, "oob"]`** — o valor da linha de rótulo 4 na coluna `oob`; a última coluna é a distância de cada OOB ao de $m = 4$.
-:::
-
-A célula seguinte lê as duas colunas de erro: o $m$ de menor valor e a amplitude, a distância entre o maior e o menor valor:
-
-```{python}
-#| label: leitura-de-m
-leitura = pd.DataFrame({
-    "m de menor erro": [erros_m["oob"].idxmin(), erros_m["teste"].idxmin()],
-    "amplitude": [erros_m["oob"].max() - erros_m["oob"].min(),
-                  erros_m["teste"].max() - erros_m["teste"].min()],
-}, index=["oob", "teste"])
-leitura.style.format(precision=3, subset=["amplitude"])
-```
-
-::: {.funcao}
-**`s.idxmin()`** — o rótulo do menor valor; aqui, o $m$ de menor erro.
-:::
-
-O MSE OOB vai de 0,167 com $m = 19$, o bagging, a 0,159 com $m = 4$. Na última coluna da tabela de erros, o OOB das duas pontas, $m = 19$ e $m = 1$, fica mais de 0,005 acima do de $m = 4$. O menor OOB está em $m = 4$ ou em $m = 6$: pelo OOB, a escolha seria um desses dois.
-
-O teste, nos 131 jogadores de fora, põe o menor erro em $m = 2$, e fica entre 0,27 e 0,30 em todos os $m$. As duas medidas variam pouco de um $m$ para outro, menos de 0,02 nas duas colunas, e com diferenças desse tamanho a ordem entre os $m$ do meio muda de uma medida para a outra. O OOB do $m$ escolhido é também o menor de seis estimativas feitas com os mesmos jogadores, com o otimismo de que a seção 13.2 falou.
-
-```{python}
-#| label: fig-m
-#| fig-cap: "O MSE da floresta aleatória de 500 árvores no `Hitters` contra o número $m$ de preditores sorteados por divisão, de 1 a 19; $m = 19$ é o bagging. Em roxo tracejado, o MSE OOB nos 132 jogadores de treino; em cinza, o MSE nos 131 jogadores de teste. Aqui as cores separam as duas medidas de erro, não o bagging e a floresta. Os valores de $m$ estão igualmente espaçados no eixo."
-#| fig-alt: "Gráfico de linhas com o número de preditores por divisão, 1, 2, 4, 6, 9 e 19, no eixo horizontal, e o MSE, de 0,10 a 0,35, no vertical. A linha cinza do teste fica quase reta perto de 0,29. A linha roxa tracejada do OOB fica perto de 0,16, com um vale raso em 4 e 6, e sobe um pouco nas duas pontas, 1 e 19."
-por_m = erros_m.sort_index()
-posicoes_m = range(len(por_m))
-fig, ax = plt.subplots(figsize=(3.8, 3.2))
-ax.plot(posicoes_m, por_m["oob"], color="C3", marker="o", linestyle="--", label="OOB")
-ax.plot(posicoes_m, por_m["teste"], color="0.45", marker="o", label="teste")
-ax.set_xticks(posicoes_m, por_m.index)
-ax.set_ylim(0.10, 0.35)
-ax.set_xlabel("preditores por divisão, m")
-ax.set_ylabel("MSE")
-ax.legend(loc="lower center", bbox_to_anchor=(0.5, 1.0), ncol=2)
-plt.tight_layout()
-plt.show()
-```
-
-::: {.funcao}
-**`df.sort_index()`** — a tabela em ordem crescente dos rótulos das linhas; aqui, de $m = 1$ a $m = 19$. Os pontos ficam nas posições 0 a 5, e `set_xticks` escreve o $m$ de cada um embaixo.
-:::
-
-O OOB fica abaixo do teste em todos os $m$: a coluna `teste − oob` da tabela é positiva em todas as linhas. Os dois medem o erro em jogadores diferentes: o OOB, nos 132 do treino, cada um previsto pelas árvores que não o sortearam; o teste, nos 131 que ficaram de fora. Com uma divisão só, um grupo pode sair mais fácil de prever que o outro, e a distância de nível vale para todo $m$, sem dizer nada sobre qual $m$ é melhor.
-
-O que se lê da figura é a ordem dentro de cada curva, e ela não é a mesma nas duas. Os 50 conjuntos de treino medidos antes, que trocam de divisão a cada vez, dão o sinal mais firme sobre $m = 4$ contra o bagging: a floresta errou menos em mais de 35 deles.
-
-## Bagging contra floresta nos pacientes
-
-Em classificação, a comparação se faz do mesmo jeito. Os pacientes do `Heart` estão divididos como na seção 13.2: metade para o teste, sorteada com a semente 13, e as colunas de texto trocadas por indicadoras de todas as categorias.
-
-```{python}
-#| label: dados-coracao
-coracao = pd.read_csv("dados/Heart.csv").dropna()
-y_c = coracao["doenca_cardiaca"]
-X_c = pd.get_dummies(coracao.drop(columns="doenca_cardiaca"), dtype=float)
-treino_Xc, teste_Xc, treino_yc, teste_yc = train_test_split(
-    X_c, y_c, test_size=0.5, random_state=13, stratify=y_c)
-print("treino:", len(treino_Xc))
-print("teste:", len(teste_Xc))
-print("colunas:", X_c.shape[1])
-```
-
-Com 18 colunas, $\sqrt{18} \approx 4{,}2$, e a floresta sorteia 4 colunas por divisão: o `max_features="sqrt"`, que é o padrão do `RandomForestClassifier`. A célula faz crescer o bagging e a floresta de 10 em 10 árvores, de 20 a 300, e mede o erro OOB e o de teste em cada tamanho. Com 4 colunas por divisão em vez de 18, a floresta deve errar menos em todo tamanho, ou só a partir de muitas árvores?
-
-```{python}
-#| label: bagging-e-floresta
-from sklearn.ensemble import RandomForestClassifier
-
-tamanhos = range(20, 301, 10)
-curvas = {}
-for nome, m in [("bagging", None), ("floresta", "sqrt")]:
-    modelo = RandomForestClassifier(n_estimators=20, max_features=m, oob_score=True,
-                                    warm_start=True, random_state=13)
-    curva = pd.DataFrame(index=tamanhos, columns=["oob", "teste"], dtype=float)
-    for B in tamanhos:
-        modelo.set_params(n_estimators=B)
-        modelo.fit(treino_Xc, treino_yc)
-        curva.loc[B] = [1 - modelo.oob_score_, 1 - modelo.score(teste_Xc, teste_yc)]
-    curvas[nome] = curva
-print("m da floresta:", modelo.estimators_[0].max_features_)
-em_300 = pd.DataFrame({
-    "teste": [curvas["bagging"].loc[300, "teste"], curvas["floresta"].loc[300, "teste"]],
-    "erros de teste": [round(curvas["bagging"].loc[300, "teste"] * 149),
-                       round(curvas["floresta"].loc[300, "teste"] * 149)],
-    "erros OOB": [round(curvas["bagging"].loc[300, "oob"] * 148),
-                  round(curvas["floresta"].loc[300, "oob"] * 148)],
-}, index=["bagging", "floresta"])
-em_300.style.format(precision=4, subset=["teste"])
-```
-
-::: {.funcao}
-**`warm_start=True`** — num novo `fit`, o modelo mantém as árvores já ajustadas e só acrescenta as que faltam, e **`modelo.set_params(n_estimators=B)`** muda o número de árvores antes do próximo `fit`. **`arvore.max_features_`** — o número de colunas sorteadas em cada divisão daquela árvore, já convertido de `"sqrt"` para um inteiro. **`round(x)`** — o inteiro mais próximo; a taxa de erro vezes 149, ou 148, vira um número de pacientes.
-:::
-
-Com 300 árvores, o bagging erra 37 dos 149 pacientes de teste e a floresta, 32, cinco pacientes a menos (37 − 32 = 5). Em 300 árvores, o erro OOB da floresta também fica abaixo do OOB do bagging, por quatro ou mais pacientes de treino. Nos outros tamanhos, a célula conta quantos pacientes de teste a floresta erra a menos que o bagging e agrupa os 29 tamanhos por essa diferença:
-
-```{python}
-#| label: por-tamanho
-distancia = curvas["bagging"]["teste"] - curvas["floresta"]["teste"]
-pacientes = (distancia * 149).round().astype(int)
-pacientes.value_counts().sort_index().rename_axis(
-    "erros a menos da floresta").to_frame("tamanhos")
-```
-
-::: {.funcao}
-**`s.round().astype(int)`** — arredonda cada valor para o inteiro mais próximo e o guarda como inteiro. **`s.value_counts().sort_index()`** — quantas vezes cada valor aparece, em ordem crescente do valor.
-:::
-
-Em 28 dos 29 tamanhos a floresta erra pelo menos dois pacientes a menos que o bagging, e em nenhum erra mais: a tabela não tem linha com diferença negativa, e só um tamanho fica abaixo de 2.
-
-```{python}
-#| label: fig-coracao
-#| fig-cap: "Taxa de erro nos pacientes do `Heart` contra o número de árvores $B$, do bagging (azul) e da floresta aleatória com 4 colunas sorteadas por divisão (verde). A linha contínua é o erro nos 149 pacientes de teste; a tracejada, o erro OOB nos 148 de treino."
-#| fig-alt: "Gráfico de linhas com o número de árvores, de 20 a 300, no eixo horizontal, e a taxa de erro, de 0,15 a 0,30, no vertical. Quatro linhas quebradas. A azul contínua, teste do bagging, termina em 300 árvores perto de 0,25; a verde contínua, teste da floresta, termina perto de 0,21 e em nenhum ponto fica acima da azul. Nas duas tracejadas, do OOB, a verde termina abaixo da azul."
-fig, ax = plt.subplots(figsize=(3.8, 3.6))
-for nome, cor in [("bagging", "C0"), ("floresta", "C2")]:
-    ax.plot(curvas[nome].index, curvas[nome]["teste"], color=cor, label=f"{nome}, teste")
-    ax.plot(curvas[nome].index, curvas[nome]["oob"], color=cor, linestyle="--",
-            label=f"{nome}, OOB")
-ax.set_xlim(0, 320)
-ax.set_ylim(0.15, 0.30)
-ax.set_yticks(np.arange(0.15, 0.31, 0.05))
-ax.set_xlabel("número de árvores B")
-ax.set_ylabel("taxa de erro")
-ax.legend(loc="lower center", bbox_to_anchor=(0.5, 1.0), ncol=2)
-plt.tight_layout()
-plt.show()
-```
-
-Cinco pacientes de 149 são uma diferença de 5/149 = 0,034 na taxa de erro, e outra divisão dos 297 pacientes daria outros erros aos dois modelos. A célula refaz a comparação em 20 divisões, com as sementes 0 a 19, cada uma com 200 árvores por modelo, e conta os erros de teste:
+A célula refaz a comparação dos pacientes em 20 divisões, com as sementes 0 a 19, cada uma com 200 árvores por modelo, e conta os erros de teste:
 
 ```{python}
 #| label: outras-divisoes
@@ -542,5 +552,3 @@ print("maior vantagem do bagging, em pacientes:", -vantagem.min())
 ```
 
 A floresta errou menos em 16 das 20 divisões, empatou em 1 e errou mais em 3. Em média, errou 3,0 pacientes a menos, e em ao menos uma divisão o bagging ganhou por mais de dois pacientes. No `Heart`, como no `Hitters`, sortear as colunas ajudou na maior parte das divisões, sem ganhar em todas.
-
-Sortear as colunas troca árvores melhores por árvores menos parecidas. Um $m$ pequeno costuma ajudar quando há muitos preditores correlacionados entre si, como as colunas de carreira do `Hitters`, cujas correlações a seção 12.5 mediu: quando `vezes_ao_bastao_carreira` fica fora do sorteio, outra coluna de carreira quase igual a ela pode entrar no lugar. Um $m$ pequeno pode atrapalhar, num caso não medido aqui, quando há poucas colunas com sinal entre muitas de ruído: muitas divisões ficam só com colunas de ruído para escolher [@hastie2009, seção 15.3.4]. Por isso o $m$ é um parâmetro a escolher, e $m = p$, o bagging, é um dos valores da escolha.

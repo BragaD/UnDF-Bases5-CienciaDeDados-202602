@@ -308,7 +308,7 @@ De 10 a 50 árvores o erro fica em torno de 0,31, e com 500 árvores fica abaixo
 
 O bagging erra menos que a árvore porque as previsões dele oscilam menos. A **variância de uma previsão** é o quanto $\hat f(x_0)$ muda de um conjunto de treino para outro, num jogador $x_0$ que o modelo não viu.
 
-Para medi-la, a célula abaixo sorteia 100 conjuntos de treino de 132 jogadores entre os 263. Em cada conjunto, ajusta uma árvore bootstrap, isto é, o bagging com $B = 1$, feita do mesmo jeito que cada uma das árvores que o bagging junta, e o bagging de 50 árvores. Antes de fazer isso para todos os jogadores, a célula acompanha um só: o jogador de salário mediano. A cada conjunto de treino em que ele ficou de fora, os dois modelos são ajustados e preveem o log do salário dele.
+Para medi-la, a célula abaixo sorteia 100 conjuntos de treino de 132 jogadores entre os 263 e acompanha um jogador só, o de salário mediano. A cada conjunto de treino em que ele ficou de fora, a célula ajusta uma árvore bootstrap, isto é, o bagging com $B = 1$, feita do mesmo jeito que cada uma das árvores que o bagging junta, e o bagging de 50 árvores, e os dois preveem o log do salário dele.
 
 ```{python}
 #| label: um-jogador
@@ -355,7 +355,36 @@ um_jogador.var(ddof=0).to_frame("variância da previsão").style.format(precisio
 **`df.var(ddof=0)`** — a variância de cada coluna, com divisor $n$, o número de linhas.
 :::
 
-A variância do bagging é menor que a da árvore bootstrap para esse jogador. A mesma conta vale para cada um dos 263 jogadores, e um laço só faz todas de uma vez. Cada modelo ganha uma matriz com uma linha por conjunto de treino e uma coluna por jogador. Em cada conjunto, o modelo prevê os 131 jogadores que ficaram de fora, e a previsão vai para a coluna de cada um; as posições de quem estava no treino ficam vazias, com `nan`. Entra também a árvore sem limite, crescida no treino inteiro, para comparar:
+A variância do bagging é menor que a da árvore bootstrap para esse jogador. Quanto menor? Se as 50 árvores fossem independentes, a média delas teria a variância de uma árvore bootstrap dividida por 50, como a média de medidas independentes do começo da seção. A célula põe essa conta ao lado da variância medida do bagging:
+
+```{python}
+#| label: independentes-um-jogador
+variancias_jogador = um_jogador.var(ddof=0)
+conta = pd.DataFrame({
+    "uma árvore / 50": [variancias_jogador["árvore bootstrap"] / 50],
+    "bagging, medida": [variancias_jogador["bagging"]],
+}, index=["variância da previsão"])
+conta["medida / conta"] = conta["bagging, medida"] / conta["uma árvore / 50"]
+conta.style.format(precision=4).format(precision=1, subset=["medida / conta"])
+```
+
+A variância medida do bagging fica mais de três vezes acima da conta com árvores independentes, como mostra a última coluna. As árvores saem todas dos mesmos 132 jogadores, e as amostras bootstrap repetem boa parte deles: as árvores se parecem, e a média de coisas parecidas reduz menos a variância que a média de coisas independentes.
+
+Seja $\rho$ a correlação, medida sobre muitos conjuntos de treino, entre as previsões de duas árvores do mesmo bagging para um mesmo jogador. Se todas as árvores têm a mesma variância $\sigma^2$ e cada par tem a mesma correlação $\rho$, a variância da média de $B$ árvores é
+
+$$
+\rho\,\sigma^2 + \frac{(1 - \rho)\,\sigma^2}{B}.
+$$
+
+Com $\rho = 0$ volta a $\sigma^2/B$. Com árvores parecidas, $\rho$ é positivo, e só a segunda parcela cai com $B$; a primeira, $\rho\sigma^2$, fica, por maior que seja $B$.
+
+A distância entre a variância medida e a conta com árvores independentes vem de $\rho$ ser positivo. Por isso, depois de algumas dezenas de árvores, somar árvores muda pouco: na curva do erro contra $B$, de 10 para 500 árvores, o erro de teste foi de cerca de 0,31 para menos de 0,30. A leitura para casa, no fim da seção, faz a medição para os 263 jogadores e separa o erro de cada modelo em variância e no que sobra dela.
+
+## Leitura para casa
+
+### Os 263 jogadores
+
+A conta do jogador mediano vale para cada um dos 263 jogadores, e um laço só faz todas de uma vez. Cada modelo ganha uma matriz com uma linha por conjunto de treino e uma coluna por jogador. Em cada conjunto, o modelo prevê os 131 jogadores que ficaram de fora, e a previsão vai para a coluna de cada um; as posições de quem estava no treino ficam vazias, com `nan`. Entra também a árvore sem limite, crescida no treino inteiro, para comparar:
 
 ```{python}
 #| label: variancia
@@ -515,7 +544,9 @@ O resto faz o papel dos outros dois juntos e quase não muda: 0,20 na árvore bo
 
 A curva do erro contra $B$ não se reparte desse jeito, porque ela é um treino só; a decomposição fala da média sobre os treinos, e é essa média que os 100 conjuntos aproximam.
 
-Se as 50 árvores fossem independentes, a variância do bagging cairia a $\sigma^2/B$, com $\sigma^2$ a variância de uma árvore bootstrap. A célula faz a conta:
+### A conta com árvores independentes, na média dos jogadores
+
+A conta feita para o jogador mediano, a variância de uma árvore bootstrap dividida por 50, se refaz com a variância média dos 263 jogadores:
 
 ```{python}
 #| label: independentes
@@ -523,14 +554,4 @@ print("uma árvore / 50:", round(var["bootstrap"].mean() / 50, 4))
 print("50 árvores:", round(var["bagging"].mean(), 4))
 ```
 
-A conta dá 0,0042; medido, dá 0,0271. As árvores saem todas dos mesmos 132 jogadores, e as amostras bootstrap repetem boa parte deles: as árvores se parecem, e a média de coisas parecidas reduz menos a variância que a média de coisas independentes.
-
-Seja $\rho$ a correlação, medida sobre muitos conjuntos de treino, entre as previsões de duas árvores do mesmo bagging para um mesmo jogador. Se todas as árvores têm a mesma variância $\sigma^2$ e cada par tem a mesma correlação $\rho$, a variância da média de $B$ árvores é
-
-$$
-\rho\,\sigma^2 + \frac{(1 - \rho)\,\sigma^2}{B}.
-$$
-
-Com $\rho = 0$ volta a $\sigma^2/B$. Com árvores parecidas, $\rho$ é positivo, e só a segunda parcela cai com $B$; a primeira, $\rho\sigma^2$, fica, por maior que seja $B$.
-
-A distância entre os 0,0271 medidos e os 0,0042 da conta com árvores independentes vem de $\rho$ ser positivo. Por isso, depois de algumas dezenas de árvores, somar árvores muda pouco: na curva do erro contra $B$, de 10 para 500 árvores, o erro de teste foi de cerca de 0,31 para menos de 0,30.
+A conta dá 0,0042; medida, a variância do bagging dá 0,0271. Na média dos 263 jogadores, como no jogador mediano, o bagging fica acima da conta com árvores independentes, pela mesma razão: árvores ajustadas nos mesmos jogadores se parecem, e $\rho$ é positivo.
