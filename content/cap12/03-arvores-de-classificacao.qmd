@@ -37,6 +37,10 @@ print("com doença:", contagem["sim"])
 print("erro de prever sempre 'não':", round((y != "não").mean(), 4))
 ```
 
+::: {.funcao}
+**`(y != "não").mean()`** — a comparação marca com `True` cada paciente que não é "não", e a média dos `True` é a fração deles: o erro de quem prevê "não" para todos.
+:::
+
 Dos 303 pacientes, seis têm alguma medida vazia, quatro em `vasos_coloridos` e dois em `talio`, e ficam de fora: sobram 297. São 160 sem doença e 137 com. Um classificador que dissesse "não" para todo paciente, sem olhar medida nenhuma, erraria os 137 doentes, uma fração de 0,4613. É esse o número que uma árvore precisa bater.
 
 As duas colunas de texto viram colunas indicadoras com **todas** as categorias, sem o `drop_first` da seção 12.2:
@@ -148,7 +152,7 @@ def no(pacientes):
             "D": -(p * np.log(p) + (1 - p) * np.log(1 - p))}
 
 
-grupo =coracao[(coracao["talio"] != "normal")
+grupo = coracao[(coracao["talio"] != "normal")
                 & (coracao["dor_no_peito"] == "assintomática")]
 baixa = grupo["depressao_st"] <= 0.5
 corte = pd.DataFrame([no(grupo), no(grupo[baixa]), no(grupo[~baixa])],
@@ -171,7 +175,7 @@ print("menor depressao_st com ST > 0.5:", grupo.loc[~baixa, "depressao_st"].min(
 ```
 
 ::: {.funcao}
-**`DecisionTreeClassifier(criterion, max_depth, random_state, ccp_alpha)`** — a árvore de classificação. `criterion` é a medida de impureza que escolhe os cortes: `"gini"`, o padrão, ou `"entropy"`, a entropia com logaritmo na base 2, o que só muda a escala. `max_depth` limita o número de perguntas entre a raiz e uma folha; com 1, a árvore faz um corte só. `random_state` e `ccp_alpha` fazem o mesmo que no `DecisionTreeRegressor`. O `predict` devolve a classe mais comum da folha.
+**`DecisionTreeClassifier(max_depth, random_state)`** — a árvore de classificação, que escolhe os cortes pelo índice de Gini. `max_depth` limita o número de perguntas entre a raiz e uma folha; com 1, a árvore faz um corte só. `random_state` faz o mesmo que no `DecisionTreeRegressor`. O `predict` devolve a classe mais comum da folha.
 
 **`arvore.classes_`** — as classes que a árvore conhece, em ordem alfabética; é a ordem das contagens e das proporções que ela guarda. **`arvore.tree_.feature[0]`** — a posição, entre as colunas de `X`, da coluna que a raiz pergunta. **`X.loc[indice]`** — as linhas com esses rótulos; `grupo.index` são os rótulos dos 89 pacientes.
 :::
@@ -297,7 +301,7 @@ print("erro de treino:", round((previsto_treino != y).mean(), 4))
 ```
 
 ::: {.funcao}
-**`(previsto != y).mean()`** — a fração de pacientes com a classe prevista errada, o erro de classificação.
+**`DecisionTreeClassifier(ccp_alpha)`** — o `ccp_alpha` faz o mesmo que no `DecisionTreeRegressor`. **`(previsto != y).mean()`** — como na primeira célula, a fração de pacientes com a classe prevista errada, o erro de classificação.
 :::
 
 Com erro de treino zero, a árvore grande decorou os 297 pacientes, e o remédio é o da seção 12.2: o caminho de poda, uma grade com um ponto dentro de cada intervalo, e a validação cruzada para escolher o `ccp_alpha`. No classificador, o custo que o `ccp_alpha` equilibra com o número de folhas é a média da impureza das folhas pelo critério da árvore, ponderada pela fração de pacientes de cada uma; com o critério padrão, é o índice de Gini, e não o erro de classificação. O último valor do caminho, a raiz sozinha, mostra isso:
@@ -427,6 +431,10 @@ for criterio in ["gini", "entropy"]:
 pd.DataFrame(linhas).style.hide(axis="index").format(precision=4)
 ```
 
+::: {.funcao}
+**`DecisionTreeClassifier(criterion)`** — `criterion` é a medida de impureza que escolhe os cortes: `"gini"`, o padrão, ou `"entropy"`, a entropia com logaritmo na base 2 em vez do natural de (8.7), o que só muda a escala.
+:::
+
 Com a entropia, a validação cruzada fica com 8 folhas e erro de 0,2153, acima do 0,1951 do Gini. Nestes pacientes e nestes grupos, o Gini ganha; em outro conjunto de dados, pode ser o contrário, e escolher entre os dois pela validação cruzada soma mais uma escolha às que tornam o mínimo otimista.
 
 Uma taxa de erro junta dois erros de custo muito diferente num exame cardíaco: mandar para casa um doente e mandar para o cateterismo quem não tem nada. O `cross_val_predict` guarda, para cada paciente, a previsão da árvore ajustada sem o grupo dele, e a matriz de confusão da seção 9.5 separa os dois erros:
@@ -453,7 +461,7 @@ Dos 137 doentes, 39 recebem "não" e 98 recebem "sim"; dos 160 sem doença, 19 r
 
 ## A árvore escolhida
 
-A figura adiante desenha a árvore escolhida, com as caixas da árvore de um corte da subseção "Um corte, a mesma classe", sem o Gini: a pergunta, os pacientes, as contagens das duas classes (`value`, primeiro "não", depois "sim") e a classe que o nó prevê (`class`).
+A figura adiante desenha a árvore escolhida por validação cruzada, com as caixas da árvore de um corte da subseção "Um corte, a mesma classe", sem o Gini: a pergunta, os pacientes, as contagens das duas classes (`value`, primeiro "não", depois "sim") e a classe que o nó prevê (`class`).
 
 O laço da célula da figura percorre as caixas e, nas que têm moldura e nenhuma pergunta, isto é, nas folhas, acrescenta "folha 1", "folha 2" e assim por diante, da esquerda para a direita, para que a tabela que vem depois possa citá-las.
 
@@ -493,7 +501,7 @@ tabela.style.format(precision=3, subset=["fração de doentes"])
 ```
 
 ::: {.funcao}
-**`pd.crosstab(linhas, colunas)`** — conta quantas vezes cada par de valores aparece; aqui, a folha de cada paciente (`apply`, da seção 12.1) contra a classe dele. Os nós são numerados da raiz para baixo, sempre o ramo da esquerda primeiro, e por isso as folhas saem na ordem da figura; `tabela.index = range(1, ...)` troca os números dos nós por 1 a 6. **`df.idxmax(axis=1)`** — o nome da coluna com o maior valor em cada linha, aqui a classe mais comum da folha. **`arvore.feature_importances_`** — um número por coluna, positivo só nas que aparecem em algum corte da árvore.
+**`pd.crosstab(linhas, colunas)`** — conta quantas vezes cada par de valores aparece; aqui, a folha de cada paciente (`apply`, da seção 12.1) contra a classe dele. Nesta árvore, crescida sem `max_leaf_nodes`, os nós são numerados da raiz para baixo, sempre o ramo da esquerda primeiro, e por isso as folhas saem na ordem da figura; `tabela.index = range(1, ...)` troca os números dos nós por 1 a 6. **`df.idxmax(axis=1)`** — o nome da coluna com o maior valor em cada linha, aqui a classe mais comum da folha. **`arvore.feature_importances_`** — um número por coluna, positivo só nas que aparecem em algum corte da árvore.
 :::
 
 A primeira pergunta é sobre o exame de tálio. Como `talio_normal` vale 1 para quem teve o exame normal, o ramo `True` de `talio_normal` ≤ 0,5, à esquerda, é o dos pacientes com algum defeito no exame. Entre eles, os que têm dor no peito assintomática formam a folha 3, com 79 doentes em 89; na tabela, é a linha com mais doentes e com a maior fração deles. São os 89 pacientes da figura das cordas, na subseção "Um corte, a mesma classe". Do outro lado, os pacientes com tálio normal e nenhum vaso colorido no exame (`vasos_coloridos ≤ 0,5`) formam a folha com 102 sem doença em 115. As mesmas perguntas voltam em lugares diferentes da árvore: `vasos_coloridos` e `dor_no_peito_assintomática` aparecem nos dois lados, em ordens diferentes.

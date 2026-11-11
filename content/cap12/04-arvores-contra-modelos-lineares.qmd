@@ -68,14 +68,12 @@ previsoes["passo da árvore"] = previsoes["árvore"].diff()
 No `pd.DataFrame`, um valor solto, como o 6, é repetido em todas as linhas. **`df.assign(nome=valores)`** — uma cópia da tabela com as colunas novas. As colunas de passo são o `diff` da seção 12.1: quanto a previsão muda de uma linha para a seguinte.
 :::
 
-Na regressão linear, cada rebatida a mais soma o $\hat\beta$ de `rebatidas`, 0,0087, ao logaritmo do salário, seja qual for o número de rebatidas e o de anos. Os três passos da linear, 0,1473, 0,0087 e 0,1906, são proporcionais às 17, 1 e 22 rebatidas acrescentadas. Na árvore, as 17 rebatidas de 100 a 117 não mudam nada, e a 118.ª soma 0,7413 de uma vez, porque o jogador atravessa o corte de 117,5 e passa de $R_2$ para $R_3$. De 118 a 140, a previsão fica parada de novo. A figura mostra as duas previsões para todas as contagens de rebatidas, com os anos fixos em 6:
+Na regressão linear, cada rebatida a mais soma o $\hat\beta$ de `rebatidas`, 0,0087, ao logaritmo do salário, seja qual for o número de rebatidas e o de anos. Os três passos da linear, 0,1473, 0,0087 e 0,1906, são proporcionais às 17, 1 e 22 rebatidas acrescentadas. Na árvore, as 17 rebatidas de 100 a 117 não mudam nada, e a 118.ª soma 0,7413 de uma vez, porque o jogador atravessa o corte de 117,5 e passa da região $R_2$ para a $R_3$ da seção 12.1. De 118 a 140, a previsão fica parada de novo. A figura mostra as duas previsões para todas as contagens de rebatidas, com os anos fixos em 6:
 
 ```{python}
 #| label: fig-reta-escada
 #| fig-cap: "O logaritmo do salário previsto (salário em milhares de dólares) para um jogador com 6 anos de liga, conforme o número de rebatidas: a regressão linear é uma reta, e a árvore de três folhas, uma escada com um degrau só, no corte em rebatidas (linha pontilhada cinza). Os pontos marcam as quatro contagens da tabela: 100, 117, 118 e 140."
 #| fig-alt: "Gráfico com rebatidas de 0 a 240 no eixo horizontal e o logaritmo do salário previsto no vertical. A reta azul da regressão linear sobe devagar e sem quebra da esquerda para a direita. A linha laranja da árvore é horizontal até a linha pontilhada vertical em 117,5, sobe ali de uma vez e volta a ser horizontal num nível mais alto. Os pontos em 100 e 117 ficam no degrau de baixo da árvore, e os de 118 e 140, no de cima."
-import matplotlib.pyplot as plt
-
 grade_reb = pd.DataFrame({"anos": 6, "rebatidas": np.arange(0, 241)})
 fig, ax = plt.subplots(figsize=(4.2, 3.2))
 ax.plot(grade_reb["rebatidas"], linear.predict(grade_reb), color="C0",
@@ -106,7 +104,7 @@ f(X) = \beta_0 + \sum_{j=1}^{p} X_j \beta_j.
 \tag{8.8}
 $$
 
-Na árvore, $f$ é constante dentro de cada caixa:
+Na árvore, $f$ é constante dentro de cada região:
 
 $$
 f(X) = \sum_{m=1}^{M} c_m\, 1(X \in R_m),
@@ -115,34 +113,11 @@ $$
 
 em que $R_1, \dots, R_M$ são as regiões retangulares das folhas, as mesmas da seção 12.1, lá contadas por $J$ e aqui por $M$: não se sobrepõem e cobrem o espaço dos preditores inteiro. O indicador $1(X \in R_m)$ vale 1 quando $X$ cai em $R_m$ e 0 quando não cai. Para cada $X$, só um dos indicadores vale 1, e $f(X)$ é o $c_m$ da região em que $X$ cai: na árvore de regressão, a média $\hat y_{R_m}$ da resposta dos dados de treino daquela folha.
 
-A célula abaixo faz a soma (8.9) para cada jogador, com as médias das folhas no lugar de $c_m$, e põe o resultado, folha a folha, ao lado das previsões da árvore:
-
-```{python}
-#| label: soma-8-9
-folha = arvore.apply(X2)
-medias_das_folhas = y.groupby(folha).mean()
-soma = np.zeros(len(X2))
-for m in medias_das_folhas.index:
-    soma = soma + medias_das_folhas[m] * (folha == m)
-por_jogador = pd.DataFrame({"folha": folha, "(8.9)": soma,
-                            "arvore.predict": arvore.predict(X2)})
-por_folha = por_jogador.groupby("folha").mean()
-por_folha.insert(0, "jogadores", por_jogador.groupby("folha").size())
-por_folha.index = ["R1", "R2", "R3"]
-por_folha.style.format(precision=3)
-```
-
-::: {.funcao}
-**`folha == m`** — um vetor de `True` e `False`, com `True` nos jogadores da folha `m`: é o $1(X \in R_m)$ de (8.9), que na conta vale 1 e 0. **`np.zeros(n)`** — um array de `n` zeros, de onde a soma parte. **`df.groupby("folha").size()`** — o número de linhas de cada grupo.
-:::
-
-Os três $c_m$, na coluna (8.9), são as médias das folhas $R_1$, $R_2$ e $R_3$ da seção 12.1, e a coluna ao lado, as previsões da árvore, tem os mesmos três números.
-
 Se a relação entre os preditores e a resposta for próxima de uma soma de efeitos, como (8.8), a regressão linear aproveita essa estrutura, e a árvore, que só consegue imitá-la com muitos degraus, sai perdendo. Se a relação tiver limiares e interações, como (8.9), a árvore pode ganhar. Nenhuma das duas é melhor em geral, e quem decide, num conjunto de dados, é a estimativa do erro de teste.
 
 ## Duas fronteiras
 
-Na classificação, o papel de (8.8) é da regressão logística: com duas classes, ela prevê a classe 1 quando a probabilidade estimada passa de 0,5, isto é, quando $\hat\beta_0 + \hat\beta_1 X_1 + \hat\beta_2 X_2 > 0$, e a fronteira entre as duas classes é a reta $\hat\beta_0 + \hat\beta_1 X_1 + \hat\beta_2 X_2 = 0$. A árvore de classificação divide o plano em caixas, e a fronteira dela é feita de segmentos paralelos aos eixos. Para ver o que cada uma faz com uma fronteira que não é a sua, a célula abaixo sorteia 200 pontos de treino e 10.000 de teste no quadrado $[-2, 2] \times [-2, 2]$ e dá a eles duas classificações verdadeiras:
+Na classificação, o papel de (8.8) é da regressão logística: com duas classes, ela prevê a classe 1 quando a probabilidade estimada passa de 0,5, isto é, quando $\hat\beta_0 + \hat\beta_1 X_1 + \hat\beta_2 X_2 > 0$, e a fronteira entre as duas classes é a reta $\hat\beta_0 + \hat\beta_1 X_1 + \hat\beta_2 X_2 = 0$. A árvore de classificação divide o plano em retângulos, e a fronteira dela é feita de segmentos paralelos aos eixos. Para ver o que cada uma faz com uma fronteira que não é a sua, a célula abaixo sorteia 200 pontos de treino e 10.000 de teste no quadrado $[-2, 2] \times [-2, 2]$ e classifica os pontos por duas fronteiras verdadeiras:
 
 - **reta**: classe 1 quando $X_1 + X_2 > 0$, uma fronteira diagonal;
 - **degraus**: classe 1 quando $X_1 < -0{,}5$ ou $X_2 > 0{,}5$, uma fronteira em L, com um segmento vertical e um horizontal.
@@ -211,32 +186,13 @@ print("erro de validação cruzada da logística:", round(1 - acertos.mean(), 4)
 **`cross_val_score(estimador, X, y, cv)`** — ajusta e avalia o estimador em cada grupo de `cv` e devolve uma pontuação por grupo; num classificador, a pontuação padrão é a acurácia, e 1 menos a média dela é o erro de validação cruzada.
 :::
 
-A logística erra 0,1226 no teste, e a validação cruzada, só com o treino, estimava 0,1250. A árvore, nos mesmos pontos, é podada como na seção 12.3: cresce sem limite, o caminho de poda dá os `ccp_alpha`, a grade fica com um ponto dentro de cada intervalo do caminho, em ordem decrescente, e o `GridSearchCV` escolhe o `ccp_alpha` pelo erro de validação cruzada, nos mesmos 10 grupos. A árvore escolhida, reajustada com os 200 pontos, classifica o teste:
-
-```{python}
-#| label: arvore-reta
-from sklearn.model_selection import GridSearchCV
-from sklearn.tree import DecisionTreeClassifier
-
-grande = DecisionTreeClassifier(random_state=12)
-grande.fit(X, y_treino)
-alfas = grande.cost_complexity_pruning_path(X, y_treino).ccp_alphas
-grade_poda = np.r_[0.0, np.sqrt(alfas[1:-1] * alfas[2:])][::-1]
-busca = GridSearchCV(DecisionTreeClassifier(random_state=12),
-                     {"ccp_alpha": grade_poda}, cv=grupos, scoring="accuracy")
-busca.fit(X, y_treino)
-escolhida = busca.best_estimator_
-previsto = escolhida.predict(X_teste)
-print("ccp_alpha escolhido:", round(busca.best_params_["ccp_alpha"], 4))
-print("folhas da árvore escolhida:", escolhida.get_n_leaves())
-print("erro de validação cruzada da árvore:", round(1 - busca.best_score_, 4))
-print("erro de teste da árvore:", round(np.mean(previsto != y_teste), 4))
-```
-
-A validação cruzada fica com uma árvore de 14 folhas, que ela estima errar 0,1300; no teste, essa árvore erra 0,2055. A mesma conta, agora para as duas fronteiras, num laço; a tabela tem uma linha por fronteira e modelo:
+A logística erra 0,1226 no teste, e a validação cruzada, só com o treino, estimava 0,1250. A árvore é podada como na seção 12.3: cresce sem limite, a grade de `ccp_alpha` sai do caminho de poda, com um ponto dentro de cada intervalo, em ordem decrescente, e o `GridSearchCV` escolhe um ponto da grade pelo erro de validação cruzada, nos mesmos 10 grupos. A mesma conta, agora para os dois modelos e as duas fronteiras, num laço; a tabela tem uma linha por fronteira e modelo:
 
 ```{python}
 #| label: ajustes
+from sklearn.model_selection import GridSearchCV
+from sklearn.tree import DecisionTreeClassifier
+
 modelos = {}
 buscas = {}
 erros_teste = {}
@@ -315,10 +271,225 @@ plt.show()
 ::: {.funcao}
 **`np.meshgrid(x, y)`** — as duas coordenadas de uma malha: cada ponto da grade 200 × 200 recebe o seu $X_1$ em `m1` e o seu $X_2$ em `m2`. **`m1.ravel()`** — a matriz achatada numa fila só, para o `np.column_stack` montar as duas colunas que os modelos esperam; **`.reshape(m1.shape)`** faz o caminho de volta, com as previsões.
 
-**`ax.contourf(x, y, z, levels, colors, alpha)`** — pinta as regiões da malha pelo valor de `z`: com `levels=[-0.5, 0.5, 1.5]`, o que vale 0 recebe a primeira cor, e o que vale 1, a segunda. **`X[da_classe, 0]`** — a primeira coluna de `X`, só nas linhas em que a máscara vale `True`: os pontos de treino de uma classe, desenhados com a cor dela. **`ax.set_aspect("equal")`** — a mesma escala nos dois eixos, para a diagonal sair a 45°. **`ax.set_xticks`** — as posições das marcas do eixo horizontal, como o `set_yticks` no vertical.
+**`ax.contourf(x, y, z, levels, colors, alpha)`** — pinta as regiões da malha pelo valor de `z`: com `levels=[-0.5, 0.5, 1.5]`, o que vale 0 recebe a primeira cor, e o que vale 1, a segunda. **`X[da_classe, 0]`** — a primeira coluna de `X`, só nas linhas em que a máscara vale `True`: os pontos de treino de uma classe, desenhados com a cor dela. **`ax.set_aspect("equal")`** — a mesma escala nos dois eixos, para a diagonal sair a 45°.
 :::
 
 Na reta, a logística tem a forma certa: a fronteira dela quase coincide com a tracejada, e o erro de teste, 0,1226, fica a 0,0235 do erro do classificador de Bayes nestes pontos, 0,0991. A árvore, com 14 folhas, só consegue imitar a diagonal com uma escada, e cada degrau deixa de um lado ou do outro uma fatia do plano com a classe errada; com 200 pontos, a escada é grosseira, e o erro de teste sobe a 0,2055. No L, os papéis se invertem: a logística não tem como dobrar a reta e corta o L em diagonal, com erro de 0,2011, enquanto a árvore acha os dois cortes com 3 folhas e erra 0,1043, a 0,0052 do erro do classificador de Bayes.
+
+Na reta, a validação cruzada estimava para a árvore um erro de 0,1300, bem abaixo dos 0,2055 do teste, e a coluna CV da tabela não põe os dois modelos em pé de igualdade: o número da logística é o de um modelo só, e o da árvore é o menor entre todos os pontos da grade. Duas causas afastam a validação cruzada do teste. Uma é o sorteio dos 200 pontos de treino, que pode fazer a validação cruzada errar para baixo em qualquer árvore, escolhida ou não. A outra é o otimismo do mínimo, visto na seção 12.2: a escolhida é a de menor erro entre muitas, e esse menor erro tende a sair abaixo do que ela de fato erra. A validação cruzada aninhada, adiante, remove a segunda causa; a leitura para casa mede as duas na fronteira reta.
+
+## Em dados reais
+
+Num conjunto de dados real, não há 10.000 pontos de teste guardados, e a comparação se faz por validação cruzada. Uma árvore podada tem um passo que aprende com o dado, a escolha do `ccp_alpha`, e esse passo precisa ser refeito dentro de cada grupo: como na seção 10.6, toda etapa que aprende com o dado entra no `cross_val_score`, e como na seção 11.2, a busca é repetida no treino de cada grupo. A forma direta de fazer isso é dar ao `cross_val_score` um `GridSearchCV` como estimador.
+
+::: {.conceito}
+Na **validação cruzada aninhada**, há duas divisões em grupos, uma dentro da outra. Cada grupo **externo** fica de fora uma vez. Com as linhas dos outros grupos externos, a busca roda a sua própria validação cruzada, em grupos **internos**, escolhe o `ccp_alpha` e reajusta a árvore. A árvore escolhida é então medida no grupo externo que ficou de fora, que não participou da escolha. A média nos grupos externos estima o erro de teste do procedimento inteiro, escolha incluída.
+:::
+
+O caminho de poda muda com os dados de cada grupo externo, e a grade de um ponto por intervalo teria de ser recalculada em cada um. Uma grade fixa, larga o bastante para ir da árvore inteira à raiz sozinha, evita isso: zero e 41 valores de $10^{-4}$ a 1, em ordem decrescente. Com zero, a árvore não é podada, e com 1 fica só a raiz, como a leitura para casa confere nos dois conjuntos de dados.
+
+Nos jogadores de `Hitters`, com as 19 colunas e o logaritmo do salário, a árvore podada disputa com a regressão linear, em 10 grupos externos e 5 internos. Com uma busca como estimador, cada ajuste do `cross_val_score` num grupo externo é uma busca inteira: validação cruzada interna, escolha do `ccp_alpha` e reajuste com o melhor. A regressão linear não tem o que escolher e passa só pelos grupos externos. O `scoring="neg_mean_squared_error"` vale para o `cross_val_score` como para o `GridSearchCV`: o MSE com o sinal trocado.
+
+```{python}
+#| label: hitters
+from sklearn.model_selection import KFold
+
+X_h = pd.get_dummies(hitters.drop(columns="salario"), drop_first=True,
+                     dtype=float)
+grade = np.r_[0.0, np.logspace(-4, 0, 41)][::-1]
+externos = KFold(10, shuffle=True, random_state=12)
+internos = KFold(5, shuffle=True, random_state=12)
+podada = GridSearchCV(DecisionTreeRegressor(random_state=12),
+                      {"ccp_alpha": grade}, cv=internos,
+                      scoring="neg_mean_squared_error")
+mse_arvore = -cross_val_score(podada, X_h, y, cv=externos,
+                              scoring="neg_mean_squared_error")
+mse_linear = -cross_val_score(LinearRegression(), X_h, y, cv=externos,
+                              scoring="neg_mean_squared_error")
+print("colunas:", X_h.shape[1])
+print("MSE médio da árvore:", round(mse_arvore.mean(), 4))
+print("MSE médio da linear:", round(mse_linear.mean(), 4))
+print("grupos com a árvore abaixo da linear:",
+      (mse_arvore < mse_linear).sum(), "de 10")
+```
+
+::: {.funcao}
+**`np.logspace(a, b, n)`** — `n` números igualmente espaçados em escala logarítmica, de $10^a$ a $10^b$.
+:::
+
+Nos jogadores, a árvore podada tem MSE de validação cruzada aninhada de 0,2323, contra 0,4242 da regressão linear com as 19 colunas, e erra menos em cada um dos 10 grupos externos; a leitura para casa mostra os grupos um a um. A regressão linear vai sem penalização; a ridge e o lasso do capítulo 11 seriam outros concorrentes, com o $\lambda$ escolhido dentro de cada grupo externo.
+
+Nos pacientes de `Heart`, a disputa é entre a árvore de classificação e a regressão logística, com grupos estratificados, 10 externos e 5 internos, e a mesma grade fixa. A árvore usa as indicadoras de todas as categorias, como na seção 12.3; a logística, com intercepto, descarta a primeira categoria de cada coluna de texto, porque sem isso as indicadoras de uma coluna somam 1 em toda linha e repetem o intercepto:
+
+```{python}
+#| label: heart-cv
+coracao = pd.read_csv("dados/Heart.csv").dropna()
+y_c = coracao["doenca_cardiaca"]
+medidas = coracao.drop(columns="doenca_cardiaca")
+X_arvore = pd.get_dummies(medidas, dtype=float)
+X_logistica = pd.get_dummies(medidas, drop_first=True, dtype=float)
+print("colunas da árvore:", X_arvore.shape[1])
+print("colunas da logística:", X_logistica.shape[1])
+
+externos = StratifiedKFold(10, shuffle=True, random_state=12)
+internos = StratifiedKFold(5, shuffle=True, random_state=12)
+podada = GridSearchCV(DecisionTreeClassifier(random_state=12),
+                      {"ccp_alpha": grade}, cv=internos, scoring="accuracy")
+logistica = LogisticRegression(C=np.inf, solver="newton-cholesky", tol=1e-8)
+erro_arvore = 1 - cross_val_score(podada, X_arvore, y_c, cv=externos)
+erro_logistica = 1 - cross_val_score(logistica, X_logistica, y_c, cv=externos)
+print("erro médio da árvore:", round(erro_arvore.mean(), 4))
+print("erro médio da logística:", round(erro_logistica.mean(), 4))
+
+menor = []
+for erro_arv, erro_log in zip(erro_arvore, erro_logistica):
+    if np.isclose(erro_arv, erro_log):
+        menor.append("empate")
+    elif erro_log < erro_arv:
+        menor.append("logística")
+    else:
+        menor.append("árvore")
+print("grupos por menor erro:")
+for rotulo in ["logística", "empate", "árvore"]:
+    print(f"  {rotulo}:", menor.count(rotulo), "de 10")
+```
+
+::: {.funcao}
+**`np.isclose(a, b)`** — `True` quando `a` e `b` são iguais a menos do arredondamento de ponto flutuante; aqui, o grupo em que os dois erros empatam. **`lista.count(valor)`** — quantas vezes o valor aparece na lista.
+:::
+
+As 18 colunas da árvore viram 16 na logística, uma a menos por coluna de texto. Nos pacientes, a logística tem o menor erro de validação cruzada aninhada, 0,1683 contra 0,2186 da árvore podada, e erra menos em 7 dos 10 grupos externos, empata em 2 e erra mais em 1.
+
+## Quem ganha
+
+A tabela junta as quatro comparações da seção, com a forma verdadeira da relação quando ela é conhecida. Nos simulados, o erro é o de teste, nos 10.000 pontos; nos dados reais, a média da validação cruzada aninhada, o MSE nos jogadores e o erro de classificação nos pacientes:
+
+```{python}
+#| label: quem-ganha
+resumo = pd.DataFrame({
+    "dados": ["simulado, reta", "simulado, L", "Hitters", "Heart"],
+    "forma verdadeira": ["soma de efeitos", "dois cortes paralelos aos eixos",
+                         "desconhecida", "desconhecida"],
+    "medida": ["erro de teste", "erro de teste",
+               "MSE, CV aninhada", "erro, CV aninhada"],
+    "linear ou logística": [erros_teste["reta"]["logística"],
+                            erros_teste["degraus"]["logística"],
+                            mse_linear.mean(), erro_logistica.mean()],
+    "árvore podada": [erros_teste["reta"]["árvore"],
+                      erros_teste["degraus"]["árvore"],
+                      mse_arvore.mean(), erro_arvore.mean()],
+})
+resumo["menor erro"] = np.where(
+    resumo["árvore podada"] < resumo["linear ou logística"],
+    "árvore", "linear ou logística")
+resumo.style.hide(axis="index").format(precision=4)
+```
+
+::: {.funcao}
+**`np.where(condicao, a, b)`** — `a` onde a condição vale `True` e `b` onde vale `False`, linha a linha.
+:::
+
+Nestes quatro casos, cada forma ganha duas vezes. Nos simulados, a forma verdadeira explica o resultado: a árvore ganha no L, feito de dois cortes paralelos aos eixos, e a logística na diagonal, que é uma soma de efeitos. Cada simulado, porém, é um sorteio só de 200 pontos. Nos dados reais, a forma verdadeira é desconhecida. Uma leitura possível é que, nos jogadores, as regiões da árvore se aproximaram mais do logaritmo do salário do que uma soma de efeitos, e que, nos pacientes, uma soma de efeitos na escala do logaritmo da chance se aproximou mais da doença cardíaca do que as regiões. A leitura vem depois do resultado; quem decide é a validação cruzada aninhada.
+
+O erro de teste também não é o único critério. A árvore podada da seção 12.3, com perguntas sobre o exame de tálio, a dor no peito e os vasos coloridos, cabe numa folha de papel e se explica a quem nunca ouviu falar de uma logística. Quanto de erro vale a pena pagar por essa clareza?
+
+## Leitura para casa
+
+### A soma (8.9), jogador a jogador
+
+A célula abaixo faz a soma (8.9) para cada jogador da árvore de três folhas, com as médias das folhas no lugar de $c_m$, e põe o resultado, folha a folha, ao lado das previsões da árvore:
+
+```{python}
+#| label: soma-8-9
+folha = arvore.apply(X2)
+medias_das_folhas = y.groupby(folha).mean()
+soma = np.zeros(len(X2))
+for m in medias_das_folhas.index:
+    soma = soma + medias_das_folhas[m] * (folha == m)
+por_jogador = pd.DataFrame({"folha": folha, "(8.9)": soma,
+                            "arvore.predict": arvore.predict(X2)})
+por_folha = por_jogador.groupby("folha").mean()
+por_folha.insert(0, "jogadores", por_jogador.groupby("folha").size())
+por_folha.index = ["R1", "R2", "R3"]
+por_folha.style.format(precision=3)
+```
+
+::: {.funcao}
+**`folha == m`** — um vetor de `True` e `False`, com `True` nos jogadores da folha `m`: é o $1(X \in R_m)$ de (8.9), que na conta vale 1 e 0. **`np.zeros(n)`** — um array de `n` zeros, de onde a soma parte. **`df.groupby("folha").size()`** — o número de linhas de cada grupo.
+:::
+
+Os três $c_m$, na coluna (8.9), são as médias das folhas $R_1$, $R_2$ e $R_3$ da seção 12.1, e a coluna ao lado, as previsões da árvore, tem os mesmos três números. É essa a conta que o `predict` da árvore faz.
+
+### Os grupos externos, um a um
+
+O MSE de cada grupo externo nos jogadores:
+
+```{python}
+#| label: grupos-jogadores
+jogadores = pd.DataFrame({"árvore": mse_arvore, "linear": mse_linear},
+                         index=pd.RangeIndex(1, 11, name="grupo externo"))
+jogadores.style.format(precision=4)
+```
+
+::: {.funcao}
+**`pd.RangeIndex(1, 11, name)`** — os rótulos de 1 a 10, com um nome para a coluna do índice.
+:::
+
+A coluna da árvore fica abaixo da da linear nas 10 linhas. Nos pacientes, o erro de cada grupo externo, com o modelo de menor erro em cada um:
+
+```{python}
+#| label: grupos-pacientes
+pacientes = pd.DataFrame({"árvore": erro_arvore, "logística": erro_logistica,
+                          "menor erro": menor},
+                         index=pd.RangeIndex(1, 11, name="grupo externo"))
+pacientes.style.format(precision=4, subset=["árvore", "logística"])
+```
+
+A coluna "menor erro" traz a logística em 7 grupos, o empate em 2 e a árvore em 1.
+
+### A grade fixa, da raiz à árvore inteira
+
+A grade fixa das duas validações cruzadas aninhadas termina em zero, e com zero a árvore não é podada. No topo, em 1, a árvore deveria ficar com a raiz sozinha, nos jogadores e nos pacientes:
+
+```{python}
+#| label: topo-da-grade
+raiz_jogadores = DecisionTreeRegressor(ccp_alpha=grade[0], random_state=12)
+raiz_jogadores.fit(X_h, y)
+raiz_pacientes = DecisionTreeClassifier(ccp_alpha=grade[0], random_state=12)
+raiz_pacientes.fit(X_arvore, y_c)
+print("ccp_alpha no topo da grade:", grade[0])
+print("folhas nos jogadores:", raiz_jogadores.get_n_leaves())
+print("folhas nos pacientes:", raiz_pacientes.get_n_leaves())
+```
+
+Com `ccp_alpha` = 1, as duas árvores ficam com uma folha só, a raiz, que prevê para todos a média do logaritmo do salário ou a classe mais comum. A grade cobre os dois extremos, e a busca de cada grupo externo escolhe um ponto entre eles.
+
+### A árvore da fronteira reta, passo a passo
+
+A árvore da linha da fronteira reta, por extenso: cresce sem limite, o caminho de poda dá os `ccp_alpha`, e o `GridSearchCV` escolhe um deles pelo erro de validação cruzada, nos mesmos 10 grupos da logística. A árvore escolhida, reajustada com os 200 pontos, classifica o teste:
+
+```{python}
+#| label: arvore-reta
+y_treino = rotulos["reta"]["treino"]
+y_teste = rotulos["reta"]["teste"]
+grande = DecisionTreeClassifier(random_state=12)
+grande.fit(X, y_treino)
+alfas = grande.cost_complexity_pruning_path(X, y_treino).ccp_alphas
+grade_poda = np.r_[0.0, np.sqrt(alfas[1:-1] * alfas[2:])][::-1]
+busca = GridSearchCV(DecisionTreeClassifier(random_state=12),
+                     {"ccp_alpha": grade_poda}, cv=grupos, scoring="accuracy")
+busca.fit(X, y_treino)
+escolhida = busca.best_estimator_
+previsto = escolhida.predict(X_teste)
+print("ccp_alpha escolhido:", round(busca.best_params_["ccp_alpha"], 4))
+print("folhas da árvore escolhida:", escolhida.get_n_leaves())
+print("erro de validação cruzada da árvore:", round(1 - busca.best_score_, 4))
+print("erro de teste da árvore:", round(np.mean(previsto != y_teste), 4))
+```
+
+A validação cruzada fica com uma árvore de 14 folhas, que ela estima errar 0,1300; no teste, essa árvore erra 0,2055. São os números da linha da árvore na fronteira reta, na tabela das fronteiras.
+
+### A validação cruzada abaixo do teste
 
 Na reta, a árvore escolhida tem erro de validação cruzada de 0,1300 e erro de teste de 0,2055. Pela validação cruzada, ela quase empataria com a logística, que tem 0,1250; pelo teste, erra 0,0829 a mais. De onde vem a distância entre 0,1300 e 0,2055? A célula abaixo mede o erro de validação cruzada e o de teste de cada árvore do caminho de poda, e não só da escolhida, uma linha por árvore:
 
@@ -339,6 +510,7 @@ for alfa, erro_cv in zip(alfas_da_grade, erros_cv):
                    "teste − CV": erro_teste - erro_cv})
 caminho = pd.DataFrame(linhas)
 print("árvores no caminho:", len(caminho))
+print("árvores com o teste acima da CV:", (caminho["teste − CV"] > 0).sum())
 (caminho.style.hide(axis="index")
  .format(precision=4)
  .format(precision=5, subset=["ccp_alpha"]))
@@ -348,108 +520,6 @@ print("árvores no caminho:", len(caminho))
 **`busca.cv_results_["param_ccp_alpha"]`** — os `ccp_alpha` da grade, na ordem em que a busca os testou, alinhados com `mean_test_score`, a acurácia média de validação cruzada de cada um.
 :::
 
-Nesta amostra, a coluna teste − CV é positiva nas 17 linhas: a validação cruzada fica abaixo do teste em todas as árvores do caminho, inclusive na última, a árvore sem poda, com `ccp_alpha` zero, que não foi escolhida por critério nenhum: 0,1600 contra 0,2163, uma distância de 0,0563. Na árvore escolhida, a de 14 folhas, a distância entre 0,1300 e 0,2055 é de 0,0755. As duas distâncias são de árvores diferentes e não se somam nem se subtraem, mas a da árvore sem poda, que nenhuma escolha tocou, indica de onde deve vir boa parte da outra: do sorteio dos 200 pontos de treino. Com esses 200 pontos, a validação cruzada subestima o erro de todas as árvores do caminho, escolhida ou não, e com outro sorteio a distância poderia ser menor ou ir para o outro lado.
+Nesta amostra, a coluna teste − CV é positiva nas 17 linhas: a validação cruzada fica abaixo do teste em todas as árvores do caminho, inclusive na última, a árvore sem poda, com `ccp_alpha` zero, que não foi escolhida por critério nenhum: 0,1600 contra 0,2163, uma distância de 0,0563. Na árvore escolhida, a de 14 folhas, a distância entre 0,1300 e 0,2055 é de 0,0755. As duas distâncias são de árvores diferentes e não se somam nem se subtraem, mas a da árvore sem poda, que nenhuma escolha tocou, indica de onde deve vir boa parte da outra. É a primeira causa, o sorteio dos 200 pontos de treino: com esses 200 pontos, a validação cruzada subestima o erro de todas as árvores do caminho, escolhida ou não, e com outro sorteio a distância poderia ser menor ou ir para o outro lado.
 
-A outra causa é o otimismo do mínimo, visto na seção 12.2: entre todas as árvores do caminho, a escolhida é a de menor erro de validação cruzada, e esse erro, 0,1300, fica 0,0300 abaixo dos 0,1600 da árvore sem poda. Parte dessa diferença é sorte da escolha, e o erro do escolhido tende a sair menor do que ele de fato é. Da primeira causa não há como fugir com 200 pontos; a segunda se remove medindo o erro em pontos que não participaram da escolha do `ccp_alpha`.
-
-## Em dados reais
-
-Num conjunto de dados real, não há 10.000 pontos de teste guardados, e a comparação se faz por validação cruzada. Uma árvore podada tem um passo que aprende com o dado, a escolha do `ccp_alpha`, e esse passo precisa ser refeito dentro de cada grupo: como na seção 10.6, toda etapa que aprende do dado entra no `cross_val_score`, e como na seção 11.2, a busca é repetida no treino de cada grupo. A forma direta de fazer isso é dar ao `cross_val_score` um `GridSearchCV` como estimador.
-
-::: {.conceito}
-Na **validação cruzada aninhada**, há duas divisões em grupos, uma dentro da outra. Cada grupo **externo** fica de fora uma vez. Com as linhas dos outros grupos externos, a busca roda a sua própria validação cruzada, em grupos **internos**, escolhe o `ccp_alpha` e reajusta a árvore. A árvore escolhida é então medida no grupo externo que ficou de fora, que não participou da escolha. A média nos grupos externos estima o erro de teste do procedimento inteiro, escolha incluída.
-:::
-
-O caminho de poda muda com os dados de cada grupo externo, e a grade de um ponto por intervalo teria de ser recalculada em cada um. Uma grade fixa, larga o bastante para ir da árvore inteira à raiz sozinha, evita isso: zero e 41 valores de $10^{-4}$ a 1, em ordem decrescente.
-
-Nos jogadores de `Hitters`, com as 19 colunas e o logaritmo do salário, a árvore podada disputa com a regressão linear, em 10 grupos externos e 5 internos. Com uma busca como estimador, cada ajuste do `cross_val_score` num grupo externo é uma busca inteira: validação cruzada interna, escolha do `ccp_alpha` e reajuste com o melhor. O `scoring="neg_mean_squared_error"` vale para o `cross_val_score` como para o `GridSearchCV`: o MSE com o sinal trocado.
-
-```{python}
-#| label: hitters
-from sklearn.model_selection import KFold
-
-X_h = pd.get_dummies(hitters.drop(columns="salario"), drop_first=True,
-                     dtype=float)
-grade = np.r_[0.0, np.logspace(-4, 0, 41)][::-1]
-externos = KFold(10, shuffle=True, random_state=12)
-internos = KFold(5, shuffle=True, random_state=12)
-podada = GridSearchCV(DecisionTreeRegressor(random_state=12),
-                      {"ccp_alpha": grade}, cv=internos,
-                      scoring="neg_mean_squared_error")
-mse_arvore = -cross_val_score(podada, X_h, y, cv=externos,
-                              scoring="neg_mean_squared_error")
-mse_linear = -cross_val_score(LinearRegression(), X_h, y, cv=externos,
-                              scoring="neg_mean_squared_error")
-print("colunas:", X_h.shape[1])
-raiz = DecisionTreeRegressor(ccp_alpha=grade[0], random_state=12)
-raiz.fit(X_h, y)
-print("folhas com ccp_alpha = 1:", raiz.get_n_leaves())
-print("MSE médio da árvore:", round(mse_arvore.mean(), 4))
-print("MSE médio da linear:", round(mse_linear.mean(), 4))
-print("grupos com a árvore abaixo da linear:",
-      (mse_arvore < mse_linear).sum(), "de 10")
-por_grupo = pd.DataFrame({"árvore": mse_arvore, "linear": mse_linear},
-                         index=pd.RangeIndex(1, 11, name="grupo externo"))
-por_grupo.style.format(precision=4)
-```
-
-::: {.funcao}
-**`np.logspace(a, b, n)`** — `n` números igualmente espaçados em escala logarítmica, de $10^a$ a $10^b$. **`pd.RangeIndex(1, 11, name)`** — os rótulos de 1 a 10, com um nome para a coluna do índice.
-:::
-
-Com `ccp_alpha` = 1, a árvore fica com a raiz sozinha, e com zero, não é podada: a grade cobre os dois extremos. Nos jogadores, a árvore podada tem MSE de validação cruzada aninhada de 0,2323, contra 0,4242 da regressão linear com as 19 colunas, e erra menos em cada um dos 10 grupos externos, como a tabela mostra linha a linha. Nestes dados, as caixas se aproximaram mais da relação entre as colunas e o logaritmo do salário do que a soma de efeitos. A regressão linear vai sem penalização; a ridge e o lasso do capítulo 11, que encolhem os coeficientes, seriam outros concorrentes, e a comparação com eles pede a mesma validação cruzada aninhada, com o $\lambda$ escolhido dentro de cada grupo externo.
-
-Nos pacientes de `Heart`, a disputa é entre a árvore de classificação e a regressão logística. A árvore usa as indicadoras de todas as categorias, como na seção 12.3; a logística, com intercepto, descarta a primeira categoria de cada coluna de texto, porque sem isso as indicadoras de uma coluna somam 1 em toda linha e repetem o intercepto:
-
-```{python}
-#| label: heart
-coracao = pd.read_csv("dados/Heart.csv").dropna()
-y_c = coracao["doenca_cardiaca"]
-medidas = coracao.drop(columns="doenca_cardiaca")
-X_arvore = pd.get_dummies(medidas, dtype=float)
-X_logistica = pd.get_dummies(medidas, drop_first=True, dtype=float)
-print("colunas da árvore:", X_arvore.shape[1])
-print("colunas da logística:", X_logistica.shape[1])
-```
-
-As 18 colunas da árvore viram 16 na logística, uma a menos por coluna de texto. A validação cruzada aninhada usa grupos estratificados, 10 externos e 5 internos, e a mesma grade fixa:
-
-```{python}
-#| label: heart-cv
-externos = StratifiedKFold(10, shuffle=True, random_state=12)
-internos = StratifiedKFold(5, shuffle=True, random_state=12)
-podada = GridSearchCV(DecisionTreeClassifier(random_state=12),
-                      {"ccp_alpha": grade}, cv=internos, scoring="accuracy")
-logistica = LogisticRegression(C=np.inf, solver="newton-cholesky", tol=1e-8)
-erro_arvore = 1 - cross_val_score(podada, X_arvore, y_c, cv=externos)
-erro_logistica = 1 - cross_val_score(logistica, X_logistica, y_c, cv=externos)
-raiz = DecisionTreeClassifier(ccp_alpha=grade[0], random_state=12)
-raiz.fit(X_arvore, y_c)
-print("folhas com ccp_alpha = 1:", raiz.get_n_leaves())
-print("erro médio da árvore:", round(erro_arvore.mean(), 4))
-print("erro médio da logística:", round(erro_logistica.mean(), 4))
-
-menor = []
-for erro_arv, erro_log in zip(erro_arvore, erro_logistica):
-    if np.isclose(erro_arv, erro_log):
-        menor.append("empate")
-    elif erro_log < erro_arv:
-        menor.append("logística")
-    else:
-        menor.append("árvore")
-por_grupo = pd.DataFrame({"árvore": erro_arvore, "logística": erro_logistica,
-                          "menor erro": menor},
-                         index=pd.RangeIndex(1, 11, name="grupo externo"))
-print("grupos por menor erro:")
-for rotulo in ["logística", "empate", "árvore"]:
-    print(f"  {rotulo}:", menor.count(rotulo), "de 10")
-por_grupo.style.format(precision=4, subset=["árvore", "logística"])
-```
-
-::: {.funcao}
-**`np.isclose(a, b)`** — `True` quando `a` e `b` são iguais a menos do arredondamento de ponto flutuante; aqui, o grupo em que os dois erros empatam. **`lista.count(valor)`** — quantas vezes o valor aparece na lista.
-:::
-
-Nos pacientes, a logística tem o menor erro de validação cruzada aninhada, 0,1683 contra 0,2186 da árvore podada, e erra menos em 7 dos 10 grupos externos, empata em 2 e erra mais em 1. Cada método ganha num dos dois conjuntos: nos jogadores, as caixas de (8.9); nos pacientes, a logística, que é linear no logaritmo da chance, como a regressão de (8.8) é linear na resposta.
-
-O erro de teste também não é o único critério. A árvore podada da seção 12.3, com perguntas sobre o exame de tálio, a dor no peito e os vasos coloridos, cabe numa folha de papel e se explica a quem nunca ouviu falar de uma logística. Quanto de erro vale a pena pagar por essa clareza?
+A segunda causa é o otimismo do mínimo, visto na seção 12.2: entre todas as árvores do caminho, a escolhida é a de menor erro de validação cruzada, e esse erro, 0,1300, fica 0,0300 abaixo dos 0,1600 da árvore sem poda. Parte dessa diferença é sorte da escolha, e o erro do escolhido tende a sair menor do que ele de fato é. Da primeira causa não há como fugir com 200 pontos; a segunda se remove medindo o erro em pontos que não participaram da escolha do `ccp_alpha`.
