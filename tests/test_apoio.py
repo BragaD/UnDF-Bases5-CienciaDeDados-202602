@@ -1,9 +1,14 @@
-"""As páginas de `apoio/` do capítulo 12: dados embutidos e o núcleo de cada uma.
+"""As páginas de `apoio/` dos capítulos 12 e 13: dados embutidos e o núcleo de cada uma.
 
 Os dados das duas páginas saem de `scripts/gerar-dados-arvores.py`, rodado no
 container, e ficam numa tag `<script type="application/json" id="dados">`. Os
 testes daqui leem essa tag e cobram que ela traga os números das seções 12.1
 e 12.2: uma página projetada ao lado do texto não pode contradizê-lo.
+
+As duas páginas do capítulo 13 recebem de `scripts/gerar-dados-ensembles.py`
+só o dado cru e a divisão de treino e teste; as contas do bagging e do
+boosting rodam na página, e os testes daqui as conferem, árvore a árvore,
+contra o `scikit-learn`.
 """
 
 import json
@@ -16,11 +21,16 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 import pytest
+from sklearn.ensemble import GradientBoostingRegressor
+from sklearn.metrics import mean_squared_error
+from sklearn.model_selection import train_test_split
 from sklearn.tree import DecisionTreeRegressor
 
 RAIZ = Path(__file__).resolve().parent.parent
 CRESCIMENTO = RAIZ / "apoio/crescimento-da-arvore.html"
 PODA = RAIZ / "apoio/poda-da-arvore.html"
+BAGGING = RAIZ / "apoio/bagging-de-arvores.html"
+BOOSTING = RAIZ / "apoio/boosting-passo-a-passo.html"
 
 
 def dados_embutidos(pagina: Path) -> dict:
@@ -245,3 +255,141 @@ def test_erro_na_curva_devolve_nulo_fora_da_grade():
 @PRECISA_DE_NODE
 def test_formato_brasileiro_na_poda():
     assert no_node(PODA, "fmt(1452, 1)") == "1.452,0"
+
+
+# --------------------------- capítulo 13 ---------------------------------
+
+
+def treino_e_teste_de_uma_coluna():
+    """A divisão das seções 13.1 e 13.4, só com `vezes_ao_bastao_carreira`."""
+    h = pd.read_csv(RAIZ / "dados/Hitters.csv").dropna()
+    X = h[["vezes_ao_bastao_carreira"]]
+    y = np.log(h["salario"])
+    return train_test_split(X, y, train_size=132, random_state=12)
+
+
+@pytest.mark.parametrize("pagina", [BAGGING, BOOSTING], ids=["bagging", "boosting"])
+def test_ensembles_embutem_a_divisao_das_secoes_13_1_e_13_4(pagina):
+    d = dados_embutidos(pagina)
+    h = pd.read_csv(RAIZ / "dados/Hitters.csv").dropna()
+    treino, teste = train_test_split(np.arange(len(h)), train_size=132, random_state=12)
+    assert d["coluna"] == "vezes_ao_bastao_carreira"
+    assert d["vezes"] == h["vezes_ao_bastao_carreira"].tolist()
+    assert d["salario"] == h["salario"].tolist()
+    assert d["treino"] == treino.tolist()
+    assert d["teste"] == teste.tolist()
+
+
+@PRECISA_DE_NODE
+def test_bagging_no_node_segue_o_decision_tree_regressor_em_cada_amostra():
+    treino_X, teste_X, treino_y, teste_y = treino_e_teste_de_uma_coluna()
+    r = no_node(BAGGING, """(() => {
+        const D = preparar(DADOS);
+        const bag = novoBagging(D.treino, D.teste, 13);
+        const previsoes = [];
+        for (let b = 0; b < 60; b++) {
+            const arvore = acrescentar(bag);
+            previsoes.push(D.teste.x.map(v => prever(arvore, v)));
+        }
+        return {amostras: bag.amostras, previsoes, teste: bag.curvaTeste,
+                oob: bag.curvaOob, fora: bag.fora,
+                uma: erroDeUmaArvore(D.treino, D.teste)};
+    })()""")
+    n = len(treino_X)
+    soma_teste = np.zeros(len(teste_X))
+    soma_oob, conta_oob = np.zeros(n), np.zeros(n)
+    for b, (amostra, previsto_js) in enumerate(zip(r["amostras"], r["previsoes"])):
+        assert len(amostra) == n and min(amostra) >= 0 and max(amostra) < n
+        arvore = DecisionTreeRegressor(random_state=12)
+        arvore.fit(treino_X.iloc[amostra], treino_y.iloc[amostra])
+        previsto = arvore.predict(teste_X)
+        assert np.allclose(previsto_js, previsto, rtol=0, atol=1e-9), f"árvore {b + 1}"
+        soma_teste += previsto
+        assert r["teste"][b] == pytest.approx(
+            mean_squared_error(teste_y, soma_teste / (b + 1)), abs=1e-9)
+        fora = np.setdiff1d(np.arange(n), amostra)
+        assert r["fora"][b] == pytest.approx(len(fora) / n)
+        soma_oob[fora] += arvore.predict(treino_X.iloc[fora])
+        conta_oob[fora] += 1
+        com = conta_oob > 0
+        oob = np.mean((treino_y.values[com] - soma_oob[com] / conta_oob[com]) ** 2)
+        assert r["oob"][b] == pytest.approx(oob, abs=1e-9), f"B = {b + 1}"
+    grande = DecisionTreeRegressor(random_state=12).fit(treino_X, treino_y)
+    assert r["uma"] == pytest.approx(mean_squared_error(teste_y, grande.predict(teste_X)), abs=1e-9)
+    # o que a página promete mostrar: a média erra menos que uma árvore só
+    assert r["teste"][-1] < r["uma"] - 0.1
+
+
+@PRECISA_DE_NODE
+def test_bagging_no_node_repete_o_sorteio_com_a_mesma_semente():
+    r = no_node(BAGGING, """[13, 13, 14].map(semente => {
+        const D = preparar(DADOS);
+        const bag = novoBagging(D.treino, D.teste, semente);
+        acrescentar(bag);
+        return bag.amostras[0];
+    })""")
+    assert r[0] == r[1]
+    assert r[0] != r[2]
+
+
+@PRECISA_DE_NODE
+def test_bagging_no_node_sorteia_outro_conjunto_de_treino():
+    r = no_node(BAGGING, """(() => {
+        const sorteio = semente => sortearDivisao(gerador(semente), DADOS.vezes.length, 132);
+        const divisao = sorteio(2024);
+        const D = preparar(DADOS, divisao);
+        return {divisao, de_novo: sorteio(2024), outra: sorteio(2025),
+                x: D.treino.x, y: D.teste.y, padrao: preparar(DADOS).treino.x};
+    })()""")
+    d = dados_embutidos(BAGGING)
+    treino, teste = r["divisao"]["treino"], r["divisao"]["teste"]
+    assert (len(treino), len(teste)) == (132, 131)
+    assert sorted(treino + teste) == list(range(263))
+    assert r["de_novo"] == r["divisao"] and r["outra"] != r["divisao"]
+    assert treino != d["treino"]
+    assert r["x"] == [d["vezes"][i] for i in treino]
+    assert np.allclose(r["y"], np.log([d["salario"][i] for i in teste]))
+    assert r["padrao"] == [d["vezes"][i] for i in d["treino"]]
+
+
+@PRECISA_DE_NODE
+def test_boosting_no_node_tem_os_tres_primeiros_passos_da_secao_13_4():
+    c = no_node(BOOSTING, """(() => {
+        const D = preparar(DADOS);
+        return caminho(D.treino, D.teste, 0.01, "zero", 3);
+    })()""")
+    assert c["cortes"] == [1452, 1452, 1452]
+    assert (round(c["esq"][0], 2), round(c["dir"][0], 2)) == (5.11, 6.46)
+    assert round(c["mseTreino"][0], 2) == 34.97
+
+
+@PRECISA_DE_NODE
+@pytest.mark.parametrize("taxa", [0.001, 0.01, 0.1, 1])
+@pytest.mark.parametrize("partida", ["zero", "media"])
+def test_boosting_no_node_segue_o_gradient_boosting_regressor(taxa, partida):
+    treino_X, teste_X, treino_y, teste_y = treino_e_teste_de_uma_coluna()
+    c = no_node(BOOSTING, f"""(() => {{
+        const D = preparar(DADOS);
+        const c = caminho(D.treino, D.teste, {taxa}, "{partida}", MAX_ARVORES);
+        const f = degraus(c, 500);
+        const grade = [20, 300, 1452, 1453, 5000, 14000];
+        return {{treino: c.mseTreino, teste: c.mseTeste,
+                 menor: indiceDoMenor(c.mseTeste, MAX_ARVORES) + 1,
+                 direto: preverAte(c, 500, grade),
+                 emDegraus: grade.map(x => f.valores[f.cortes.filter(k => x > k).length])}};
+    }})()""")
+    inicio = {"init": "zero"} if partida == "zero" else {}
+    boost = GradientBoostingRegressor(n_estimators=3000, learning_rate=taxa, max_leaf_nodes=2,
+                                      max_depth=None, random_state=13, **inicio)
+    boost.fit(treino_X, treino_y)
+    teste = np.array([mean_squared_error(teste_y, p) for p in boost.staged_predict(teste_X)])
+    assert np.allclose(c["treino"], boost.train_score_, rtol=0, atol=1e-9)
+    assert np.allclose(c["teste"], teste, rtol=0, atol=1e-9)
+    assert c["menor"] == int(np.argmin(teste)) + 1
+    assert np.allclose(c["direto"], c["emDegraus"], rtol=0, atol=1e-9)
+
+
+@PRECISA_DE_NODE
+def test_formato_brasileiro_nos_ensembles():
+    assert no_node(BAGGING, "fmt(1452, 0)") == "1.452"
+    assert no_node(BOOSTING, "fmt(0.3443, 3)") == "0,344"
