@@ -1,0 +1,1015 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>A Média de Muitas Árvores</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans+Condensed:wght@600&family=IBM+Plex+Sans:wght@400;500&display=swap">
+
+<style>
+/* ------------------------------------------------------------------ *
+ * Tokens — os mesmos das outras páginas de apoio/, para todas serem
+ * visivelmente irmãs. Fundo e texto do tema `cosmo`; azuis do logo da UnDF.
+ *
+ * A regra de leitura também é a mesma: azul é o que fica (a média das
+ * árvores, o modelo), laranja é o que está mudando (a árvore da vez).
+ * ------------------------------------------------------------------ */
+:root{
+  color-scheme: light;
+
+  --paper:    #FFFFFF;
+  --paper-2:  #EEF4FA;
+  --panel:    #FFFFFF;
+  --ink:      #373A3C;
+  --ink-2:    #5B6B76;
+  --ink-3:    #8A99A5;
+  --rule:     #DCE5EE;
+  --grid:     #EDF2F7;
+
+  --marca:    #2264AF;
+  --ajuste:   #D9480F;
+
+  --sans: "IBM Plex Sans", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --cond: "IBM Plex Sans Condensed", "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+
+  --r: 3px;
+}
+
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    color-scheme: dark;
+    --paper:   #12161B;
+    --paper-2: #1A2430;
+    --panel:   #171F27;
+    --ink:     #E6ECF2;
+    --ink-2:   #9BAAB8;
+    --ink-3:   #6E7F8D;
+    --rule:    #2A3743;
+    --grid:    #202B35;
+    --marca:   #6FB0E8;
+    --ajuste:  #FF7A45;
+  }
+}
+:root[data-theme="dark"]{
+  color-scheme: dark;
+  --paper:   #12161B;
+  --paper-2: #1A2430;
+  --panel:   #171F27;
+  --ink:     #E6ECF2;
+  --ink-2:   #9BAAB8;
+  --ink-3:   #6E7F8D;
+  --rule:    #2A3743;
+  --grid:    #202B35;
+  --marca:   #6FB0E8;
+  --ajuste:  #FF7A45;
+}
+
+*{ box-sizing: border-box; }
+[hidden]{ display: none !important; }
+
+body{
+  margin: 0;
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--sans);
+  font-size: 15px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+}
+
+:focus-visible{ outline: 2px solid var(--marca); outline-offset: 2px; }
+
+.app{
+  max-width: 1360px;
+  margin: 0 auto;
+  padding: 22px 24px 40px;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.topbar{
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 24px;
+  flex-wrap: wrap;
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--rule);
+}
+
+.eyebrow{
+  margin: 0 0 2px;
+  font-family: var(--cond);
+  font-size: 11.5px;
+  font-weight: 600;
+  letter-spacing: .14em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+}
+
+h1{
+  margin: 0;
+  font-family: var(--cond);
+  font-weight: 600;
+  font-size: clamp(26px, 3.4vw, 38px);
+  line-height: 1.04;
+  letter-spacing: -.005em;
+  text-wrap: balance;
+}
+
+.sub{ margin: 6px 0 0; max-width: 76ch; color: var(--ink-2); font-size: 14.5px; }
+
+.relogio{ text-align: right; font-family: var(--mono); font-variant-numeric: tabular-nums; }
+.relogio .n{ font-size: 30px; line-height: 1; color: var(--ink); }
+.relogio .u, .relogio .r{
+  display: block;
+  font-family: var(--cond);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+  margin-top: 4px;
+}
+.relogio .r b{ font-family: var(--mono); font-size: 15px; letter-spacing: 0; color: var(--ink); }
+
+/* -------------------------------- palco --------------------------------- */
+
+.stage{
+  display: grid;
+  grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr);
+  gap: 20px;
+  align-items: start;
+}
+.coluna{ display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+
+.plate{
+  position: relative;
+  background: var(--panel);
+  border: 1px solid var(--rule);
+  border-radius: var(--r);
+  overflow: hidden;
+}
+.plate svg{ display: block; width: 100%; user-select: none; -webkit-user-select: none; }
+
+.tag{
+  margin: 0;
+  padding: 9px 12px 0;
+  font-family: var(--cond);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+}
+.tag.alto{ min-height: 43px; }
+.junto{ white-space: nowrap; }
+.tag b{ color: var(--ink); font-weight: 600; text-transform: none; letter-spacing: 0; font-family: var(--mono); }
+
+.legenda{
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 16px;
+  margin: 0;
+  padding: 4px 12px 0;
+  font-size: 12.5px;
+  color: var(--ink-2);
+}
+.legenda span{ display: inline-flex; align-items: center; gap: 6px; }
+.legenda i{ display: inline-block; width: 18px; height: 0; border-top: 2.5px solid var(--ink-3); }
+.legenda i.media{ border-color: var(--marca); border-top-width: 3px; }
+.legenda i.vez{ border-color: var(--ajuste); }
+.legenda i.outras{ border-color: var(--ink-3); border-top-width: 1.5px; opacity: .5; }
+.legenda i.anel{ width: 11px; height: 11px; border: 2px solid var(--marca); border-radius: 50%; }
+.legenda i.tracejada{ border-top-style: dashed; border-color: var(--ink); border-top-width: 2px; }
+.legenda i.pontilhada{ border-top-style: dotted; border-color: var(--ink-3); border-top-width: 2px; }
+.legenda i.bola{ width: 9px; height: 9px; border: 1.5px solid var(--ink-2); border-radius: 50%; background: var(--ink-2); }
+.legenda i.bola.oca{ background: none; }
+
+.transport{ display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+.rotulo{
+  font-family: var(--cond);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: .07em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+}
+.rotulo b{ font-family: var(--mono); font-size: 13px; letter-spacing: 0; text-transform: none; color: var(--ink); }
+.dica{ margin: 0; flex: 1 1 260px; font-size: 13px; color: var(--ink-2); }
+.espaco{ flex: 1 1 0; }
+.nota{ margin: 0; font-size: 13px; color: var(--ink-2); max-width: 90ch; }
+.leitura{ margin: 0; padding: 4px 12px 0; font-size: 12.5px; color: var(--ink-2); min-height: 23px; }
+.leitura.rodape{ padding: 6px 12px 10px; min-height: 0; }
+.leitura b{ font-family: var(--mono); font-weight: 500; color: var(--ink); }
+
+button.ctl{
+  font-family: var(--cond);
+  font-size: 13.5px;
+  font-weight: 600;
+  letter-spacing: .03em;
+  padding: 8px 14px;
+  border: 1px solid var(--rule);
+  border-radius: var(--r);
+  background: var(--panel);
+  color: var(--ink);
+  cursor: pointer;
+}
+button.ctl:hover:not(:disabled){ border-color: var(--ink-3); }
+button.ctl.primary{ background: var(--marca); border-color: var(--marca); color: var(--paper); }
+button.ctl.primary:hover:not(:disabled){ filter: brightness(1.08); }
+button.ctl[aria-pressed="true"]{ background: var(--paper-2); border-color: var(--ajuste); }
+button.ctl:disabled{ opacity: .4; cursor: default; }
+
+/* ------------------------------- desenhos ------------------------------- */
+
+svg text{ font-family: var(--sans); font-size: 12px; fill: var(--ink); }
+svg text.num{ font-family: var(--mono); font-size: 11.5px; }
+svg text.fraco{ fill: var(--ink-2); }
+svg text.eixo{ font-family: var(--cond); font-size: 11px; font-weight: 600; letter-spacing: .06em; fill: var(--ink-3); }
+
+.grade line{ stroke: var(--grid); stroke-width: 1; }
+.moldura{ fill: none; stroke: var(--rule); }
+
+.ponto{ fill: var(--ink-2); stroke: var(--panel); stroke-width: 1; opacity: .8; }
+.ponto.fora{ fill: var(--panel); stroke: var(--ink-2); stroke-width: 1.25; opacity: .9; }
+.ponto.teste{ fill: none; stroke: var(--ink-3); stroke-width: 1; opacity: .7; }
+
+.arvore-antiga{ fill: none; stroke: var(--ink-3); stroke-width: 1; opacity: .5; }
+.arvore-vez{ fill: none; stroke: var(--ajuste); stroke-width: 1.75; stroke-linejoin: round; }
+.curva-media{ fill: none; stroke: var(--marca); stroke-width: 3; stroke-linejoin: round; }
+.halo{ fill: none; stroke: var(--panel); stroke-width: 6; stroke-linejoin: round; opacity: .85; }
+
+.sonda{ stroke: var(--ink); stroke-width: 1.25; stroke-dasharray: 5 4; }
+.alca{ fill: var(--ink); stroke: var(--panel); stroke-width: 2; cursor: ew-resize; }
+#plano, #erro, #residuos, #modelo{ touch-action: none; }
+#plano{ cursor: ew-resize; }
+#plano:focus-visible{ outline: 2px solid var(--marca); outline-offset: -2px; }
+
+.pingo{ fill: var(--ink-3); opacity: .55; }
+.pingo.vez{ fill: var(--ajuste); opacity: 1; stroke: var(--panel); stroke-width: 1.5; }
+.traco-media{ stroke: var(--marca); stroke-width: 3.5; stroke-linecap: round; }
+.faixa{ stroke: var(--ink-3); stroke-width: 1.25; }
+.outro-media{ stroke: var(--marca); stroke-width: 2.5; stroke-linecap: round; opacity: .55; }
+.outro-arvore{ fill: none; stroke: var(--ajuste); stroke-width: 1.5; }
+.legenda i.outro-m{ width: 0; height: 12px; border-top: 0; border-left: 2.5px solid var(--marca); opacity: .55; }
+.legenda i.outro-a{ width: 9px; height: 9px; border: 1.5px solid var(--ajuste); border-radius: 50%; }
+
+.linha-teste{ fill: none; stroke: var(--marca); stroke-width: 2.25; stroke-linejoin: round; }
+.linha-oob, .linha-treino{ fill: none; stroke: var(--ink); stroke-width: 1.75; stroke-dasharray: 6 4; stroke-linejoin: round; }
+.referencia{ stroke: var(--ink-3); stroke-width: 1.5; stroke-dasharray: 2 4; }
+.marca-b{ fill: var(--marca); stroke: var(--panel); stroke-width: 2; }
+.marca-oob{ fill: var(--ink); stroke: var(--panel); stroke-width: 2; }
+.minimo{ fill: none; stroke: var(--marca); stroke-width: 2; }
+.guia{ stroke: var(--ink-3); stroke-width: 1; }
+
+.barra{ fill: var(--marca); }
+.barra.fora{ fill: var(--ink-3); }
+
+.toco{ fill: none; stroke: var(--ajuste); stroke-width: 2; stroke-dasharray: 6 4; }
+.toco-encolhido{ fill: none; stroke: var(--ajuste); stroke-width: 3; }
+.corte{ stroke: var(--ajuste); stroke-width: 1.25; stroke-dasharray: 3 3; }
+.zero{ stroke: var(--ink-3); stroke-width: 1; }
+
+table.passos{
+  width: 100%;
+  border-collapse: collapse;
+  font-family: var(--mono);
+  font-size: 12.5px;
+  font-variant-numeric: tabular-nums;
+}
+table.passos th{
+  font-family: var(--cond);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+  text-align: right;
+  padding: 8px 12px 4px;
+}
+table.passos th, table.passos td:first-child{ white-space: nowrap; }
+table.passos td{ text-align: right; padding: 4px 12px; border-top: 1px solid var(--grid); }
+table.passos tr.proximo td{ color: var(--ajuste); }
+table.passos td.vazio{ text-align: left; color: var(--ink-2); font-family: var(--sans); }
+
+footer{
+  border-top: 1px solid var(--rule);
+  padding-top: 12px;
+  font-size: 13px;
+  color: var(--ink-2);
+  max-width: 110ch;
+}
+footer p{ margin: 0 0 6px; }
+footer strong{ color: var(--ink); }
+code{ font-family: var(--mono); font-size: .92em; }
+</style>
+</head>
+<body>
+<div class="app">
+  <header class="topbar">
+    <div>
+      <p class="eyebrow">Seções 13.1 e 13.2 · bagging</p>
+      <h1>A média de muitas árvores</h1>
+      <p class="sub">Cada árvore é ajustada numa amostra bootstrap dos 132 jogadores de treino e cresce sem limite; o bagging é a média delas. Acrescente uma árvore, depois dez, depois cem. Arraste a linha tracejada: para o mesmo jogador, cada árvore prevê um valor diferente, e a média delas muda cada vez menos a cada árvore que entra. “Outro conjunto de treino” sorteia outros 132 jogadores e mostra quanto a média muda de um conjunto para outro, ao lado de uma árvore só. Com um preditor só, os erros aqui são maiores que os da seção, que usa 19 colunas.</p>
+    </div>
+    <div class="relogio">
+      <span class="n" id="n-arvores">0</span>
+      <span class="u" id="u-arvores">árvores</span>
+      <span class="r">MSE de teste <b id="mse-teste">—</b></span>
+    </div>
+  </header>
+
+  <div class="transport">
+    <button class="ctl primary" id="btn-1">+1 árvore</button>
+    <button class="ctl" id="btn-10">+10</button>
+    <button class="ctl" id="btn-100">+100</button>
+    <button class="ctl" id="btn-recomecar">recomeçar</button>
+    <button class="ctl" id="btn-semente">outro sorteio</button>
+    <button class="ctl" id="btn-treino">outro conjunto de treino</button>
+    <span class="espaco"></span>
+    <span class="rotulo">árvore em destaque</span>
+    <button class="ctl" id="btn-anterior" aria-label="árvore anterior">←</button>
+    <span class="rotulo"><b id="qual-arvore">—</b></span>
+    <button class="ctl" id="btn-seguinte" aria-label="árvore seguinte">→</button>
+  </div>
+
+  <section class="stage">
+    <div class="coluna">
+      <div class="plate">
+        <p class="tag" id="tag-plano">os jogadores de treino e as árvores</p>
+        <p class="legenda">
+          <span><i class="media"></i>média das árvores (bagging)</span>
+          <span><i class="vez"></i>árvore em destaque</span>
+          <span><i class="outras"></i>outras árvores</span>
+          <span><i class="bola"></i>jogador na amostra da árvore em destaque (maior: sorteado mais vezes)</span>
+          <span><i class="bola oca"></i>jogador fora dela</span>
+          <span><i class="tracejada"></i>jogador escolhido (arraste)</span>
+        </p>
+        <svg id="plano" tabindex="0" role="img" aria-label="Os 132 jogadores de treino, com as vezes ao bastão na carreira no eixo horizontal e o logaritmo do salário no vertical, a curva de cada árvore e a média delas"></svg>
+      </div>
+      <p class="nota">A árvore sem limite tem uma folha para cada valor de vezes ao bastão que entrou na amostra: ela passa por todos os jogadores sorteados e ignora os que ficaram de fora. O desenho mostra, em cinza, as 15 árvores mais recentes; a média usa todas.</p>
+    </div>
+
+    <div class="coluna">
+      <div class="plate">
+        <p class="tag" id="tag-faixa">a previsão de cada árvore no jogador escolhido</p>
+        <p class="leitura" id="leitura-faixa"></p>
+        <svg id="faixa" role="img" aria-label="Um ponto por árvore, na altura da previsão dela para o jogador escolhido, e um traço na média"></svg>
+        <p class="legenda" id="legenda-outros" hidden>
+          <span><i class="outro-m"></i>média das árvores em outro conjunto de treino</span>
+          <span><i class="outro-a"></i>a primeira árvore desse conjunto</span>
+        </p>
+        <p class="leitura rodape" id="leitura-outros">Aqui o treino é um só, e o que muda de uma árvore para outra é a amostra bootstrap. Para ver quanto a média muda de um conjunto de treino para outro, a medição da seção 13.1, clique em “outro conjunto de treino”.</p>
+      </div>
+      <div class="plate">
+        <p class="tag" id="tag-erro">erro contra o número de árvores</p>
+        <p class="legenda">
+          <span><i class="media"></i>teste (131 jogadores)</span>
+          <span><i class="tracejada"></i>out-of-bag (treino)</span>
+          <span><i class="pontilhada"></i>teste de uma árvore só, ajustada nos 132 de treino</span>
+        </p>
+        <svg id="erro" role="img" aria-label="MSE de teste e erro out-of-bag do bagging contra o número de árvores, em escala logarítmica"></svg>
+        <p class="leitura rodape">Out-of-bag: cada jogador de treino é previsto só pelas árvores que não o sortearam. Esse erro é medido nos 132 jogadores de treino, e o de teste, em outros 131: são jogadores diferentes, e as duas curvas não precisam coincidir.</p>
+      </div>
+      <div class="plate">
+        <p class="tag alto" id="tag-amostra">a amostra bootstrap da árvore em destaque</p>
+        <svg id="amostra" role="img" aria-label="Quantos jogadores de treino aparecem 0, 1, 2, 3 e 4 ou mais vezes na amostra da árvore em destaque"></svg>
+      </div>
+    </div>
+  </section>
+
+  <footer>
+    <p><strong>O dado.</strong> Os 263 jogadores de <code>Hitters</code> com salário registrado, de início na divisão das seções 13.1 e 13.4: 132 de treino e 131 de teste. “Outro conjunto de treino” sorteia outros 132 dos 263 para o treino, deixa os demais no teste e refaz o bagging com o mesmo número de árvores; os conjuntos se sobrepõem, como os 100 da seção 13.1, e servem para comparar a média com uma árvore só, não como a variância exata de cada uma. A resposta é o logaritmo do salário de 1987, em milhares de dólares. Para a árvore caber num gráfico, o preditor aqui é um só, <code>vezes_ao_bastao_carreira</code>, com o eixo em escala logarítmica; a seção usa as 19 colunas, e por isso os erros dela são outros.</p>
+    <p><strong>As contas.</strong> Uma amostra bootstrap sorteia 132 jogadores entre os 132, com reposição. A árvore de cada amostra é a do <code>DecisionTreeRegressor</code> sem limite: uma folha por valor distinto do preditor, com os cortes nos pontos médios. O bagging prevê com a média das árvores. O erro out-of-bag prevê cada jogador de treino só com as árvores em cuja amostra ele não entrou. A linha pontilhada é a árvore sem limite ajustada uma vez, nos 132 jogadores.</p>
+    <p><strong>O sorteio.</strong> As amostras saem de um gerador da própria página, não do <code>numpy</code>: os números não repetem os da seção dígito a dígito, mas o comportamento é o mesmo. “Outro sorteio” troca as amostras bootstrap e mantém o conjunto de treino; “recomeçar” volta ao treino da seção, sem árvores.</p>
+  </footer>
+</div>
+
+<script type="application/json" id="dados">{"coluna":"vezes_ao_bastao_carreira","vezes":[3449,1624,5628,396,4408,214,509,341,5206,4631,1876,1512,1941,3231,8068,479,727,413,426,1924,8424,2695,1931,2331,2308,5201,591,1646,1309,6207,350,232,694,999,932,756,2648,6521,226,4478,5150,950,1335,3742,3210,416,6631,1115,926,7546,514,815,8247,5347,7761,6661,3651,1258,2174,1064,6311,2223,5017,3828,6727,428,5409,1350,1457,1810,317,592,2133,7287,711,2130,5624,1350,6100,2129,215,6675,1506,6063,985,2862,793,6840,3573,2140,6986,8716,1469,1516,5562,1649,3118,2358,3754,2954,1185,7186,618,639,524,2325,4338,440,696,1447,4405,7472,2641,2128,2482,3871,4040,288,278,2964,2744,670,4618,1437,3053,196,7127,3910,630,2020,1354,450,5590,948,3327,1689,181,2723,6126,6090,2816,3919,1789,342,3082,3423,911,1928,279,3006,667,4479,4291,805,3558,4273,5829,682,4704,216,1696,2051,216,969,3400,1416,2815,209,344,1928,1085,638,41,1968,498,580,822,3015,1644,1258,1038,978,4739,1493,1556,5885,540,4139,14053,1257,1966,354,4933,1394,2796,7058,652,3949,2331,4071,9528,1770,3967,912,5134,2288,3368,312,3358,239,961,3146,1089,653,382,5348,549,2682,7037,1750,290,730,680,831,1619,8759,711,507,1716,3070,3181,2658,2765,1518,1897,888,2364,1337,3162,927,19,854,1136,4061,2872,1399,1546,4086,8396,1359,3031,1236,2728,2268,1775,2778,408,593,2703,5511,1700,3198,4908],"salario":[475.0,480.0,500.0,91.5,750.0,70.0,100.0,75.0,1100.0,517.143,512.5,550.0,700.0,240.0,775.0,175.0,135.0,100.0,115.0,600.0,776.6669999999999,765.0,708.3330000000001,750.0,625.0,900.0,110.0,612.5,300.0,850.0,90.0,67.5,180.0,305.0,215.0,247.5,815.0,875.0,70.0,1200.0,675.0,415.0,340.0,416.667,1350.0,90.0,275.0,230.0,225.0,950.0,75.0,105.0,320.0,850.0,535.0,933.333,850.0,210.0,325.0,275.0,450.0,1975.0,1900.0,600.0,1041.667,110.0,260.0,475.0,431.5,1220.0,70.0,145.0,595.0,1861.46,300.0,490.0,2460.0,375.0,750.0,1175.0,70.0,1500.0,385.0,1925.571,215.0,900.0,155.0,700.0,535.0,362.5,733.3330000000001,200.0,400.0,400.0,737.5,500.0,600.0,662.5,950.0,750.0,297.5,325.0,87.5,175.0,90.0,1237.5,430.0,100.0,165.0,250.0,1300.0,773.3330000000001,1008.333,275.0,775.0,850.0,365.0,95.0,110.0,100.0,277.5,80.0,600.0,200.0,657.0,75.0,2412.5,250.0,155.0,640.0,300.0,110.0,825.0,195.0,450.0,630.0,86.5,1300.0,1000.0,1800.0,1310.0,737.5,625.0,125.0,1043.333,725.0,300.0,365.0,75.0,1183.333,202.5,225.0,525.0,265.0,787.5,800.0,587.5,145.0,420.0,75.0,575.0,780.0,90.0,150.0,700.0,550.0,650.0,68.0,100.0,670.0,175.0,137.0,2127.333,875.0,120.0,140.0,210.0,800.0,240.0,350.0,175.0,200.0,1940.0,700.0,750.0,450.0,172.0,1260.0,750.0,190.0,580.0,130.0,450.0,300.0,250.0,1050.0,215.0,400.0,560.0,1670.0,487.5,425.0,500.0,250.0,400.0,450.0,750.0,70.0,875.0,190.0,191.0,740.0,250.0,140.0,97.5,740.0,140.0,341.667,1000.0,100.0,90.0,200.0,135.0,155.0,475.0,1450.0,150.0,105.0,350.0,90.0,530.0,341.667,940.0,350.0,326.66700000000003,250.0,740.0,425.0,925.0,185.0,920.0,286.66700000000003,245.0,235.0,1150.0,160.0,425.0,900.0,500.0,277.5,750.0,160.0,1300.0,525.0,550.0,1600.0,120.0,165.0,700.0,875.0,385.0,960.0,1000.0],"treino":[95,239,255,126,93,108,246,236,223,26,228,235,132,220,248,218,22,149,72,76,138,46,54,211,71,244,2,28,262,9,69,150,237,153,97,102,57,80,148,213,112,0,221,207,245,162,91,114,201,116,192,18,185,227,43,179,105,157,20,183,182,121,99,84,59,58,156,259,195,231,70,198,170,60,175,107,53,234,181,68,115,203,165,44,65,196,4,56,25,79,216,224,217,187,27,110,160,242,173,73,109,123,134,212,208,178,214,146,96,191,119,158,161,163,100,190,35,89,82,13,204,104,117,128,74,118,141,49,130,241,253,155],"teste":[87,122,11,48,52,205,133,258,16,135,34,166,238,247,98,83,131,3,164,154,159,77,219,184,202,31,194,260,7,171,240,243,251,85,210,230,261,6,24,86,21,42,92,127,229,180,136,177,125,256,232,50,78,38,143,64,12,188,225,32,174,29,23,90,139,151,63,193,51,75,206,142,111,168,10,144,152,250,61,36,55,1,167,37,41,226,199,106,66,94,254,145,124,257,222,249,147,101,215,5,252,200,137,233,14,19,47,62,176,120,8,88,169,40,140,189,45,197,33,172,15,67,81,186,129,209,30,39,103,17,113]}</script>
+
+<script id="nucleo">
+"use strict";
+
+/* ==================================================================== *
+ * O núcleo — as contas do bagging, sem nada de tela
+ *
+ * São as contas das seções 13.1 e 13.2 com um preditor só. A árvore sem
+ * limite, com uma coluna, tem uma folha por valor distinto do preditor na
+ * amostra, cortes nos pontos médios entre valores vizinhos e, em cada folha,
+ * a média da resposta (x <= corte vai para a esquerda, como no
+ * scikit-learn). tests/test_apoio.py roda este bloco no node e compara as
+ * previsões, árvore a árvore, com o DecisionTreeRegressor ajustado nas
+ * mesmas amostras.
+ *
+ * O sorteio é um mulberry32 com semente: não é o gerador do numpy, então
+ * as amostras não são as da seção.
+ * ==================================================================== */
+
+const MAX_ARVORES = 500;
+
+/* `divisao` é {treino, teste}, as posições dos jogadores de cada lado; sem
+ * ela, vale a divisão das seções, que vem nos dados. */
+function preparar(dados, divisao) {
+  const d = divisao || dados;
+  const lado = posicoes => ({
+    x: posicoes.map(i => dados.vezes[i]),
+    y: posicoes.map(i => Math.log(dados.salario[i])),
+  });
+  return {treino: lado(d.treino), teste: lado(d.teste)};
+}
+
+/* Outro conjunto de treino: nTreino jogadores sorteados sem reposição entre
+ * todos, e os demais no teste (um embaralhamento de Fisher-Yates). */
+function sortearDivisao(rng, total, nTreino) {
+  const posicoes = Array.from({length: total}, (_, i) => i);
+  for (let i = total - 1; i > 0; i--) {
+    const j = Math.floor(rng() * (i + 1));
+    [posicoes[i], posicoes[j]] = [posicoes[j], posicoes[i]];
+  }
+  return {treino: posicoes.slice(0, nTreino), teste: posicoes.slice(nTreino)};
+}
+
+function gerador(semente) {
+  let a = semente >>> 0;
+  return function () {
+    a = (a + 0x6D2B79F5) | 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+/* n posições sorteadas entre 0 e n − 1, com reposição. */
+function amostraBootstrap(rng, n) {
+  const amostra = [];
+  for (let k = 0; k < n; k++) amostra.push(Math.floor(rng() * n));
+  return amostra;
+}
+
+/* A árvore sem limite nas linhas dadas (com as repetições). */
+function ajustarArvore(x, y, linhas) {
+  const soma = new Map();
+  const conta = new Map();
+  for (const i of linhas) {
+    soma.set(x[i], (soma.get(x[i]) || 0) + y[i]);
+    conta.set(x[i], (conta.get(x[i]) || 0) + 1);
+  }
+  const valoresDeX = [...soma.keys()].sort((a, b) => a - b);
+  const cortes = [];
+  for (let k = 0; k + 1 < valoresDeX.length; k++) {
+    cortes.push((valoresDeX[k] + valoresDeX[k + 1]) / 2);
+  }
+  return {cortes, valores: valoresDeX.map(v => soma.get(v) / conta.get(v))};
+}
+
+function prever(arvore, x) {
+  let lo = 0;
+  let hi = arvore.cortes.length;
+  while (lo < hi) {
+    const meio = (lo + hi) >> 1;
+    if (x <= arvore.cortes[meio]) hi = meio; else lo = meio + 1;
+  }
+  return arvore.valores[lo];
+}
+
+function mse(y, previsto) {
+  let soma = 0;
+  for (let i = 0; i < y.length; i++) soma += (y[i] - previsto[i]) ** 2;
+  return soma / y.length;
+}
+
+/* Quantas vezes cada posição de 0 a n − 1 aparece na amostra. */
+function vezesNaAmostra(amostra, n) {
+  const vezes = new Array(n).fill(0);
+  for (const i of amostra) vezes[i] += 1;
+  return vezes;
+}
+
+function novoBagging(treino, teste, semente) {
+  const n = treino.x.length;
+  return {
+    treino, teste, rng: gerador(semente),
+    amostras: [], arvores: [],
+    somaTeste: new Array(teste.x.length).fill(0),
+    somaOob: new Array(n).fill(0),
+    contaOob: new Array(n).fill(0),
+    curvaTeste: [],   // MSE de teste da média das b primeiras árvores
+    curvaOob: [],     // erro out-of-bag com as b primeiras árvores (null sem previsão)
+    fora: [],         // fração dos jogadores de treino fora de cada amostra
+  };
+}
+
+/* Sorteia mais uma amostra, ajusta a árvore dela e atualiza as curvas. */
+function acrescentar(bag) {
+  const {treino, teste} = bag;
+  const n = treino.x.length;
+  const amostra = amostraBootstrap(bag.rng, n);
+  const arvore = ajustarArvore(treino.x, treino.y, amostra);
+  bag.amostras.push(amostra);
+  bag.arvores.push(arvore);
+  const B = bag.arvores.length;
+
+  for (let j = 0; j < teste.x.length; j++) bag.somaTeste[j] += prever(arvore, teste.x[j]);
+  bag.curvaTeste.push(mse(teste.y, bag.somaTeste.map(s => s / B)));
+
+  const vezes = vezesNaAmostra(amostra, n);
+  let fora = 0;
+  for (let i = 0; i < n; i++) {
+    if (vezes[i] > 0) continue;
+    fora += 1;
+    bag.somaOob[i] += prever(arvore, treino.x[i]);
+    bag.contaOob[i] += 1;
+  }
+  bag.fora.push(fora / n);
+
+  let soma = 0;
+  let com = 0;
+  for (let i = 0; i < n; i++) {
+    if (bag.contaOob[i] === 0) continue;
+    soma += (treino.y[i] - bag.somaOob[i] / bag.contaOob[i]) ** 2;
+    com += 1;
+  }
+  bag.curvaOob.push(com > 0 ? soma / com : null);
+  return arvore;
+}
+
+/* O MSE de teste de uma árvore sem limite ajustada nos jogadores de treino, sem sorteio. */
+function erroDeUmaArvore(treino, teste) {
+  const arvore = ajustarArvore(treino.x, treino.y, treino.x.map((_, i) => i));
+  return mse(teste.y, teste.x.map(v => prever(arvore, v)));
+}
+
+const FORMATOS = new Map();
+function fmt(x, casas) {
+  if (!FORMATOS.has(casas)) {
+    FORMATOS.set(casas, new Intl.NumberFormat("pt-BR", {
+      minimumFractionDigits: casas, maximumFractionDigits: casas,
+    }));
+  }
+  return FORMATOS.get(casas).format(x);
+}
+</script>
+
+<script>
+"use strict";
+
+/* ==================================================================== *
+ * A tela — só desenha e responde ao mouse; toda conta vem do núcleo.
+ * ==================================================================== */
+
+const DADOS = JSON.parse(document.getElementById("dados").textContent);
+let D = preparar(DADOS);
+const N = D.treino.x.length;
+const X_MIN = 15, X_MAX = 16000;
+const Y_MIN = 4, Y_MAX = 8;
+const MARCAS_X = [20, 50, 100, 200, 500, 1000, 2000, 5000, 10000];
+let ERRO_DE_UMA = erroDeUmaArvore(D.treino, D.teste);
+const MAX_OUTROS = 40;
+const FORA_PELA_FORMULA = (1 - 1 / N) ** N;
+const CINZAS = 15;
+
+/* A grade em que a média das árvores é desenhada: pontos igualmente
+ * espaçados no eixo logarítmico. */
+const GRADE = Array.from({length: 1600}, (_, g) => X_MIN * (X_MAX / X_MIN) ** (g / 1599));
+
+const S = {
+  semente: 13,
+  bag: null,
+  somaGrade: null,   // a soma das árvores em cada ponto da grade
+  outros: [],        // o bagging de cada conjunto de treino anterior, com o mesmo B
+  rngTreino: null,   // o gerador que sorteia os conjuntos de treino
+  conjunto: 1,       // 1 é o treino da seção
+  destaque: -1,      // o índice da árvore em destaque
+  x0: 1452,          // o jogador escolhido: vezes ao bastão
+};
+
+const $ = id => document.getElementById(id);
+const NS = "http://www.w3.org/2000/svg";
+function el(tag, attrs, pai) {
+  const e = document.createElementNS(NS, tag);
+  for (const [k, v] of Object.entries(attrs || {})) e.setAttribute(k, v);
+  if (pai) pai.appendChild(e);
+  return e;
+}
+function texto(conteudo, attrs, pai) {
+  const t = el("text", attrs, pai);
+  t.textContent = conteudo;
+  return t;
+}
+
+function novoBag() {
+  S.bag = novoBagging(D.treino, D.teste, S.semente);
+  S.somaGrade = new Array(GRADE.length).fill(0);
+  S.destaque = -1;
+}
+
+/* Volta ao treino da seção, sem árvores e sem conjuntos anteriores. */
+function recomecar() {
+  D = preparar(DADOS);
+  ERRO_DE_UMA = erroDeUmaArvore(D.treino, D.teste);
+  S.outros = [];
+  S.rngTreino = gerador(2024);
+  S.conjunto = 1;
+  novoBag();
+}
+
+function mais(quantas) {
+  for (let k = 0; k < quantas && S.bag.arvores.length < MAX_ARVORES; k++) {
+    const arvore = acrescentar(S.bag);
+    for (let g = 0; g < GRADE.length; g++) S.somaGrade[g] += prever(arvore, GRADE[g]);
+    for (const outro of S.outros) acrescentar(outro);   // os anteriores acompanham o B
+  }
+  S.destaque = S.bag.arvores.length - 1;
+}
+
+/* Guarda o bagging atual, sorteia outros 132 jogadores para o treino e
+ * refaz o bagging neles com o mesmo número de árvores. */
+function outroTreino() {
+  const B = S.bag.arvores.length;
+  if (B > 0) {
+    S.outros.push(S.bag);
+    if (S.outros.length > MAX_OUTROS) S.outros.shift();
+  }
+  D = preparar(DADOS, sortearDivisao(S.rngTreino, DADOS.vezes.length, N));
+  ERRO_DE_UMA = erroDeUmaArvore(D.treino, D.teste);
+  S.conjunto += 1;
+  novoBag();
+  const guardados = S.outros;
+  S.outros = [];              // os anteriores já têm B árvores
+  mais(B);
+  S.outros = guardados;
+}
+
+/* Espalhamento vertical fixo dos pontos da faixa, um por árvore. */
+function espalha(b) {
+  const s = Math.sin((b + 1) * 12.9898) * 43758.5453;
+  return s - Math.floor(s) - 0.5;
+}
+
+/* ------------------------------- o plano ------------------------------- */
+
+const MP = {esq: 52, dir: 16, topo: 12, base: 40};
+
+function escalasDoPlano() {
+  const svg = $("plano");
+  const W = svg.clientWidth || 720;
+  const H = 400;
+  const lx = v => Math.log(v / X_MIN) / Math.log(X_MAX / X_MIN);
+  const sx = v => MP.esq + lx(v) * (W - MP.esq - MP.dir);
+  const sy = v => H - MP.base - (v - Y_MIN) / (Y_MAX - Y_MIN) * (H - MP.topo - MP.base);
+  const ix = p => X_MIN * (X_MAX / X_MIN) ** ((p - MP.esq) / (W - MP.esq - MP.dir));
+  return {W, H, sx, sy, ix};
+}
+
+function caminhoDaArvore(arvore, sx, sy) {
+  let d = `M${sx(X_MIN).toFixed(1)},${sy(arvore.valores[0]).toFixed(1)}`;
+  for (let k = 0; k < arvore.cortes.length; k++) {
+    d += `H${sx(arvore.cortes[k]).toFixed(1)}V${sy(arvore.valores[k + 1]).toFixed(1)}`;
+  }
+  return d + `H${sx(X_MAX).toFixed(1)}`;
+}
+
+function desenhaPlano() {
+  const svg = $("plano");
+  svg.replaceChildren();
+  const {W, H, sx, sy} = escalasDoPlano();
+  svg.setAttribute("viewBox", `0 0 ${W} ${H}`);
+  svg.setAttribute("height", H);
+  const B = S.bag.arvores.length;
+
+  const grade = el("g", {class: "grade"}, svg);
+  for (const v of MARCAS_X) {
+    el("line", {x1: sx(v), x2: sx(v), y1: sy(Y_MIN), y2: sy(Y_MAX)}, grade);
+    texto(fmt(v, 0), {x: sx(v), y: H - MP.base + 16, "text-anchor": "middle", class: "num fraco"}, svg);
+  }
+  for (let v = Y_MIN; v <= Y_MAX; v++) {
+    el("line", {x1: sx(X_MIN), x2: sx(X_MAX), y1: sy(v), y2: sy(v)}, grade);
+    texto(String(v), {x: MP.esq - 8, y: sy(v) + 4, "text-anchor": "end", class: "num fraco"}, svg);
+  }
+  texto("vezes ao bastão na carreira (escala log)", {x: (MP.esq + W - MP.dir) / 2, y: H - 6, "text-anchor": "middle", class: "eixo"}, svg);
+  const meioY = (MP.topo + H - MP.base) / 2;
+  texto("log do salário", {x: 14, y: meioY, "text-anchor": "middle", class: "eixo", transform: `rotate(-90 14 ${meioY})`}, svg);
+  el("rect", {class: "moldura", x: sx(X_MIN), y: sy(Y_MAX), width: sx(X_MAX) - sx(X_MIN), height: sy(Y_MIN) - sy(Y_MAX)}, svg);
+
+  // as outras árvores, em cinza
+  const antigas = el("g", {}, svg);
+  for (let b = Math.max(0, B - CINZAS); b < B; b++) {
+    if (b === S.destaque) continue;
+    el("path", {class: "arvore-antiga", d: caminhoDaArvore(S.bag.arvores[b], sx, sy)}, antigas);
+  }
+
+  // os jogadores de treino
+  const vezes = S.destaque >= 0 ? vezesNaAmostra(S.bag.amostras[S.destaque], N) : null;
+  const pontos = el("g", {}, svg);
+  for (let i = 0; i < N; i++) {
+    const k = vezes ? vezes[i] : 1;
+    const c = el("circle", {
+      class: "ponto" + (k === 0 ? " fora" : ""),
+      cx: sx(D.treino.x[i]), cy: sy(D.treino.y[i]),
+      r: k === 0 ? 3.5 : Math.min(3.2 + (k - 1) * 1.5, 8),
+    }, pontos);
+    const naAmostra = vezes ? (k === 0 ? " · fora da amostra" : ` · ${k}× na amostra`) : "";
+    el("title", {}, c).textContent =
+      `${fmt(D.treino.x[i], 0)} vezes ao bastão · salário ${fmt(Math.exp(D.treino.y[i]), 1)} mil US$ (log ${fmt(D.treino.y[i], 2)})${naAmostra}`;
+  }
+
+  // a média e, por cima dela, a árvore em destaque
+  if (B > 0) {
+    const pts = GRADE.map((v, g) => `${sx(v).toFixed(1)},${sy(S.somaGrade[g] / B).toFixed(1)}`).join(" ");
+    el("polyline", {class: "halo", points: pts}, svg);
+    el("polyline", {class: "curva-media", points: pts}, svg);
+  } else {
+    texto("Nenhuma árvore ainda: clique em “+1 árvore”.", {x: MP.esq + 12, y: MP.topo + 22, class: "fraco"}, svg);
+  }
+  if (S.destaque >= 0) {
+    el("path", {class: "arvore-vez", d: caminhoDaArvore(S.bag.arvores[S.destaque], sx, sy)}, svg);
+  }
+
+  el("g", {id: "sonda"}, svg);
+  desenhaSonda();
+}
+
+function desenhaSonda() {
+  const g = $("sonda");
+  if (!g) return;
+  g.replaceChildren();
+  const {sx, sy} = escalasDoPlano();
+  el("line", {class: "sonda", x1: sx(S.x0), x2: sx(S.x0), y1: sy(Y_MAX), y2: sy(Y_MIN)}, g);
+  el("circle", {class: "alca", cx: sx(S.x0), cy: sy(Y_MIN), r: 7}, g);
+}
+
+/* ------------------------- a faixa das previsões ------------------------ */
+
+function desenhaFaixa() {
+  const svg = $("faixa");
+  svg.replaceChildren();
+  const W = svg.clientWidth || 560;
+  const H = 178;
+  svg.setAttribute("viewBox", `0 0 ${W} ${H}`);
+  svg.setAttribute("height", H);
+  const esq = 24, dir = 24, eixoY = H - 34, centro = 62, linhaOutros = 122;
+  const sx = v => esq + (v - Y_MIN) / (Y_MAX - Y_MIN) * (W - esq - dir);
+  const B = S.bag.arvores.length;
+
+  el("line", {class: "faixa", x1: sx(Y_MIN), x2: sx(Y_MAX), y1: eixoY, y2: eixoY}, svg);
+  for (let v = Y_MIN; v <= Y_MAX; v++) {
+    el("line", {class: "faixa", x1: sx(v), x2: sx(v), y1: eixoY, y2: eixoY + 5}, svg);
+    texto(String(v), {x: sx(v), y: eixoY + 18, "text-anchor": "middle", class: "num fraco"}, svg);
+  }
+  texto("log do salário previsto", {x: (esq + W - dir) / 2, y: H - 2, "text-anchor": "middle", class: "eixo"}, svg);
+
+  $("tag-faixa").innerHTML = `a previsão de cada árvore · jogador com <b>${fmt(S.x0, 0)}</b> vezes ao bastão`;
+  $("leitura-faixa").textContent = "";
+  if (S.outros.length === 0 || B === 0) {
+    $("legenda-outros").hidden = true;
+    $("leitura-outros").textContent = "Aqui o treino é um só, e o que muda de uma árvore para outra é a amostra bootstrap. Para ver quanto a média muda de um conjunto de treino para outro, a medição da seção 13.1, clique em “outro conjunto de treino”.";
+  }
+  if (B === 0) {
+    texto("Um ponto por árvore, quando houver árvores.", {x: W / 2, y: centro, "text-anchor": "middle", class: "fraco"}, svg);
+    return;
+  }
+
+  const previsoes = S.bag.arvores.map(a => prever(a, S.x0));
+  let soma = 0, menor = Infinity, maior = -Infinity;
+  for (const p of previsoes) { soma += p; menor = Math.min(menor, p); maior = Math.max(maior, p); }
+  const media = soma / B;
+
+  const pingos = el("g", {}, svg);
+  previsoes.forEach((p, b) => {
+    if (b === S.destaque) return;
+    el("circle", {class: "pingo", cx: sx(p), cy: centro + espalha(b) * 44, r: 3.5}, pingos);
+  });
+  el("line", {class: "traco-media", x1: sx(media), x2: sx(media), y1: centro - 34, y2: centro + 34}, svg);
+  if (S.destaque >= 0) {
+    el("circle", {class: "pingo vez", cx: sx(previsoes[S.destaque]), cy: centro + espalha(S.destaque) * 44, r: 5.5}, svg);
+  }
+  const rotulo = texto(`média ${fmt(media, 2)}`, {x: sx(media) + 8, y: 16, class: "num"}, svg);
+  if (sx(media) + 8 + rotulo.getComputedTextLength() > W - 6) {
+    rotulo.setAttribute("x", sx(media) - 8);
+    rotulo.setAttribute("text-anchor", "end");
+  }
+  $("leitura-faixa").innerHTML = B === 1
+    ? `uma árvore só: <b>${fmt(media, 2)}</b>`
+    : `as ${B} árvores preveem de <b>${fmt(menor, 2)}</b> a <b>${fmt(maior, 2)}</b>; a média delas é <b>${fmt(media, 2)}</b>`;
+
+  // os conjuntos de treino anteriores: a média das árvores e a primeira árvore de cada um
+  $("legenda-outros").hidden = S.outros.length === 0;
+  if (S.outros.length === 0) return;
+  const medias = [media];
+  const primeiras = [previsoes[0]];
+  for (const outro of S.outros) {
+    let s = 0;
+    for (const a of outro.arvores) s += prever(a, S.x0);
+    medias.push(s / outro.arvores.length);
+    primeiras.push(prever(outro.arvores[0], S.x0));
+  }
+  const marcas = el("g", {}, svg);
+  for (let k = 1; k < medias.length; k++) {
+    el("circle", {class: "outro-arvore", cx: sx(primeiras[k]), cy: linhaOutros, r: 3.5}, marcas);
+  }
+  for (let k = 1; k < medias.length; k++) {
+    el("line", {class: "outro-media", x1: sx(medias[k]), x2: sx(medias[k]), y1: linhaOutros - 9, y2: linhaOutros + 9}, marcas);
+  }
+  const n = medias.length;
+  $("leitura-outros").innerHTML = `Em ${n} conjuntos de treino, contando este: a média das ${B === 1 ? "árvores (uma só)" : B + " árvores"} foi de ` +
+    `<b>${fmt(Math.min(...medias), 2)}</b> a <b>${fmt(Math.max(...medias), 2)}</b>; a primeira árvore de cada um, de ` +
+    `<b>${fmt(Math.min(...primeiras), 2)}</b> a <b>${fmt(Math.max(...primeiras), 2)}</b>.`;
+}
+
+/* ------------------------------- o erro -------------------------------- */
+
+const ME = {esq: 52, dir: 16, topo: 14, base: 38};
+const ERRO_MIN = 0.3, ERRO_MAX = 1.0;
+let hoverB = null;
+
+function escalasDoErro() {
+  const svg = $("erro");
+  const W = svg.clientWidth || 560;
+  const H = 240;
+  const sx = b => ME.esq + Math.log(b) / Math.log(MAX_ARVORES) * (W - ME.esq - ME.dir);
+  const sy = v => H - ME.base - (Math.min(Math.max(v, ERRO_MIN), ERRO_MAX) - ERRO_MIN) / (ERRO_MAX - ERRO_MIN) * (H - ME.topo - ME.base);
+  const ib = p => Math.round(MAX_ARVORES ** ((p - ME.esq) / (W - ME.esq - ME.dir)));
+  return {W, H, sx, sy, ib};
+}
+
+function desenhaErro() {
+  const svg = $("erro");
+  svg.replaceChildren();
+  const {W, H, sx, sy} = escalasDoErro();
+  svg.setAttribute("viewBox", `0 0 ${W} ${H}`);
+  svg.setAttribute("height", H);
+  const B = S.bag.arvores.length;
+
+  const grade = el("g", {class: "grade"}, svg);
+  for (const b of [1, 2, 5, 10, 20, 50, 100, 200, 500]) {
+    el("line", {x1: sx(b), x2: sx(b), y1: ME.topo, y2: H - ME.base}, grade);
+    texto(String(b), {x: sx(b), y: H - ME.base + 16, "text-anchor": "middle", class: "num fraco"}, svg);
+  }
+  for (let v = ERRO_MIN; v <= ERRO_MAX + 1e-9; v += 0.1) {
+    el("line", {x1: ME.esq, x2: W - ME.dir, y1: sy(v), y2: sy(v)}, grade);
+    texto(fmt(v, 1), {x: ME.esq - 8, y: sy(v) + 4, "text-anchor": "end", class: "num fraco"}, svg);
+  }
+  texto("número de árvores B (escala log)", {x: (ME.esq + W - ME.dir) / 2, y: H - 4, "text-anchor": "middle", class: "eixo"}, svg);
+  const meioY = (ME.topo + H - ME.base) / 2;
+  texto("MSE", {x: 14, y: meioY, "text-anchor": "middle", class: "eixo", transform: `rotate(-90 14 ${meioY})`}, svg);
+
+  el("line", {class: "referencia", x1: ME.esq, x2: W - ME.dir, y1: sy(ERRO_DE_UMA), y2: sy(ERRO_DE_UMA)}, svg);
+  texto(`uma árvore: ${fmt(ERRO_DE_UMA, 3)}`, {x: W - ME.dir - 4, y: sy(ERRO_DE_UMA) - 6, "text-anchor": "end", class: "num fraco"}, svg);
+
+  let leitura = "erro contra o número de árvores";
+  if (B > 0) {
+    const pontosDe = curva => curva
+      .map((v, k) => (v === null ? null : `${sx(k + 1).toFixed(1)},${sy(v).toFixed(1)}`))
+      .filter(p => p !== null).join(" ");
+    el("polyline", {class: "linha-oob", points: pontosDe(S.bag.curvaOob)}, svg);
+    el("polyline", {class: "linha-teste", points: pontosDe(S.bag.curvaTeste)}, svg);
+    const b = hoverB === null ? B : Math.min(Math.max(hoverB, 1), B);
+    const teste = S.bag.curvaTeste[b - 1];
+    const oob = S.bag.curvaOob[b - 1];
+    if (hoverB !== null) el("line", {class: "guia", x1: sx(b), x2: sx(b), y1: ME.topo, y2: H - ME.base}, svg);
+    if (oob !== null) el("circle", {class: "marca-oob", cx: sx(b), cy: sy(oob), r: 4.5}, svg);
+    el("circle", {class: "marca-b", cx: sx(b), cy: sy(teste), r: 5}, svg);
+    leitura = `B = <b>${b}</b> · teste <b>${fmt(teste, 3)}</b> · out-of-bag <b>${oob === null ? "—" : fmt(oob, 3)}</b>`;
+  }
+  $("tag-erro").innerHTML = leitura;
+}
+
+/* ------------------------------ a amostra ------------------------------ */
+
+function desenhaAmostra() {
+  const svg = $("amostra");
+  svg.replaceChildren();
+  const W = svg.clientWidth || 560;
+  const H = 132;
+  svg.setAttribute("viewBox", `0 0 ${W} ${H}`);
+  svg.setAttribute("height", H);
+  if (S.destaque < 0) {
+    $("tag-amostra").textContent = "a amostra bootstrap da árvore em destaque";
+    texto("Cada árvore sorteia 132 jogadores entre os 132, com reposição.", {x: W / 2, y: H / 2, "text-anchor": "middle", class: "fraco"}, svg);
+    return;
+  }
+  const vezes = vezesNaAmostra(S.bag.amostras[S.destaque], N);
+  const contagem = [0, 0, 0, 0, 0];
+  for (const k of vezes) contagem[Math.min(k, 4)] += 1;
+  const rotulos = ["0", "1", "2", "3", "4+"];
+  const base = H - 34, topo = 22, passo = 46, x0 = 28;
+  const maior = Math.max(...contagem, 60);
+  contagem.forEach((c, k) => {
+    const h = c / maior * (base - topo);
+    const x = x0 + k * passo;
+    el("rect", {class: "barra" + (k === 0 ? " fora" : ""), x, y: base - h, width: 30, height: Math.max(h, 0.5), rx: 2}, svg);
+    texto(String(c), {x: x + 15, y: base - h - 5, "text-anchor": "middle", class: "num"}, svg);
+    texto(rotulos[k], {x: x + 15, y: base + 15, "text-anchor": "middle", class: "num fraco"}, svg);
+  });
+  texto("vezes que o jogador aparece", {x: x0 + 2.5 * passo - 8, y: H - 3, "text-anchor": "middle", class: "eixo"}, svg);
+
+  const tx = x0 + 5 * passo + 18;
+  const fora = contagem[0];
+  let somaFora = 0;
+  for (const f of S.bag.fora) somaFora += f;
+  const linhas = [
+    [`fora desta amostra: ${fora} de ${N}`, `fração ${fmt(fora / N, 3)}`],
+    [`média das ${S.bag.fora.length} amostras`, `fração ${fmt(somaFora / S.bag.fora.length, 3)}`],
+    ["pela fórmula, (1 − 1/132)¹³²", `fração ${fmt(FORA_PELA_FORMULA, 3)}`],
+  ];
+  linhas.forEach(([a, b], k) => {
+    texto(a, {x: tx, y: 26 + k * 37, class: "fraco"}, svg);
+    texto(b, {x: tx, y: 40 + k * 37, class: "num"}, svg);
+  });
+  $("tag-amostra").innerHTML = `a amostra bootstrap da árvore <b>${S.destaque + 1}</b> · os ${fora} de fora são os que ela prevê no <span class="junto">out-of-bag</span>`;
+}
+
+/* ------------------------------ controles ------------------------------ */
+
+function atualizaControles() {
+  const B = S.bag.arvores.length;
+  $("n-arvores").textContent = B;
+  $("u-arvores").textContent = B === 1 ? "árvore" : "árvores";
+  $("mse-teste").textContent = B > 0 ? fmt(S.bag.curvaTeste[B - 1], 3) : "—";
+  for (const id of ["btn-1", "btn-10", "btn-100"]) $(id).disabled = B >= MAX_ARVORES;
+  $("btn-recomecar").disabled = B === 0 && S.conjunto === 1;
+  $("tag-plano").innerHTML = S.conjunto === 1
+    ? "os jogadores de treino e as árvores · treino da seção"
+    : `os jogadores de treino e as árvores · conjunto de treino sorteado nº <b>${S.conjunto}</b>`;
+  $("btn-anterior").disabled = S.destaque <= 0;
+  $("btn-seguinte").disabled = S.destaque < 0 || S.destaque >= B - 1;
+  $("qual-arvore").textContent = S.destaque >= 0 ? `${S.destaque + 1} de ${B}` : "—";
+}
+
+function desenhaTudo() {
+  desenhaPlano();
+  desenhaFaixa();
+  desenhaErro();
+  desenhaAmostra();
+  atualizaControles();
+}
+
+for (const [id, quantas] of [["btn-1", 1], ["btn-10", 10], ["btn-100", 100]]) {
+  $(id).addEventListener("click", () => { mais(quantas); desenhaTudo(); });
+}
+$("btn-recomecar").addEventListener("click", () => { recomecar(); desenhaTudo(); });
+$("btn-semente").addEventListener("click", () => {
+  const B = S.bag.arvores.length;
+  S.semente += 1;
+  novoBag();
+  const guardados = S.outros;
+  S.outros = [];
+  mais(B);
+  S.outros = guardados;
+  desenhaTudo();
+});
+$("btn-treino").addEventListener("click", () => { outroTreino(); desenhaTudo(); });
+$("btn-anterior").addEventListener("click", () => { S.destaque -= 1; desenhaTudo(); });
+$("btn-seguinte").addEventListener("click", () => { S.destaque += 1; desenhaTudo(); });
+
+/* ------------------------- arrastar o jogador --------------------------- */
+
+function pontoNoSvg(svg, evento) {
+  const r = svg.getBoundingClientRect();
+  const vb = svg.viewBox.baseVal;
+  return {x: (evento.clientX - r.left) * vb.width / r.width, y: (evento.clientY - r.top) * vb.height / r.height};
+}
+
+function moveSonda(valor) {
+  S.x0 = Math.round(Math.min(Math.max(valor, 20), 14000));
+  desenhaSonda();
+  desenhaFaixa();
+}
+
+let arrastando = false;
+$("plano").addEventListener("pointerdown", e => {
+  arrastando = true;
+  $("plano").setPointerCapture(e.pointerId);
+  moveSonda(escalasDoPlano().ix(pontoNoSvg($("plano"), e).x));
+});
+$("plano").addEventListener("pointermove", e => {
+  if (arrastando) moveSonda(escalasDoPlano().ix(pontoNoSvg($("plano"), e).x));
+});
+for (const tipo of ["pointerup", "pointercancel"]) {
+  $("plano").addEventListener(tipo, () => { arrastando = false; });
+}
+$("plano").addEventListener("keydown", e => {
+  const passo = {ArrowLeft: 1 / 1.08, ArrowRight: 1.08}[e.key];
+  if (!passo) return;
+  e.preventDefault();
+  moveSonda(S.x0 * passo);
+});
+
+$("erro").addEventListener("pointermove", e => {
+  const b = escalasDoErro().ib(pontoNoSvg($("erro"), e).x);
+  if (b !== hoverB) { hoverB = b; desenhaErro(); }
+});
+$("erro").addEventListener("pointerleave", () => { hoverB = null; desenhaErro(); });
+
+window.addEventListener("resize", desenhaTudo);
+
+recomecar();
+desenhaTudo();
+</script>
+</body>
+</html>
