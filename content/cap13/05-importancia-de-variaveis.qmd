@@ -14,124 +14,72 @@ import matplotlib.pyplot as plt
 plt.style.use("estilo-figuras.mplstyle")
 ```
 
-## Quanto cada coluna reduz a impureza
-
-Cada corte de uma árvore de classificação foi escolhido porque deixa os dois filhos mais puros que o nó, pelo índice de Gini da seção 12.3. A redução que o corte produz pesa pelo tamanho do nó: é o Gini do nó vezes o número de observações que chegam a ele, menos o mesmo produto nos dois filhos. Por causa desse peso, um corte na raiz, que separa todos os pacientes, conta mais que um corte num nó de poucos pacientes.
-
-Somando essas reduções sobre os cortes que usam uma coluna, numa árvore, e depois tirando a média sobre as $B$ árvores, cada coluna ganha um número.
-
-::: {.conceito}
-A ***importância por redução de impureza*** de um preditor, num bagging ou numa floresta de $B$ árvores, é a redução total do índice de Gini (em classificação) ou do RSS (em regressão) nos cortes que usam esse preditor, somada dentro de cada árvore; a importância é a média dessas somas nas $B$ árvores. Um valor grande indica um preditor que o modelo usou muito para separar as observações de treino. Costuma-se mostrá-la relativa à maior, que vale 100.
-:::
-
-Os pacientes do `Heart` são os da seção 13.2, com a mesma divisão: metade para o teste, sorteada com a semente 13 e com a mesma proporção de doentes nas duas metades. As colunas `dor_no_peito` e `talio` são texto, e cada uma vira uma indicadora para cada categoria, sem descartar nenhuma. As indicadoras vão na frente das outras 11 colunas:
+Os pacientes do `Heart` são os da seção 13.2, com a mesma divisão: metade para o teste, sorteada com a semente 13 e com a mesma proporção de doentes nas duas metades. O modelo é o bagging de 300 árvores, isto é, a floresta com `max_features=None`. As colunas `dor_no_peito` e `talio` são texto, e o primeiro passo do `Pipeline` troca cada uma por uma indicadora para cada categoria:
 
 ```{python}
-#| label: dados
+#| label: modelo
 import numpy as np
 import pandas as pd
+from sklearn.compose import make_column_transformer
+from sklearn.ensemble import RandomForestClassifier
 from sklearn.model_selection import train_test_split
+from sklearn.pipeline import make_pipeline
+from sklearn.preprocessing import OneHotEncoder
 
 coracao = pd.read_csv("dados/Heart.csv").dropna()
 y_c = coracao["doenca_cardiaca"]
 X_cru = coracao.drop(columns="doenca_cardiaca")
 treino_X, teste_X, treino_y, teste_y = train_test_split(
     X_cru, y_c, test_size=0.5, random_state=13, stratify=y_c)
-dor = pd.get_dummies(treino_X[["dor_no_peito"]], dtype=float)
-talio = pd.get_dummies(treino_X[["talio"]], dtype=float)
-outras = treino_X.drop(columns=["dor_no_peito", "talio"])
-treino_ind = pd.concat([dor, talio, outras], axis=1)
-print("treino:", len(treino_X))
-print("teste:", len(teste_X))
+
+indicadoras = make_column_transformer(
+    (OneHotEncoder(sparse_output=False), ["dor_no_peito", "talio"]),
+    remainder="passthrough", verbose_feature_names_out=False,
+).set_output(transform="pandas")
+modelo = make_pipeline(
+    indicadoras,
+    RandomForestClassifier(n_estimators=300, max_features=None, random_state=13))
+modelo.fit(treino_X, treino_y)
+print("pacientes de treino:", len(treino_X))
+print("pacientes de teste:", len(teste_X))
 print("colunas da tabela:", treino_X.shape[1])
-print("indicadoras de dor_no_peito:", dor.shape[1])
-print("indicadoras de talio:", talio.shape[1])
-print("colunas que as árvores veem:", treino_ind.shape[1])
+print("colunas que as árvores veem:", len(modelo[0].get_feature_names_out()))
+print("acerto no teste:", round(modelo.score(teste_X, teste_y), 4))
 ```
 
 ::: {.funcao}
-**`pd.concat(tabelas, axis=1)`** — junta as tabelas lado a lado, na ordem da lista; com `axis=1`, as colunas de uma vêm depois das da anterior, e as linhas se alinham pelo rótulo.
+**`make_column_transformer((transformador, colunas), remainder, verbose_feature_names_out)`** — aplica cada transformador só às colunas da lista dele e junta o resultado numa tabela, com as colunas transformadas na frente. Com `remainder="passthrough"`, as outras colunas passam sem mudança; com `verbose_feature_names_out=False`, os nomes de saída não ganham prefixo. **`OneHotEncoder(sparse_output=False)`** — uma coluna de 0 e 1 para cada categoria vista no `fit`; `sparse_output=False` devolve uma tabela comum, que é o que o `.set_output(transform="pandas")` precisa para montar um `DataFrame` com o nome de cada coluna.
+
+**`make_pipeline(passo1, passo2)`** — encadeia os passos: no `fit`, cada passo aprende com a saída do anterior; no `predict` e no `score`, os dados passam pelos mesmos passos, já ajustados. **`modelo[0]`**, **`modelo[-1]`** — o primeiro passo, aqui as indicadoras, e o último, a floresta. **`get_feature_names_out()`** — os nomes das colunas que saem do passo, na ordem em que as árvores as veem: as indicadoras, com o nome da coluna de origem e a categoria (`talio_normal`), e depois as outras 11.
 :::
 
-As 13 colunas viraram 18. O modelo é o bagging de 300 árvores, isto é, a floresta com `max_features=None`, ajustado nos 148 pacientes de treino:
+As 13 colunas da tabela viram 18 nas árvores. As duas medidas de importância desta seção falam desse mesmo modelo.
 
-```{python}
-#| label: floresta
-from sklearn.ensemble import RandomForestClassifier
+## Quanto cada coluna reduz a impureza
 
-floresta = RandomForestClassifier(n_estimators=300, max_features=None, random_state=13)
-floresta.fit(treino_ind, treino_y)
-print("árvores:", len(floresta.estimators_))
-```
+Cada corte de uma árvore de classificação foi escolhido porque deixa os dois filhos mais puros que o nó, pelo índice de Gini da seção 12.3. A redução que o corte produz pesa pelo número de pacientes que chegam ao nó: um corte perto da raiz, que separa muitos pacientes, conta mais que um corte num nó de poucos.
 
-A conta da importância começa num corte só, a raiz da primeira árvore. A tabela mostra o nó e os dois filhos: os pacientes que chegam a cada um, contados com as repetições da amostra bootstrap, o Gini e o produto dos dois:
-
-```{python}
-#| label: um-corte
-t = floresta.estimators_[0].tree_
-esquerda = t.children_left[0]
-direita = t.children_right[0]
-print("coluna da raiz:", treino_ind.columns[t.feature[0]])
-raiz = pd.DataFrame({
-    "pacientes": t.weighted_n_node_samples[[0, esquerda, direita]],
-    "Gini": t.impurity[[0, esquerda, direita]],
-}, index=["raiz", "filho ≤", "filho >"])
-raiz["pacientes × Gini"] = raiz["pacientes"] * raiz["Gini"]
-reducao_raiz = (raiz.loc["raiz", "pacientes × Gini"] - raiz.loc["filho ≤", "pacientes × Gini"]
-                - raiz.loc["filho >", "pacientes × Gini"])
-print("redução do corte:", round(reducao_raiz, 2))
-raiz.style.format(precision=3).format(precision=0, subset=["pacientes"])
-```
-
-::: {.funcao}
-**`tree_.children_left`**, **`tree_.children_right`** — o número do nó filho da esquerda, com os pacientes que ficam abaixo ou no corte, e o da direita. **`tree_.weighted_n_node_samples`** — os pacientes que chegam a cada nó, contados com as repetições do sorteio. **`tree_.impurity`** — o Gini de cada nó. **`v[[0, a, b]]`** — os valores nas posições 0, `a` e `b`.
+::: {.conceito}
+A ***importância por redução de impureza*** de um preditor, num bagging ou numa floresta de $B$ árvores, é a redução total do índice de Gini (em classificação) ou do RSS (em regressão) nos cortes que usam esse preditor, somada dentro de cada árvore; a importância é a média dessas somas nas $B$ árvores. Um valor grande indica um preditor que o modelo usou muito para separar as observações de treino. Costuma-se mostrá-la relativa à maior, que vale 100.
 :::
 
-A redução impressa é a do corte da raiz. O laço faz a mesma conta em cada nó que divide, nessa árvore, soma as reduções por coluna e divide pelo total, e a tabela põe as cinco maiores ao lado do `feature_importances_` que a árvore guardou:
-
-```{python}
-#| label: uma-arvore
-peso = t.weighted_n_node_samples * t.impurity
-reducoes = {}
-for no in range(t.node_count):
-    if t.feature[no] >= 0:
-        coluna = treino_ind.columns[t.feature[no]]
-        reducao = peso[no] - peso[t.children_left[no]] - peso[t.children_right[no]]
-        reducoes[coluna] = reducoes.get(coluna, 0) + reducao
-a_mao = pd.Series(reducoes) / sum(reducoes.values())
-guardada = pd.Series(floresta.estimators_[0].feature_importances_, index=treino_ind.columns)
-primeira_arvore = pd.DataFrame({"à mão": a_mao, "feature_importances_": guardada[a_mao.index]})
-primeira_arvore.sort_values("à mão", ascending=False).head().style.format(precision=4)
-```
-
-::: {.funcao}
-**`tree_.node_count`** — o número de nós da árvore. Numa folha, `tree_.feature` é negativo, e por isso `feature[no] >= 0` separa os nós que dividem. **`dicionario.get(chave, 0)`** — o valor da chave, ou 0 se ela ainda não está no dicionário. **`arvore.feature_importances_`** — a importância por redução de impureza de cada coluna naquela árvore, como fração do total.
-:::
-
-As duas colunas coincidem: a importância de uma coluna numa árvore é a soma das reduções dos cortes nela, dividida pela soma de todas as reduções. A floresta faz essa conta nas 300 árvores e guarda a média, também em `feature_importances_`.
-
-Para ter um número por coluna da tabela, as indicadoras somam de volta na coluna de que saíram. O dicionário `origem` diz de onde vem cada indicadora; uma coluna que não virou indicadora é a sua própria origem. A soma é a mesma do laço acima, e no fim a importância se divide pela maior:
+A floresta guarda essa importância em `feature_importances_`, uma para cada uma das 18 colunas que as árvores veem. Para ter um número por coluna da tabela, as indicadoras de `dor_no_peito` e de `talio` se somam de volta na coluna de origem, e a importância se divide pela maior:
 
 ```{python}
 #| label: mdi
-origem = {}
-for indicadora in dor.columns:
-    origem[indicadora] = "dor_no_peito"
-for indicadora in talio.columns:
-    origem[indicadora] = "talio"
-
-mdi = {}
-for nome, importancia in zip(treino_ind.columns, floresta.feature_importances_):
-    coluna = origem.get(nome, nome)
-    mdi[coluna] = mdi.get(coluna, 0) + importancia
-mdi = pd.Series(mdi)
+nomes = modelo[0].get_feature_names_out()
+importancia = pd.Series(modelo[-1].feature_importances_, index=nomes)
+origem = pd.Series(nomes, index=nomes)
+for coluna in ["dor_no_peito", "talio"]:
+    origem[origem.str.startswith(coluna + "_")] = coluna
+mdi = importancia.groupby(origem).sum()
 print("soma das importâncias:", round(mdi.sum(), 4))
 relativa = (100 * mdi / mdi.max()).sort_values(ascending=False)
 relativa.to_frame("importância relativa").style.format(precision=1)
 ```
 
 ::: {.funcao}
-**`floresta.feature_importances_`** — a importância por redução de impureza de cada coluna que o modelo viu, na ordem das colunas, já como fração do total: as importâncias somam 1.
+**`floresta.feature_importances_`** — a importância por redução de impureza de cada coluna que o modelo viu, na ordem das colunas, como fração do total: as importâncias somam 1. **`s.str.startswith(texto)`** — `True` nos nomes que começam com `texto`. **`s.groupby(origem).sum()`** — soma os valores de `s` que têm a mesma `origem`.
 :::
 
 A coluna de maior importância é `talio`, o exame com tálio, seguida de `depressao_st` e de `vasos_coloridos`; `colesterol` vem em quarto lugar, com 34,8 contra 100 de `talio`, e `glicemia_alta`, a última, fica em 1,2.
@@ -140,8 +88,6 @@ A coluna de maior importância é `talio`, o exame com tálio, seguida de `depre
 #| label: fig-mdi
 #| fig-cap: "Importância por redução do índice de Gini de cada coluna do `Heart`, no bagging de 300 árvores ajustado nos 148 pacientes de treino, relativa à maior (100). As indicadoras de `dor_no_peito` e de `talio` estão somadas na coluna de origem."
 #| fig-alt: "Gráfico de barras horizontais azuis com as 13 colunas do Heart, em ordem decrescente de cima para baixo, e a importância relativa de 0 a 100 no eixo horizontal. A primeira barra, talio, vai a 100; depressao_st passa de 70; vasos_coloridos fica perto de 50; colesterol, idade, dor_no_peito e pressao_repouso ficam entre 20 e 35; freq_cardiaca_max perto de 20; as cinco últimas, de sexo a glicemia_alta, ficam abaixo de 10."
-import matplotlib.pyplot as plt
-
 fig, ax = plt.subplots(figsize=(4.4, 4.0))
 ax.barh(range(len(relativa)), relativa.values, color="C0", height=0.7)
 ax.set_yticks(range(len(relativa)), relativa.index, fontsize=8)
@@ -152,151 +98,54 @@ plt.tight_layout()
 plt.show()
 ```
 
-Essa importância é calculada com os pacientes de treino, os mesmos que as árvores usaram para escolher os cortes.
+Essa importância diz quanto as árvores usaram cada coluna para separar os pacientes de treino, os mesmos com que os cortes foram escolhidos. Ela não diz se esses cortes servem para pacientes novos.
 
 ## Quanto o acerto cai se a coluna for embaralhada
 
 `colesterol` aparece em quarto lugar. O modelo precisa dele para prever pacientes que não viu?
 
-Uma forma de responder usa o teste. Embaralha-se uma coluna nos 149 pacientes de teste, deixando as outras como estão, e o modelo, já ajustado, prevê de novo. O embaralhamento quebra a ligação da coluna com a resposta e com as outras colunas e mantém os mesmos valores. Se o modelo depende da coluna, o acerto cai; se não depende, fica onde estava.
-
-A conta usa o teste, e não o treino, porque nos pacientes de treino as árvores já decoraram as respostas: a queda ali mediria o que o modelo memorizou, não o que serve para pacientes novos.
+Embaralha-se uma coluna nos 149 pacientes de teste, deixando as outras como estão, e o modelo, já ajustado, prevê de novo. O embaralhamento quebra a ligação da coluna com a resposta e mantém os mesmos valores. Se o modelo depende da coluna, o acerto cai; se não depende, fica onde estava. A conta usa o teste porque, nos pacientes de treino, as árvores já decoraram as respostas.
 
 ::: {.conceito}
 A ***importância por permutação*** de um preditor é a queda na medida de desempenho do modelo ajustado, num conjunto de dados, quando os valores desse preditor são embaralhados entre as observações e os demais ficam como estão. O embaralhamento se repete várias vezes, e a importância é a média das quedas. Ela vale para qualquer modelo, porque só usa as previsões.
 :::
 
-Para prever os pacientes de teste, as indicadoras do teste precisam ser as mesmas do treino, uma para cada categoria vista no treino e na mesma ordem. O `Pipeline` guarda essa troca dentro do modelo. O primeiro passo aprende as categorias de `dor_no_peito` e `talio` no treino e põe as indicadoras na frente das outras 11 colunas, como em `treino_ind`; o segundo é o bagging de 300 árvores, com a mesma semente:
-
-```{python}
-#| label: modelo
-from sklearn.compose import make_column_transformer
-from sklearn.pipeline import make_pipeline
-from sklearn.preprocessing import OneHotEncoder
-
-indicadoras = make_column_transformer(
-    (OneHotEncoder(sparse_output=False), ["dor_no_peito", "talio"]),
-    remainder="passthrough", verbose_feature_names_out=False,
-).set_output(transform="pandas")
-modelo = make_pipeline(
-    indicadoras,
-    RandomForestClassifier(n_estimators=300, max_features=None, random_state=13))
-modelo.fit(treino_X, treino_y)
-diferenca = np.abs(modelo[-1].feature_importances_ - floresta.feature_importances_).max()
-print("maior diferença entre as importâncias das duas florestas:", round(diferenca, 4))
-```
-
-::: {.funcao}
-**`make_column_transformer((transformador, colunas), remainder, verbose_feature_names_out)`** — aplica cada transformador só às colunas da lista dele e junta o resultado numa tabela, com as colunas transformadas na frente. Com `remainder="passthrough"`, as outras colunas passam sem mudança; com `verbose_feature_names_out=False`, os nomes de saída não ganham prefixo. **`OneHotEncoder(sparse_output=False)`** — uma coluna de 0 e 1 para cada categoria vista no `fit`; `sparse_output=False` devolve uma tabela comum, que é o que o `.set_output(transform="pandas")` precisa para montar um `DataFrame` com o nome de cada coluna.
-
-**`make_pipeline(passo1, passo2)`** — encadeia os passos: no `fit`, cada passo aprende com a saída do anterior; no `predict` e no `score`, os dados passam pelos mesmos passos, já ajustados. **`modelo[-1]`** — o último passo, aqui a floresta.
-:::
-
-As importâncias das duas florestas são as mesmas: o `Pipeline` ajustou as mesmas 300 árvores nas mesmas 18 colunas, e as duas medidas desta seção falam do mesmo modelo. A diferença é que `modelo` recebe a tabela com as colunas de texto e refaz as indicadoras a partir dela.
-
-À mão, com a coluna `talio`: o acerto do modelo no teste, o acerto depois de embaralhar `talio` uma vez, e a queda:
-
-```{python}
-#| label: um-embaralhamento
-embaralha = np.random.default_rng(13)
-acerto = modelo.score(teste_X, teste_y)
-embaralhado = teste_X.copy()
-embaralhado["talio"] = embaralha.permutation(teste_X["talio"].to_numpy())
-acerto_embaralhado = modelo.score(embaralhado, teste_y)
-print("acerto no teste:", round(acerto, 4))
-print("acerto com talio embaralhado:", round(acerto_embaralhado, 4))
-print("queda:", round(acerto - acerto_embaralhado, 4))
-```
-
-::: {.funcao}
-**`rng.permutation(v)`** — os mesmos valores de `v`, em ordem sorteada.
-:::
-
-O acerto no teste, 0,7584, pode diferir em um paciente do bagging da seção 13.2, com a mesma divisão: as mesmas 18 colunas chegam às árvores em outra ordem, e a ordem muda os desempates entre cortes igualmente bons.
-
-Um embaralhamento só é um sorteio só. O laço repete o embaralhamento de `talio` 20 vezes e guarda as 20 quedas:
-
-```{python}
-#| label: vinte-embaralhamentos
-quedas_talio = []
-for _ in range(20):
-    embaralhado = teste_X.copy()
-    embaralhado["talio"] = embaralha.permutation(teste_X["talio"].to_numpy())
-    quedas_talio.append(acerto - modelo.score(embaralhado, teste_y))
-print("talio, média das 20 quedas à mão:", round(np.mean(quedas_talio), 3))
-print("talio, desvio padrão das 20 quedas:", round(np.std(quedas_talio), 3))
-```
-
-::: {.funcao}
-**`np.std(lista)`** — o desvio padrão dos valores, com $n$ no denominador.
-:::
-
-O `permutation_importance` faz isso com o `Pipeline` inteiro, coluna por coluna, e é aqui que ter as indicadoras dentro do modelo importa: ele embaralha a coluna `dor_no_peito` da tabela, e as quatro indicadoras dela mudam juntas, como mudariam num paciente de verdade. A medida é o acerto no teste, e cada coluna é embaralhada 20 vezes, com outros sorteios que os do laço acima:
+O `permutation_importance` faz essa conta coluna por coluna, com o `Pipeline` inteiro: ao embaralhar `dor_no_peito` na tabela, as quatro indicadoras dela mudam juntas. Cada coluna é embaralhada 20 vezes. A tabela traz a média e o desvio padrão das 20 quedas no acerto e em quantas das 20 o acerto subiu em vez de cair:
 
 ```{python}
 #| label: permutacao
 from sklearn.inspection import permutation_importance
 
 perm = permutation_importance(modelo, teste_X, teste_y, n_repeats=20, random_state=13)
-queda = pd.DataFrame({"média": perm.importances_mean, "desvio": perm.importances_std},
-                     index=teste_X.columns)
-queda = queda.loc[relativa.index]
-queda.style.format(precision=3)
+queda = pd.DataFrame({
+    "média": perm.importances_mean,
+    "desvio": perm.importances_std,
+    "repetições com queda negativa": (perm.importances < 0).sum(axis=1),
+}, index=teste_X.columns)
+queda.sort_values("média", ascending=False).style.format(precision=3, subset=["média", "desvio"])
 ```
 
 ::: {.funcao}
-**`permutation_importance(estimador, X, y, n_repeats, random_state)`** — embaralha cada coluna de `X`, uma por vez, `n_repeats` vezes, e mede a queda no `score` do estimador já ajustado; num classificador, o `score` é o acerto. Devolve um objeto com **`importances_mean`**, a média das quedas de cada coluna, **`importances_std`**, o desvio padrão delas entre as repetições, e **`importances`**, as quedas de cada repetição, uma linha por coluna. `random_state` fixa os embaralhamentos.
+**`permutation_importance(estimador, X, y, n_repeats, random_state)`** — embaralha cada coluna de `X`, uma por vez, `n_repeats` vezes, e mede a queda no `score` do estimador já ajustado; num classificador, o `score` é o acerto. Devolve um objeto com **`importances_mean`**, a média das quedas de cada coluna, **`importances_std`**, o desvio padrão delas entre as repetições, e **`importances`**, as quedas de cada repetição, uma linha por coluna. `random_state` fixa os embaralhamentos. **`(m < 0).sum(axis=1)`** — em cada linha de `m`, quantos valores são negativos.
 :::
 
-A tabela está na ordem da importância por impureza. Um paciente a mais ou a menos de acerto, em 149, muda a taxa em 1/149, cerca de 0,007. Embaralhar `talio` derruba o acerto em 0,056, em média, perto de oito pacientes (0,056 × 149 ≈ 8,3). Em `depressao_st`, o desvio entre as 20 repetições, 0,029, é maior que a média, 0,015.
+Um paciente a mais ou a menos de acerto, em 149, muda a taxa em 1/149, cerca de 0,007. Embaralhar `talio` derruba o acerto em 0,056, em média, perto de oito pacientes (0,056 × 149 ≈ 8,3); seguem `vasos_coloridos` e `depressao_st`. Em `depressao_st`, o desvio entre as 20 repetições, 0,029, é maior que a média, 0,015: com 149 pacientes, a medida oscila de um embaralhamento para outro.
 
-As 20 quedas de `talio` feitas à mão e as 20 do `permutation_importance`, lado a lado:
-
-```{python}
-#| label: talio-dos-dois-jeitos
-dois_jeitos = pd.DataFrame({
-    "laço à mão": [np.mean(quedas_talio), np.std(quedas_talio)],
-    "permutation_importance": [queda.loc["talio", "média"], queda.loc["talio", "desvio"]],
-}, index=["média das 20 quedas", "desvio padrão das 20 quedas"])
-dois_jeitos.style.format(precision=3)
-```
-
-As duas contas são o mesmo procedimento com outros sorteios dos embaralhamentos, e é deles que vem a diferença entre as médias, 0,061 contra 0,056. Ela é menor que o desvio padrão das 20 quedas, 0,023 nas duas contas.
-
-Na ordem da permutação, com o número de repetições em que o acerto subiu em vez de cair, as colunas ficam assim:
-
-```{python}
-#| label: ordem-permutacao
-negativas = (perm.importances < 0).sum(axis=1)
-ordem = pd.DataFrame({"média": perm.importances_mean,
-                      "repetições com queda negativa": negativas},
-                     index=teste_X.columns)
-ordem = ordem.sort_values("média", ascending=False)
-ordem.style.format(precision=3, subset=["média"])
-```
-
-::: {.funcao}
-**`(m < 0).sum(axis=1)`** — em cada linha de `m`, quantos valores são negativos; aqui, em quantas das 20 repetições o acerto subiu.
-:::
-
-As três primeiras pela permutação são `talio`, `vasos_coloridos` e `depressao_st`. Embaralhar `colesterol` não derrubou o acerto: a média das 20 quedas é −0,010, e em 15 das 20 repetições o modelo acertou mais com a coluna embaralhada do que com ela intacta. Com `idade`, 17 de 20. Uma média de −0,010 é cerca de um paciente e meio em 149 (0,010 × 149 ≈ 1,5).
-
-Uma queda negativa não quer dizer que a coluna atrapalha em geral. As 20 repetições mudam só o embaralhamento: o modelo e os 149 pacientes de teste são sempre os mesmos. O que elas mostram é que, neste modelo e nestes pacientes, trocar o colesterol de cada um pelo de outro não piora o acerto; em média o melhora um pouco, e na maior parte das repetições também.
-
-Os cortes que as árvores fizeram em `colesterol` não ajudam a prever estes pacientes de teste. Com outro sorteio dos pacientes de teste, a média poderia sair diferente.
+Embaralhar `colesterol` não derrubou o acerto: a média das 20 quedas é −0,010, cerca de um paciente e meio (0,010 × 149 ≈ 1,5), e em 15 das 20 repetições o modelo acertou mais com a coluna embaralhada. Com `idade`, isso aconteceu em 17 de 20. Neste modelo e nestes pacientes, trocar o colesterol de cada um pelo de outro não piora o acerto: os cortes que as árvores fizeram em `colesterol` não ajudam a prever estes pacientes de teste.
 
 ```{python}
 #| label: fig-permutacao
 #| fig-cap: "Queda no acerto do bagging nos 149 pacientes de teste do `Heart` quando cada coluna é embaralhada, média de 20 embaralhamentos, com um desvio padrão entre as repetições para cada lado (cinza). As colunas estão na ordem da importância por impureza da figura anterior. A linha vertical marca queda zero; à esquerda dela, o modelo acertou mais com a coluna embaralhada."
 #| fig-alt: "Gráfico de barras horizontais laranja com as mesmas 13 colunas da figura anterior, na mesma ordem, e a queda no acerto de −0,02 a 0,08 no eixo horizontal, com uma linha vertical no zero. A barra de talio, no alto, vai a cerca de 0,056; vasos_coloridos a cerca de 0,026; depressao_st a 0,015, com um traço cinza de desvio que atravessa o zero. As barras de colesterol e idade, quarta e quinta de cima, vão para a esquerda do zero, até cerca de −0,01; a de pressao_repouso, sétima, também fica à esquerda, mas quase não se vê. As barras das outras colunas de baixo são curtas, perto de 0,005."
+na_ordem = queda.loc[relativa.index]
 fig, ax = plt.subplots(figsize=(4.4, 4.0))
-posicoes = range(len(queda))
-ax.barh(posicoes, queda["média"], color="C1", height=0.7)
-ax.errorbar(queda["média"], posicoes, xerr=queda["desvio"], fmt="none", ecolor="0.45",
+posicoes = range(len(na_ordem))
+ax.barh(posicoes, na_ordem["média"], color="C1", height=0.7)
+ax.errorbar(na_ordem["média"], posicoes, xerr=na_ordem["desvio"], fmt="none", ecolor="0.45",
             elinewidth=1, capsize=2)
 ax.axvline(0, color="0.45", linewidth=0.8)
-ax.set_yticks(posicoes, queda.index, fontsize=8)
-ax.set_ylim(len(queda) - 0.5, -0.5)
+ax.set_yticks(posicoes, na_ordem.index, fontsize=8)
+ax.set_ylim(len(na_ordem) - 0.5, -0.5)
 ax.set_xlim(-0.03, 0.085)
 ax.xaxis.set_major_locator(plt.MultipleLocator(0.02))
 ax.set_xlabel("queda no acerto de teste")
@@ -308,49 +157,28 @@ plt.show()
 **`ax.errorbar(x, y, xerr, fmt="none", ecolor, elinewidth, capsize)`** — um traço horizontal de `x - xerr` a `x + xerr` em cada `y`; com `fmt="none"`, sem marcador no centro. `capsize` é o tamanho da trava nas pontas. **`ax.axvline(x, color, linewidth)`** — uma linha vertical na posição `x`. **`ax.xaxis.set_major_locator(plt.MultipleLocator(0.02))`** — põe uma marca no eixo horizontal a cada 0,02.
 :::
 
-Por que `colesterol` fica em quarto lugar numa medida e abaixo de zero na outra? A importância por impureza soma os cortes no treino, inclusive os fundos, perto das folhas, onde restam poucos pacientes.
+## O que cada medida informa
 
-O laço percorre as 300 árvores e anota cada corte numa linha: a coluna da tabela de que ele saiu, os pacientes distintos de treino que chegam ao nó e a redução ponderada do Gini, a mesma conta da raiz feita acima:
+Por que `colesterol` fica em quarto lugar numa medida e abaixo de zero na outra? A importância por impureza soma todos os cortes feitos no treino, inclusive os fundos, perto das folhas, onde restam poucos pacientes e a árvore separa até o que é ruído. Uma coluna com muitos valores distintos oferece muitos pontos de corte para isso, e a importância por impureza tende a favorecê-la [@strobl2007]. A tabela põe as duas medidas ao lado do número de valores distintos de cada coluna nos pacientes de treino:
 
 ```{python}
-#| label: cortes
-linhas = []
-for arvore in floresta.estimators_:
-    t = arvore.tree_
-    peso = t.weighted_n_node_samples * t.impurity
-    for no in range(t.node_count):
-        if t.feature[no] >= 0:
-            nome = treino_ind.columns[t.feature[no]]
-            linhas.append({
-                "coluna": origem.get(nome, nome),
-                "pacientes distintos": t.n_node_samples[no],
-                "redução": peso[no] - peso[t.children_left[no]] - peso[t.children_right[no]],
-            })
-cortes = pd.DataFrame(linhas)
-print("cortes nas 300 árvores:", len(cortes))
-cortes.head().style.format(precision=3).hide(axis="index")
+#| label: lado-a-lado
+lado_a_lado = pd.DataFrame({
+    "impureza relativa": relativa,
+    "queda média no acerto": queda["média"],
+    "valores distintos no treino": treino_X.nunique(),
+}).loc[relativa.index]
+print("coluna com mais valores distintos no treino:", treino_X.nunique().idxmax())
+(lado_a_lado.style
+ .format(precision=1, subset=["impureza relativa"])
+ .format(precision=3, subset=["queda média no acerto"]))
 ```
 
 ::: {.funcao}
-**`tree_.n_node_samples`** — os pacientes distintos da amostra bootstrap que chegam a cada nó, sem contar as repetições.
+**`df.nunique()`** — o número de valores distintos de cada coluna. **`s.idxmax()`** — o rótulo do maior valor.
 :::
 
-Com a tabela dos cortes, `talio` e `colesterol` se comparam por extenso: quantos cortes cada uma tem, quantos pacientes há no nó de um corte típico, quantos cortes caem em nós de até 20 pacientes e que parte da importância vem desses nós:
-
-```{python}
-#| label: talio-e-colesterol
-for coluna in ["talio", "colesterol"]:
-    da_coluna = cortes[cortes["coluna"] == coluna]
-    fundos = da_coluna[da_coluna["pacientes distintos"] <= 20]
-    parte = 100 * fundos["redução"].sum() / da_coluna["redução"].sum()
-    print(coluna)
-    print("  cortes:", len(da_coluna))
-    print("  mediana de pacientes no nó:", round(da_coluna["pacientes distintos"].median(), 1))
-    print("  cortes em nós de até 20 pacientes:", len(fundos))
-    print("  % da importância vinda desses nós:", round(parte, 1))
-```
-
-`talio` tem 326 cortes, a mediana de pacientes no nó é 90,5, e só 2,1% da importância dele vem de nós com até 20 pacientes: ele separa grupos grandes. `colesterol` tem 775 cortes, a mediana de pacientes no nó é 12, e 62,7% da importância dele vem dos nós pequenos. Cada corte num nó pequeno reduz pouco o Gini, porque o peso é pequeno, mas somados eles fazem a maior parte da importância de `colesterol`.
+`colesterol` tem 100 valores distintos nos 148 pacientes de treino, o maior número entre as 13 colunas: são 99 pontos de corte possíveis para separar os últimos pacientes de um nó. No treino, cada um desses cortes reduz um pouco o Gini; nos pacientes de teste, os cortes em `colesterol` não ajudaram, como mostrou a permutação. Ter muitos valores distintos não basta para a queda ficar negativa: `freq_cardiaca_max` tem 69 e queda média positiva.
 
 As duas medidas respondem a perguntas diferentes. A importância por impureza mede quanto o modelo usou cada coluna para separar os pacientes de treino, até os últimos de cada nó. A por permutação mede quanto o acerto em pacientes novos depende da coluna; com 149 pacientes, ela varia de um embaralhamento para outro, como mostra o desvio de `depressao_st`.
 
@@ -362,41 +190,9 @@ A importância de uma coluna é sempre a importância dela **dadas as outras**, 
 
 ## Leitura para casa
 
-### Os cortes fundos, coluna a coluna
-
-A mesma conta para as cinco colunas de maior importância por impureza e para `freq_cardiaca_max`, agora com o número de valores distintos de cada coluna nos 148 pacientes de treino:
-
-```{python}
-#| label: seis-colunas
-seis = list(relativa.index[:5]) + ["freq_cardiaca_max"]
-resumo = []
-for coluna in seis:
-    da_coluna = cortes[cortes["coluna"] == coluna]
-    fundos = da_coluna[da_coluna["pacientes distintos"] <= 20]
-    resumo.append({
-        "cortes": len(da_coluna),
-        "% da importância em nós de até 20": (100 * fundos["redução"].sum()
-                                             / da_coluna["redução"].sum()),
-        "valores distintos no treino": treino_X[coluna].nunique(),
-    })
-resumo = pd.DataFrame(resumo, index=seis)
-print("coluna com mais valores distintos no treino:", treino_X.nunique().idxmax())
-resumo.style.format(precision=1, subset=["% da importância em nós de até 20"])
-```
-
-::: {.funcao}
-**`s.nunique()`** — o número de valores distintos da série; numa tabela, o de cada coluna. **`s.idxmax()`** — o rótulo do maior valor.
-:::
-
-Em `idade`, 71,0% da importância vem de nós pequenos. `colesterol` tem ainda 100 valores distintos nos 148 pacientes de treino, o maior número entre as 13 colunas. São 99 pontos de corte possíveis, um entre cada par de valores vizinhos, para separar os últimos pacientes de um nó.
-
-Valores distintos e cortes fundos não bastam para decidir o sinal da permutação. `freq_cardiaca_max` tem 69 valores distintos e 76,6% da importância vinda de nós pequenos, e embaralhá-la derruba o acerto em 0,006, em média, perto de um paciente (0,006 × 149 ≈ 0,9).
-
 ### Colunas que se substituem
 
-As colunas de carreira do `Hitters` somam o que o jogador fez desde a estreia, e a seção 13.3 viu uma delas, `vezes_ao_bastao_carreira`, dominar as raízes do bagging. Duas colunas que carregam quase a mesma informação disputam os mesmos cortes. O que acontece com a importância de cada uma?
-
-Os dados são os da seção 13.3: os jogadores com salário registrado, o logaritmo do salário como resposta e o treino de 132 jogadores sorteado com a semente 12.
+Quando duas colunas dizem quase a mesma coisa, elas disputam os mesmos cortes. O que acontece com a importância de cada uma? As colunas de carreira do `Hitters`, que somam o que o jogador fez desde a estreia, são um caso assim. Os dados são os da seção 13.3: os jogadores com salário registrado, o logaritmo do salário como resposta e o treino de 132 jogadores sorteado com a semente 12.
 
 ```{python}
 #| label: dados-hitters
@@ -413,14 +209,13 @@ print("treino:", len(treino_Xh))
 print("teste:", len(teste_Xh))
 print("colunas de carreira:", len(carreira))
 print("correlação entre vezes ao bastão e rebatidas na carreira:", round(correlacao, 3))
-print("menor correlação entre as seis:", round(X[carreira].corr().min().min(), 3))
 ```
 
 ::: {.funcao}
-**`X.columns.str.endswith("_carreira")`** — `True` para os nomes que terminam em `_carreira`. **`s.corr(outra)`** — a correlação entre duas séries. **`df.corr()`** — a tabela das correlações entre cada par de colunas; `.min().min()` é a menor delas.
+**`X.columns.str.endswith("_carreira")`** — `True` para os nomes que terminam em `_carreira`. **`s.corr(outra)`** — a correlação entre duas séries.
 :::
 
-Vezes ao bastão e rebatidas na carreira têm correlação de 0,995 nos 263 jogadores: saber uma é quase saber a outra. Entre as seis colunas de carreira, a menor correlação é 0,787. A célula ajusta duas florestas de 300 árvores, o bagging ($m = p$) e a floresta com $m = 4$, e mede as duas importâncias para as seis colunas de carreira: a por impureza, relativa à maior entre as 19 colunas, e a por permutação nos 131 jogadores de teste, agora como aumento do MSE:
+Vezes ao bastão e rebatidas na carreira têm correlação de 0,995 nos 263 jogadores: saber uma é quase saber a outra. A célula ajusta o bagging ($m = p$) e a floresta com $m = 4$, 300 árvores cada, e mede as duas importâncias das seis colunas de carreira: a por impureza, relativa à maior das 19 colunas, e a por permutação nos 131 jogadores de teste, como aumento do MSE:
 
 ```{python}
 #| label: carreira
@@ -478,12 +273,8 @@ plt.show()
 
 Nos dois modelos, a maior importância por impureza é a de `vezes_ao_bastao_carreira`. Os números da tabela mudam um pouco de um computador para outro, em uma unidade na impureza e na terceira casa no aumento do MSE.
 
-No bagging, em que toda divisão pode escolher qualquer coluna, `rebatidas_carreira` fica abaixo de 35 contra 100 de `vezes_ao_bastao_carreira`: com as duas entre as candidatas, um corte numa é quase tão bom quanto na outra, e a redução do corte vai inteira para a escolhida.
+No bagging, toda divisão pode escolher qualquer coluna. Um corte em `rebatidas_carreira` é quase tão bom quanto um em `vezes_ao_bastao_carreira`, e a redução do corte vai inteira para a escolhida: `rebatidas_carreira` fica abaixo de 35 contra 100. Na floresta com $m = 4$, `vezes_ao_bastao_carreira` fica fora do sorteio em muitas divisões, e `rebatidas_carreira` ganha esses cortes: passa de 85.
 
-Na floresta, `rebatidas_carreira` passa de 85, mas não sobe sozinha: as cinco colunas de carreira além de `vezes_ao_bastao_carreira`, que fica em 100 nos dois modelos, sobem todas, como mostram as duas primeiras colunas da tabela.
+A permutação mostra a mesma divisão. No bagging, embaralhar `vezes_ao_bastao_carreira` aumenta o MSE de teste em mais de 0,05, e embaralhar `rebatidas_carreira`, em menos de 0,01: as árvores se apoiam muito mais na primeira. Na floresta, o aumento com `vezes_ao_bastao_carreira` fica abaixo de 0,05, e o com `rebatidas_carreira` passa de 0,01: as duas dividem os cortes, e embaralhar uma deixa a outra carregando a informação nos cortes dela.
 
-Com $m = 4$, a coluna mais forte fica fora do sorteio em muitas divisões, e qualquer outra ganha os cortes que sobram. Por isso a subida de `rebatidas_carreira` na impureza não mostra que ela substitui a outra; para ver isso, compara-se a permutação nos dois modelos.
-
-No bagging, embaralhar `vezes_ao_bastao_carreira` aumenta o MSE de teste em mais de 0,05, e embaralhar `rebatidas_carreira`, em menos de 0,01. As árvores do bagging cortam por `vezes_ao_bastao_carreira`, e embaralhá-la desfaz os cortes em que elas se apoiam; `rebatidas_carreira` diz quase o mesmo, mas as árvores já ajustadas não cortam nela no lugar. Embaralhar `rebatidas_carreira` custa pouco pelo motivo inverso: as árvores a usam bem menos, e `vezes_ao_bastao_carreira`, intacta, carrega a informação.
-
-Na floresta, o aumento do MSE ao embaralhar `vezes_ao_bastao_carreira` fica abaixo de 0,05, e o de `rebatidas_carreira` passa de 0,01. Com $m = 4$, as árvores cortam em `rebatidas_carreira` nas divisões em que a outra não foi sorteada; embaralhar uma das duas desfaz só os cortes dela, e a outra segue carregando a informação nos cortes restantes. As duas dividem o trabalho.
+Os dados são os mesmos nos dois modelos; o que muda é como as árvores dividem os cortes entre as duas colunas, e as duas medidas acompanham essa divisão. Uma importância baixa, por isso, não quer dizer que a coluna não tenha informação: outra coluna pode estar carregando a mesma.
