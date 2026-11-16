@@ -359,6 +359,7 @@ def test_boosting_no_node_tem_os_tres_primeiros_passos_da_secao_13_4():
         return caminho(D.treino, D.teste, 0.01, "zero", 3);
     })()""")
     assert c["cortes"] == [1452, 1452, 1452]
+    assert c["nEsq"] == [54, 54, 54]
     assert (round(c["esq"][0], 2), round(c["dir"][0], 2)) == (5.11, 6.46)
     assert round(c["mseTreino"][0], 2) == 34.97
 
@@ -373,7 +374,7 @@ def test_boosting_no_node_segue_o_gradient_boosting_regressor(taxa, partida):
         const c = caminho(D.treino, D.teste, {taxa}, "{partida}", MAX_ARVORES);
         const f = degraus(c, 500);
         const grade = [20, 300, 1452, 1453, 5000, 14000];
-        return {{treino: c.mseTreino, teste: c.mseTeste,
+        return {{treino: c.mseTreino, teste: c.mseTeste, cortes: c.cortes, nEsq: c.nEsq,
                  menor: indiceDoMenor(c.mseTeste, MAX_ARVORES) + 1,
                  direto: preverAte(c, 500, grade),
                  emDegraus: grade.map(x => f.valores[f.cortes.filter(k => x > k).length])}};
@@ -387,6 +388,10 @@ def test_boosting_no_node_segue_o_gradient_boosting_regressor(taxa, partida):
     assert np.allclose(c["teste"], teste, rtol=0, atol=1e-9)
     assert c["menor"] == int(np.argmin(teste)) + 1
     assert np.allclose(c["direto"], c["emDegraus"], rtol=0, atol=1e-9)
+    # o desenho de cada árvore: o corte da raiz e quantos jogadores caem à esquerda
+    arvores = [e.tree_ for e in boost.estimators_[:, 0]]
+    assert np.allclose(c["cortes"], [a.threshold[0] for a in arvores], rtol=0, atol=1e-9)
+    assert c["nEsq"] == [int(a.n_node_samples[a.children_left[0]]) for a in arvores]
 
 
 @PRECISA_DE_NODE
