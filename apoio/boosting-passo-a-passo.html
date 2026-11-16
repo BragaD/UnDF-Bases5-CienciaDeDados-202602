@@ -189,6 +189,8 @@ h1{
 .legenda i.pontilhada{ border-top-style: dotted; border-color: var(--ink-3); border-top-width: 2px; }
 .legenda i.bola{ width: 9px; height: 9px; border: 1.5px solid var(--ink-2); border-radius: 50%; background: var(--ink-2); }
 .legenda i.bola.oca{ background: none; }
+.legenda i.caixa{ width: 16px; height: 11px; border: 1px solid var(--ink-3); border-radius: 2px; background: var(--paper-2); }
+.legenda i.caixa.vez{ border: 2px dashed var(--ajuste); background: none; }
 
 .transport{ display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
 .rotulo{
@@ -271,6 +273,14 @@ svg text.eixo{ font-family: var(--cond); font-size: 11px; font-weight: 600; lett
 .toco-encolhido{ fill: none; stroke: var(--ajuste); stroke-width: 3; }
 .corte{ stroke: var(--ajuste); stroke-width: 1.25; stroke-dasharray: 3 3; }
 .zero{ stroke: var(--ink-3); stroke-width: 1; }
+
+.no rect{ fill: var(--panel); stroke: var(--ink-3); stroke-width: 1; }
+.no.folha rect{ fill: var(--paper-2); }
+.ramo{ stroke: var(--ink-3); stroke-width: 1.25; fill: none; }
+.cartao.vez .no rect{ fill: color-mix(in srgb, var(--ajuste) 8%, var(--panel)); stroke: var(--ajuste); stroke-width: 2; stroke-dasharray: 5 3; }
+.cartao.vez .ramo{ stroke: var(--ajuste); stroke-width: 2; }
+.cartao.vez text.passo{ fill: var(--ajuste); }
+.divisoria{ stroke: var(--rule); stroke-width: 1; }
 
 table.passos{
   width: 100%;
@@ -382,6 +392,16 @@ code{ font-family: var(--mono); font-size: .92em; }
     </div>
   </section>
 
+  <div class="plate">
+    <p class="tag" id="tag-arvores">as árvores de cada passo</p>
+    <p class="legenda">
+      <span><i class="caixa"></i>árvore que já entrou no modelo</span>
+      <span><i class="caixa vez"></i>a próxima árvore, o toco do gráfico dos resíduos</span>
+    </p>
+    <svg id="arvores" role="img" aria-label="O desenho das árvores dos últimos passos e da próxima: o corte da raiz e, em cada folha, quantos jogadores de treino caem nela, o resíduo médio deles e a fração λ que entra no modelo"></svg>
+    <p class="leitura rodape">Em cada árvore, a raiz pergunta se o jogador foi ao bastão, na carreira, no máximo o número de vezes do corte. Cada folha traz quantos jogadores de treino caem nela, o resíduo médio deles, que é a previsão da árvore para a folha inteira, e, depois de λ×, quanto o passo soma à previsão desses jogadores.</p>
+  </div>
+
   <footer>
     <p><strong>O dado.</strong> Os 263 jogadores de <code>Hitters</code> com salário registrado, na divisão da seção 13.4: 132 de treino e 131 de teste. A resposta é o logaritmo do salário de 1987, em milhares de dólares. O preditor aqui é um só, <code>vezes_ao_bastao_carreira</code>, com o eixo em escala logarítmica. A seção usa as 19 colunas: os três primeiros tocos dela cortam por essa mesma coluna, e os três primeiros passos daqui, partindo de zero com λ = 0,01, têm os mesmos números; depois, os tocos da seção passam a usar outras colunas, e os erros se separam.</p>
     <p><strong>As contas.</strong> O modelo começa em zero, ou na média do log do salário no treino. A cada passo, o resíduo de cada jogador é o log do salário menos o modelo; o toco é a árvore de duas folhas que melhor se ajusta aos resíduos, com a média deles em cada folha; o modelo ganha λ vezes o toco, e os resíduos perdem o mesmo tanto. É a conta do <code>GradientBoostingRegressor(max_leaf_nodes=2, max_depth=None)</code>, com <code>init="zero"</code> quando a partida é zero. Não há sorteio: toda árvore vê os 132 jogadores.</p>
@@ -452,14 +472,15 @@ function toco(x, r, ordem) {
     const somaDir = total - somaEsq;
     const ganho = somaEsq * somaEsq / nEsq + somaDir * somaDir / nDir;
     if (melhor === null || ganho > melhor.ganho) {
-      melhor = {ganho, corte: (a + b) / 2, esq: somaEsq / nEsq, dir: somaDir / nDir};
+      melhor = {ganho, corte: (a + b) / 2, esq: somaEsq / nEsq, dir: somaDir / nDir, nEsq};
     }
   }
   return melhor;
 }
 
-/* Os `arvores` passos do boosting, do começo: o toco de cada passo e o MSE
- * de treino e de teste depois dele. `partida` é "zero" ou "media". */
+/* Os `arvores` passos do boosting, do começo: o toco de cada passo (o corte,
+ * o valor de cada folha e quantos jogadores de treino caem na da esquerda) e
+ * o MSE de treino e de teste depois dele. `partida` é "zero" ou "media". */
 function caminho(treino, teste, taxa, partida, arvores) {
   const inicio = partida === "media" ? media(treino.y) : 0;
   const fTreino = treino.y.map(() => inicio);
@@ -468,7 +489,7 @@ function caminho(treino, teste, taxa, partida, arvores) {
   const c = {
     taxa, partida, inicio,
     mseTreino0: mse(treino.y, fTreino), mseTeste0: mse(teste.y, fTeste),
-    cortes: [], esq: [], dir: [], mseTreino: [], mseTeste: [],
+    cortes: [], esq: [], dir: [], nEsq: [], mseTreino: [], mseTeste: [],
   };
   for (let b = 0; b < arvores; b++) {
     const residuos = treino.y.map((v, i) => v - fTreino[i]);
@@ -478,6 +499,7 @@ function caminho(treino, teste, taxa, partida, arvores) {
     c.cortes.push(t.corte);
     c.esq.push(t.esq);
     c.dir.push(t.dir);
+    c.nEsq.push(t.nEsq);
     c.mseTreino.push(mse(treino.y, fTreino));
     c.mseTeste.push(mse(teste.y, fTeste));
   }
@@ -568,6 +590,14 @@ function num(x, casas) {
   return /[1-9]/.test(s) ? "−" + s.slice(1) : s.slice(1);
 }
 
+/* Número com sinal e casas que bastam para dois algarismos significativos
+ * (pelo menos duas): 5,11, 0,051, 0,0051. Um toco tardio tem folhas pequenas,
+ * e com casas fixas elas virariam 0,00. */
+function numCurto(x) {
+  const casas = x === 0 ? 2 : Math.min(6, Math.max(2, 1 - Math.floor(Math.log10(Math.abs(x)))));
+  return num(x, casas);
+}
+
 const M = {esq: 52, dir: 16, topo: 12, base: 40};
 
 /* As escalas de um gráfico contra as vezes ao bastão, em escala log. */
@@ -656,8 +686,8 @@ function desenhaResiduos() {
   el("path", {class: "toco", d: caminhoEmDegraus([corte], [esq, dir], e.sx, e.sy)}, svg);
   el("path", {class: "toco-encolhido", d: caminhoEmDegraus([corte], [c.taxa * esq, c.taxa * dir], e.sx, e.sy)}, svg);
   $("tag-residuos").innerHTML = `os resíduos e o toco do passo <b>${fmt(S.B + 1, 0)}</b>` +
-    ` · corte em <b>${fmt(corte, 1)}</b> · folhas <b>${num(esq, 2)}</b> e <b>${num(dir, 2)}</b>` +
-    ` · entra <span class="cru">λ</span> × toco: <b>${num(c.taxa * esq, 3)}</b> e <b>${num(c.taxa * dir, 3)}</b>`;
+    ` · corte em <b>${fmt(corte, 1)}</b> · folhas <b>${numCurto(esq)}</b> e <b>${numCurto(dir)}</b>` +
+    ` · entra <span class="cru">λ</span> × toco: <b>${numCurto(c.taxa * esq)}</b> e <b>${numCurto(c.taxa * dir)}</b>`;
 }
 
 /* ------------------------------- o erro -------------------------------- */
@@ -727,6 +757,80 @@ function desenhaErro() {
     ` · menor erro de teste até aqui: <b>${fmt(c.mseTeste[kMin], 3)}</b> em B = <b>${fmt(kMin + 1, 0)}</b>`;
 }
 
+/* ------------------------------ as árvores ----------------------------- */
+
+const CARTAO_MIN = 200, CARTAO_MAX = 230;
+
+/* As árvores dos últimos passos e a próxima, lado a lado, da mais antiga à
+ * esquerda até a próxima. Com 3.000 árvores no modelo, não há próxima, e a
+ * faixa mostra as últimas. */
+function desenhaArvores() {
+  const svg = $("arvores");
+  svg.replaceChildren();
+  const c = atual();
+  const W = svg.clientWidth || 1200;
+  const H = 214;
+  svg.setAttribute("viewBox", `0 0 ${W} ${H}`);
+  svg.setAttribute("height", H);
+  const PAD = 10;
+  const cabem = Math.max(1, Math.floor((W - 2 * PAD) / CARTAO_MIN));
+  const w = Math.min(CARTAO_MAX, (W - 2 * PAD) / cabem);
+  const ultimo = Math.min(S.B, MAX_ARVORES - 1);
+  const primeiro = Math.max(0, ultimo - cabem + 1);
+  const n = D.treino.x.length;
+
+  for (let k = primeiro; k <= ultimo; k++) {
+    const vez = k === S.B;
+    const ox = PAD + (k - primeiro) * w;
+    const g = el("g", {class: "cartao" + (vez ? " vez" : ""), transform: `translate(${ox},0)`}, svg);
+    if (k > primeiro) el("line", {class: "divisoria", x1: 0, x2: 0, y1: 10, y2: H - 10}, g);
+    const meio = w / 2;
+    texto(vez ? `passo ${fmt(k + 1, 0)} · o próximo` : `passo ${fmt(k + 1, 0)}`,
+      {x: meio, y: 20, "text-anchor": "middle", class: "eixo passo"}, g);
+
+    // a raiz
+    const rw = Math.min(w - 40, 140), rh = 38, ry = 30;
+    const raiz = el("g", {class: "no", transform: `translate(${meio - rw / 2},${ry})`}, g);
+    el("rect", {width: rw, height: rh, rx: 4}, raiz);
+    texto("vezes ao bastão", {x: rw / 2, y: 15, "text-anchor": "middle", class: "fraco", "font-size": 11}, raiz);
+    texto(`≤ ${fmt(c.cortes[k], 1)}`, {x: rw / 2, y: 31, "text-anchor": "middle", class: "num"}, raiz);
+
+    // as folhas
+    const fw = Math.min(w / 2 - 14, 88), fh = 56, fy = 104;
+    const folhas = [
+      {cx: w * 0.25, valor: c.esq[k], jogadores: c.nEsq[k], rotulo: "sim", lado: -1},
+      {cx: w * 0.75, valor: c.dir[k], jogadores: n - c.nEsq[k], rotulo: "não", lado: 1},
+    ];
+    for (const f of folhas) {
+      el("line", {class: "ramo", x1: meio, y1: ry + rh, x2: f.cx, y2: fy}, g);
+      texto(f.rotulo, {x: (meio + f.cx) / 2 + f.lado * 9, y: (ry + rh + fy) / 2 + 2,
+        "text-anchor": f.lado < 0 ? "end" : "start", class: "fraco", "font-size": 11}, g);
+      const folha = el("g", {class: "no folha", transform: `translate(${f.cx - fw / 2},${fy})`}, g);
+      el("rect", {width: fw, height: fh, rx: 4}, folha);
+      texto(`${f.jogadores} jog.`, {x: fw / 2, y: 15, "text-anchor": "middle", class: "fraco", "font-size": 11}, folha);
+      texto(numCurto(f.valor), {x: fw / 2, y: 31, "text-anchor": "middle", class: "num"}, folha);
+      texto(`λ× ${numCurto(c.taxa * f.valor)}`, {x: fw / 2, y: 47, "text-anchor": "middle", class: "num fraco", "font-size": 11}, folha);
+    }
+
+    // embaixo, o erro de treino depois do passo
+    texto(vez ? "ainda fora do modelo" : `MSE de treino ${fmt(c.mseTreino[k], 4)}`,
+      {x: meio, y: fy + fh + 24, "text-anchor": "middle", class: "fraco", "font-size": 11}, g);
+
+    el("title", {}, g).textContent =
+      `Passo ${fmt(k + 1, 0)}${vez ? " (o próximo, ainda fora do modelo)" : ""}: ` +
+      `vezes ao bastão ≤ ${fmt(c.cortes[k], 1)}. ` +
+      `Sim: ${folhas[0].jogadores} jogadores, resíduo médio ${numCurto(folhas[0].valor)}, entra ${numCurto(c.taxa * folhas[0].valor)}. ` +
+      `Não: ${folhas[1].jogadores} jogadores, resíduo médio ${numCurto(folhas[1].valor)}, entra ${numCurto(c.taxa * folhas[1].valor)}.` +
+      (vez ? "" : ` MSE de treino depois do passo: ${fmt(c.mseTreino[k], 4)}.`);
+  }
+
+  const fim = ultimo + 1;
+  $("tag-arvores").innerHTML = primeiro === ultimo
+    ? `a árvore do passo <b>${fmt(fim, 0)}</b>${ultimo === S.B ? ", a próxima" : ""}`
+    : `as árvores dos passos <b>${fmt(primeiro + 1, 0)}</b> a <b>${fmt(fim, 0)}</b>` +
+      (ultimo === S.B ? ` · a do passo <b>${fmt(fim, 0)}</b> é a próxima` : "");
+}
+
 /* ------------------------------ a tabela ------------------------------- */
 
 function desenhaPassos() {
@@ -738,7 +842,7 @@ function desenhaPassos() {
     if (proximo) tr.className = "proximo";
     const celulas = [
       proximo ? `${fmt(k + 1, 0)} (próximo)` : fmt(k + 1, 0),
-      fmt(c.cortes[k], 1), num(c.esq[k], 2), num(c.dir[k], 2),
+      fmt(c.cortes[k], 1), numCurto(c.esq[k]), numCurto(c.dir[k]),
       proximo ? "—" : fmt(c.mseTreino[k], 4),
     ];
     for (const v of celulas) {
@@ -771,6 +875,7 @@ function desenhaTudo() {
   desenhaModelo();
   desenhaResiduos();
   desenhaErro();
+  desenhaArvores();
   desenhaPassos();
   atualizaControles();
 }
