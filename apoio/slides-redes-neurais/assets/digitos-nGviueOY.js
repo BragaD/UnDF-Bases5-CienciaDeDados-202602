@@ -1,0 +1,1 @@
+var e=``+new URL(`../fig/digitos.svg`,import.meta.url).href;export{e as t};
