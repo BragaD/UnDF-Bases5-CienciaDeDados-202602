@@ -1,0 +1,673 @@
+# Backpropagation {.divisoria background-color="#27316E"}
+
+[Parte 5 · 75 min]{.parte}
+
+O erro aparece na saída. A culpa está espalhada pela rede inteira.
+
+## Quanta culpa tem um peso lá do começo?
+
+[3 · Atribuir]{.olho .q}
+
+```{python}
+#| echo: false
+#| output: asis
+rede(
+    [2, 2, 1],
+    textos=TEXTOS_221,
+    pesos={(0, 0, 0): "0,1 → ?"},
+    fora={(2, 0): "ŷ = 0,584"},
+    fora_quente={(2, 0): "y = 1"},
+    arestas_quentes={(0, 0, 0)},
+    so_arestas=set(),
+    altura=340,
+    escala=0.9,
+)
+```
+
+::: {.incremental}
+- A perda compara $\hat{y}$ com $y$ **na saída**.
+- O peso em laranja não toca a saída: ele muda $h_1$, que muda $\hat{y}$, que muda $L$.
+- Queremos $\dfrac{\partial L}{\partial w}$ para **todos** os pesos, inclusive esse.
+:::
+
+## A saída ingênua: mexer em cada peso e medir
+
+[3 · Atribuir]{.olho .q}
+
+Some um $\varepsilon$ pequeno a **um** peso, refaça a ida e veja quanto a perda mudou:
+
+$$\frac{\partial L}{\partial w} \approx \frac{L(w + \varepsilon) - L(w)}{\varepsilon}$$
+
+::: {.incremental}
+- Funciona, e não exige cálculo nenhum.
+- Custa **uma ida completa por peso**.
+- Na rede de 13.002 parâmetros: 13.002 idas para dar **um** passo.
+:::
+
+::: {.fragment .conceito}
+O **backpropagation** entrega as mesmas derivadas, de todos os pesos, com **uma ida e uma volta**.
+:::
+
+## Toda conta é um grafo de contas pequenas
+
+[1 · Prever]{.olho}
+
+Exemplo sem rede nenhuma: $f = (x + y) \cdot z$, com $x = -2$, $y = 5$, $z = -4$.
+
+```{python}
+#| echo: false
+#| output: asis
+grafo_soma_produto(gradientes=False, escala=0.9)
+```
+
+::: {.fragment}
+A **ida** calcula da esquerda para a direita: $q = x + y = 3$, depois $f = q \cdot z = -12$.
+:::
+
+## A volta percorre o mesmo grafo ao contrário
+
+[3 · Atribuir]{.olho .q}
+
+```{python}
+#| echo: false
+#| output: asis
+grafo_soma_produto(escala=0.9)
+```
+
+::: {.fragment data-fragment-index="0"}
+Começa no fim: $\partial f / \partial f = 1$.
+:::
+
+::: {.fragment data-fragment-index="1"}
+Produto $f = q \cdot z$: a derivada em relação a um fator é **o outro fator**.
+:::
+
+::: {.fragment data-fragment-index="2"}
+Soma $q = x + y$: a derivada local é 1, então o $-4$ que chegou **passa igual** para $x$ e $y$.
+:::
+
+## A regra de toda a volta
+
+[3 · Atribuir]{.olho .q}
+
+::: {.grande .centro}
+[derivada que **chega** da frente]{.volta} &nbsp;×&nbsp; **derivada local** da conta
+:::
+
+::: {.incremental}
+- Cada nó só precisa saber a **sua** derivada local, a de uma conta simples.
+- O que chega da frente já resume tudo o que acontece dali até a perda.
+- Por isso a ordem é **de trás para a frente**: quando um nó é visitado, o que ele precisa já foi calculado.
+:::
+
+::: {.fragment .conceito}
+É a regra da cadeia da Parte 2, organizada para **nunca calcular a mesma coisa duas vezes**.
+:::
+
+## Na rede, a volta calcula o erro de cada neurônio
+
+[3 · Atribuir]{.olho .q}
+
+O **erro de um neurônio** é quanto a perda muda quando a soma $z$ dele muda:
+
+$$\delta^{[l]}_j = \frac{\partial L}{\partial z^{[l]}_j}$$
+
+::: {.incremental}
+- Na **saída**, já conhecemos: $\delta = \hat{y} - y$ (Partes 2 e 4).
+- Nas **camadas ocultas**, é o que falta descobrir.
+- Com o $\delta$ de um neurônio na mão, os gradientes dos pesos dele saem numa multiplicação.
+:::
+
+::: {.fragment .fraco .pequeno}
+$\delta$ é a letra grega delta. É a quantidade que "anda para trás" e dá nome ao algoritmo.
+:::
+
+## O ponto de partida: a ida já feita
+
+[1 · Prever]{.olho} [2 · Medir]{.olho}
+
+```{python}
+#| echo: false
+#| output: asis
+rede(
+    [2, 2, 1],
+    textos=TEXTOS_221,
+    pesos=PESOS_221,
+    fora={(0, 0): "0,5", (0, 1): "1", (1, 0): "a = 0,611", (1, 1): "a = 0,550", (2, 0): "ŷ = 0,584"},
+    titulos=["x", "camada 1", "camada 2"],
+    arestas_fortes=TODAS_221,
+    altura=400,
+)
+```
+
+Resposta $y = 1$, perda $L = 0{,}537$. A volta **reusa** os valores em azul: por isso a ida os guarda.
+
+## Volta, passo 1: o erro do neurônio de saída
+
+[3 · Atribuir]{.olho .q}
+
+```{python}
+#| echo: false
+#| output: asis
+rede(
+    [2, 2, 1],
+    textos=TEXTOS_221,
+    fora={(1, 0): "a = 0,611", (1, 1): "a = 0,550", (2, 0): "ŷ = 0,584"},
+    fora_quente={(2, 0): "δ = −0,416"},
+    nos_quentes={(2, 0)},
+    so_arestas=set(),
+    altura=330,
+    escala=0.85,
+)
+```
+
+$$\delta^{[2]} = \hat{y} - y = 0{,}584 - 1 = -0{,}416$$
+
+::: {.fragment}
+Negativo: a soma $z^{[2]}$ ficou **baixa demais**. A previsão precisa subir.
+:::
+
+## Volta, passo 2: os gradientes da camada de saída
+
+[3 · Atribuir]{.olho .q}
+
+```{python}
+#| echo: false
+#| output: asis
+rede(
+    [2, 2, 1],
+    textos=TEXTOS_221,
+    pesos={(1, 0, 0): "−0,254", (1, 1, 0): "−0,229"},
+    fora={(1, 0): "a = 0,611", (1, 1): "a = 0,550"},
+    fora_quente={(2, 0): "δ = −0,416"},
+    nos_quentes={(2, 0)},
+    arestas_quentes={(1, 0, 0), (1, 1, 0)},
+    so_arestas=set(),
+    altura=330,
+    escala=0.85,
+)
+```
+
+Erro do neurônio de **chegada** vezes ativação do neurônio de **partida**:
+
+$$\frac{\partial L}{\partial w^{[2]}_1} = \delta^{[2]} \cdot a^{[1]}_1 = -0{,}416 \cdot 0{,}611 = -0{,}254 \qquad \frac{\partial L}{\partial w^{[2]}_2} = -0{,}416 \cdot 0{,}550 = -0{,}229$$
+
+::: {.fragment}
+E o viés: $\dfrac{\partial L}{\partial b^{[2]}} = \delta^{[2]} = -0{,}416$. É a conta da Parte 2, com $a^{[1]}$ no lugar de $x$.
+:::
+
+## Volta, passo 3: o erro atravessa para a camada oculta
+
+[3 · Atribuir]{.olho .q}
+
+```{python}
+#| echo: false
+#| output: asis
+rede(
+    [2, 2, 1],
+    textos=TEXTOS_221,
+    pesos={(1, 0, 0): "× 0,5", (1, 1, 0): "× (−0,3)"},
+    fora_quente={(2, 0): "δ = −0,416", (1, 0): "δ = −0,049", (1, 1): "δ = 0,031"},
+    nos_quentes={(1, 0), (1, 1)},
+    arestas_quentes={(1, 0, 0), (1, 1, 0)},
+    so_arestas=set(),
+    volta=True,
+    altura=330,
+    escala=0.85,
+)
+```
+
+O erro volta **pelo mesmo peso** por onde a ativação foi, e passa pela derivada da ativação:
+
+$$\delta^{[1]}_j = \underbrace{w^{[2]}_j\, \delta^{[2]}}_{\text{o que chega da frente}} \cdot \underbrace{\sigma'\big(z^{[1]}_j\big)}_{\text{derivada local}}$$
+
+## Volta, passo 3: os números
+
+[3 · Atribuir]{.olho .q}
+
+A derivada local da sigmoide é $a\,(1 - a)$, com a ativação que a ida guardou.
+
+::: {.fragment}
+**Neurônio $h_1$:**
+
+$$\delta^{[1]}_1 = \underbrace{0{,}5 \cdot (-0{,}416)}_{-0{,}208} \cdot \underbrace{0{,}611 \cdot (1 - 0{,}611)}_{0{,}238} = -0{,}049$$
+:::
+
+::: {.fragment}
+**Neurônio $h_2$:**
+
+$$\delta^{[1]}_2 = \underbrace{-0{,}3 \cdot (-0{,}416)}_{0{,}125} \cdot \underbrace{0{,}550 \cdot (1 - 0{,}550)}_{0{,}248} = 0{,}031$$
+:::
+
+::: {.fragment .conceito}
+$h_2$ tem peso **negativo** para a saída: para $\hat{y}$ subir, $h_2$ precisa **descer**. O sinal do erro inverteu sozinho.
+:::
+
+## Volta, passo 4: os gradientes da camada oculta
+
+[3 · Atribuir]{.olho .q}
+
+```{python}
+#| echo: false
+#| output: asis
+rede(
+    [2, 2, 1],
+    textos=TEXTOS_221,
+    pesos={(0, 0, 0): "−0,025", (0, 1, 0): "−0,049", (0, 0, 1): "0,015", (0, 1, 1): "0,031"},
+    fora={(0, 0): "0,5", (0, 1): "1"},
+    fora_quente={(1, 0): "δ = −0,049", (1, 1): "δ = 0,031"},
+    nos_quentes={(1, 0), (1, 1)},
+    arestas_quentes={(0, 0, 0), (0, 1, 0), (0, 0, 1), (0, 1, 1)},
+    so_arestas=set(),
+    altura=330,
+    escala=0.85,
+)
+```
+
+A mesma receita do passo 2: erro de chegada vezes ativação de partida. Aqui a partida é $x$.
+
+$$\frac{\partial L}{\partial W^{[1]}} = \begin{bmatrix} \delta^{[1]}_1 x_1 & \delta^{[1]}_1 x_2 \\ \delta^{[1]}_2 x_1 & \delta^{[1]}_2 x_2 \end{bmatrix} = \begin{bmatrix} -0{,}025 & -0{,}049 \\ 0{,}015 & 0{,}031 \end{bmatrix} \qquad \frac{\partial L}{\partial b^{[1]}} = \begin{bmatrix} -0{,}049 \\ 0{,}031 \end{bmatrix}$$
+
+## Passo 5: corrigir os nove parâmetros de uma vez
+
+[4 · Corrigir]{.olho .q}
+
+Com $\eta = 0{,}5$, cada parâmetro anda contra o seu gradiente: $\;\theta \leftarrow \theta - \eta\, \dfrac{\partial L}{\partial \theta}$
+
+| parâmetro | antes | gradiente | depois |
+|---|---|---|---|
+| $w^{[2]}_1$ | $0{,}5$ | $-0{,}254$ | $0{,}627$ |
+| $w^{[2]}_2$ | $-0{,}3$ | $-0{,}229$ | $-0{,}186$ |
+| $b^{[2]}$ | $0{,}2$ | $-0{,}416$ | $0{,}408$ |
+| $w^{[1]}_{11}$ | $0{,}1$ | $-0{,}025$ | $0{,}112$ |
+| $w^{[1]}_{21}$ | $-0{,}2$ | $0{,}015$ | $-0{,}208$ |
+
+::: {.fragment .conta}
+**Conferindo com uma ida nova:** a previsão sobe de $0{,}584$ para $0{,}668$ e a perda cai de $0{,}537$ para $0{,}404$.
+:::
+
+::: {.fraco .menor}
+Os outros quatro parâmetros seguem a mesma conta; estão na saída do código, adiante.
+:::
+
+## Todo gradiente de peso tem a mesma forma
+
+[3 · Atribuir]{.olho .q}
+
+$$\frac{\partial L}{\partial w^{[l]}_{jk}} = \underbrace{\delta^{[l]}_j}_{\text{erro de quem recebe}} \cdot \underbrace{a^{[l-1]}_k}_{\text{ativação de quem envia}}$$
+
+::: {.incremental}
+- Entrada **zerada** ($a = 0$): o peso não participou, gradiente zero.
+- Neurônio de chegada **sem erro** ($\delta = 0$): nada a corrigir, gradiente zero.
+- É a regra do perceptron, generalizada para qualquer camada.
+:::
+
+::: {.fragment .conceito}
+Todo o trabalho do backpropagation é calcular os $\delta$. Os gradientes vêm de graça.
+:::
+
+## Com vários neurônios à frente, as culpas se somam
+
+[3 · Atribuir]{.olho .q}
+
+```{python}
+#| echo: false
+#| output: asis
+rede(
+    [3, 3, 3],
+    textos={(1, 1): "j", (2, 0): "δ₁", (2, 1): "δ₂", (2, 2): "δ₃"},
+    nos_quentes={(1, 1)},
+    arestas_quentes={(1, 1, 0), (1, 1, 1), (1, 1, 2)},
+    so_arestas=set(),
+    volta=True,
+    titulos=["camada l − 1", "camada l", "camada l + 1"],
+    altura=350,
+    escala=0.8,
+)
+```
+
+O neurônio $j$ influencia a perda por **todos** os neurônios que ele alimenta:
+
+$$\delta^{[l]}_j = \Big( \sum_k w^{[l+1]}_{kj}\, \delta^{[l+1]}_k \Big) \cdot g'\big(z^{[l]}_j\big)$$
+
+::: {.fragment .fraco .pequeno}
+Cada parcela é "peso da ligação vezes erro de quem recebeu". Na rede 2-2-1 a soma tinha um termo só.
+:::
+
+## As quatro equações do backpropagation
+
+[3 · Atribuir]{.olho .q}
+
+::: {.fragment}
+**1. Erro da saída** &nbsp; (camada $L$, a última)
+$$\delta^{[L]} = \hat{y} - y$$
+:::
+
+::: {.fragment}
+**2. Erro de volta uma camada**
+$$\delta^{[l]} = \Big( \big(W^{[l+1]}\big)^{\!\top} \delta^{[l+1]} \Big) \odot g'\big(z^{[l]}\big)$$
+:::
+
+::: {.fragment}
+**3 e 4. Gradientes dos pesos e dos vieses**
+$$\frac{\partial L}{\partial W^{[l]}} = \delta^{[l]} \big(a^{[l-1]}\big)^{\!\top} \qquad\qquad \frac{\partial L}{\partial b^{[l]}} = \delta^{[l]}$$
+:::
+
+::: {.fragment .fraco .pequeno}
+$\odot$ multiplica elemento a elemento. A transposta $W^\top$ faz a soma do slide anterior para a camada inteira: na ida, $W$ leva da camada $l$ para a $l + 1$; na volta, $W^\top$ traz de $l + 1$ para $l$.
+:::
+
+## Muitas camadas: a equação 2, repetida
+
+[3 · Atribuir]{.olho .q}
+
+```{python}
+#| echo: false
+#| output: asis
+cadeia(
+    ["x", "camada 1", "camada 2", "camada 3", "camada 4", "perda L"],
+    ida=["a⁽⁰⁾", "a⁽¹⁾", "a⁽²⁾", "a⁽³⁾", "ŷ"],
+    volta=["", "δ⁽¹⁾", "δ⁽²⁾", "δ⁽³⁾", "δ⁽⁴⁾"],
+    largura=1300,
+)
+```
+
+::: {.incremental}
+- Começa em $\delta^{[4]} = \hat{y} - y$. Cada $\delta$ seguinte sai do anterior pela equação 2.
+- A rede ter 2 camadas ou 200 não muda a receita: muda **quantas vezes** o laço roda.
+- Cada camada recebe o $\delta$ da frente, calcula os **seus** gradientes e passa o $\delta$ para trás.
+:::
+
+## O algoritmo completo, para um exemplo
+
+::: {.incremental}
+1. [**Ida.**]{.ida} Calcule $z^{[l]}$ e $a^{[l]}$ de todas as camadas, **guardando** os valores.
+2. [**Perda.**]{.ida} Compare $\hat{y}$ com $y$.
+3. [**Erro da saída.**]{.volta} $\delta^{[L]} = \hat{y} - y$.
+4. [**Volta.**]{.volta} Para $l = L, L - 1, \dots, 1$:
+    - gradientes da camada: $\delta^{[l]} \big(a^{[l-1]}\big)^{\!\top}$ e $\delta^{[l]}$;
+    - erro da camada anterior: $\delta^{[l-1]} = \big( (W^{[l]})^{\!\top} \delta^{[l]} \big) \odot g'\big(z^{[l-1]}\big)$.
+5. [**Correção.**]{.volta} Todos os parâmetros andam $-\eta$ vezes o seu gradiente.
+:::
+
+::: {.fragment .conceito}
+A volta custa o mesmo tipo de conta que a ida: uma multiplicação de matriz por camada. **Duas passadas**, não treze mil.
+:::
+
+## Em código: a volta, linha por linha
+
+```{python}
+#| echo: false
+W1 = np.array([[0.1, 0.3], [-0.2, 0.4]])
+b1 = np.array([0.1, -0.1])
+W2 = np.array([[0.5, -0.3]])
+b2 = np.array([0.2])
+x = np.array([0.5, 1.0])
+y = 1
+```
+
+```{python}
+z1 = W1 @ x + b1                         # ida (guardando tudo)
+a1 = sigmoide(z1)
+z2 = W2 @ a1 + b2
+a2 = sigmoide(z2)
+
+delta2 = a2 - y                          # passo 1: erro da saída
+grad_W2 = np.outer(delta2, a1)           # passo 2: gradientes da camada 2
+grad_b2 = delta2
+delta1 = (W2.T @ delta2) * a1 * (1 - a1) # passo 3: erro de volta à camada 1
+grad_W1 = np.outer(delta1, x)            # passo 4: gradientes da camada 1
+grad_b1 = delta1
+
+print("delta2:", delta2.round(3), "| delta1:", delta1.round(3))
+print("grad_W2:", grad_W2.round(3))
+print("grad_W1:", grad_W1.round(3).tolist())
+```
+
+::: {.fraco .pequeno}
+`np.outer(delta, a)` monta a matriz "erro de quem recebe × ativação de quem envia", um peso por célula.
+:::
+
+## Em código: a correção
+
+```{python}
+eta = 0.5
+W1_novo = W1 - eta * grad_W1
+b1_novo = b1 - eta * grad_b1
+W2_novo = W2 - eta * grad_W2
+b2_novo = b2 - eta * grad_b2
+
+print("W1 novo:", W1_novo.round(3).tolist(), "| b1 novo:", b1_novo.round(3))
+print("W2 novo:", W2_novo.round(3).tolist(), "| b2 novo:", b2_novo.round(3))
+```
+
+::: {.fraco .pequeno}
+Os nove parâmetros mudam **ao mesmo tempo**, todos calculados com os pesos antigos.
+:::
+
+## Em código: a ida de conferência
+
+```{python}
+a1_novo = sigmoide(W1_novo @ x + b1_novo)
+a2_novo = sigmoide(W2_novo @ a1_novo + b2_novo)
+
+pd.DataFrame(
+    {"previsão": [a2[0], a2_novo[0]], "perda": [-np.log(a2[0]), -np.log(a2_novo[0])]},
+    index=["antes do passo", "depois do passo"],
+).round(3)
+```
+
+::: {.fragment .conceito}
+Um passo, e a rede já erra menos **neste exemplo**. Treinar é repetir isso milhares de vezes, com todos os exemplos.
+:::
+
+## Como saber se a volta está certa: o método ingênuo confere {.compacto}
+
+```{python}
+def perda_da_rede(W1, b1, W2, b2):
+    a2 = sigmoide(W2 @ sigmoide(W1 @ x + b1) + b2)
+    return -np.log(a2[0])
+
+eps = 1e-6
+perda_original = perda_da_rede(W1, b1, W2, b2)
+linhas = []
+for j in range(2):
+    for k in range(2):
+        W1_mexido = W1.copy()
+        W1_mexido[j, k] = W1_mexido[j, k] + eps
+        numerico = (perda_da_rede(W1_mexido, b1, W2, b2) - perda_original) / eps
+        linhas.append({"peso": f"W1[{j},{k}]",
+                       "backpropagation": grad_W1[j, k], "mexendo no peso": numerico})
+
+pd.DataFrame(linhas).set_index("peso").round(5)
+```
+
+::: {.fraco .pequeno}
+As duas colunas saem de contas independentes. É o teste que se faz ao programar uma volta nova.
+:::
+
+## Em código: qualquer número de camadas
+
+```{python}
+def ida(x, W, b):
+    a = [x]                                   # a[0] é a entrada
+    for W_l, b_l in zip(W, b):
+        a.append(sigmoide(W_l @ a[-1] + b_l))
+    return a                                  # as ativações de todas as camadas
+
+def volta(y, W, a):
+    grad_W = [None] * len(W)
+    grad_b = [None] * len(W)
+    delta = a[-1] - y                         # erro da saída
+    for l in range(len(W) - 1, -1, -1):       # da última camada à primeira
+        grad_W[l] = np.outer(delta, a[l])
+        grad_b[l] = delta
+        if l > 0:                             # erro de volta uma camada
+            delta = (W[l].T @ delta) * a[l] * (1 - a[l])
+    return grad_W, grad_b
+```
+
+::: {.fraco .pequeno}
+`W` e `b` são listas, com uma matriz e um vetor por camada. `W[l]` leva de `a[l]` para `a[l + 1]`.
+:::
+
+## Em código: a rede aprende o XOR sozinha
+
+```{python}
+rng = np.random.default_rng(1)
+W = [rng.normal(0, 1, (2, 2)), rng.normal(0, 1, (1, 2))]     # rede 2-2-1
+b = [np.zeros(2), np.zeros(1)]
+eta = 0.5
+custos = []
+
+for epoca in range(5000):
+    perda_da_epoca = 0.0
+    for x_i, y_i in zip(X, y_xor):
+        a = ida(x_i, W, b)                                    # ida
+        grad_W, grad_b = volta(y_i, W, a)                     # volta
+        for l in range(len(W)):                               # correção
+            W[l] = W[l] - eta * grad_W[l]
+            b[l] = b[l] - eta * grad_b[l]
+        y_chapeu = a[-1][0]
+        perda_da_epoca += -(y_i * np.log(y_chapeu) + (1 - y_i) * np.log(1 - y_chapeu))
+    custos.append(perda_da_epoca / len(X))
+```
+
+::: {.fraco .pequeno}
+Os pesos começam **aleatórios** (com semente, para o resultado se repetir). Ninguém disse à rede o que é OU nem NÃO-E.
+:::
+
+## O que nenhum neurônio sozinho fazia
+
+:::: {.columns}
+::: {.column width="38%"}
+```{python}
+#| echo: false
+linhas = []
+for x_i, y_i in zip(X, y_xor):
+    a = ida(x_i, W, b)
+    linhas.append({"x1": x_i[0], "x2": x_i[1], "XOR": y_i, "h1": a[1][0], "h2": a[1][1], "previsão": a[2][0]})
+pd.DataFrame(linhas).set_index(["x1", "x2"]).round(3)
+```
+
+```{python}
+#| echo: false
+fig, ax = plt.subplots(figsize=(4.6, 2.5))
+ax.plot(custos, color=AZUL, lw=2.5)
+ax.set(xlabel="época", ylabel="custo", ylim=(0, None), xlim=(0, 5000))
+plt.show()
+```
+:::
+
+::: {.column width="62%"}
+```{python}
+#| echo: false
+def rede_xor(P):
+    return np.array([ida(p, W, b)[-1][0] for p in P])
+
+def saida_xor(Hp):
+    return sigmoide(Hp @ W[1][0] + b[1][0])
+
+H_aprendido = np.array([ida(x_i, W, b)[1] for x_i in X])
+fig, eixos = plt.subplots(1, 2, figsize=(8.6, 4.4))
+g = np.linspace(-0.5, 1.5, 70)
+G1, G2 = np.meshgrid(g, g)
+S = rede_xor(np.column_stack([G1.ravel(), G2.ravel()])).reshape(G1.shape)
+eixos[0].contourf(G1, G2, S, levels=[0.5, 2], colors=[CEU], alpha=0.45)
+eixos[0].contour(G1, G2, S, levels=[0.5], colors=[LARANJA], linewidths=2.5)
+pontos(eixos[0], X, y_xor, "nas entradas: fronteira dobrada")
+eixos[0].set(xlabel="$x_1$", ylabel="$x_2$")
+regiao(eixos[1], saida_xor, lim=(-0.15, 1.15))
+pontos(eixos[1], H_aprendido, y_xor, "na camada oculta: uma reta", lim=(-0.15, 1.15))
+eixos[1].set(xlabel="$h_1$", ylabel="$h_2$")
+fig.tight_layout()
+plt.show()
+```
+:::
+::::
+
+::: {.fragment .conceito}
+A rede **descobriu** uma representação oculta em que o XOR é separável por uma reta, como a que montamos à mão na Parte 3.
+:::
+
+## Sua vez: a volta com outra resposta {.sua-vez}
+
+Mesma rede e mesma ida: $a^{[1]} = (0{,}611;\ 0{,}550)$, $\hat{y} = 0{,}584$, $W^{[2]} = (0{,}5;\ {-}0{,}3)$. Agora a resposta é $y = 0$.
+
+1. Quanto vale $\delta^{[2]}$?
+2. Quais são os gradientes de $w^{[2]}_1$ e $w^{[2]}_2$?
+3. Calcule $\delta^{[1]}_1$, usando $\sigma'\big(z^{[1]}_1\big) = 0{,}238$. Para que lado $h_1$ deveria ir?
+
+::: {.fragment .conta}
+$\delta^{[2]} = 0{,}584 - 0 = 0{,}584$. Gradientes: $0{,}584 \cdot 0{,}611 = 0{,}357$ e $0{,}584 \cdot 0{,}550 = 0{,}321$.
+
+$\delta^{[1]}_1 = 0{,}5 \cdot 0{,}584 \cdot 0{,}238 = 0{,}069$. Positivo: $h_1$ deveria **descer**, porque ele empurra $\hat{y}$ para cima e a resposta é 0.
+:::
+
+## O erro encolhe a cada camada que atravessa
+
+A equação 2 multiplica por $g'(z)$ **em toda camada**. Com a sigmoide, $g'(z) \le 0{,}25$.
+
+:::: {.columns}
+::: {.column width="55%"}
+```{python}
+#| echo: false
+camadas_atras = np.arange(0, 11)
+fig, ax = plt.subplots(figsize=(7, 4.3))
+ax.semilogy(camadas_atras, 0.25**camadas_atras, color=LARANJA, lw=2.5, marker="o", ms=8)
+ax.semilogy(camadas_atras, 1.0**camadas_atras, color=AZUL, lw=2.5, marker="o", ms=8)
+ax.annotate("sigmoide: no máximo $0{,}25^n$", (5.4, 4e-3), color=LARANJA, fontsize=13)
+ax.annotate("ReLU (lado positivo): $1^n$", (5.4, 2.4), color=AZUL, fontsize=13)
+ax.set(xlabel="camadas atravessadas na volta", ylabel="fator sobre o erro (escala log)", ylim=(5e-7, 20))
+plt.show()
+```
+:::
+
+::: {.column width="45%"}
+::: {.incremental}
+- Dez camadas de sigmoide: o erro chega ao começo multiplicado por menos de um milionésimo.
+- As primeiras camadas quase não aprendem: é o **gradiente que desaparece**.
+- Com a **ReLU**, o fator é 1 onde o neurônio está ativo. É um dos motivos de ela ter virado o padrão.
+:::
+:::
+::::
+
+## O backpropagation nas quatro perguntas
+
+::: {.quatro}
+::: {}
+[1]{.num}
+
+[Prever]{.nome}
+
+A ida, guardando $z$ e $a$ de cada camada
+:::
+
+::: {}
+[2]{.num}
+
+[Medir]{.nome}
+
+A perda na saída
+:::
+
+::: {}
+[3]{.num}
+
+[Atribuir]{.nome}
+
+A volta: $\delta$ da saída, depois $\delta$ de cada camada, de trás para a frente
+:::
+
+::: {}
+[4]{.num}
+
+[Corrigir]{.nome}
+
+$W^{[l]} \leftarrow W^{[l]} - \eta\, \delta^{[l]} \big(a^{[l-1]}\big)^{\!\top}$
+:::
+:::
+
+::: {.fragment .conceito}
+O backpropagation **não é** o aprendizado: é só a pergunta 3, o cálculo do gradiente. Quem aprende é o gradiente descendente, que usa esse gradiente na pergunta 4.
+:::

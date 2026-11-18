@@ -1,0 +1,364 @@
+# Treinar de verdade {.divisoria background-color="#27316E"}
+
+[Parte 6 · 40 min]{.parte}
+
+Do exemplo de quatro pontos a imagens de dígitos escritos à mão.
+
+## O problema: reconhecer dígitos escritos à mão
+
+```{python}
+#| echo: false
+from sklearn.datasets import load_digits
+from sklearn.model_selection import train_test_split
+
+digitos = load_digits()
+fig, eixos = plt.subplots(2, 10, figsize=(12.5, 2.9))
+for ax, imagem, rotulo in zip(eixos.ravel(), digitos.images, digitos.target):
+    ax.imshow(imagem, cmap="Blues")
+    ax.set_title(str(rotulo), fontsize=13)
+    ax.axis("off")
+fig.tight_layout()
+plt.show()
+```
+
+::: {.incremental}
+- 1.797 imagens de $8 \times 8$ pixels: **64 entradas**, cada uma a intensidade de um pixel.
+- **10 classes**: os dígitos de 0 a 9.
+- Rede 64-32-10: camada oculta com **ReLU**, saída com **softmax**.
+:::
+
+## Preparar os dados
+
+```{python}
+X_dig = digitos.data / 16                    # pixels de 0 a 16 viram 0 a 1
+y_dig = digitos.target
+
+X_treino, X_teste, y_treino, y_teste = train_test_split(
+    X_dig, y_dig, test_size=0.25, random_state=0, stratify=y_dig
+)
+Y_treino = np.eye(10)[y_treino]              # respostas em one-hot
+
+print("treino:", X_treino.shape, "| teste:", X_teste.shape)
+print("resposta da 1ª imagem:", y_treino[0], "| em one-hot:", Y_treino[0])
+```
+
+::: {.fraco .pequeno}
+A rede treina numa parte e é avaliada na outra, que ela nunca viu.
+:::
+
+## Lote, minilote, um por vez
+
+[4 · Corrigir]{.olho .q}
+
+Quantos exemplos entram em **cada passo** de correção?
+
+| | exemplos por passo | o gradiente | passos por época |
+|---|---|---|---|
+| **Lote inteiro** | todos | exato, caro | 1 |
+| **Estocástico** | 1 | barato, ruidoso | um por exemplo |
+| **Minilote** | 16 a 256 | meio-termo | dezenas |
+
+::: {.fragment .conceito}
+Na prática se usa o **minilote**: o gradiente é a **média** dos gradientes dos exemplos do lote, e as contas viram operações de matriz.
+:::
+
+::: {.fragment .fraco .pequeno}
+Uma **época** continua sendo uma passada por todos os exemplos de treino.
+:::
+
+## As peças da rede 64-32-10
+
+```{python}
+def relu(Z):
+    return np.maximum(0, Z)
+
+def softmax_lote(Z):                              # softmax em cada linha
+    E = np.exp(Z - Z.max(axis=1, keepdims=True))
+    return E / E.sum(axis=1, keepdims=True)
+
+rng = np.random.default_rng(0)
+W1 = rng.normal(0, np.sqrt(2 / 64), (32, 64))     # pesos pequenos e aleatórios
+b1 = np.zeros(32)
+W2 = rng.normal(0, np.sqrt(2 / 32), (10, 32))
+b2 = np.zeros(10)
+
+print("W1:", W1.shape, "| b1:", b1.shape, "| W2:", W2.shape, "| b2:", b2.shape)
+print("parâmetros:", W1.size + b1.size + W2.size + b2.size)
+```
+
+## Com um lote, cada linha da matriz é um exemplo
+
+[1 · Prever]{.olho}
+
+```{python}
+X_lote, Y_lote = X_treino[:32], Y_treino[:32]     # as 32 primeiras imagens
+
+Z1 = X_lote @ W1.T + b1                           # ida, 32 exemplos de uma vez
+A1 = relu(Z1)
+Z2 = A1 @ W2.T + b2
+P = softmax_lote(Z2)
+
+print("formas -> X_lote:", X_lote.shape, "| Z1:", Z1.shape, "| P:", P.shape)
+print("probabilidades da 1ª imagem:", P[0].round(2))
+```
+
+::: {.fraco .pequeno}
+Com um exemplo por linha, a conta da camada vira `X @ W.T`: é o mesmo $W a + b$, feito para as 32 linhas de uma vez. Antes de treinar, as dez probabilidades não dizem nada.
+:::
+
+## A volta do lote: as mesmas quatro equações
+
+[3 · Atribuir]{.olho .q}
+
+```{python}
+m = len(X_lote)
+custo = -np.sum(Y_lote * np.log(P)) / m
+
+D2 = (P - Y_lote) / m                 # eq. 1: erro da saída (já com a média)
+grad_W2 = D2.T @ A1                   # eq. 3
+grad_b2 = D2.sum(axis=0)              # eq. 4
+D1 = (D2 @ W2) * (Z1 > 0)             # eq. 2: (Z1 > 0) é a derivada da ReLU
+grad_W1 = D1.T @ X_lote
+grad_b1 = D1.sum(axis=0)
+
+print("custo do lote antes de treinar:", custo.round(3))
+print("formas dos gradientes -> W2:", grad_W2.shape, "| W1:", grad_W1.shape)
+```
+
+::: {.fraco .pequeno}
+Cada gradiente tem a forma da matriz que ele corrige. Conferir as formas pega metade dos erros de quem programa uma rede.
+:::
+
+## O laço de treino completo {.compacto}
+
+```{python}
+def treinar_digitos(eta, epocas=30, tamanho_lote=32, semente=0):
+    rng = np.random.default_rng(semente)
+    W1 = rng.normal(0, np.sqrt(2 / 64), (32, 64)); b1 = np.zeros(32)
+    W2 = rng.normal(0, np.sqrt(2 / 32), (10, 32)); b2 = np.zeros(10)
+    historico = []
+    for epoca in range(1, epocas + 1):
+        ordem = rng.permutation(len(X_treino))                 # embaralha a cada época
+        for inicio in range(0, len(ordem), tamanho_lote):
+            lote = ordem[inicio:inicio + tamanho_lote]
+            A0, Y = X_treino[lote], Y_treino[lote]
+            Z1 = A0 @ W1.T + b1; A1 = relu(Z1)                 # ida
+            P = softmax_lote(A1 @ W2.T + b2)
+            D2 = (P - Y) / len(lote)                           # volta
+            D1 = (D2 @ W2) * (Z1 > 0)
+            W2 -= eta * D2.T @ A1; b2 -= eta * D2.sum(axis=0)  # correção
+            W1 -= eta * D1.T @ A0; b1 -= eta * D1.sum(axis=0)
+        P_treino = softmax_lote(relu(X_treino @ W1.T + b1) @ W2.T + b2)
+        historico.append({"época": epoca, "custo": -np.mean(np.log(P_treino[Y_treino == 1] + 1e-12))})
+    return (W1, b1, W2, b2), pd.DataFrame(historico).set_index("época")
+```
+
+## A rede escrita à mão acerta quase todos os dígitos de teste
+
+:::: {.columns}
+::: {.column width="56%"}
+```{python}
+pesos, hist = treinar_digitos(eta=0.1)
+W1, b1, W2, b2 = pesos
+
+def prever(X):
+    A1 = relu(X @ W1.T + b1)
+    P = softmax_lote(A1 @ W2.T + b2)
+    return P.argmax(axis=1)     # classe mais provável
+
+acertos_treino = (prever(X_treino) == y_treino).mean()
+acertos_teste = (prever(X_teste) == y_teste).mean()
+print("acurácia no treino:", acertos_treino.round(3))
+print("acurácia no teste: ", acertos_teste.round(3))
+```
+:::
+
+::: {.column width="44%"}
+```{python}
+#| echo: false
+fig, ax = plt.subplots(figsize=(5.6, 4.2))
+ax.plot(hist.index, hist["custo"], color=AZUL, lw=2.5)
+ax.set(xlabel="época", ylabel="custo no treino", ylim=(0, None), xlim=(1, 30))
+plt.show()
+```
+:::
+::::
+
+::: {.fraco .pequeno}
+Algumas dezenas de linhas de `numpy`, sem biblioteca de redes neurais: ida, volta e correção.
+:::
+
+## Onde ela erra
+
+```{python}
+#| echo: false
+previsto = prever(X_teste)
+errados = np.flatnonzero(previsto != y_teste)[:10]
+fig, eixos = plt.subplots(1, len(errados), figsize=(12.5, 1.9))
+for ax, i in zip(eixos, errados):
+    ax.imshow(X_teste[i].reshape(8, 8), cmap="Blues")
+    ax.set_title(f"era {y_teste[i]}\ndisse {previsto[i]}", fontsize=12, color=LARANJA)
+    ax.axis("off")
+fig.tight_layout()
+plt.show()
+```
+
+```{python}
+print("imagens de teste:", len(y_teste), "| erradas:", int((previsto != y_teste).sum()))
+```
+
+::: {.fragment}
+Olhar os erros é o primeiro diagnóstico: vários desses dígitos confundiriam uma pessoa.
+:::
+
+## A taxa de aprendizado decide se o treino funciona
+
+[4 · Corrigir]{.olho .q}
+
+```{python}
+#| echo: false
+fig, ax = plt.subplots(figsize=(11, 4.1))
+estilos = {0.001: (CINZA, "$\\eta = 0{,}001$: passos pequenos demais"),
+           0.1: (AZUL, "$\\eta = 0{,}1$: desce bem"),
+           3.0: (LARANJA, "$\\eta = 3$: passos grandes demais, não desce")}
+for eta_teste, (cor, rotulo) in estilos.items():
+    _, h = treinar_digitos(eta=eta_teste)
+    ax.plot(h.index, h["custo"], color=cor, lw=2.5)
+    ax.annotate(rotulo, (30.4, h["custo"].iloc[-1]), color=cor, fontsize=12, va="center", annotation_clip=False)
+ax.set(xlabel="época", ylabel="custo no treino", xlim=(1, 30), ylim=(0, 2.7))
+fig.subplots_adjust(right=0.62)
+plt.show()
+```
+
+::: {.incremental}
+- **Pequena demais**: aprende, mas levaria milhares de épocas.
+- **Grande demais**: cada passo salta para o outro lado do vale, e o custo não cai.
+- É o primeiro botão a ajustar quando uma rede não treina.
+:::
+
+## Por que os pesos começam aleatórios
+
+::: {.incremental}
+- Se todos os pesos começam **iguais** (zero, por exemplo), todos os neurônios de uma camada calculam a mesma coisa.
+- Recebem o mesmo $\delta$, o mesmo gradiente, a mesma correção.
+- Continuam iguais para sempre: a camada inteira vale por **um** neurônio.
+:::
+
+::: {.fragment .conceito}
+Pesos iniciais **aleatórios e pequenos** quebram a simetria. Os vieses podem começar em zero.
+:::
+
+::: {.fragment .fraco .pequeno}
+O tamanho do sorteio importa: no código, $\sqrt{2 / n_{\text{entradas}}}$ (inicialização de He), a escolha usual com ReLU.
+:::
+
+## Aprender demais: o risco de decorar o treino
+
+Uma rede tem botões suficientes para **decorar** os exemplos de treino, ruído incluído.
+
+::: {.incremental}
+- Sinal: o custo de treino continua caindo, e o de **validação** começa a subir.
+- **Parada antecipada**: interromper o treino quando a validação para de melhorar.
+- **Penalidade nos pesos** (L2): somar ao custo um termo que cresce com o tamanho dos pesos.
+- ***Dropout***: a cada passo, desligar ao acaso uma parte dos neurônios.
+:::
+
+::: {.fragment .fraco .pequeno}
+A página interativa [Lotes, penalidade e *dropout*](../../apoio/lotes-penalidade-e-dropout.html) mostra os três efeitos numa rede treinando na tela.
+:::
+
+## A mesma rede em cinco linhas de scikit-learn
+
+```{python}
+from sklearn.neural_network import MLPClassifier
+
+modelo = MLPClassifier(hidden_layer_sizes=(32,), activation="relu", solver="sgd",
+                       learning_rate_init=0.1, batch_size=32, max_iter=30, random_state=0)
+modelo.fit(X_treino, y_treino)
+
+pd.DataFrame(
+    {"acurácia no teste": [acertos_teste, modelo.score(X_teste, y_teste)]},
+    index=["nossa rede, em numpy", "MLPClassifier"],
+).round(3)
+```
+
+::: {.fragment}
+Por dentro, `fit` roda o mesmo laço: ida, volta, correção, lote após lote.
+:::
+
+## Nas bibliotecas de redes profundas, a volta é automática
+
+```python
+import torch
+
+modelo = torch.nn.Sequential(
+    torch.nn.Linear(64, 32), torch.nn.ReLU(),
+    torch.nn.Linear(32, 10),
+)
+otimizador = torch.optim.SGD(modelo.parameters(), lr=0.1)
+
+for X_lote, y_lote in lotes:
+    perda = torch.nn.functional.cross_entropy(modelo(X_lote), y_lote)   # ida + perda
+    otimizador.zero_grad()
+    perda.backward()                                                    # a volta
+    otimizador.step()                                                   # a correção
+```
+
+::: {.incremental}
+- Você escreve **só a ida**. A biblioteca monta o grafo de contas e faz a volta: `perda.backward()`.
+- É o grafo de $f = (x + y) \cdot z$ da Parte 5, com milhões de nós.
+:::
+
+## O que muda nas redes de hoje, e o que não muda
+
+:::: {.columns}
+::: {.column width="50%"}
+### Muda
+
+- A **arquitetura**: convoluções para imagens, *transformers* para texto.
+- O **tamanho**: de 9 parâmetros para bilhões.
+- O **otimizador**: variações do gradiente descendente, como o Adam.
+- O **hardware**: GPUs fazendo as multiplicações de matriz.
+:::
+
+::: {.column width="50%"}
+### Não muda
+
+- A [**ida**]{.ida}: somas ponderadas e ativações, camada por camada.
+- Uma **perda** que mede o erro na saída.
+- A [**volta**]{.volta}: a regra da cadeia, de trás para a frente.
+- A **correção**: um passo contra o gradiente.
+:::
+::::
+
+## A aula em um slide
+
+| | Perceptron | Neurônio sigmoide | Rede multicamada |
+|---|---|---|---|
+| **1 · Prever** | degrau de $\mathbf{w} \cdot \mathbf{x} + b$ | $\sigma(\mathbf{w} \cdot \mathbf{x} + b)$ | a ida, camada por camada |
+| **2 · Medir** | certo ou errado | entropia cruzada | entropia cruzada (com softmax, se $K$ classes) |
+| **3 · Atribuir** | entradas ativas | $(\hat{y} - y)\,x_j$ | backpropagation: $\delta^{[l]}\,\big(a^{[l-1]}\big)^{\!\top}$ |
+| **4 · Corrigir** | $w \leftarrow w + \eta\,(y - \hat{y})\,x$ | $w \leftarrow w - \eta\,\dfrac{\partial L}{\partial w}$ | o mesmo, em todos os pesos |
+
+::: {.fragment .conceito}
+Em toda a tabela, a correção de um peso é **o erro de quem recebe vezes o sinal de quem envia**.
+:::
+
+## Para continuar
+
+::: {.pequeno}
+- **3Blue1Brown**, série *Neural Networks*: a intuição visual da ida, do gradiente e do backpropagation. [3blue1brown.com/topics/neural-networks](https://www.3blue1brown.com/topics/neural-networks)
+- **Michael Nielsen**, *Neural Networks and Deep Learning*: o capítulo 2 deriva as quatro equações. [neuralnetworksanddeeplearning.com](http://neuralnetworksanddeeplearning.com)
+- **Stanford CS231n**, notas de curso: grafos de contas e backpropagation. [cs231n.github.io](https://cs231n.github.io)
+- **Andrej Karpathy**, *The spelled-out intro to neural networks and backpropagation*: um motor de derivadas escrito do zero. [github.com/karpathy/micrograd](https://github.com/karpathy/micrograd)
+- **DeepLearning.AI**, *Neural Networks and Deep Learning* (Andrew Ng): do neurônio logístico às redes profundas, com a notação $W^{[l]}$ usada aqui.
+- **MIT 6.S191**, *Introduction to Deep Learning*: [introtodeeplearning.com](http://introtodeeplearning.com)
+:::
+
+::: {.fraco .menor}
+Artigos originais: Rosenblatt (1958), *The perceptron*; Minsky e Papert (1969), *Perceptrons*; Rumelhart, Hinton e Williams (1986), *Learning representations by back-propagating errors*.
+:::
+
+::: {.fraco .pequeno}
+Páginas interativas do curso: [Do pixel ao dígito](../../apoio/do-pixel-ao-digito.html) · [Retropropagação](../../apoio/retropropagacao.html) · [Lotes, penalidade e *dropout*](../../apoio/lotes-penalidade-e-dropout.html)
+:::

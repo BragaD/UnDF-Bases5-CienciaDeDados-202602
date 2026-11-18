@@ -1,0 +1,551 @@
+# O neurônio que desce o gradiente {.divisoria background-color="#27316E"}
+
+[Parte 2 · 45 min]{.parte}
+
+Trocar "certo ou errado" por "quão errado", e corrigir na medida do erro.
+
+## O degrau não diz para que lado ir
+
+:::: {.columns}
+::: {.column width="48%"}
+Mexa um peso **um pouquinho**. Com o degrau, a saída:
+
+::: {.incremental}
+- quase sempre **não muda nada**;
+- às vezes **pula** de 0 para 1.
+:::
+
+::: {.fragment}
+Não existe "errou um pouco menos". Sem isso, não há como saber se o ajuste foi na direção certa.
+:::
+
+::: {.fragment .conceito}
+Precisamos de uma ativação **suave**: mudança pequena no peso, mudança pequena na saída.
+:::
+:::
+
+::: {.column width="52%"}
+```{python}
+#| echo: false
+def sigmoide(z):
+    return 1 / (1 + np.exp(-z))
+
+zz = np.linspace(-6, 6, 400)
+fig, ax = plt.subplots(figsize=(6.4, 4.6))
+ax.step(zz, (zz >= 0).astype(float), color=CINZA, lw=2, where="post")
+ax.plot(zz, sigmoide(zz), color=AZUL, lw=3)
+ax.annotate("degrau", (-5.6, 0.07), color=CINZA, fontsize=14)
+ax.annotate("sigmoide", (1.6, 0.66), color=AZUL, fontsize=14)
+ax.set(xlabel="$z$", ylabel="saída", yticks=[0, 0.5, 1])
+plt.show()
+```
+:::
+::::
+
+## A sigmoide transforma z numa probabilidade
+
+[1 · Prever]{.olho}
+
+:::: {.columns}
+::: {.column width="50%"}
+$$\sigma(z) = \frac{1}{1 + e^{-z}}$$
+
+::: {.fragment}
+| $z$ | $\sigma(z)$ | leitura |
+|---|---|---|
+| $-4$ | $0{,}02$ | quase certo que é 0 |
+| $-2$ | $0{,}12$ | |
+| $0$ | $0{,}50$ | em cima do muro |
+| $2$ | $0{,}88$ | |
+| $4$ | $0{,}98$ | quase certo que é 1 |
+:::
+:::
+
+::: {.column width="50%"}
+::: {.fragment}
+O neurônio continua o mesmo, só troca a ativação:
+
+$$z = \mathbf{w} \cdot \mathbf{x} + b \qquad \hat{y} = \sigma(z)$$
+:::
+
+::: {.fragment .conceito}
+Agora $\hat{y}$ é um número **entre 0 e 1**: a probabilidade que o neurônio dá à classe 1.
+:::
+
+::: {.fragment .fraco .pequeno}
+Um neurônio com sigmoide é a **regressão logística**.
+:::
+:::
+::::
+
+## Na mão: a previsão de um neurônio sigmoide
+
+[1 · Prever]{.olho}
+
+```{python}
+#| echo: false
+#| output: asis
+neuronio(
+    xs=("2", "1"), ws=("0,4", "−0,6"), b="0,1", z="z = 0,3", ativ="σ", saida="0,57", legendas=False, escala=0.72
+)
+```
+
+::: {.fragment}
+$$z = 0{,}4 \cdot 2 + (-0{,}6) \cdot 1 + 0{,}1 = 0{,}3$$
+:::
+
+::: {.fragment}
+$$\hat{y} = \sigma(0{,}3) = \frac{1}{1 + e^{-0{,}3}} = 0{,}574$$
+:::
+
+::: {.fragment}
+A resposta certa era $y = 1$. O neurônio deu 57% de chance. **Quão ruim é isso?**
+:::
+
+## A perda mede quão ruim foi a previsão
+
+[2 · Medir]{.olho}
+
+:::: {.columns}
+::: {.column width="52%"}
+**Entropia cruzada binária**, para um exemplo:
+
+$$L = -\big[\, y \ln \hat{y} + (1 - y) \ln (1 - \hat{y}) \,\big]$$
+
+::: {.incremental}
+- Se $y = 1$, sobra $L = -\ln \hat{y}$.
+- Se $y = 0$, sobra $L = -\ln (1 - \hat{y})$.
+:::
+
+::: {.fragment}
+No exemplo: $L = -\ln 0{,}574 = 0{,}554$.
+:::
+
+::: {.fragment .conceito}
+Acertar com confiança custa quase zero. **Errar com confiança custa muito.**
+:::
+:::
+
+::: {.column width="48%"}
+```{python}
+#| echo: false
+p = np.linspace(0.01, 0.999, 300)
+fig, ax = plt.subplots(figsize=(6, 4.8))
+ax.plot(p, -np.log(p), color=AZUL, lw=3)
+ax.scatter([0.574], [-np.log(0.574)], s=110, color=LARANJA, zorder=3)
+ax.annotate("o exemplo:\n$\\hat{y} = 0{,}574$", (0.6, 0.85), color=LARANJA, fontsize=13)
+ax.set(xlabel="$\\hat{y}$ (quando a resposta é 1)", ylabel="perda $L = -\\ln \\hat{y}$", ylim=(0, 4.7))
+plt.show()
+```
+:::
+::::
+
+## O custo é a perda média, e é ele que queremos baixar
+
+[2 · Medir]{.olho}
+
+Para $m$ exemplos:
+
+$$J(\mathbf{w}, b) = \frac{1}{m} \sum_{i=1}^{m} L^{(i)}$$
+
+::: {.incremental}
+- $J$ depende **só dos pesos e do viés**: os dados estão fixos.
+- Cada posição dos botões dá um valor de $J$.
+- **Treinar** é procurar a posição em que $J$ é menor.
+:::
+
+::: {.fragment .conceito}
+A pergunta "para que lado girar cada botão?" virou uma pergunta de cálculo: **como $J$ muda quando $w_j$ muda?** Essa é a derivada $\dfrac{\partial J}{\partial w_j}$.
+:::
+
+## Gradiente descendente: um passo contra a derivada
+
+[4 · Corrigir]{.olho .q}
+
+:::: {.columns}
+::: {.column width="48%"}
+$$w_j \leftarrow w_j - \eta\, \frac{\partial J}{\partial w_j}$$
+
+::: {.incremental}
+- Derivada **positiva**: subir $w_j$ aumenta o custo. Então **desça** $w_j$.
+- Derivada **negativa**: subir $w_j$ diminui o custo. Então **suba** $w_j$.
+- Derivada **perto de zero**: quase no fundo. Passo pequeno.
+:::
+
+::: {.fragment .fraco .pequeno}
+O conjunto das derivadas de todos os pesos é o **gradiente**.
+:::
+:::
+
+::: {.column width="52%"}
+```{python}
+#| echo: false
+ww = np.linspace(-1.2, 3.2, 300)
+custo = lambda w: (w - 1.4) ** 2 * 0.55 + 0.3
+passos = [-0.8]
+for _ in range(5):
+    passos.append(passos[-1] - 0.45 * 1.1 * (passos[-1] - 1.4))
+passos = np.array(passos)
+fig, ax = plt.subplots(figsize=(6.4, 4.8))
+ax.plot(ww, custo(ww), color=AZUL, lw=3)
+ax.plot(passos, custo(passos), color=LARANJA, lw=1.5, marker="o", ms=9)
+ax.annotate("começo", (passos[0] + 0.1, custo(passos[0]) + 0.05), color=LARANJA, fontsize=13)
+ax.set(xlabel="um peso $w$", ylabel="custo $J$", yticks=[])
+plt.show()
+```
+:::
+::::
+
+## A perda depende do peso por uma cadeia de três elos
+
+[3 · Atribuir]{.olho .q}
+
+```{python}
+#| echo: false
+#| output: asis
+cadeia(["peso w", "soma z", "saída ŷ", "perda L"], ida=["z = w·x + b", "ŷ = σ(z)", "L = −ln ŷ …"], largura=1200)
+```
+
+::: {.fragment}
+Mexer em $w_j$ mexe em $z$, que mexe em $\hat{y}$, que mexe em $L$. A **regra da cadeia** multiplica os três efeitos:
+
+$$\frac{\partial L}{\partial w_j} = \frac{\partial L}{\partial \hat{y}} \cdot \frac{\partial \hat{y}}{\partial z} \cdot \frac{\partial z}{\partial w_j}$$
+:::
+
+::: {.fragment .fraco .pequeno}
+Como engrenagens: se a primeira gira a segunda 2 vezes mais rápido e a segunda gira a terceira 3 vezes, a primeira gira a terceira $2 \cdot 3 = 6$ vezes.
+:::
+
+## Os três elos: cada função ao lado da sua derivada
+
+[3 · Atribuir]{.olho .q}
+
+::: {.elos}
+::: {.cab}
+:::
+
+::: {.cab}
+[a função]{.ida}
+:::
+
+::: {.cab}
+[a derivada dela]{.volta}
+:::
+:::
+
+::: {.fragment .elos}
+::: {.nome}
+**Perda**, em relação à **saída** $\hat{y}$
+:::
+
+::: {.f}
+$$L = -\big[\, y \ln \hat{y} + (1 - y) \ln (1 - \hat{y}) \,\big]$$
+:::
+
+::: {.d}
+$$\frac{\partial L}{\partial \hat{y}} = -\frac{y}{\hat{y}} + \frac{1 - y}{1 - \hat{y}} = \frac{\hat{y} - y}{\hat{y}\,(1 - \hat{y})}$$
+:::
+:::
+
+::: {.fragment .elos}
+::: {.nome}
+**Saída**, em relação à **soma** $z$
+:::
+
+::: {.f}
+$$\hat{y} = \sigma(z) = \frac{1}{1 + e^{-z}}$$
+:::
+
+::: {.d}
+$$\frac{\partial \hat{y}}{\partial z} = \sigma(z)\,\big(1 - \sigma(z)\big) = \hat{y}\,(1 - \hat{y})$$
+:::
+:::
+
+::: {.fragment .elos}
+::: {.nome}
+**Soma**, em relação ao **peso** $w_j$
+:::
+
+::: {.f}
+$$z = w_1 x_1 + \dots + w_j x_j + \dots + b$$
+:::
+
+::: {.d}
+$$\frac{\partial z}{\partial w_j} = x_j$$
+:::
+:::
+
+::: {.fragment .fraco .pequeno}
+Em cada linha, só a letra do denominador varia; o resto é tratado como constante. Na soma, o único termo que contém $w_j$ é $w_j x_j$.
+:::
+
+## Multiplicados, os elos se simplificam
+
+[3 · Atribuir]{.olho .q}
+
+$$\frac{\partial L}{\partial w_j} = \frac{\hat{y} - y}{\textcolor{#8A99A5}{\hat{y}\,(1 - \hat{y})}} \cdot \textcolor{#8A99A5}{\hat{y}\,(1 - \hat{y})} \cdot x_j$$
+
+::: {.fragment}
+$$\boxed{\;\frac{\partial L}{\partial w_j} = (\hat{y} - y)\, x_j \qquad\qquad \frac{\partial L}{\partial b} = \hat{y} - y\;}$$
+:::
+
+::: {.fragment .conceito}
+A culpa de um peso é **o erro da saída vezes a entrada que passou por ele**.
+:::
+
+::: {.fragment .fraco .pequeno}
+Para o viés a conta é a mesma, com $\partial z / \partial b = 1$ no lugar de $x_j$.
+:::
+
+## É a regra do perceptron, agora com um erro que tem tamanho
+
+[4 · Corrigir]{.olho .q}
+
+| | correção do peso | o erro |
+|---|---|---|
+| **Perceptron** | $w_j \leftarrow w_j + \eta\,(y - \hat{y})\,x_j$ | $-1$, $0$ ou $+1$ |
+| **Neurônio sigmoide** | $w_j \leftarrow w_j - \eta\,(\hat{y} - y)\,x_j$ | qualquer valor entre $-1$ e $1$ |
+
+::: {.fragment}
+As duas linhas são a **mesma fórmula**: $-(\hat{y} - y) = (y - \hat{y})$.
+:::
+
+::: {.fragment .conceito}
+A diferença está no erro: errou por pouco, corrige pouco. Errou feio, corrige muito.
+:::
+
+## Na mão: um passo de gradiente
+
+[3 · Atribuir]{.olho .q} [4 · Corrigir]{.olho .q}
+
+Mesmo neurônio: $w = (0{,}4;\ {-}0{,}6)$, $b = 0{,}1$, $x = (2;\ 1)$, $y = 1$, $\hat{y} = 0{,}574$. Taxa $\eta = 0{,}5$.
+
+::: {.fragment}
+**Erro da saída:** $\hat{y} - y = 0{,}574 - 1 = -0{,}426$
+:::
+
+::: {.fragment}
+**Gradientes:** $\dfrac{\partial L}{\partial w_1} = -0{,}426 \cdot 2 = -0{,}851 \qquad \dfrac{\partial L}{\partial w_2} = -0{,}426 \cdot 1 = -0{,}426 \qquad \dfrac{\partial L}{\partial b} = -0{,}426$
+:::
+
+::: {.fragment}
+**Correção:** $w_1 \leftarrow 0{,}4 - 0{,}5 \cdot (-0{,}851) = 0{,}826 \qquad w_2 \leftarrow -0{,}387 \qquad b \leftarrow 0{,}313$
+:::
+
+::: {.fragment .conta}
+**Conferindo:** com os pesos novos, $z = 1{,}577$ e $\hat{y} = 0{,}829$. A perda caiu de $0{,}554$ para $0{,}188$.
+:::
+
+## Em código: o mesmo passo
+
+```{python}
+def sigmoide(z):
+    return 1 / (1 + np.exp(-z))
+
+w = np.array([0.4, -0.6])
+b = 0.1
+x = np.array([2.0, 1.0])
+y = 1
+eta = 0.5
+
+y_chapeu = sigmoide(w @ x + b)             # 1. prever
+perda = -np.log(y_chapeu)                  # 2. medir (y = 1)
+erro = y_chapeu - y                        # 3. atribuir
+grad_w = erro * x
+grad_b = erro
+w = w - eta * grad_w                       # 4. corrigir
+b = b - eta * grad_b
+
+print("previsão:", y_chapeu.round(3), "| perda:", perda.round(3))
+print("gradiente dos pesos:", grad_w.round(3), "| do viés:", grad_b.round(3))
+print("pesos novos:", w.round(3), "| viés novo:", b.round(3))
+print("previsão nova:", sigmoide(w @ x + b).round(3))
+```
+
+## Em código: treinar na porta E, com todos os exemplos
+
+```{python}
+w = np.zeros(2)
+b = 0.0
+eta = 1.0
+custos = []
+
+for epoca in range(2000):
+    y_chapeu = sigmoide(X @ w + b)                 # as 4 previsões de uma vez
+    perdas = -(y_and * np.log(y_chapeu) + (1 - y_and) * np.log(1 - y_chapeu))
+    erro = y_chapeu - y_and                        # os 4 erros
+    grad_w = X.T @ erro / len(X)                   # média de erro · entrada
+    grad_b = erro.mean()
+    w = w - eta * grad_w
+    b = b - eta * grad_b
+    custos.append(perdas.mean())
+
+print("pesos:", w.round(2), "| viés:", b.round(2))
+```
+
+::: {.fraco .pequeno}
+`X @ w` faz a soma ponderada dos quatro exemplos de uma vez. O gradiente do custo é a **média** dos gradientes dos exemplos.
+:::
+
+## O custo cai, e as previsões viram probabilidades
+
+:::: {.columns}
+::: {.column width="50%"}
+```{python}
+#| echo: false
+fig, ax = plt.subplots(figsize=(6.4, 4.4))
+ax.plot(custos, color=AZUL, lw=2.5)
+ax.set(xlabel="época", ylabel="custo $J$", ylim=(0, 0.75), xlim=(0, 2000))
+plt.show()
+```
+:::
+
+::: {.column width="50%"}
+```{python}
+pd.DataFrame(
+    {"resposta": y_and,
+     "previsão": sigmoide(X @ w + b).round(3)},
+    index=["(0, 0)", "(0, 1)", "(1, 0)", "(1, 1)"],
+)
+```
+:::
+::::
+
+::: {.fragment}
+Diferente do perceptron, o custo **nunca chega a zero**: sempre dá para ficar um pouco mais confiante.
+:::
+
+## Sua vez: e se a resposta fosse 0? {.sua-vez}
+
+Mesmo neurônio e mesmo exemplo: $w = (0{,}4;\ {-}0{,}6)$, $b = 0{,}1$, $x = (2;\ 1)$, $\hat{y} = 0{,}574$. Mas agora $y = 0$.
+
+1. Quanto vale o erro da saída, $\hat{y} - y$?
+2. Quais são os gradientes de $w_1$, $w_2$ e $b$?
+3. Os pesos vão subir ou descer? Isso faz sentido?
+
+::: {.fragment .conta}
+Erro: $0{,}574 - 0 = 0{,}574$. Gradientes: $0{,}574 \cdot 2 = 1{,}149$; $\;0{,}574 \cdot 1 = 0{,}574$; $\;0{,}574$.
+
+Gradientes positivos: os três **descem**. Faz sentido: $z$ precisa cair para $\hat{y}$ se aproximar de 0.
+:::
+
+## E o XOR? O mesmo treino, agora numa função
+
+```{python}
+def treinar_neuronio(X, y, eta=1.0, epocas=2000):
+    w = np.zeros(X.shape[1])
+    b = 0.0
+    custos = []
+    for epoca in range(epocas):
+        y_chapeu = sigmoide(X @ w + b)
+        perdas = -(y * np.log(y_chapeu) + (1 - y) * np.log(1 - y_chapeu))
+        erro = y_chapeu - y
+        w = w - eta * X.T @ erro / len(X)
+        b = b - eta * erro.mean()
+        custos.append(perdas.mean())
+    return w, b, custos
+
+y_or = np.array([0, 1, 1, 1])
+y_xor = np.array([0, 1, 1, 0])
+```
+
+::: {.fraco .pequeno}
+É o laço do slide anterior, sem mudar uma linha da conta: só ganhou nome e passou a receber os dados.
+:::
+
+## O neurônio sigmoide também não aprende o XOR {.compacto}
+
+```{python}
+linhas = []
+for nome, y_porta in [("E", y_and), ("OU", y_or), ("XOR", y_xor)]:
+    w, b, custos = treinar_neuronio(X, y_porta)
+    linhas.append({"porta": nome, "custo final": round(custos[-1], 3), "pesos": w.round(2),
+                   "previsões para (0,0) (0,1) (1,0) (1,1)": sigmoide(X @ w + b).round(2)})
+
+print("custo de quem responde 0,5 para tudo:", -np.log(0.5).round(3))
+pd.DataFrame(linhas).set_index("porta")
+```
+
+:::: {.columns}
+::: {.column width="46%"}
+```{python}
+#| echo: false
+fig, ax = plt.subplots(figsize=(5.8, 2.0))
+for nome, y_porta, cor in [("E", y_and, AZUL), ("OU", y_or, NAVY), ("XOR", y_xor, LARANJA)]:
+    custos_porta = treinar_neuronio(X, y_porta)[2]
+    ax.plot(custos_porta, color=cor, lw=2.5)
+ax.annotate("XOR", (1500, 0.6), color=LARANJA, fontsize=13)
+ax.annotate("E e OU", (300, 0.12), color=AZUL, fontsize=13)
+ax.set(xlabel="época", ylabel="custo $J$", xlim=(0, 2000), ylim=(0, 0.8))
+plt.show()
+```
+:::
+
+::: {.column width="54%"}
+::: {.fragment .cuidado}
+No XOR o custo **não sai do lugar**. O neurônio responde 0,5 para as quatro entradas, o mesmo que não saber nada, e os pesos nem se mexem.
+:::
+:::
+::::
+
+## Por que o gradiente não ajuda no XOR {.compacto}
+
+```{python}
+w = np.zeros(2)
+b = 0.0
+y_chapeu = sigmoide(X @ w + b)
+erro = y_chapeu - y_xor
+
+pd.DataFrame({"XOR": y_xor, "previsão": y_chapeu, "erro": erro,
+              "erro · x1": erro * X[:, 0] + 0.0, "erro · x2": erro * X[:, 1] + 0.0},
+             index=["(0, 0)", "(0, 1)", "(1, 0)", "(1, 1)"])
+```
+
+```{python}
+print("gradiente dos pesos:", X.T @ erro / len(X), "| gradiente do viés:", erro.mean())
+```
+
+::: {.incremental}
+- Os exemplos **puxam em sentidos opostos**: $(1,1)$ quer baixar os pesos, $(0,1)$ e $(1,0)$ querem subir. Na média, dá zero.
+- Não é azar do ponto de partida: a fronteira é $z = 0$, **uma reta**, com degrau ou com sigmoide.
+:::
+
+## O neurônio sigmoide nas quatro perguntas
+
+::: {.quatro}
+::: {}
+[1]{.num}
+
+[Prever]{.nome}
+
+$\hat{y} = \sigma(\mathbf{w} \cdot \mathbf{x} + b)$
+:::
+
+::: {}
+[2]{.num}
+
+[Medir]{.nome}
+
+Entropia cruzada: $L = -\ln$ da probabilidade dada à resposta certa
+:::
+
+::: {}
+[3]{.num}
+
+[Atribuir]{.nome}
+
+Regra da cadeia: $\dfrac{\partial L}{\partial w_j} = (\hat{y} - y)\,x_j$
+:::
+
+::: {}
+[4]{.num}
+
+[Corrigir]{.nome}
+
+$w_j \leftarrow w_j - \eta\,\dfrac{\partial L}{\partial w_j}$
+:::
+:::
+
+::: {.fragment .cuidado}
+Um defeito ficou: a fronteira ainda é $z = 0$, **uma reta**. O XOR continua fora de alcance.
+:::

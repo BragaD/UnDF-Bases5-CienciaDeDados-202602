@@ -1,0 +1,186 @@
+# A saída e a perda {.divisoria background-color="#27316E"}
+
+[Parte 4 · 30 min]{.parte}
+
+Um número, duas classes ou muitas classes: cada pergunta pede uma última camada.
+
+## A última camada depende do que se quer prever
+
+[1 · Prever]{.olho} [2 · Medir]{.olho}
+
+| a pergunta | neurônios de saída | ativação da saída | perda |
+|---|---|---|---|
+| **Quanto?** (regressão) | 1 | nenhuma: $\hat{y} = z$ | erro quadrático |
+| **Sim ou não?** (duas classes) | 1 | sigmoide | entropia cruzada binária |
+| **Qual delas?** ($K$ classes) | $K$, um por classe | **softmax** | entropia cruzada categórica |
+
+::: {.fragment .conceito}
+As camadas ocultas não mudam. Trocar de problema é trocar a **saída** e a **perda**.
+:::
+
+::: {.fragment .fraco .pequeno}
+As duas primeiras linhas já apareceram: a regressão linear e o neurônio da Parte 2. Falta a terceira.
+:::
+
+## Muitas classes: um neurônio de saída por classe
+
+```{python}
+#| echo: false
+#| output: asis
+rede(
+    [3, 4, 3],
+    textos={(2, 0): "z₁", (2, 1): "z₂", (2, 2): "z₃"},
+    fora={(2, 0): "gato", (2, 1): "cachorro", (2, 2): "pássaro"},
+    titulos=["entrada", "oculta", "saída"],
+    altura=380,
+    r=28,
+    escala=0.85,
+)
+```
+
+::: {.incremental}
+- Cada neurônio de saída calcula um **placar** $z_k$ para a sua classe.
+- Placar é qualquer número: negativo, maior que 1, não soma nada em especial.
+- Queremos **probabilidades**: positivas e somando 1.
+:::
+
+## A softmax transforma placares em probabilidades
+
+[1 · Prever]{.olho}
+
+$$\hat{y}_k = \frac{e^{z_k}}{\displaystyle\sum_{j=1}^{K} e^{z_j}}$$
+
+::: {.incremental}
+1. **Exponencial** de cada placar: tudo fica positivo.
+2. **Divide pela soma**: tudo passa a somar 1.
+:::
+
+::: {.fragment .conceito}
+A ordem se mantém: o maior placar fica com a maior probabilidade. E a exponencial **estica** as diferenças.
+:::
+
+## Na mão: a softmax de três placares
+
+[1 · Prever]{.olho}
+
+```{=html}
+<table>
+<thead><tr><th></th><th>gato</th><th>cachorro</th><th>pássaro</th><th>soma</th></tr></thead>
+<tbody>
+<tr><td>placar <i>z</i></td><td>2,0</td><td>1,0</td><td>0,1</td><td></td></tr>
+<tr class="fragment"><td>exponencial <i>e<sup>z</sup></i></td><td>7,389</td><td>2,718</td><td>1,105</td><td>11,212</td></tr>
+<tr class="fragment"><td>dividido pela soma: <b>ŷ</b></td><td class="ida">0,659</td><td class="ida">0,242</td><td class="ida">0,099</td><td>1</td></tr>
+</tbody>
+</table>
+```
+
+::: {.fragment}
+O placar do gato era o **dobro** do placar do cachorro. A probabilidade ficou quase o **triplo**: $0{,}659 / 0{,}242 = 2{,}72$.
+:::
+
+::: {.fragment .fraco .pequeno}
+Esse fator é $e^{2 - 1} = e$: a softmax só enxerga a **diferença** entre os placares.
+:::
+
+## A resposta certa vira um vetor com um único 1
+
+[2 · Medir]{.olho}
+
+Se a classe certa é "cachorro", a resposta é escrita assim (codificação *one-hot*):
+
+$$y = \begin{bmatrix} 0 \\ 1 \\ 0 \end{bmatrix} \begin{matrix} \leftarrow \text{gato} \\ \leftarrow \text{cachorro} \\ \leftarrow \text{pássaro} \end{matrix} \qquad\qquad \hat{y} = \begin{bmatrix} 0{,}659 \\ 0{,}242 \\ 0{,}099 \end{bmatrix}$$
+
+::: {.fragment}
+**Entropia cruzada categórica:**
+
+$$L = -\sum_{k=1}^{K} y_k \ln \hat{y}_k$$
+:::
+
+::: {.fragment .conceito}
+Como só um $y_k$ vale 1, a soma inteira se reduz a **um termo**: $L = -\ln$ da probabilidade dada à classe certa.
+:::
+
+## Na mão: a mesma previsão, duas respostas possíveis
+
+[2 · Medir]{.olho}
+
+A rede previu $\hat{y} = (0{,}659;\ 0{,}242;\ 0{,}099)$.
+
+:::: {.columns}
+::: {.column width="50%"}
+::: {.fragment}
+**Se a resposta era "gato":**
+
+$$L = -\ln 0{,}659 = 0{,}417$$
+
+A rede apostou na classe certa. Perda baixa.
+:::
+:::
+
+::: {.column width="50%"}
+::: {.fragment}
+**Se a resposta era "cachorro":**
+
+$$L = -\ln 0{,}242 = 1{,}417$$
+
+A rede apostou em outra. Perda alta.
+:::
+:::
+::::
+
+::: {.fragment .fraco}
+É a mesma perda da Parte 2. Com duas classes, softmax e entropia categórica voltam a ser sigmoide e entropia binária.
+:::
+
+## O erro da saída é sempre "previsto menos certo"
+
+[3 · Atribuir]{.olho .q}
+
+A derivada da perda em relação ao **placar** $z_k$ de cada neurônio de saída:
+
+| saída + perda | $\dfrac{\partial L}{\partial z_k}$ |
+|---|---|
+| sem ativação + erro quadrático $\tfrac{1}{2}(\hat{y} - y)^2$ | $\hat{y} - y$ |
+| sigmoide + entropia cruzada binária | $\hat{y} - y$ |
+| softmax + entropia cruzada categórica | $\hat{y}_k - y_k$ |
+
+::: {.fragment .conceito}
+Não é coincidência: cada perda é o par natural da sua ativação, e a conta sempre se simplifica do jeito que vimos na Parte 2.
+:::
+
+::: {.fragment}
+No exemplo, com resposta "cachorro": $\hat{y} - y = (0{,}659;\ 0{,}242 - 1;\ 0{,}099) = (0{,}659;\ {-}0{,}758;\ 0{,}099)$.
+:::
+
+## Em código: softmax e entropia cruzada
+
+```{python}
+def softmax(z):
+    e = np.exp(z - z.max())        # subtrair o máximo evita números gigantes
+    return e / e.sum()
+
+z = np.array([2.0, 1.0, 0.1])
+y = np.array([0, 1, 0])            # a classe certa é a segunda
+
+y_chapeu = softmax(z)
+perda = -np.sum(y * np.log(y_chapeu))
+erro = y_chapeu - y
+
+print("perda:", perda.round(3))
+pd.DataFrame({"placar z": z, "probabilidade": y_chapeu.round(3), "resposta y": y, "erro": erro.round(3)},
+             index=["gato", "cachorro", "pássaro"])
+```
+
+## Sua vez: softmax no papel {.sua-vez}
+
+Uma rede deu os placares $z = (3;\ 1;\ 0)$. Use $e^3 = 20{,}09$, $e^1 = 2{,}72$ e $e^0 = 1$.
+
+1. Calcule as três probabilidades.
+2. A classe certa era a **primeira**. Qual é a perda? (Use $\ln 0{,}844 = -0{,}170$.)
+3. Qual é o vetor de erro $\hat{y} - y$?
+
+::: {.fragment .conta}
+Soma: $20{,}09 + 2{,}72 + 1 = 23{,}81$. Probabilidades: $(0{,}844;\ 0{,}114;\ 0{,}042)$.
+
+Perda: $-\ln 0{,}844 = 0{,}170$. Erro: $(0{,}844 - 1;\ 0{,}114;\ 0{,}042) = (-0{,}156;\ 0{,}114;\ 0{,}042)$.
+:::

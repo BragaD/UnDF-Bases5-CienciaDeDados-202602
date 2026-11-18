@@ -1,0 +1,419 @@
+# A rede multicamada {.divisoria background-color="#27316E"}
+
+[Parte 3 · 50 min]{.parte}
+
+Neurônios que alimentam neurônios: a camada oculta e a conta da ida.
+
+## O XOR sai de duas perguntas mais fáceis
+
+"Exatamente uma entrada é 1" é o mesmo que:
+
+::: {.grande .centro}
+[**pelo menos uma** é 1]{.ida} &nbsp; **E** &nbsp; [**não são as duas**]{.ida}
+:::
+
+::: {.incremental}
+- "Pelo menos uma é 1" é a porta **OU**: uma reta resolve.
+- "Não são as duas" é a porta **NÃO-E**: uma reta resolve.
+- Juntar as duas respostas é a porta **E**: uma reta resolve.
+:::
+
+::: {.fragment .conceito}
+Três neurônios, cada um com a sua reta: dois respondem às perguntas fáceis, o terceiro combina as respostas.
+:::
+
+## Três perceptrons resolvem o XOR
+
+```{python}
+#| echo: false
+#| output: asis
+rede(
+    [2, 2, 1],
+    textos={(0, 0): "x₁", (0, 1): "x₂", (1, 0): "h₁", (1, 1): "h₂", (2, 0): "ŷ"},
+    fora={(1, 0): "OU · b = −1", (1, 1): "NÃO-E · b = 1", (2, 0): "E · b = −2"},
+    pesos={(0, 0, 0): "1", (0, 1, 0): "1", (0, 0, 1): "−1", (0, 1, 1): "−1", (1, 0, 0): "1", (1, 1, 0): "1"},
+    titulos=["entrada", "camada oculta", "saída"],
+    arestas_fortes={(0, 0, 0), (0, 1, 0), (0, 0, 1), (0, 1, 1), (1, 0, 0), (1, 1, 0)},
+    frag={1: 0, 2: 1},
+    altura=400,
+)
+```
+
+::: {.fragment .fraco .pequeno}
+Os pesos aqui foram escolhidos à mão, com a ativação degrau. Aprender esses pesos é o assunto da Parte 5.
+:::
+
+## Em código: a rede feita à mão acerta os quatro casos
+
+```{python}
+linhas = []
+for x1, x2 in X:
+    h1 = degrau(1 * x1 + 1 * x2 - 1)        # OU
+    h2 = degrau(-1 * x1 - 1 * x2 + 1)       # NÃO-E
+    saida = degrau(1 * h1 + 1 * h2 - 2)     # E
+    linhas.append({"x1": x1, "x2": x2, "h1 (OU)": h1, "h2 (NÃO-E)": h2, "saída": saida})
+
+tabela_xor = pd.DataFrame(linhas).set_index(["x1", "x2"])
+tabela_xor["XOR"] = y_xor
+tabela_xor
+```
+
+## A camada oculta redesenha o problema
+
+```{python}
+#| echo: false
+H = tabela_xor[["h1 (OU)", "h2 (NÃO-E)"]].to_numpy()
+fig, eixos = plt.subplots(1, 2, figsize=(10.5, 4.6))
+pontos(eixos[0], X, y_xor, "o que a rede recebe: $(x_1, x_2)$")
+eixos[0].set(xlabel="$x_1$", ylabel="$x_2$")
+regiao(eixos[1], lambda P: (P @ np.array([1, 1]) - 1.5 >= 0).astype(float))
+pontos(eixos[1], H, y_xor, "o que o neurônio de saída recebe: $(h_1, h_2)$")
+eixos[1].set(xlabel="$h_1$", ylabel="$h_2$")
+eixos[1].annotate("(0,1) e (1,0)\ncaem no mesmo ponto", (1.0, 1.0), (0.05, 0.45), color=NAVY, fontsize=11,
+                  arrowprops=dict(arrowstyle="-", color=NAVY))
+fig.tight_layout()
+plt.show()
+```
+
+::: {.fragment .conceito}
+Nas coordenadas novas, $(h_1, h_2)$, **uma reta separa as classes**. A camada oculta não classifica: ela cria uma representação em que classificar fica fácil.
+:::
+
+## Um perceptron multicamada (MLP)
+
+```{python}
+#| echo: false
+#| output: asis
+rede(
+    [3, 4, 4, 2],
+    titulos=["entrada", "oculta 1", "oculta 2", "saída"],
+    frag={1: 0, 2: 1, 3: 2},
+    altura=430,
+    r=26,
+)
+```
+
+::: {.incremental}
+- **Camada de entrada**: os dados, sem conta nenhuma.
+- **Camadas ocultas**: cada neurônio é o da Parte 2, recebendo as saídas da camada anterior.
+- **Camada de saída**: a previsão.
+:::
+
+## Cada camada tem uma matriz de pesos
+
+[1 · Prever]{.olho}
+
+:::: {.columns}
+::: {.column width="50%"}
+| símbolo | o que é |
+|---|---|
+| $a^{[0]} = x$ | a entrada |
+| $W^{[l]}$ | pesos que **chegam** à camada $l$ |
+| $b^{[l]}$ | vieses da camada $l$ |
+| $z^{[l]}$ | somas ponderadas da camada $l$ |
+| $a^{[l]}$ | **ativações** (saídas) da camada $l$ |
+| $g$ | a função de ativação |
+:::
+
+::: {.column width="50%"}
+::: {.fragment}
+$W^{[l]}$ tem **uma linha por neurônio** da camada $l$ e **uma coluna por neurônio** da camada anterior.
+:::
+
+::: {.fragment}
+$w^{[l]}_{jk}$ é o peso que liga o neurônio $k$ da camada ${l-1}$ ao neurônio $j$ da camada $l$.
+:::
+
+::: {.fragment .fraco .pequeno}
+O número entre colchetes é a camada. Não é potência.
+:::
+:::
+::::
+
+## A ida é a mesma conta, repetida em cada camada
+
+[1 · Prever]{.olho}
+
+::: {.fragment}
+Um neurônio $j$ da camada $l$:
+
+$$z^{[l]}_j = \sum_k w^{[l]}_{jk}\, a^{[l-1]}_k + b^{[l]}_j \qquad a^{[l]}_j = g\big(z^{[l]}_j\big)$$
+:::
+
+::: {.fragment}
+A camada inteira de uma vez, com matriz:
+
+$$\boxed{\; z^{[l]} = W^{[l]}\, a^{[l-1]} + b^{[l]} \qquad a^{[l]} = g\big(z^{[l]}\big) \;}$$
+:::
+
+```{python}
+#| echo: false
+#| output: asis
+cadeia(["x", "z⁽¹⁾", "a⁽¹⁾", "z⁽²⁾", "a⁽²⁾ = ŷ"], ida=["W⁽¹⁾, b⁽¹⁾", "g", "W⁽²⁾, b⁽²⁾", "g"], largura=1200, frag_ida=False)
+```
+
+::: {.fragment .fraco .pequeno}
+Em inglês, *forward propagation*: a entrada se propaga para a frente, camada por camada.
+:::
+
+## A rede que vai nos acompanhar até o fim da aula
+
+```{python}
+#| echo: false
+#| output: asis
+PESOS_221 = {
+    (0, 0, 0): "0,1", (0, 1, 0): "0,3", (0, 0, 1): "−0,2", (0, 1, 1): "0,4",
+    (1, 0, 0): "0,5", (1, 1, 0): "−0,3",
+}
+TEXTOS_221 = {(0, 0): "x₁", (0, 1): "x₂", (1, 0): "h₁", (1, 1): "h₂", (2, 0): "ŷ"}
+TODAS_221 = set(PESOS_221)
+rede(
+    [2, 2, 1],
+    textos=TEXTOS_221,
+    pesos=PESOS_221,
+    fora={(0, 0): "0,5", (0, 1): "1", (1, 0): "b = 0,1", (1, 1): "b = −0,1", (2, 0): "b = 0,2"},
+    titulos=["entrada", "camada 1 (oculta)", "camada 2 (saída)"],
+    arestas_fortes=TODAS_221,
+    altura=400,
+)
+```
+
+$$W^{[1]} = \begin{bmatrix} 0{,}1 & 0{,}3 \\ -0{,}2 & 0{,}4 \end{bmatrix} \quad b^{[1]} = \begin{bmatrix} 0{,}1 \\ -0{,}1 \end{bmatrix} \qquad W^{[2]} = \begin{bmatrix} 0{,}5 & -0{,}3 \end{bmatrix} \quad b^{[2]} = 0{,}2$$
+
+::: {.fraco .pequeno}
+Entrada $x = (0{,}5;\ 1)$, resposta $y = 1$. Sigmoide em todos os neurônios.
+:::
+
+## Na mão: a ida, camada 1
+
+[1 · Prever]{.olho}
+
+::: {.fragment}
+**Somas ponderadas** dos dois neurônios ocultos:
+
+$$z^{[1]}_1 = 0{,}1 \cdot 0{,}5 + 0{,}3 \cdot 1 + 0{,}1 = 0{,}45$$
+
+$$z^{[1]}_2 = -0{,}2 \cdot 0{,}5 + 0{,}4 \cdot 1 - 0{,}1 = 0{,}20$$
+:::
+
+::: {.fragment}
+**Ativações**:
+
+$$a^{[1]}_1 = \sigma(0{,}45) = 0{,}611 \qquad a^{[1]}_2 = \sigma(0{,}20) = 0{,}550$$
+:::
+
+::: {.fragment .conceito}
+Essas duas ativações são a **entrada da camada seguinte**. A camada 2 nunca vê $x$.
+:::
+
+## Na mão: a ida, camada 2
+
+[1 · Prever]{.olho}
+
+```{python}
+#| echo: false
+#| output: asis
+rede(
+    [2, 2, 1],
+    textos=TEXTOS_221,
+    pesos={(1, 0, 0): "0,5", (1, 1, 0): "−0,3"},
+    fora={(0, 0): "0,5", (0, 1): "1", (1, 0): "0,611", (1, 1): "0,550", (2, 0): "0,584"},
+    arestas_fortes={(1, 0, 0), (1, 1, 0)},
+    so_arestas={(1, 0, 0), (1, 1, 0)},
+    altura=330,
+    escala=0.85,
+)
+```
+
+::: {.fragment}
+$$z^{[2]} = 0{,}5 \cdot 0{,}611 + (-0{,}3) \cdot 0{,}550 + 0{,}2 = 0{,}340$$
+:::
+
+::: {.fragment}
+$$\hat{y} = a^{[2]} = \sigma(0{,}340) = 0{,}584 \qquad\qquad L = -\ln 0{,}584 = 0{,}537$$
+:::
+
+## Em código: a ida, linha por linha
+
+```{python}
+W1 = np.array([[0.1, 0.3], [-0.2, 0.4]])
+b1 = np.array([0.1, -0.1])
+W2 = np.array([[0.5, -0.3]])
+b2 = np.array([0.2])
+
+x = np.array([0.5, 1.0])
+y = 1
+
+z1 = W1 @ x + b1            # camada 1: somas
+a1 = sigmoide(z1)           #           ativações
+z2 = W2 @ a1 + b2           # camada 2: soma
+a2 = sigmoide(z2)           #           ativação = previsão
+perda = -np.log(a2)
+
+print("z1:", z1, "| a1:", a1.round(3))
+print("z2:", z2.round(3), "| previsão:", a2.round(3), "| perda:", perda.round(3))
+```
+
+## Quantos botões tem uma rede?
+
+Cada camada tem **(neurônios) × (entradas que chegam)** pesos, mais **um viés por neurônio**.
+
+::: {.fragment}
+A rede 2-2-1 destes slides:
+
+$$\underbrace{2 \cdot 2 + 2}_{\text{camada 1}} + \underbrace{1 \cdot 2 + 1}_{\text{camada 2}} = 9 \text{ parâmetros}$$
+:::
+
+::: {.fragment}
+Uma rede para dígitos de $28 \times 28$ pixels, com camadas 784-16-16-10:
+
+$$\underbrace{16 \cdot 784 + 16}_{12.560} + \underbrace{16 \cdot 16 + 16}_{272} + \underbrace{10 \cdot 16 + 10}_{170} = 13.002 \text{ parâmetros}$$
+:::
+
+::: {.fragment .cuidado}
+Treinar é descobrir para que lado girar **cada um** desses botões. É o problema da Parte 5.
+:::
+
+## Sua vez: a ida com outra entrada {.sua-vez}
+
+Na mesma rede 2-2-1, troque a entrada para $x = (1;\ 0)$.
+
+1. Calcule $z^{[1]}_1$ e $z^{[1]}_2$.
+2. Use $\sigma(0{,}2) = 0{,}550$ e $\sigma(-0{,}3) = 0{,}426$ para as ativações.
+3. Calcule $z^{[2]}$. A previsão fica acima ou abaixo de 0,5?
+
+::: {.fragment .conta}
+$z^{[1]}_1 = 0{,}1 \cdot 1 + 0{,}3 \cdot 0 + 0{,}1 = 0{,}2 \qquad z^{[1]}_2 = -0{,}2 \cdot 1 + 0{,}4 \cdot 0 - 0{,}1 = -0{,}3$
+
+$z^{[2]} = 0{,}5 \cdot 0{,}550 - 0{,}3 \cdot 0{,}426 + 0{,}2 = 0{,}347$. É positivo, então $\hat{y} > 0{,}5$ (vale $0{,}586$).
+:::
+
+## Sem ativação, empilhar camadas não adianta
+
+Tire o $g$ de uma rede de duas camadas:
+
+::: {.fragment}
+$$\hat{y} = W^{[2]} \big( W^{[1]} x + b^{[1]} \big) + b^{[2]}$$
+:::
+
+::: {.fragment}
+$$\hat{y} = \underbrace{W^{[2]} W^{[1]}}_{\text{uma matriz só}}\, x + \underbrace{W^{[2]} b^{[1]} + b^{[2]}}_{\text{um viés só}}$$
+:::
+
+::: {.fragment .cuidado}
+Dez camadas lineares empilhadas calculam o mesmo que **uma** camada linear. A fronteira continua sendo uma reta.
+:::
+
+::: {.fragment .conceito}
+É a função de ativação, **não linear**, que dá à rede o poder de dobrar a fronteira.
+:::
+
+## Três funções de ativação que você vai encontrar
+
+```{python}
+#| echo: false
+zz = np.linspace(-5, 5, 400)
+s = sigmoide(zz)
+t = np.tanh(zz)
+funcoes = [
+    ("sigmoide", s, s * (1 - s), (-0.1, 1.1)),
+    ("tanh", t, 1 - t**2, (-1.1, 1.1)),
+    ("ReLU", np.maximum(0, zz), (zz > 0).astype(float), (-0.3, 5.2)),
+]
+fig, eixos = plt.subplots(1, 3, figsize=(12.5, 2.9))
+for ax, (nome, f, df, ylim) in zip(eixos, funcoes):
+    ax.plot(zz, f, color=AZUL, lw=3)
+    ax.plot(zz, df, color=LARANJA, lw=2, ls="--")
+    ax.set(title=nome, xlabel="$z$", ylim=ylim)
+eixos[0].annotate("$g(z)$", (2.6, 0.78), color=AZUL, fontsize=13)
+eixos[0].annotate("derivada $g'(z)$", (0.9, 0.3), color=LARANJA, fontsize=13)
+fig.tight_layout()
+plt.show()
+```
+
+::: {.pequeno}
+| | fórmula | derivada | saída |
+|---|---|---|---|
+| **sigmoide** | $\sigma(z) = 1 / (1 + e^{-z})$ | $\sigma(z)\,(1 - \sigma(z))$, no máximo $0{,}25$ | entre 0 e 1 |
+| **tanh** | $\tanh(z)$ | $1 - \tanh^2(z)$, no máximo $1$ | entre −1 e 1 |
+| **ReLU** | $\max(0, z)$ | $1$ se $z > 0$, senão $0$ | de 0 em diante |
+:::
+
+## Qual ativação usar
+
+::: {.incremental}
+- **Camadas ocultas: ReLU**, na dúvida. É barata, e a derivada vale 1 em todo o lado positivo.
+- **Sigmoide e tanh** achatam nas pontas: lá a derivada é quase zero, e o aprendizado emperra. Esse efeito volta na Parte 5.
+- **Camada de saída**: quem decide é o tipo de resposta, não o gosto. É a Parte 4.
+:::
+
+::: {.fragment .fraco .pequeno}
+A ReLU tem variações (*Leaky ReLU*, GELU e outras) que mudam o lado negativo. A ideia é a mesma.
+:::
+
+## Mais neurônios ocultos, curvas mais flexíveis
+
+```{python}
+#| echo: false
+from sklearn.neural_network import MLPRegressor
+
+rng = np.random.default_rng(3)
+x_curva = np.sort(rng.uniform(-3, 3, 120))
+y_curva = np.sin(2 * x_curva) + 0.3 * x_curva + rng.normal(0, 0.15, 120)
+grade = np.linspace(-3, 3, 300)
+
+fig, eixos = plt.subplots(1, 3, figsize=(12.5, 3.9), sharey=True)
+for ax, n in zip(eixos, [1, 3, 20]):
+    modelo = MLPRegressor(hidden_layer_sizes=(n,), activation="tanh", solver="lbfgs", max_iter=5000, random_state=1)
+    modelo.fit(x_curva.reshape(-1, 1), y_curva)
+    ax.scatter(x_curva, y_curva, s=14, color=CINZA, alpha=0.6)
+    ax.plot(grade, modelo.predict(grade.reshape(-1, 1)), color=AZUL, lw=3)
+    ax.set(title=f"{n} neurônio(s) na camada oculta", xlabel="$x$")
+eixos[0].set_ylabel("$y$")
+fig.tight_layout()
+plt.show()
+```
+
+::: {.fragment .conceito}
+**Aproximação universal**: com neurônios suficientes, uma única camada oculta aproxima qualquer função contínua. O teorema diz que os pesos existem. Não diz como achá-los.
+:::
+
+## A rede multicamada nas quatro perguntas
+
+::: {.quatro}
+::: {}
+[1]{.num}
+
+[Prever]{.nome}
+
+A ida: $a^{[l]} = g\big(W^{[l]} a^{[l-1]} + b^{[l]}\big)$, camada por camada
+:::
+
+::: {}
+[2]{.num}
+
+[Medir]{.nome}
+
+Uma perda na saída. Qual? Parte 4
+:::
+
+::: {}
+[3]{.num}
+
+[Atribuir]{.nome}
+
+**?** Quanta culpa tem um peso da camada 1, se o erro só aparece na saída?
+:::
+
+::: {}
+[4]{.num}
+
+[Corrigir]{.nome}
+
+Gradiente descendente, igual. Só falta o gradiente
+:::
+:::
+
+::: {.fragment .cuidado}
+A regra do perceptron precisava da **resposta certa de cada neurônio**. Para os neurônios ocultos, ninguém sabe qual é. Foi esse o impasse de 1969 a 1986.
+:::

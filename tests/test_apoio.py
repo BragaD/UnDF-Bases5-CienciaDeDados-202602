@@ -9,9 +9,16 @@ As duas páginas do capítulo 13 recebem de `scripts/gerar-dados-ensembles.py`
 só o dado cru e a divisão de treino e teste; as contas do bagging e do
 boosting rodam na página, e os testes daqui as conferem, árvore a árvore,
 contra o `scikit-learn`.
+
+As três do capítulo 14 dividem um núcleo só, a rede dos dígitos em tamanho
+pequeno (784, 16, 16 e 10), e recebem de `scripts/gerar-dados-redes.py` as
+imagens e, na primeira, uma rede já ajustada. A ida, a retropropagação e as
+épocas de gradiente são conferidas contra o `MLPClassifier`.
 """
 
+import base64
 import json
+import warnings
 import re
 import shutil
 import subprocess
@@ -23,7 +30,9 @@ import pandas as pd
 import pytest
 from sklearn.ensemble import GradientBoostingRegressor
 from sklearn.metrics import mean_squared_error
+from sklearn.metrics import log_loss
 from sklearn.model_selection import train_test_split
+from sklearn.neural_network import MLPClassifier
 from sklearn.tree import DecisionTreeRegressor
 
 RAIZ = Path(__file__).resolve().parent.parent
@@ -31,6 +40,9 @@ CRESCIMENTO = RAIZ / "apoio/crescimento-da-arvore.html"
 PODA = RAIZ / "apoio/poda-da-arvore.html"
 BAGGING = RAIZ / "apoio/bagging-de-arvores.html"
 BOOSTING = RAIZ / "apoio/boosting-passo-a-passo.html"
+IDA = RAIZ / "apoio/do-pixel-ao-digito.html"
+VOLTA = RAIZ / "apoio/retropropagacao.html"
+AJUSTE = RAIZ / "apoio/lotes-penalidade-e-dropout.html"
 
 
 def dados_embutidos(pagina: Path) -> dict:
@@ -398,3 +410,220 @@ def test_boosting_no_node_segue_o_gradient_boosting_regressor(taxa, partida):
 def test_formato_brasileiro_nos_ensembles():
     assert no_node(BAGGING, "fmt(1452, 0)") == "1.452"
     assert no_node(BOOSTING, "fmt(0.3443, 3)") == "0,344"
+
+
+# --------------------------------------------------------------------------
+# Capítulo 14: a rede dos dígitos (ida, retropropagação e ajuste por lotes)
+# --------------------------------------------------------------------------
+
+TAMANHOS = [784, 16, 16, 10]
+
+
+def mnist(nome: str) -> tuple[np.ndarray, np.ndarray]:
+    tabela = pd.read_csv(RAIZ / "dados" / nome)
+    return tabela.drop(columns="digito").to_numpy(), tabela["digito"].to_numpy()
+
+
+def imagens(texto: str) -> np.ndarray:
+    """As imagens embutidas em base64, como a página as lê: uma linha por imagem."""
+    return np.frombuffer(base64.b64decode(texto), dtype=np.uint8).reshape(-1, 784) / 255
+
+
+def em_matrizes(pesos: list) -> list[np.ndarray]:
+    """Os pesos de cada camada, do vetor da página para a forma de `coefs_`."""
+    return [
+        np.array(w).reshape(TAMANHOS[c], TAMANHOS[c + 1]) for c, w in enumerate(pesos)
+    ]
+
+
+def rede_do_sklearn(pesos: list, vieses: list, X, y, **opcoes) -> MLPClassifier:
+    """Um `MLPClassifier` de gradiente simples que parte dos pesos dados.
+
+    A primeira chamada de `partial_fit` só existe para o `scikit-learn` criar
+    as matrizes; os pesos são escritos por cima, no lugar, porque o otimizador
+    guarda referência a elas.
+    """
+    rede = MLPClassifier(
+        hidden_layer_sizes=(16, 16), solver="sgd", momentum=0,
+        nesterovs_momentum=False, shuffle=False, **opcoes,
+    )
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        rede.partial_fit(X, y, classes=np.arange(10))
+    for camada, W in enumerate(em_matrizes(pesos)):
+        rede.coefs_[camada][...] = W
+    for camada, v in enumerate(vieses):
+        rede.intercepts_[camada][...] = v
+    return rede
+
+
+def test_as_tres_paginas_de_redes_tem_o_mesmo_nucleo():
+    assert nucleo(IDA) == nucleo(VOLTA) == nucleo(AJUSTE)
+
+
+def test_redes_embutem_as_imagens_das_secoes_14_2_e_14_3():
+    treino_pixels, treino_y = mnist("mnist_treino.csv.gz")
+    teste_pixels, teste_y = mnist("mnist_teste.csv.gz")
+
+    ida = dados_embutidos(IDA)
+    assert np.array_equal(imagens(ida["imagens"]), teste_pixels[:200] / 255)
+    assert ida["digitos"] == teste_y[:200].tolist()
+    assert ida["rede"]["tamanhos"] == TAMANHOS
+    assert (ida["n_treino"], ida["n_teste"]) == (len(treino_y), len(teste_y))
+
+    volta = dados_embutidos(VOLTA)
+    assert volta["digitos"] == list(range(10)) * 3
+    linhas = [np.flatnonzero(treino_y == d)[vez] for vez in range(3) for d in range(10)]
+    assert np.array_equal(imagens(volta["imagens"]), treino_pixels[linhas] / 255)
+
+    ajuste = dados_embutidos(AJUSTE)
+    parte_ajuste, parte_validacao = train_test_split(
+        np.arange(len(treino_y)), test_size=0.2, random_state=14, stratify=treino_y
+    )
+    assert np.array_equal(imagens(ajuste["ajuste"]), treino_pixels[parte_ajuste[:600]] / 255)
+    assert ajuste["digitos_ajuste"] == treino_y[parte_ajuste[:600]].tolist()
+    assert np.array_equal(
+        imagens(ajuste["validacao"]), treino_pixels[parte_validacao[:400]] / 255
+    )
+    assert ajuste["digitos_validacao"] == treino_y[parte_validacao[:400]].tolist()
+
+
+@PRECISA_DE_NODE
+def test_ida_no_node_segue_o_predict_proba():
+    d = dados_embutidos(IDA)
+    X = imagens(d["imagens"])
+    y = np.array(d["digitos"])
+    rede = rede_do_sklearn(d["rede"]["W"], d["rede"]["v"], X, y)
+    r = no_node(IDA, """(() => {
+      const rede = redeDe(DADOS.rede);
+      const idas = decodificar(DADOS.imagens).map(x => adiante(rede, x));
+      return {
+        f: idas.map(ida => Array.from(ida.f)),
+        ligadas: idas.map(ida => ida.a[1].filter(a => a > 0).length),
+        erros: medir(rede, decodificar(DADOS.imagens), DADOS.digitos).erros,
+      };
+    })()""")
+    probabilidades = rede.predict_proba(X)
+    assert np.allclose(r["f"], probabilidades, rtol=0, atol=1e-9)
+    primeira = np.maximum(0, X @ rede.coefs_[0] + rede.intercepts_[0])
+    assert r["ligadas"] == (primeira > 0).sum(axis=1).tolist()
+    assert r["erros"] == int((probabilidades.argmax(axis=1) != y).sum())
+
+    # O número de erros que a página afirma nas 2.000 imagens de teste.
+    teste_pixels, teste_y = mnist("mnist_teste.csv.gz")
+    assert d["erros_teste"] == int((rede.predict(teste_pixels / 255) != teste_y).sum())
+
+
+@PRECISA_DE_NODE
+@pytest.mark.parametrize("imagem", [0, 7, 15])
+def test_volta_no_node_da_o_passo_do_mlpclassifier(imagem):
+    d = dados_embutidos(VOLTA)
+    X = imagens(d["imagens"])
+    y = np.array(d["digitos"])
+    r = no_node(VOLTA, f"""(() => {{
+      const X = decodificar(DADOS.imagens), y = DADOS.digitos;
+      const rede = iniciar(gerador(14), [784, 16, 16, 10]);
+      const lista = r => ({{W: r.W.map(w => Array.from(w)), v: r.v.map(b => Array.from(b))}});
+      const antes = lista(rede);
+      const ida = adiante(rede, X[{imagem}]);
+      const delta = atras(rede, ida, y[{imagem}]);
+      const grad = gradiente(rede, X, y, [{imagem}]);
+      passo(rede, grad, 0.03, 0, 1);
+      return {{antes, depois: lista(rede), f: Array.from(ida.f),
+               saida: Array.from(delta[2]), perda: grad.perda}};
+    }})()""")
+    # Na saída, a derivada é a probabilidade menos o alvo.
+    alvo = np.eye(10)[y[imagem]]
+    assert np.allclose(r["saida"], np.array(r["f"]) - alvo, rtol=0, atol=1e-12)
+    assert r["perda"] == pytest.approx(-np.log(r["f"][y[imagem]]))
+
+    um = slice(imagem, imagem + 1)
+    rede = rede_do_sklearn(
+        r["antes"]["W"], r["antes"]["v"], X[um], y[um],
+        learning_rate_init=0.03, alpha=0, batch_size=1,
+    )
+    assert np.allclose(rede.predict_proba(X[um])[0], r["f"], rtol=0, atol=1e-12)
+    rede.partial_fit(X[um], y[um])
+    for camada, W in enumerate(em_matrizes(r["depois"]["W"])):
+        assert np.allclose(rede.coefs_[camada], W, rtol=0, atol=1e-12)
+        assert np.allclose(rede.intercepts_[camada], r["depois"]["v"][camada], rtol=0, atol=1e-12)
+
+
+@PRECISA_DE_NODE
+@pytest.mark.parametrize(
+    "lote, taxa, alpha", [(600, 0.1, 0), (100, 0.1, 0), (20, 0.1, 0.3), (20, 0.1, 3), (1, 0.01, 0)]
+)
+def test_ajuste_no_node_segue_as_epocas_do_sgd(lote, taxa, alpha):
+    d = dados_embutidos(AJUSTE)
+    X, y = imagens(d["ajuste"]), np.array(d["digitos_ajuste"])
+    XV, yv = imagens(d["validacao"]), np.array(d["digitos_validacao"])
+    r = no_node(AJUSTE, f"""(() => {{
+      const X = decodificar(DADOS.ajuste), y = DADOS.digitos_ajuste;
+      const XV = decodificar(DADOS.validacao), yv = DADOS.digitos_validacao;
+      const rede = iniciar(gerador(14), DADOS.tamanhos);
+      const lista = r => ({{W: r.W.map(w => Array.from(w)), v: r.v.map(b => Array.from(b))}});
+      const antes = lista(rede);
+      let passos = 0;
+      for (let e = 0; e < 3; e++) {{
+        passos += epoca(rede, X, y, emOrdem(X.length), {{lote: {lote}, taxa: {taxa}, alpha: {alpha}, phi: 0}});
+      }}
+      return {{antes, depois: lista(rede), passos,
+               ajuste: medir(rede, X, y), validacao: medir(rede, XV, yv)}};
+    }})()""")
+    assert r["passos"] == 3 * int(np.ceil(600 / lote))
+    rede = rede_do_sklearn(
+        r["antes"]["W"], r["antes"]["v"], X, y,
+        learning_rate_init=taxa, alpha=alpha, batch_size=lote,
+    )
+    for _ in range(3):
+        rede.partial_fit(X, y)
+    for camada, W in enumerate(em_matrizes(r["depois"]["W"])):
+        assert np.allclose(rede.coefs_[camada], W, rtol=0, atol=1e-9)
+        assert np.allclose(rede.intercepts_[camada], r["depois"]["v"][camada], rtol=0, atol=1e-9)
+    for parte, (Xp, yp) in {"ajuste": (X, y), "validacao": (XV, yv)}.items():
+        probabilidades = rede.predict_proba(Xp)
+        assert r[parte]["perda"] == pytest.approx(log_loss(yp, probabilidades, labels=np.arange(10)))
+        assert r[parte]["erros"] == int((probabilidades.argmax(axis=1) != yp).sum())
+
+
+@PRECISA_DE_NODE
+def test_dropout_no_node_desliga_a_fracao_pedida_e_compensa_o_que_fica():
+    r = no_node(AJUSTE, """(() => {
+      const X = decodificar(DADOS.ajuste), y = DADOS.digitos_ajuste;
+      const rede = iniciar(gerador(14), DADOS.tamanhos);
+      const fracoes = [0.2, 0.5].map(phi => {
+        const rng = gerador(7);
+        let zeros = 0, total = 0, outros = new Set();
+        for (let t = 0; t < 200; t++) {
+          for (const m of sortearMascaras(rede, phi, rng)) {
+            for (const fator of m) { total += 1; if (fator === 0) zeros += 1; else outros.add(fator); }
+          }
+        }
+        return {phi, fracao: zeros / total, fatores: Array.from(outros)};
+      });
+      const tamanhos = sortearMascaras(rede, 0.5, gerador(7)).map(m => m.length);
+      const linhas = emOrdem(20);
+      const g = semente => Array.from(gradiente(rede, X, y, linhas, {phi: 0.5, rng: gerador(semente)}).W[2]);
+      const mascaras = sortearMascaras(rede, 0.5, gerador(7));
+      const ida = adiante(rede, X[0], mascaras);
+      const delta = atras(rede, ida, y[0], mascaras);
+      const desligadas = [0, 1].map(c => Array.from(mascaras[c + 1]).map((m, k) => m === 0 ? [ida.a[c + 1][k], delta[c][k]] : null).filter(p => p));
+      return {fracoes, tamanhos, repete: g(3), deNovo: g(3), outro: g(4), desligadas,
+              semDropout: medir(rede, X, y).perda};
+    })()""")
+    for caso in r["fracoes"]:
+        assert caso["fracao"] == pytest.approx(caso["phi"], abs=0.01)
+        assert caso["fatores"] == [pytest.approx(1 / (1 - caso["phi"]))]
+    # Uma máscara para os pixels e uma para cada camada escondida.
+    assert r["tamanhos"] == [784, 16, 16]
+    assert r["repete"] == r["deNovo"]
+    assert r["repete"] != r["outro"]
+    # Unidade desligada: ativação zero na ida e nada volta por ela.
+    for camada in r["desligadas"]:
+        assert camada and all(par == [0, 0] for par in camada)
+
+
+@PRECISA_DE_NODE
+def test_formato_brasileiro_nas_redes():
+    assert no_node(IDA, "fmt(6000, 0)") == "6.000"
+    assert no_node(AJUSTE, "fmt(0.5632, 3)") == "0,563"
