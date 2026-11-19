@@ -303,5 +303,38 @@ def khan_do_pacote(destino: Path) -> None:
 
 khan_do_pacote(DADOS / "Khan.csv.gz")
 
+
+# `mammography.csv` entra com a lista computacional 4: é o conjunto do
+# exercício 5, de classificação binária desbalanceada com redes neurais.
+# Nenhum capítulo o lê. Vem do OpenML (conjunto 310, licença pública), como
+# ARFF, lido EM MEMÓRIA; o que se grava é o CSV já traduzido: `attr1`…`attr6`
+# viram `medida_1`…`medida_6`, e `class` (-1/1) vira `microcalcificacao`
+# (`não`/`sim`). Os números são copiados como texto, sem passar por float, e a
+# ordem das linhas é a do original.
+URL_MAMMOGRAPHY = "https://openml.org/data/v1/download/52214/mammography.arff"
+
+
+def mammography(destino: Path) -> None:
+    if destino.exists():
+        print(f"skip  {destino.relative_to(RAIZ)} (já existe)")
+        return
+    print(f"baixa {URL_MAMMOGRAPHY} (em memória)")
+    with urllib.request.urlopen(URL_MAMMOGRAPHY) as r:
+        linhas = r.read().decode("utf-8").splitlines()
+    inicio = next(i for i, l in enumerate(linhas) if l.strip().lower() == "@data")
+    classe = {"-1": "não", "1": "sim"}
+    saida = [",".join([f"medida_{k}" for k in range(1, 7)] + ["microcalcificacao"])]
+    for linha in linhas[inicio + 1:]:
+        if not linha.strip():
+            continue
+        *medidas, rotulo = [campo.strip() for campo in linha.split(",")]
+        assert len(medidas) == 6, linha
+        saida.append(",".join(medidas + [classe[rotulo.strip("'\"")]]))
+    destino.write_text("\n".join(saida) + "\n", encoding="utf-8")
+    print(f"grava {destino.relative_to(RAIZ)} ({len(saida) - 1} linhas)")
+
+
+mammography(DADOS / "mammography.csv")
+
 print("---")
 print("Revise os arquivos e commite-os. Este script não roda no render.")

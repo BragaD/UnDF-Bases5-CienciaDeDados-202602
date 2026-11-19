@@ -24,6 +24,7 @@ ESPERADOS = [
     "Khan.csv.gz",
     "Carseats.csv",
     "OJ.csv",
+    "mammography.csv",
 ]
 
 COLUNAS_ESPERADAS = {
@@ -71,6 +72,10 @@ COLUNAS_ESPERADAS = {
         "desconto_mm", "promocao_ch", "promocao_mm", "fidelidade_ch",
         "preco_final_mm", "preco_final_ch", "diferenca_preco", "loja_7",
         "perc_desconto_mm", "perc_desconto_ch", "diferenca_preco_tabela", "loja",
+    ],
+    "mammography.csv": [
+        "medida_1", "medida_2", "medida_3", "medida_4", "medida_5", "medida_6",
+        "microcalcificacao",
     ],
 }
 
@@ -276,3 +281,16 @@ def test_khan_formato():
         "rabdomiossarcoma": 5, "linfoma de Burkitt": 3,
     }, teste
     assert not khan.isna().any().any()
+
+
+def test_mammography_preserva_o_desbalanceamento():
+    """O exercício 5 da lista computacional 4 é sobre estas proporções: 260
+    microcalcificações em 11.183 regiões. Um CSV reamostrado ou "balanceado"
+    faria a acurácia deixar de enganar, e o exercício perderia o assunto.
+    """
+    import csv
+    with (RAIZ / "dados" / "mammography.csv").open(encoding="utf-8") as f:
+        linhas = list(csv.DictReader(f))
+    assert len(linhas) == 11183
+    assert sum(1 for l in linhas if l["microcalcificacao"] == "sim") == 260
+    assert {l["microcalcificacao"] for l in linhas} == {"não", "sim"}

@@ -599,6 +599,51 @@ Conferido no arquivo: `preco_final_*` = `preco_*` − `desconto_*`,
 redundância é do original e fica: o exercício pede todas as outras variáveis
 como preditores.
 
+## `mammography.csv` — 11.183 regiões suspeitas em mamografias, 260 microcalcificações
+
+Da lista computacional 4, que cobre o capítulo 14 (ISLP 10): é o conjunto do
+exercício 5, de classificação binária desbalanceada com redes neurais. Nenhum
+capítulo o lê, e ele **não é do ISLP**.
+
+Cada linha é uma região de uma mamografia digitalizada que um detector
+automático marcou como suspeita, descrita por seis medidas da imagem. A
+resposta diz se a região é de fato uma microcalcificação, um dos sinais do
+câncer de mama: 260 são (2,3%), 10.923 não. O conjunto vem do estudo de Woods,
+Doss, Bowyer, Solka, Priebe e Kegelmeyer, "Comparative evaluation of pattern
+recognition techniques for detection of microcalcifications in mammography"
+(*International Journal of Pattern Recognition and Artificial Intelligence*,
+1993), e é referência em trabalhos sobre classes desbalanceadas.
+
+Baixado do [OpenML, conjunto 310](https://www.openml.org/d/310), de licença
+pública, por `scripts/baixar-dados.py`, que lê o ARFF em memória e grava o CSV
+traduzido. Os números são copiados como texto e a ordem das linhas é a do
+original.
+
+| Original | Traduzida | Valores |
+|---|---|---|
+| `attr1` a `attr6` | `medida_1` a `medida_6` | seis descritores numéricos da região |
+| `class` | `microcalcificacao` | `-1`/`1` → `não`/`sim` |
+
+**As seis medidas chegam sem nome e já padronizadas** (média 0 e desvio padrão
+1 no conjunto inteiro): a distribuição pública não diz o que cada uma mede, e
+os nomes `medida_1` a `medida_6` não inventam um sentido. O artigo de Woods e
+outros (lido no original, seção 4.3) escolhe sete medidas de cada região, nesta
+ordem: (1) a área, em pixels; (2) o nível médio de cinza; (3) a intensidade do
+gradiente nos pixels do contorno; (4) a flutuação do ruído (raiz da média dos
+quadrados) dentro da região; (5) a mesma flutuação no fundo local, de 3,5 mm ×
+3,5 mm; (6) o contraste, o cinza médio da região menos o de uma borda de dois
+pixels em volta; (7) um descritor de forma baseado em momentos de baixa ordem.
+**Isso não basta para nomear as colunas.** O arquivo tem seis colunas, não
+sete, e o artigo normaliza cada medida entre 0 e 1, enquanto o arquivo vem com
+média 0 e desvio padrão 1: é uma versão reprocessada, e nenhuma fonte
+encontrada (o artigo, o OpenML, o `mammography.names` que circula com o
+conjunto) diz qual medida ficou de fora nem qual coluna é qual. Os valores
+também não decidem: três colunas (`medida_2`, `medida_3` e `medida_6`) caem
+num reticulado de passo fixo, como uma contagem, e não uma só, como se
+esperaria se a área fosse a única medida inteira. Há 3.334 linhas
+iguais a alguma anterior, porque várias medidas repetem o valor mínimo em
+muitas regiões; são regiões diferentes, e ficam.
+
 ## O que saiu
 
 Os conjuntos da abordagem de obtenção de dados abandonada — `stocks.csv`,

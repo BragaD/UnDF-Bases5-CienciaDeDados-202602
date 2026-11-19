@@ -201,6 +201,30 @@ em `dados/` para isso, extraídos do *wheel* do ISLP e traduzidos como os demais
 uma árvore podada nos dois conjuntos, e o `export_text` com `max_depth=3` do OJ
 mostra folhas.
 
+**Emenda de 2026-11-19.** A lista 4, a última, cobre o capítulo 14 (ISLP 10), com
+entrega em 16/12, uma semana depois do seminário, por decisão do professor (o
+cronograma previa 02/12). Seis exercícios. Cinco são do ISLP 10.10: os
+conceituais 1, 2 e 5 e os aplicados 6 e 13. Ficam de fora o 3 (verossimilhança,
+que o livro não escreve em fórmula), o 4 e o 8 (redes convolucionais), o 7
+(`Default`, substituído pelo exercício abaixo) e o 9 a 12 (`NYSE` e redes
+recorrentes). No 13, o `IMDb`, que não está em `dados/`, vira a amostra do MNIST
+da seção 14.2, com 16, 32 e 64 unidades por camada e `alpha` 0,0001 e 1 no
+lugar de "com e sem *dropout*", que o `scikit-learn` não tem.
+
+O exercício 5 **não é do ISLP**: foi pedido pelo professor. É uma classificação
+binária desbalanceada em que um erro pesa mais que o outro, no `mammography`
+(OpenML 310; 11.183 regiões suspeitas de mamografias, 260 microcalcificações,
+2,3%), que entrou em `dados/` para isso (ver `dados/README.md`). O professor
+pediu um conjunto com mais linhas que o câncer de mama de Wisconsin (569). O
+aluno divide em treino, validação e teste (6.709 / 2.237 / 2.237), ajusta doze
+redes dadas e ao menos duas próprias, variando unidades, camadas, ativação,
+taxa de aprendizado e penalidade, compara-as na validação por acurácia,
+precisão, revocação e área sob a curva ROC, escolhe uma, move o limiar e só
+então abre o teste. Com a semente 4, host e container, a acurácia das doze
+fica entre 0,977 e 0,987 (prever `não` para todos dá 0,977), a revocação vai de
+0 a 0,60, e duas redes, a de 2 unidades e a de `alpha` 10, marcam `não` para
+todas as regiões de validação. A semente é 4 em toda divisão e rede.
+
 ## Testes
 
 A suíte ganha o que o padrão da casa já cobra dos outros derivados:
