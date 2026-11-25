@@ -21,6 +21,7 @@ const props = defineProps({
   altura: { type: Number, default: 290 },
   r: { type: Number, default: 25 },
   tPeso: { type: Number, default: 0.3 },
+  tPesos: { type: Object, default: () => ({}) }, // posição do rótulo de uma aresta, de 0 a 1
   margem: { type: Number, default: 110 },
 })
 const L = computed(() => props.camadas.length)
@@ -60,7 +61,7 @@ const arestas = computed(() => {
         const inv = q && props.volta
         o.push({
           ch, l, q, forte, de: inv ? b2 : a, para: inv ? a2 : b,
-          tx: x1 + (x2 - x1) * props.tPeso, ty: y1 + (y2 - y1) * props.tPeso, peso: props.pesos[ch],
+          tx: x1 + (x2 - x1) * (props.tPesos[ch] ?? props.tPeso), ty: y1 + (y2 - y1) * (props.tPesos[ch] ?? props.tPeso), peso: props.pesos[ch],
         })
       }
   return o

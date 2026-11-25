@@ -96,7 +96,9 @@ clicks: 3
   :camadas="[4, 3, 1]" :largura="900" :altura="330" :margem="170" :r="20" :passo="$clicks" :visivel="{ 1: 1, 2: 2 }"
   :so-arestas="$clicks >= 3 ? null : ['0-0-0', '0-1-0', '0-2-1', '0-0-2', '0-3-2', '1-0-0', '1-1-0', '1-2-0']"
   :fortes="['0-0-0', '0-1-0', '0-2-1', '0-0-2', '0-3-2', '1-0-0', '1-1-0', '1-2-0']"
-  :fora="{ '0-0': 'preço', '0-1': 'frete', '0-2': 'marketing', '0-3': 'material', '1-0': 'acessível?', '1-1': 'conhecida?', '1-2': 'boa qualidade?', '2-0': 'campeã?' }"
+  :fora="{ '0-0': 'preço', '0-1': 'frete', '0-2': 'marketing', '0-3': 'material', '1-0': 'acessível? · b = 4', '1-1': 'conhecida? · b = −2', '1-2': 'boa qualidade? · b = −4', '2-0': 'campeã? · b = −5' }"
+  :pesos="{ '0-0-0': '−0,05', '0-1-0': '−0,05', '0-2-1': '0,2', '0-0-2': '0,02', '0-3-2': '0,5', '1-0-0': '3', '1-1-0': '3', '1-2-0': '3' }"
+  :t-pesos="{ '0-0-2': 0.8 }"
   :titulos="['atributos brutos', 'camada oculta', 'saída']"
 />
 
