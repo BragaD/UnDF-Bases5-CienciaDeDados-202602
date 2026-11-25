@@ -1,0 +1,1 @@
+import{B as e,U as t,b as n}from"./modules/shiki-DyaLTTWP.js";import{rt as r}from"./index-1jceEJip.js";var i={class:`slidev-layout secao`},a={__name:`secao`,setup(a){let{$slidev:o,$nav:s,$clicksContext:c,$clicks:l,$page:u,$renderContext:d,$frontmatter:f}=r();return(r,a)=>(e(),n(`div`,i,[t(r.$slots,`default`)]))}};export{a as t};

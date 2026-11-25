@@ -90,6 +90,53 @@ Passe pelos quatro casos. Note que (0,1) e (1,0) caem no mesmo ponto do plano da
 clicks: 3
 ---
 
+# A camada oculta calcula atributos que não estão nos dados
+
+<Rede
+  :camadas="[4, 3, 1]" :largura="900" :altura="330" :margem="170" :r="20" :passo="$clicks" :visivel="{ 1: 1, 2: 2 }"
+  :so-arestas="$clicks >= 3 ? null : ['0-0-0', '0-1-0', '0-2-1', '0-0-2', '0-3-2', '1-0-0', '1-1-0', '1-2-0']"
+  :fortes="['0-0-0', '0-1-0', '0-2-1', '0-0-2', '0-3-2', '1-0-0', '1-1-0', '1-2-0']"
+  :fora="{ '0-0': 'preço', '0-1': 'frete', '0-2': 'marketing', '0-3': 'material', '1-0': 'acessível?', '1-1': 'conhecida?', '1-2': 'boa qualidade?', '2-0': 'campeã?' }"
+  :titulos="['atributos brutos', 'camada oculta', 'saída']"
+/>
+
+<div class="centro" style="min-height: 3.4em">
+<div v-if="$clicks === 0">Uma camiseta vai ser <b>campeã de vendas</b>? A tabela só tem quatro colunas.</div>
+<div v-if="$clicks === 1">Quem compra pensa em outras três coisas. Cada uma sai de <b>algumas</b> colunas: preço e frete dizem se ela é acessível.</div>
+<div v-if="$clicks === 2">A saída não olha o preço: decide com os <b>três atributos intermediários</b>.</div>
+<div v-if="$clicks === 3">Na rede de verdade, cada neurônio recebe <b>todas</b> as entradas, e ninguém dá nome a eles: o treino escolhe os atributos que ajudam a acertar.</div>
+</div>
+
+<div class="fraco pequeno centro">
+
+Exemplo de previsão de demanda de Andrew Ng (*Machine Learning Specialization*).
+
+</div>
+
+<!--
+Mesma ideia do XOR: lá, h1 e h2 eram "pelo menos uma" e "não são as duas". Aqui são "acessível", "conhecida" e "boa qualidade".
+Preço entra em dois neurônios, com sinais opostos: preço alto derruba "acessível" e sobe "boa qualidade" (preço como sinal de qualidade).
+Os atributos de uma rede treinada raramente têm nome tão limpo. Na rede dos dígitos (Parte 6) dá para olhar os pesos da primeira camada como imagens.
+-->
+
+---
+
+# Em código: três camisetas, três atributos ocultos
+
+<<< @/snippets/m_camiseta.py {1-2|4-7|9-10|all}
+
+<Saida v-click nome="m_camiseta" />
+
+<div v-click class="conceito pequeno">
+
+**A** é acessível, mas pouca gente a conhece. **B** é conhecida e boa, mas cara. **C** vai bem nos três, e é a de maior probabilidade. Os pesos aqui foram escolhidos à mão.
+
+</div>
+
+---
+clicks: 3
+---
+
 # Um perceptron multicamada (MLP)
 
 <Rede :camadas="[3, 4, 4, 2]" :titulos="['entrada', 'oculta 1', 'oculta 2', 'saída']" :visivel="{ 1: 1, 2: 2, 3: 3 }" :passo="$clicks" :altura="280" :largura="780" :r="20" />
